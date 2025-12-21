@@ -95,7 +95,7 @@ pub(crate) async fn create_or_find_location(
                     location.state.clone(),
                     location.zip_code.clone(),
                     location.region_code.clone(),
-                    location.country_mail_code.clone(),
+                    location.country_code.clone(),
                     location.geolocation,
                 )
                 .await
@@ -204,7 +204,7 @@ pub(crate) async fn create_start_end_location(
                     location.state.clone(),
                     location.zip_code.clone(),
                     location.region_code.clone(),
-                    location.country_mail_code.clone(),
+                    location.country_code.clone(),
                     location.geolocation,
                 )
                 .await

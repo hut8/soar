@@ -76,7 +76,7 @@ fi
 # Show sample of orphaned locations
 echo -e "${BLUE}Sample of orphaned locations (first 10):${NC}"
 psql "$DATABASE" -c "
-SELECT id, street1, city, state, zip_code, country_mail_code
+SELECT id, street1, city, state, zip_code, country_code
 FROM locations l
 WHERE NOT EXISTS (
     SELECT 1 FROM aircraft_registrations WHERE location_id = l.id

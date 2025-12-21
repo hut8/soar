@@ -849,7 +849,7 @@ diesel::table! {
         state -> Nullable<Text>,
         zip_code -> Nullable<Text>,
         region_code -> Nullable<Text>,
-        country_mail_code -> Nullable<Text>,
+        country_code -> Nullable<Text>,
         geolocation -> Nullable<Point>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,

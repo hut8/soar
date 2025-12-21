@@ -1,0 +1,4 @@
+-- This migration cannot be reverted because the original mixed-case country codes
+-- were not standard and varied inconsistently (e.g., "Un", "De", "Fr", "Po", etc.)
+-- The uppercased versions are the correct ISO 3166-1 alpha-2 format.
+-- No action needed for rollback.

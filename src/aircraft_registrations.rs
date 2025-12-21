@@ -714,7 +714,7 @@ pub struct Aircraft {
     #[serde(skip_serializing)]
     pub county_mail_code: Option<String>, // 213–215 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub country_mail_code: Option<String>, // 217–218 (legacy, kept for parsing)
+    pub country_code: Option<String>, // 217–218 (legacy, kept for parsing)
 
     // Location normalization
     pub location_id: Option<Uuid>, // Foreign key to locations table
@@ -930,7 +930,7 @@ impl Aircraft {
         let zip_code = format_zip_code(fw(line, 200, 209));
         let region_code = to_opt_string(fw(line, 211, 211));
         let county_mail_code = to_opt_string(fw(line, 213, 215));
-        let country_mail_code = to_opt_string(fw(line, 217, 218));
+        let country_code = to_opt_string(fw(line, 217, 218));
 
         let last_action_date = to_opt_date(fw(line, 220, 227));
         let certificate_issue_date = to_opt_date(fw(line, 229, 236));
@@ -1006,7 +1006,7 @@ impl Aircraft {
             zip_code,
             region_code,
             county_mail_code,
-            country_mail_code,
+            country_code,
 
             last_action_date,
             certificate_issue_date,
@@ -1172,7 +1172,7 @@ impl Aircraft {
         let zip_code = format_zip_code(fields[11]);
         let region_code = to_opt_string(fields[12]);
         let county_mail_code = to_opt_string(fields[13]);
-        let country_mail_code = to_opt_string(fields[14]);
+        let country_code = to_opt_string(fields[14]);
 
         let last_action_date = parse_csv_date(fields[15]);
         let certificate_issue_date = parse_csv_date(fields[16]);
@@ -1227,7 +1227,7 @@ impl Aircraft {
             zip_code,
             region_code,
             county_mail_code,
-            country_mail_code,
+            country_code,
             last_action_date,
             certificate_issue_date,
             airworthiness_class,
@@ -1422,7 +1422,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             zip_code: None,
             region_code: None,
             county_mail_code: None,
-            country_mail_code: None,
+            country_code: None,
             location_id: model.location_id,
             last_action_date: model.last_action_date,
             certificate_issue_date: model.certificate_issue_date,
@@ -1696,7 +1696,7 @@ mod tests {
             zip_code: None,
             region_code: None,
             county_mail_code: None,
-            country_mail_code: None,
+            country_code: None,
             last_action_date: None,
             certificate_issue_date: None,
             airworthiness_class: None,

@@ -17,7 +17,7 @@ pub struct Location {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub country_mail_code: Option<String>,
+    pub country_code: Option<String>,
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -83,7 +83,7 @@ pub struct LocationModel {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub country_mail_code: Option<String>,
+    pub country_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -101,7 +101,7 @@ pub struct NewLocationModel {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub country_mail_code: Option<String>,
+    pub country_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
 }
 
@@ -116,7 +116,7 @@ impl From<Location> for LocationModel {
             state: location.state,
             zip_code: location.zip_code,
             region_code: location.region_code,
-            country_mail_code: location.country_mail_code,
+            country_code: location.country_code,
             geolocation: location.geolocation,
             created_at: location.created_at,
             updated_at: location.updated_at,
@@ -135,7 +135,7 @@ impl From<Location> for NewLocationModel {
             state: location.state,
             zip_code: location.zip_code,
             region_code: location.region_code,
-            country_mail_code: location.country_mail_code,
+            country_code: location.country_code,
             geolocation: location.geolocation,
         }
     }
@@ -152,7 +152,7 @@ impl From<LocationModel> for Location {
             state: model.state,
             zip_code: model.zip_code,
             region_code: model.region_code,
-            country_mail_code: model.country_mail_code,
+            country_code: model.country_code,
             geolocation: model.geolocation,
             created_at: model.created_at,
             updated_at: model.updated_at,
@@ -170,7 +170,7 @@ impl Location {
         state: Option<String>,
         zip_code: Option<String>,
         region_code: Option<String>,
-        country_mail_code: Option<String>,
+        country_code: Option<String>,
         geolocation: Option<Point>,
     ) -> Self {
         let now = Utc::now();
@@ -182,7 +182,7 @@ impl Location {
             state,
             zip_code,
             region_code,
-            country_mail_code,
+            country_code: country_code.map(|c| c.to_uppercase()),
             geolocation,
             created_at: now,
             updated_at: now,
@@ -224,7 +224,7 @@ impl Location {
         }
 
         // Add country if not US
-        if let Some(country) = &self.country_mail_code
+        if let Some(country) = &self.country_code
             && country != "US"
             && !country.trim().is_empty()
         {
@@ -311,5 +311,37 @@ mod tests {
         let location = Location::new(None, None, None, None, None, None, None, None);
 
         assert_eq!(location.address_string(), None);
+    }
+
+    #[test]
+    fn test_country_code_normalized_to_uppercase() {
+        let location = Location::new(
+            Some("123 Main St".to_string()),
+            None,
+            Some("Berlin".to_string()),
+            None,
+            Some("10115".to_string()),
+            None,
+            Some("de".to_string()), // lowercase
+            None,
+        );
+
+        assert_eq!(location.country_code, Some("DE".to_string()));
+    }
+
+    #[test]
+    fn test_country_code_already_uppercase() {
+        let location = Location::new(
+            Some("123 Main St".to_string()),
+            None,
+            Some("Paris".to_string()),
+            None,
+            Some("75001".to_string()),
+            None,
+            Some("FR".to_string()), // already uppercase
+            None,
+        );
+
+        assert_eq!(location.country_code, Some("FR".to_string()));
     }
 }

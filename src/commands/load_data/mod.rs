@@ -485,7 +485,7 @@ async fn geocode_aircraft_registration_locations(
                 location.city.as_deref(),
                 location.state.as_deref(),
                 location.zip_code.as_deref(),
-                location.country_mail_code.as_deref(),
+                location.country_code.as_deref(),
             )
             .await;
 
@@ -711,7 +711,7 @@ async fn geocode_airports(
                                 location.state.clone(),
                                 location.zip_code.clone(),
                                 location.region_code.clone(),
-                                location.country_mail_code.clone(),
+                                location.country_code.clone(),
                                 location.geolocation,
                             )
                             .await
