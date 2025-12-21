@@ -222,46 +222,33 @@ echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
 echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
 echo ""
 
-# Step 2: Create missing partitions (BEFORE detaching DEFAULT)
-# This is critical: we create partitions while DEFAULT is still attached,
-# then migrate data, THEN detach. This avoids FK constraint violations.
-echo "Step 2: Creating missing daily partitions..."
+# Step 2: Create missing partitions as STANDALONE tables
+# We cannot create them as partitions directly because DEFAULT has data for those dates.
+# Instead, we create standalone tables, migrate data, then attach them as partitions.
+echo "Step 2: Creating missing daily partitions (as standalone tables)..."
 echo ""
+
+# Get the table structure (excluding constraints that reference the parent)
+STANDALONE_TABLES=()
 
 # Generate list of dates between MIN_DATE and MAX_DATE (inclusive)
 CURRENT_DATE="$MIN_DATE"
-while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
-    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
     PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
+    STANDALONE_TABLES+=("$PARTITION_NAME")
 
-    # Partition boundaries use UTC timezone (00:00:00+00)
-    START_TS="${CURRENT_DATE} 00:00:00+00"
-    END_TS="${NEXT_DATE} 00:00:00+00"
+    echo "Creating standalone table ${PARTITION_NAME} for ${CURRENT_DATE}..."
 
-    echo "Creating partition ${PARTITION_NAME} for ${CURRENT_DATE}..."
-
+    # Create standalone table with same structure as parent (LIKE includes columns, but not constraints)
     psql -U soar -d "${DATABASE}" -c "
-        CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} PARTITION OF ${TABLE_NAME}
-        FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
-    " || echo "Partition ${PARTITION_NAME} may already exist, continuing..."
+        CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} (LIKE ${TABLE_NAME} INCLUDING ALL);
+    " || echo "Table ${PARTITION_NAME} may already exist, continuing..."
 
-    CURRENT_DATE="$NEXT_DATE"
+    CURRENT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
 done
 
-# Create partition for MAX_DATE
-PARTITION_NAME="${TABLE_NAME}_p$(date -d "$MAX_DATE" +%Y%m%d)"
-NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
-START_TS="${MAX_DATE} 00:00:00+00"
-END_TS="${NEXT_DATE} 00:00:00+00"
-
-echo "Creating partition ${PARTITION_NAME} for ${MAX_DATE}..."
-psql -U soar -d "${DATABASE}" -c "
-    CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} PARTITION OF ${TABLE_NAME}
-    FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
-" || echo "Partition ${PARTITION_NAME} may already exist, continuing..."
-
 echo ""
-echo "Partitions created successfully."
+echo "Standalone tables created successfully."
 echo ""
 
 # Step 3: Get column list (excluding generated columns)
@@ -286,23 +273,25 @@ fi
 echo "Columns to migrate: ${COLUMNS}"
 echo ""
 
-# Step 4: Migrate data day by day (while DEFAULT is still attached)
-echo "Step 4: Migrating data from ${DEFAULT_PARTITION} to proper partitions..."
+# Step 4: Migrate data day by day to STANDALONE tables
+echo "Step 4: Migrating data from ${DEFAULT_PARTITION} to standalone partition tables..."
 echo "This may take a while for large datasets..."
-echo "NOTE: DEFAULT partition is still attached - this is intentional to avoid FK violations."
+echo "NOTE: Migrating to standalone tables, not parent - this avoids routing back to DEFAULT."
 echo ""
 
 # Function to migrate a single day
 migrate_day() {
     local MIGRATE_DATE="$1"
     local MIGRATE_COLUMNS="$2"
+    local TARGET_TABLE="${TABLE_NAME}_p$(date -d "$MIGRATE_DATE" +%Y%m%d)"
     local NEXT_DATE=$(date -d "$MIGRATE_DATE + 1 day" +%Y-%m-%d)
     local START_TS="${MIGRATE_DATE} 00:00:00+00"
     local END_TS="${NEXT_DATE} 00:00:00+00"
 
-    echo "[$(date +%H:%M:%S)] Migrating data for ${MIGRATE_DATE}..."
+    echo "[$(date +%H:%M:%S)] Migrating data for ${MIGRATE_DATE} to ${TARGET_TABLE}..."
 
     # Use DELETE...RETURNING + INSERT pattern to move data
+    # CRITICAL: Insert into the STANDALONE table, not the parent!
     if psql -U soar -d "${DATABASE}" << EOF
         WITH moved_rows AS (
             DELETE FROM ${DEFAULT_PARTITION}
@@ -310,7 +299,7 @@ migrate_day() {
               AND ${PARTITION_KEY} < '${END_TS}'
             RETURNING *
         )
-        INSERT INTO ${TABLE_NAME} (${MIGRATE_COLUMNS})
+        INSERT INTO ${TARGET_TABLE} (${MIGRATE_COLUMNS})
         SELECT ${MIGRATE_COLUMNS} FROM moved_rows;
 EOF
     then
@@ -384,8 +373,36 @@ fi
 echo "${DEFAULT_PARTITION} is empty (verified)."
 echo ""
 
-# Step 6: Detach DEFAULT partition (now that it's empty)
-echo "Step 6: Detaching empty ${DEFAULT_PARTITION}..."
+# Step 6: Attach standalone tables as partitions
+echo "Step 6: Attaching standalone tables as partitions..."
+echo ""
+
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
+    PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
+    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+    START_TS="${CURRENT_DATE} 00:00:00+00"
+    END_TS="${NEXT_DATE} 00:00:00+00"
+
+    echo "Attaching ${PARTITION_NAME} for ${CURRENT_DATE}..."
+
+    # Attach the standalone table as a partition
+    # PostgreSQL will validate that all rows satisfy the partition constraint
+    psql -U soar -d "${DATABASE}" -c "
+        ALTER TABLE ${TABLE_NAME}
+        ATTACH PARTITION ${PARTITION_NAME}
+        FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
+    "
+
+    CURRENT_DATE="$NEXT_DATE"
+done
+
+echo ""
+echo "Standalone tables attached as partitions successfully."
+echo ""
+
+# Step 7: Detach DEFAULT partition (now that it's empty)
+echo "Step 7: Detaching empty ${DEFAULT_PARTITION}..."
 
 IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT EXISTS (
@@ -407,14 +424,14 @@ fi
 
 echo ""
 
-# Step 7: Drop the detached DEFAULT partition
-echo "Step 7: Dropping empty ${DEFAULT_PARTITION}..."
+# Step 8: Drop the detached DEFAULT partition
+echo "Step 8: Dropping empty ${DEFAULT_PARTITION}..."
 psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
 
 echo "Successfully dropped ${DEFAULT_PARTITION}."
 echo ""
 
-# Step 8: Show final state
+# Step 9: Show final state
 echo "================================================================================"
 echo "Migration completed successfully!"
 echo "================================================================================"
