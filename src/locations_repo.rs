@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::TimeZone;
 use diesel::prelude::*;
 use uuid::Uuid;
 
@@ -184,6 +185,55 @@ impl LocationsRepository {
                   AND NOT EXISTS (SELECT 1 FROM flights WHERE takeoff_location_id = l.id)
                 "#,
             )
+            .get_result::<CountQueryResult>(&mut conn)?
+            .count;
+
+            Ok::<i64, anyhow::Error>(result)
+        })
+        .await??;
+
+        Ok(count)
+    }
+
+    /// Count unreferenced locations created within a date range
+    /// Returns the number of locations not referenced by any other table
+    /// that were created between start_date and end_date (inclusive)
+    pub async fn count_unreferenced_locations_in_range(
+        &self,
+        start_date: chrono::NaiveDate,
+        end_date: chrono::NaiveDate,
+    ) -> Result<i64> {
+        let pool = self.pool.clone();
+
+        let count = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Convert NaiveDates to DateTime<Utc> for comparison
+            let start_datetime = chrono::Utc
+                .from_local_datetime(&start_date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Failed to create start datetime"))?;
+            let end_datetime = chrono::Utc
+                .from_local_datetime(&end_date.and_hms_opt(23, 59, 59).unwrap())
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Failed to create end datetime"))?;
+
+            let result: i64 = diesel::sql_query(
+                r#"
+                SELECT COUNT(*) as count
+                FROM locations l
+                WHERE l.created_at >= $1 AND l.created_at <= $2
+                  AND NOT EXISTS (SELECT 1 FROM aircraft_registrations WHERE location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM airports WHERE location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM clubs WHERE location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM flights WHERE end_location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM flights WHERE landing_location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM flights WHERE start_location_id = l.id)
+                  AND NOT EXISTS (SELECT 1 FROM flights WHERE takeoff_location_id = l.id)
+                "#,
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(start_datetime)
+            .bind::<diesel::sql_types::Timestamptz, _>(end_datetime)
             .get_result::<CountQueryResult>(&mut conn)?
             .count;
 
