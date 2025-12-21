@@ -80,36 +80,38 @@
 # USAGE
 # ==============================================================================
 #
-# ./fix-partitioned-table <database> <table_name> <partition_key> <timezone>
+# ./fix-partitioned-table <database> <table_name> <partition_key>
 #
 # Examples:
-#   ./fix-partitioned-table soar fixes received_at '+01'
-#   ./fix-partitioned-table soar raw_messages received_at '+01'
+#   ./fix-partitioned-table soar fixes received_at
+#   ./fix-partitioned-table soar raw_messages received_at
 #
 # Parameters:
 #   database      - PostgreSQL database name
 #   table_name    - Parent table name (e.g., "fixes", "raw_messages")
 #   partition_key - Column used for partitioning (e.g., "received_at")
-#   timezone      - Timezone offset for partition boundaries (e.g., "+01" for CET)
+#
+# NOTE: This script now assumes UTC timezone. PostgreSQL must be configured with timezone = 'UTC'
 #
 # ==============================================================================
 
 set -euo pipefail
 
 # Check arguments
-if [ $# -ne 4 ]; then
-    echo "Usage: $0 <database> <table_name> <partition_key> <timezone>"
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <database> <table_name> <partition_key>"
     echo ""
     echo "Examples:"
-    echo "  $0 soar fixes received_at '+01'"
-    echo "  $0 soar raw_messages received_at '+01'"
+    echo "  $0 soar fixes received_at"
+    echo "  $0 soar raw_messages received_at"
+    echo ""
+    echo "NOTE: PostgreSQL must be configured with timezone = 'UTC'"
     exit 1
 fi
 
 DATABASE="$1"
 TABLE_NAME="$2"
 PARTITION_KEY="$3"
-TIMEZONE="$4"
 
 DEFAULT_PARTITION="${TABLE_NAME}_default"
 
@@ -117,7 +119,6 @@ echo "==========================================================================
 echo "Fixing DEFAULT partition for table: ${TABLE_NAME}"
 echo "Database: ${DATABASE}"
 echo "Partition key: ${PARTITION_KEY}"
-echo "Timezone: ${TIMEZONE}"
 echo "================================================================================"
 echo ""
 
@@ -150,8 +151,26 @@ MAX_DATE=$(echo "$DATE_RANGE" | cut -d'|' -f2)
 ROW_COUNT=$(echo "$DATE_RANGE" | cut -d'|' -f3)
 
 if [ -z "$MIN_DATE" ] || [ "$MIN_DATE" = "" ]; then
-    echo "DEFAULT partition is empty. Dropping it..."
-    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    echo "DEFAULT partition is empty."
+
+    # Check if it's still attached before trying to detach
+    IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
+        SELECT EXISTS (
+            SELECT 1 FROM pg_inherits i
+            JOIN pg_class c ON c.oid = i.inhrelid
+            JOIN pg_class p ON p.oid = i.inhparent
+            WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
+        );
+    ")
+
+    if [ "$IS_ATTACHED" = "t" ]; then
+        echo "Detaching empty DEFAULT partition..."
+        psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    else
+        echo "DEFAULT partition is already detached."
+    fi
+
+    echo "Dropping empty ${DEFAULT_PARTITION}..."
     psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
     echo "Empty DEFAULT partition dropped successfully."
     exit 0
@@ -161,15 +180,32 @@ echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
 echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
 echo ""
 
-# Step 2: Detach DEFAULT partition
-echo "Step 2: Detaching DEFAULT partition..."
-echo "WARNING: This will briefly lock the parent table."
-echo ""
+# Step 2: Detach DEFAULT partition (if still attached)
+echo "Step 2: Checking if DEFAULT partition is attached..."
 
-# Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
-psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT EXISTS (
+        SELECT 1 FROM pg_inherits i
+        JOIN pg_class c ON c.oid = i.inhrelid
+        JOIN pg_class p ON p.oid = i.inhparent
+        WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
+    );
+")
 
-echo "Successfully detached ${DEFAULT_PARTITION}"
+if [ "$IS_ATTACHED" = "t" ]; then
+    echo "DEFAULT partition is still attached. Detaching..."
+    echo "WARNING: This will briefly lock the parent table."
+    echo ""
+
+    # Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+
+    echo "Successfully detached ${DEFAULT_PARTITION}"
+else
+    echo "DEFAULT partition is already detached (standalone table)."
+    echo "Continuing with data migration..."
+fi
+
 echo ""
 
 # Step 3: Create missing partitions
@@ -182,9 +218,9 @@ while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
     NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
     PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
 
-    # Partition boundaries use timezone offset
-    START_TS="${CURRENT_DATE} 01:00:00${TIMEZONE}"
-    END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+    # Partition boundaries use UTC timezone (00:00:00+00)
+    START_TS="${CURRENT_DATE} 00:00:00+00"
+    END_TS="${NEXT_DATE} 00:00:00+00"
 
     echo "Creating partition ${PARTITION_NAME} for ${CURRENT_DATE}..."
 
@@ -199,8 +235,8 @@ done
 # Create partition for MAX_DATE
 PARTITION_NAME="${TABLE_NAME}_p$(date -d "$MAX_DATE" +%Y%m%d)"
 NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
-START_TS="${MAX_DATE} 01:00:00${TIMEZONE}"
-END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+START_TS="${MAX_DATE} 00:00:00+00"
+END_TS="${NEXT_DATE} 00:00:00+00"
 
 echo "Creating partition ${PARTITION_NAME} for ${MAX_DATE}..."
 psql -U soar -d "${DATABASE}" -c "
@@ -234,8 +270,8 @@ echo ""
 CURRENT_DATE="$MIN_DATE"
 while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
     NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
-    START_TS="${CURRENT_DATE} 01:00:00${TIMEZONE}"
-    END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+    START_TS="${CURRENT_DATE} 00:00:00+00"
+    END_TS="${NEXT_DATE} 00:00:00+00"
 
     echo "Migrating data for ${CURRENT_DATE}..."
 
@@ -256,8 +292,8 @@ done
 
 # Migrate data for MAX_DATE
 NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
-START_TS="${MAX_DATE} 01:00:00${TIMEZONE}"
-END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+START_TS="${MAX_DATE} 00:00:00+00"
+END_TS="${NEXT_DATE} 00:00:00+00"
 
 echo "Migrating data for ${MAX_DATE}..."
 psql -U soar -d "${DATABASE}" -c "
