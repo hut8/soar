@@ -167,10 +167,34 @@ if ! command -v docker &> /dev/null; then
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-    echo -e "${GREEN}Docker installed${NC}"
+    # Enable and start Docker daemon
+    systemctl enable docker
+    systemctl start docker
+
+    echo -e "${GREEN}Docker installed and started${NC}"
 else
     echo -e "${BLUE}Docker already installed${NC}"
 fi
+
+# Ensure Docker daemon is running
+if ! systemctl is-active --quiet docker; then
+    echo -e "${BLUE}Starting Docker daemon...${NC}"
+    systemctl start docker
+fi
+
+# Wait for Docker to be ready
+echo -e "${BLUE}Waiting for Docker to be ready...${NC}"
+for i in {1..10}; do
+    if docker info > /dev/null 2>&1; then
+        echo -e "${GREEN}Docker is ready${NC}"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo -e "${RED}Error: Docker failed to start${NC}"
+        exit 1
+    fi
+    sleep 2
+done
 
 # Install Node.js 18.x (for Pelias services)
 if ! command -v node &> /dev/null; then
@@ -191,6 +215,15 @@ if ! id "pelias" &>/dev/null; then
     echo -e "${GREEN}'pelias' user created${NC}"
 else
     echo -e "${BLUE}'pelias' user already exists${NC}"
+fi
+
+# Add pelias user to docker group for Docker access
+if ! groups pelias | grep -q docker; then
+    echo -e "${BLUE}Adding pelias user to docker group...${NC}"
+    usermod -a -G docker pelias
+    echo -e "${GREEN}pelias user added to docker group${NC}"
+else
+    echo -e "${BLUE}pelias user already in docker group${NC}"
 fi
 
 # Create Pelias directories
