@@ -30,6 +30,7 @@
 	import type { Flight, Receiver } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import durationPlugin from 'dayjs/plugin/duration';
 	import {
 		getAircraftTypeOgnDescription,
 		formatAircraftAddress,
@@ -47,8 +48,29 @@
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
 
 	dayjs.extend(relativeTime);
+	dayjs.extend(durationPlugin);
 
 	let { data }: { data: PageData } = $props();
+
+	interface FlightGap {
+		gap_start: string;
+		gap_end: string;
+		duration_seconds: number;
+		distance_meters: number;
+		callsign_before: string | null;
+		callsign_after: string | null;
+		squawk_before: string | null;
+		squawk_after: string | null;
+		climb_rate_before: number | null;
+		climb_rate_after: number | null;
+		avg_climb_rate_10_before: number | null;
+		avg_climb_rate_10_after: number | null;
+	}
+
+	interface FlightGapsResponse {
+		gaps: FlightGap[];
+		count: number;
+	}
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
@@ -85,6 +107,11 @@
 	let receivers = $state<Receiver[]>([]);
 	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
 	let isLoadingReceivers = $state(false);
+
+	// Fix gaps data
+	let flightGaps = $state<FlightGap[]>([]);
+	let isLoadingGaps = $state(false);
+	let showGaps = $state(false);
 
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived([...data.fixes].reverse());
@@ -1286,6 +1313,62 @@
 			document.getElementById('fixes-table')?.scrollIntoView({ behavior: 'smooth' });
 		}
 	}
+
+	// Fetch flight gaps
+	async function fetchFlightGaps() {
+		if (flightGaps.length > 0) {
+			// Already loaded
+			showGaps = true;
+			return;
+		}
+
+		isLoadingGaps = true;
+		try {
+			const response = await serverCall<FlightGapsResponse>(`/flights/${data.flight.id}/gaps`);
+			flightGaps = response.gaps;
+			showGaps = true;
+		} catch (err) {
+			console.error('Failed to fetch flight gaps:', err);
+		} finally {
+			isLoadingGaps = false;
+		}
+	}
+
+	// Format duration from seconds to human-readable format
+	function formatDuration(seconds: number): string {
+		const d = dayjs.duration(seconds, 'seconds');
+		const hours = Math.floor(d.asHours());
+		const minutes = d.minutes();
+		const secs = d.seconds();
+
+		if (hours > 0) {
+			return `${hours}h ${minutes}m ${secs}s`;
+		} else if (minutes > 0) {
+			return `${minutes}m ${secs}s`;
+		} else {
+			return `${secs}s`;
+		}
+	}
+
+	// Format distance in meters to human-readable format
+	function formatDistanceMeters(meters: number): string {
+		const nm = meters / 1852;
+		const km = meters / 1000;
+
+		if (nm >= 1) {
+			return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`;
+		} else if (km >= 0.1) {
+			return `${km.toFixed(2)} km`;
+		} else {
+			return `${meters.toFixed(0)} m`;
+		}
+	}
+
+	// Format climb rate in fpm
+	function formatClimbRate(fpm: number | null | undefined): string {
+		if (fpm === null || fpm === undefined) return 'N/A';
+		return `${fpm.toFixed(0)} fpm`;
+	}
 </script>
 
 <svelte:head>
@@ -1829,6 +1912,7 @@
 				showHideInactive={false}
 				showRaw={true}
 				useRelativeTimes={true}
+				showIntervals={true}
 				showClimb={true}
 				emptyMessage="No position data available for this flight."
 			/>
@@ -1881,6 +1965,129 @@
 					</div>
 				</div>
 			{/if}
+		{/if}
+	</div>
+
+	<!-- Fix Gaps Section -->
+	<div class="card p-6">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="h2">Fix Gaps</h2>
+		</div>
+
+		{#if !showGaps}
+			<button onclick={fetchFlightGaps} class="btn preset-filled-primary-500" type="button">
+				Show fix gaps (5+ minute intervals)
+			</button>
+		{:else if isLoadingGaps}
+			<div class="flex items-center justify-center py-8">
+				<div
+					class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+				></div>
+				<span class="ml-2">Loading fix gaps...</span>
+			</div>
+		{:else if flightGaps.length === 0}
+			<div class="text-surface-600-300-token py-8 text-center">
+				<Info class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+				<p>No significant gaps found (all fixes within 5 minutes of each other).</p>
+			</div>
+		{:else}
+			<div class="space-y-4">
+				<div class="text-surface-600-300-token text-sm">
+					Found {flightGaps.length} gap{flightGaps.length !== 1 ? 's' : ''} of 5+ minutes between fixes
+				</div>
+
+				{#each flightGaps as gap, index (gap.gap_start)}
+					<div class="preset-tonal-surface-500 card p-4">
+						<div class="mb-3 flex items-center gap-2">
+							<span class="chip preset-filled-warning-500 text-sm font-semibold">
+								Gap #{index + 1}
+							</span>
+							<span class="text-lg font-semibold">{formatDuration(gap.duration_seconds)}</span>
+						</div>
+
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							<!-- Time Information -->
+							<div>
+								<div class="text-surface-600-300-token text-sm">Start Time</div>
+								<div class="font-semibold">{dayjs(gap.gap_start).format('h:mm:ss A')}</div>
+								<div class="text-surface-500-400-token text-xs">
+									{dayjs(gap.gap_start).format('MMM D, YYYY')}
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">End Time</div>
+								<div class="font-semibold">{dayjs(gap.gap_end).format('h:mm:ss A')}</div>
+								<div class="text-surface-500-400-token text-xs">
+									{dayjs(gap.gap_end).format('MMM D, YYYY')}
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">Distance Covered</div>
+								<div class="font-semibold">{formatDistanceMeters(gap.distance_meters)}</div>
+							</div>
+
+							<!-- Callsign and Squawk -->
+							{#if gap.callsign_before || gap.callsign_after}
+								<div>
+									<div class="text-surface-600-300-token text-sm">Callsign</div>
+									<div class="font-mono text-sm">
+										{#if gap.callsign_before === gap.callsign_after}
+											{gap.callsign_before || 'N/A'}
+										{:else}
+											<span>{gap.callsign_before || 'N/A'}</span>
+											<span class="text-surface-500-400-token mx-1">→</span>
+											<span>{gap.callsign_after || 'N/A'}</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							{#if gap.squawk_before || gap.squawk_after}
+								<div>
+									<div class="text-surface-600-300-token text-sm">Squawk Code</div>
+									<div class="font-mono text-sm">
+										{#if gap.squawk_before === gap.squawk_after}
+											{gap.squawk_before || 'N/A'}
+										{:else}
+											<span>{gap.squawk_before || 'N/A'}</span>
+											<span class="text-surface-500-400-token mx-1">→</span>
+											<span>{gap.squawk_after || 'N/A'}</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Climb Rates -->
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Climb Rate (immediately before/after)
+								</div>
+								<div class="text-sm">
+									<span>{formatClimbRate(gap.climb_rate_before)}</span>
+									<span class="text-surface-500-400-token mx-1">→</span>
+									<span>{formatClimbRate(gap.climb_rate_after)}</span>
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Avg Climb Rate (10 fixes before)
+								</div>
+								<div class="text-sm">{formatClimbRate(gap.avg_climb_rate_10_before)}</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Avg Climb Rate (10 fixes after)
+								</div>
+								<div class="text-sm">{formatClimbRate(gap.avg_climb_rate_10_after)}</div>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
 		{/if}
 	</div>
 </div>
