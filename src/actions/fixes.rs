@@ -9,7 +9,7 @@ use axum::{
 use chrono::{Duration, Utc};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::sync::broadcast;
 use tracing::{error, info, instrument, warn};
 
@@ -33,6 +33,14 @@ pub struct FixesQueryParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoBounds {
+    pub north: f64,
+    pub south: f64,
+    pub east: f64,
+    pub west: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SubscriptionMessage {
     #[serde(rename = "device")]
@@ -40,12 +48,214 @@ pub enum SubscriptionMessage {
         action: String, // "subscribe" or "unsubscribe"
         id: String,     // Aircraft UUID
     },
-    #[serde(rename = "area")]
-    Area {
-        action: String, // "subscribe" or "unsubscribe"
-        latitude: i32,  // Integer latitude
-        longitude: i32, // Integer longitude
+    #[serde(rename = "area_bulk")]
+    AreaBulk {
+        action: String,    // "subscribe" or "unsubscribe"
+        bounds: GeoBounds, // Bounding box for bulk area subscription
     },
+}
+
+/// Maximum number of squares allowed in a single bulk subscription
+const MAX_SQUARES_PER_SUBSCRIPTION: usize = 1000;
+
+/// Validates that bounds are reasonable and not too large
+fn validate_bounds(bounds: &GeoBounds) -> anyhow::Result<()> {
+    // Check that south < north
+    if bounds.south >= bounds.north {
+        return Err(anyhow::anyhow!(
+            "Invalid bounds: south ({}) must be less than north ({})",
+            bounds.south,
+            bounds.north
+        ));
+    }
+
+    // Calculate number of squares (accounting for date line crossing)
+    let lat_range = (bounds.north.floor() - bounds.south.floor()) as usize + 2;
+    let lon_range = if bounds.east < bounds.west {
+        // Date line crossing
+        ((180.0 - bounds.west).floor() + (bounds.east - (-180.0)).floor()) as usize + 2
+    } else {
+        (bounds.east.floor() - bounds.west.floor()) as usize + 2
+    };
+
+    let total_squares = lat_range * lon_range;
+
+    if total_squares > MAX_SQUARES_PER_SUBSCRIPTION {
+        return Err(anyhow::anyhow!(
+            "Bounding box too large: {} squares (max {})",
+            total_squares,
+            MAX_SQUARES_PER_SUBSCRIPTION
+        ));
+    }
+
+    Ok(())
+}
+
+/// Calculates area squares without handling date line crossing
+fn calculate_area_squares_no_wrap(bounds: &GeoBounds) -> Vec<(i32, i32)> {
+    let lat_min = bounds.south.floor() as i32;
+    let lat_max = bounds.north.floor() as i32;
+    let lon_min = bounds.west.floor() as i32;
+    let lon_max = bounds.east.floor() as i32;
+
+    let mut squares = Vec::new();
+
+    // +1 to match frontend's "latMax + 1" logic
+    for lat in lat_min..=lat_max + 1 {
+        // Skip polar regions (outside valid latitude range)
+        if !(-90..=90).contains(&lat) {
+            continue;
+        }
+
+        for lon in lon_min..=lon_max + 1 {
+            squares.push((lat, lon));
+        }
+    }
+
+    squares
+}
+
+/// Calculates all integer lat/lon squares within decimal bounds
+/// Handles date line crossing (when east < west)
+fn calculate_area_squares(bounds: &GeoBounds) -> Vec<(i32, i32)> {
+    if bounds.east < bounds.west {
+        // Date line crossing - split into two ranges
+        let west_bounds = GeoBounds {
+            north: bounds.north,
+            south: bounds.south,
+            east: 180.0,
+            west: bounds.west,
+        };
+        let east_bounds = GeoBounds {
+            north: bounds.north,
+            south: bounds.south,
+            east: bounds.east,
+            west: -180.0,
+        };
+
+        let mut squares = calculate_area_squares_no_wrap(&west_bounds);
+        squares.extend(calculate_area_squares_no_wrap(&east_bounds));
+        squares
+    } else {
+        calculate_area_squares_no_wrap(bounds)
+    }
+}
+
+/// Parses an area key like "area.37.-122" into (latitude, longitude)
+fn parse_area_key(key: &str) -> anyhow::Result<(i32, i32)> {
+    let parts: Vec<&str> = key.split('.').collect();
+    if parts.len() != 3 || parts[0] != "area" {
+        return Err(anyhow::anyhow!("Invalid area key format: {}", key));
+    }
+
+    let lat = parts[1]
+        .parse::<i32>()
+        .map_err(|e| anyhow::anyhow!("Failed to parse latitude from {}: {}", key, e))?;
+    let lon = parts[2]
+        .parse::<i32>()
+        .map_err(|e| anyhow::anyhow!("Failed to parse longitude from {}: {}", key, e))?;
+
+    Ok((lat, lon))
+}
+
+/// Handles bulk area subscription/unsubscription with delta calculation
+async fn handle_bulk_area_subscription(
+    action: &str,
+    new_bounds: &GeoBounds,
+    subscribed_areas: &mut HashSet<String>,
+    current_bulk_bounds: &mut Option<GeoBounds>,
+    receivers: &mut HashMap<String, broadcast::Receiver<WebSocketMessage>>,
+    live_fix_service: &crate::live_fixes::LiveFixService,
+) -> anyhow::Result<()> {
+    match action {
+        "subscribe" => {
+            // Validate bounds first
+            validate_bounds(new_bounds)?;
+
+            // Calculate squares for new bounds
+            let new_squares = calculate_area_squares(new_bounds);
+            let new_square_set: HashSet<String> = new_squares
+                .iter()
+                .map(|(lat, lon)| format!("area.{}.{}", lat, lon))
+                .collect();
+
+            // Find deltas
+            let to_unsubscribe: Vec<_> = subscribed_areas
+                .difference(&new_square_set)
+                .cloned()
+                .collect();
+
+            let to_subscribe: Vec<_> = new_square_set
+                .difference(subscribed_areas)
+                .cloned()
+                .collect();
+
+            info!(
+                "Bulk area subscription: {} to unsubscribe, {} to subscribe, {} total squares",
+                to_unsubscribe.len(),
+                to_subscribe.len(),
+                new_square_set.len()
+            );
+
+            // Unsubscribe from removed squares
+            for area_key in to_unsubscribe {
+                let (lat, lon) = parse_area_key(&area_key)?;
+                live_fix_service.unsubscribe_from_area(lat, lon).await?;
+                subscribed_areas.remove(&area_key);
+                receivers.remove(&area_key);
+                metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+                metrics::counter!("websocket_area_unsubscribes").increment(1);
+            }
+
+            // Subscribe to new squares
+            for area_key in to_subscribe {
+                let (lat, lon) = parse_area_key(&area_key)?;
+                match live_fix_service.subscribe_to_area(lat, lon).await {
+                    Ok(receiver) => {
+                        subscribed_areas.insert(area_key.clone());
+                        receivers.insert(area_key, receiver);
+                        metrics::gauge!("websocket_active_subscriptions").increment(1.0);
+                        metrics::counter!("websocket_area_subscribes").increment(1);
+                    }
+                    Err(e) => {
+                        error!("Failed to subscribe to area {}: {}", area_key, e);
+                        return Err(e);
+                    }
+                }
+            }
+
+            // Store new bounds and track metrics
+            *current_bulk_bounds = Some(new_bounds.clone());
+            metrics::counter!("websocket_area_bulk_subscribes").increment(1);
+            metrics::histogram!("websocket_area_bulk_squares_per_subscription")
+                .record(new_square_set.len() as f64);
+
+            info!(
+                "Successfully updated bulk area subscription: {} active squares",
+                subscribed_areas.len()
+            );
+
+            Ok(())
+        }
+        "unsubscribe" => {
+            // Unsubscribe from all current areas
+            for area_key in subscribed_areas.drain() {
+                let (lat, lon) = parse_area_key(&area_key)?;
+                live_fix_service.unsubscribe_from_area(lat, lon).await?;
+                receivers.remove(&area_key);
+                metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+                metrics::counter!("websocket_area_unsubscribes").increment(1);
+            }
+
+            *current_bulk_bounds = None;
+            metrics::counter!("websocket_area_bulk_unsubscribes").increment(1);
+
+            info!("Successfully unsubscribed from all bulk areas");
+
+            Ok(())
+        }
+        _ => Err(anyhow::anyhow!("Unknown action: {}", action)),
+    }
 }
 
 pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -207,6 +417,8 @@ async fn handle_subscriptions(
     _pool: crate::web::PgPool,
 ) {
     let mut subscribed_aircraft: Vec<String> = Vec::new();
+    let mut subscribed_areas: HashSet<String> = HashSet::new();
+    let mut current_bulk_bounds: Option<GeoBounds> = None;
     let mut receivers: HashMap<String, broadcast::Receiver<WebSocketMessage>> = HashMap::new();
 
     loop {
@@ -254,43 +466,24 @@ async fn handle_subscriptions(
                                     }
                                 }
                             }
-                            SubscriptionMessage::Area { action, latitude, longitude } => {
-                                match action.as_str() {
-                                    "subscribe" => {
-                                        info!("Client subscribing to area: lat={}, lon={}", latitude, longitude);
-                                        let area_key = format!("area.{}.{}", latitude, longitude);
-                                        if !subscribed_aircraft.contains(&area_key) {
-                                            match live_fix_service.subscribe_to_area(latitude, longitude).await {
-                                                Ok(receiver) => {
-                                                    subscribed_aircraft.push(area_key.clone());
-                                                    receivers.insert(area_key, receiver);
-                                                    metrics::gauge!("websocket_active_subscriptions").increment(1.0);
-                                                    metrics::counter!("websocket_area_subscribes").increment(1);
-                                                    info!("Successfully subscribed to area: lat={}, lon={}", latitude, longitude);
-                                                }
-                                                Err(e) => {
-                                                    error!("Failed to subscribe to area lat={}, lon={}: {}", latitude, longitude, e);
-                                                }
-                                            }
-                                        }
+                            SubscriptionMessage::AreaBulk { action, bounds } => {
+                                info!("Client bulk area subscription: action={}, bounds={:?}", action, bounds);
+                                match handle_bulk_area_subscription(
+                                    &action,
+                                    &bounds,
+                                    &mut subscribed_areas,
+                                    &mut current_bulk_bounds,
+                                    &mut receivers,
+                                    &live_fix_service,
+                                )
+                                .await
+                                {
+                                    Ok(()) => {
+                                        info!("Successfully handled bulk area subscription");
                                     }
-                                    "unsubscribe" => {
-                                        info!("Client unsubscribing from area: lat={}, lon={}", latitude, longitude);
-                                        let area_key = format!("area.{}.{}", latitude, longitude);
-                                        if subscribed_aircraft.contains(&area_key) {
-                                            subscribed_aircraft.retain(|key| key != &area_key);
-                                            receivers.remove(&area_key);
-                                            metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                                            metrics::counter!("websocket_area_unsubscribes").increment(1);
-                                            if let Err(e) = live_fix_service.unsubscribe_from_area(latitude, longitude).await {
-                                                error!("Failed to unsubscribe from area lat={}, lon={}: {}", latitude, longitude, e);
-                                            } else {
-                                                info!("Successfully unsubscribed from area: lat={}, lon={}", latitude, longitude);
-                                            }
-                                        }
-                                    }
-                                    _ => {
-                                        warn!("Unknown area subscription action: {}", action);
+                                    Err(e) => {
+                                        error!("Failed to handle bulk area subscription: {}", e);
+                                        metrics::counter!("websocket_area_bulk_validation_errors").increment(1);
                                     }
                                 }
                             }
@@ -354,41 +547,37 @@ async fn handle_subscriptions(
     }
 
     // Cleanup subscriptions when connection closes
-    for subscription_key in &subscribed_aircraft {
-        if subscription_key.starts_with("area.") {
-            // Parse area subscription key: "area.lat.lon"
-            let parts: Vec<&str> = subscription_key.split('.').collect();
-            if parts.len() == 3 {
-                if let (Ok(lat), Ok(lon)) = (parts[1].parse::<i32>(), parts[2].parse::<i32>()) {
-                    if let Err(e) = live_fix_service.unsubscribe_from_area(lat, lon).await {
-                        error!(
-                            "Failed to cleanup area subscription {}: {}",
-                            subscription_key, e
-                        );
-                    } else {
-                        metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                        info!("Cleaned up area subscription: {}", subscription_key);
-                    }
+
+    // Clean up area subscriptions
+    for area_key in &subscribed_areas {
+        match parse_area_key(area_key) {
+            Ok((lat, lon)) => {
+                if let Err(e) = live_fix_service.unsubscribe_from_area(lat, lon).await {
+                    error!("Failed to cleanup area subscription {}: {}", area_key, e);
                 } else {
-                    error!("Invalid area subscription key format: {}", subscription_key);
+                    metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+                    info!("Cleaned up area subscription: {}", area_key);
                 }
-            } else {
-                error!("Invalid area subscription key format: {}", subscription_key);
             }
+            Err(e) => {
+                error!("Failed to parse area key during cleanup: {}", e);
+            }
+        }
+    }
+
+    // Clean up aircraft subscriptions
+    for aircraft_id in &subscribed_aircraft {
+        if let Err(e) = live_fix_service
+            .unsubscribe_from_aircraft(aircraft_id)
+            .await
+        {
+            error!(
+                "Failed to cleanup aircraft subscription {}: {}",
+                aircraft_id, e
+            );
         } else {
-            // Aircraft subscription
-            if let Err(e) = live_fix_service
-                .unsubscribe_from_aircraft(subscription_key)
-                .await
-            {
-                error!(
-                    "Failed to cleanup aircraft subscription {}: {}",
-                    subscription_key, e
-                );
-            } else {
-                metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                info!("Cleaned up aircraft subscription: {}", subscription_key);
-            }
+            metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+            info!("Cleaned up aircraft subscription: {}", aircraft_id);
         }
     }
 }

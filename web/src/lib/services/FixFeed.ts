@@ -17,20 +17,26 @@ export type FixFeedEvent =
 
 export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
+export interface GeoBounds {
+	north: number;
+	south: number;
+	east: number;
+	west: number;
+}
+
 export interface AircraftSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
 	type: 'aircraft';
 	id: string;
 }
 
-export interface AreaSubscriptionMessage {
+export interface BulkAreaSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	type: 'area';
-	latitude: number;
-	longitude: number;
+	type: 'area_bulk';
+	bounds: GeoBounds;
 }
 
-export type SubscriptionMessage = AircraftSubscriptionMessage | AreaSubscriptionMessage;
+export type SubscriptionMessage = AircraftSubscriptionMessage | BulkAreaSubscriptionMessage;
 
 export class FixFeed {
 	private static instance: FixFeed | null = null;
