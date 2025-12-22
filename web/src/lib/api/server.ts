@@ -1,3 +1,4 @@
+import { browser } from '$app/environment';
 import { dev } from '$app/environment';
 import { loading } from '$lib/stores/loading';
 import { backendMode } from '$lib/stores/backend';
@@ -57,13 +58,27 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 	// Use provided fetch (from SvelteKit load function) or fall back to global fetch
 	const fetchFn = customFetch || fetch;
 
+	// Get auth token from localStorage and add to headers if available
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		...(requestOptions.headers as Record<string, string>)
+	};
+
+	// Add Authorization header if token is available in browser environment
+	if (browser) {
+		const token = localStorage.getItem('auth_token');
+		if (token) {
+			// Only add Authorization header if one wasn't explicitly provided
+			if (!headers['Authorization'] && !headers['authorization']) {
+				headers['Authorization'] = `Bearer ${token}`;
+			}
+		}
+	}
+
 	try {
 		const response = await fetchFn(url, {
 			...requestOptions,
-			headers: {
-				'Content-Type': 'application/json',
-				...requestOptions.headers
-			}
+			headers
 		});
 
 		if (!response.ok) {
