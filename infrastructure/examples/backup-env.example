@@ -38,10 +38,18 @@ BACKUP_RCLONE_BUCKET=soar-backup-prod
 # Example: BACKUP_RCLONE_PATH=production/database
 BACKUP_RCLONE_PATH=
 
-# Note: You must configure rclone with your Wasabi credentials first:
-#   rclone config
+#------------------------------------------------------------------------------
+# RCLONE CONFIGURATION
+#------------------------------------------------------------------------------
+
+# Path to rclone configuration file (REQUIRED)
+# This file contains the Wasabi S3 credentials
+# The file should be owned by postgres:soar with 640 permissions
+RCLONE_CONFIG=/etc/soar/rclone.conf
+
+# Note: The rclone configuration file should contain:
 #
-# Example rclone configuration for Wasabi:
+# Example /etc/soar/rclone.conf:
 #   [wasabi]
 #   type = s3
 #   provider = Wasabi
@@ -49,6 +57,12 @@ BACKUP_RCLONE_PATH=
 #   secret_access_key = YOUR_SECRET_KEY
 #   endpoint = s3.wasabisys.com
 #   acl = private
+#
+# Setup instructions:
+#   sudo mkdir -p /etc/soar
+#   sudo nano /etc/soar/rclone.conf  # Add configuration above
+#   sudo chown postgres:soar /etc/soar/rclone.conf
+#   sudo chmod 640 /etc/soar/rclone.conf
 #
 # The bucket must exist before running backups. The structure will be:
 #   s3://soar-backup-prod/base/YYYY-MM-DD/  (base backups)
@@ -207,7 +221,7 @@ METRICS_PUSHGATEWAY=
 #
 # 1. Test rclone access to Wasabi:
 #    source /etc/soar/backup-env
-#    rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
+#    rclone --config ${RCLONE_CONFIG} lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
 #
 # 2. Test WAL archiving (as postgres user):
 #    sudo -u postgres /usr/local/bin/soar-wal-archive \
@@ -220,5 +234,5 @@ METRICS_PUSHGATEWAY=
 #
 # 4. Verify backup in Wasabi S3:
 #    source /etc/soar/backup-env
-#    rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base
-#    rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal | head
+#    rclone --config ${RCLONE_CONFIG} lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base
+#    rclone --config ${RCLONE_CONFIG} ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal | head
