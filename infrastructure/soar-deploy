@@ -480,6 +480,16 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
                     filename=$(basename "$alerting_file")
                     # Skip template files
                     if [[ "$filename" != *.template ]]; then
+                        # Skip environment-specific alert rules that don't match current environment
+                        if [[ "$filename" == "alert-rules-production.yml" && "$ENVIRONMENT" == "staging" ]]; then
+                            log_info "Skipping $filename (production-only alerts)"
+                            continue
+                        fi
+                        if [[ "$filename" == "alert-rules-staging.yml" && "$ENVIRONMENT" == "production" ]]; then
+                            log_info "Skipping $filename (staging-only alerts)"
+                            continue
+                        fi
+
                         cp "$alerting_file" /etc/grafana/provisioning/alerting/
                         chmod 644 "/etc/grafana/provisioning/alerting/$filename"
                         log_info "Installed alerting config: $filename"
