@@ -576,8 +576,56 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
         log_info "Restarting Grafana to load new dashboards..."
         systemctl restart grafana-server || log_warn "Failed to restart Grafana"
         log_info "Grafana restarted successfully"
+
+        # Wait for Grafana to fully start
+        sleep 3
+
+        # Validate required datasources exist
+        log_info "Validating Grafana datasources..."
+        DATASOURCE_VALIDATION_FAILED=false
+
+        # Check for prometheus datasource (required for alerts and dashboards)
+        if ! sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='prometheus';" 2>/dev/null | grep -q "prometheus"; then
+            log_error "Required datasource 'prometheus' not found in Grafana"
+            log_error "Alerts and dashboards will not work without this datasource"
+            log_error "To fix: Add Prometheus datasource with uid='prometheus' in Grafana UI or provisioning"
+            DATASOURCE_VALIDATION_FAILED=true
+        else
+            log_info "Datasource 'prometheus': ${GREEN}FOUND${NC}"
+        fi
+
+        # Check for PostgreSQL datasource (required for flight analysis dashboard)
+        # Check by both UID and name for flexibility
+        if [ "$ENVIRONMENT" = "staging" ]; then
+            POSTGRES_DATASOURCE_UID="soar-postgres-staging"
+            POSTGRES_DATASOURCE_NAME="soar-postgres-staging"
+        else
+            POSTGRES_DATASOURCE_UID="soar-postgres"
+            POSTGRES_DATASOURCE_NAME="soar-postgres"
+        fi
+
+        # Check if datasource exists by UID or name
+        POSTGRES_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='$POSTGRES_DATASOURCE_UID';" 2>/dev/null)
+        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME' OR name='soar-postgres';" 2>/dev/null)
+
+        if [ -n "$POSTGRES_UID_EXISTS" ]; then
+            log_info "Datasource '$POSTGRES_DATASOURCE_UID': ${GREEN}FOUND (by UID)${NC}"
+        elif [ -n "$POSTGRES_NAME_EXISTS" ]; then
+            log_info "Datasource 'soar-postgres': ${GREEN}FOUND (by name)${NC}"
+            log_warn "PostgreSQL datasource found but UID doesn't match expected '$POSTGRES_DATASOURCE_UID'"
+            log_warn "Flight analysis dashboard queries may need to reference the correct datasource"
+        else
+            log_warn "Datasource 'soar-postgres' or '$POSTGRES_DATASOURCE_UID' not found in Grafana"
+            log_warn "Flight analysis dashboard will not work without this datasource"
+            log_warn "To fix: Add PostgreSQL datasource in Grafana UI"
+        fi
+
+        if [ "$DATASOURCE_VALIDATION_FAILED" = true ]; then
+            log_error "${RED}Datasource validation failed - Grafana alerts may not work${NC}"
+            log_error "Fix datasource configuration before alerts will evaluate correctly"
+        fi
     else
-        log_warn "Grafana is not running, skipping restart"
+        log_warn "Grafana is not running, skipping restart and datasource validation"
     fi
 fi
 
