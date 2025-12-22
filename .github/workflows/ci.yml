@@ -662,6 +662,13 @@ jobs:
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
+
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
             cp -r infrastructure/prometheus-jobs deploy-pkg/
@@ -807,6 +814,13 @@ jobs:
           cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
+
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
