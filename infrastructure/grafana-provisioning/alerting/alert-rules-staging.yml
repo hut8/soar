@@ -18,14 +18,14 @@ groups:
       # Alert when staging OGN/APRS message ingestion rate drops below 1 message per minute
       - uid: ogn_message_rate_low_staging
         title: "[Staging] OGN Message Ingestion Rate Too Low"
-        condition: C
+        condition: D
         data:
           # Query A: Get the rate of APRS messages processed per minute (staging only)
           - refId: A
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: Prometheus
+            datasourceUid: prometheus
             model:
               expr: rate(aprs_raw_message_processed_total{environment="staging"}[1m]) * 60
               intervalMs: 1000
@@ -37,15 +37,27 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: Prometheus
+            datasourceUid: prometheus
             model:
               expr: rate(aprs_nats_published_total{environment="staging"}[1m]) * 60
               intervalMs: 1000
               maxDataPoints: 43200
               refId: B
 
-          # Condition C: Alert if metric is below 1 msg/min
+          # Reduce C: Convert time series to single value using last()
           - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: C
+
+          # Condition D: Alert if metric is below 1 msg/min
+          - refId: D
             relativeTimeRange:
               from: 300
               to: 0
@@ -60,7 +72,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - A
+                      - D
                   reducer:
                     params: []
                     type: last
@@ -68,11 +80,11 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: A
+              expression: C
               hide: false
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: C
+              refId: D
               type: threshold
 
         for: 2m
@@ -80,7 +92,7 @@ groups:
         execErrState: Alerting
         annotations:
           summary: "[Staging] OGN/APRS message ingestion rate is critically low"
-          description: 'Staging OGN ingestion rate: {{ printf "%.2f" $values.A.Value }} messages/min (threshold: 1.0 msg/min). Check if ingest-ogn-staging service is running and connected to APRS-IS.'
+          description: 'Staging OGN ingestion rate: {{ printf "%.2f" $values.C.Value }} messages/min (threshold: 1.0 msg/min). Check if ingest-ogn-staging service is running and connected to APRS-IS.'
         labels:
           severity: critical
           service: ogn-ingest
@@ -90,22 +102,34 @@ groups:
       # Alert when staging OGN ingest service is disconnected
       - uid: ogn_service_disconnected_staging
         title: "[Staging] OGN Ingest Service Disconnected"
-        condition: B
+        condition: C
         data:
           # Query A: Check if APRS connection is established (staging only)
           - refId: A
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: Prometheus
+            datasourceUid: prometheus
             model:
               expr: aprs_connection_connected{environment="staging"}
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
 
-          # Condition B: Alert if connection gauge is 0 (disconnected)
+          # Reduce B: Convert time series to single value using last()
           - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+
+          # Condition C: Alert if connection gauge is 0 (disconnected)
+          - refId: C
             relativeTimeRange:
               from: 300
               to: 0
@@ -120,7 +144,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - A
+                      - C
                   reducer:
                     params: []
                     type: last
@@ -128,11 +152,11 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: A
+              expression: B
               hide: false
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: B
+              refId: C
               type: threshold
 
         for: 1m
@@ -150,22 +174,34 @@ groups:
       # Alert when staging NATS publishing errors are occurring
       - uid: ogn_nats_publish_errors_staging
         title: "[Staging] OGN NATS Publishing Errors"
-        condition: B
+        condition: C
         data:
           # Query A: Get the rate of NATS publish errors (staging only)
           - refId: A
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: Prometheus
+            datasourceUid: prometheus
             model:
               expr: rate(aprs_nats_publish_error_total{environment="staging"}[5m]) * 60
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
 
-          # Condition B: Alert if error rate > 0.1 errors/min
+          # Reduce B: Convert time series to single value using last()
           - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+
+          # Condition C: Alert if error rate > 0.1 errors/min
+          - refId: C
             relativeTimeRange:
               from: 300
               to: 0
@@ -180,7 +216,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - A
+                      - C
                   reducer:
                     params: []
                     type: last
@@ -188,11 +224,11 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: A
+              expression: B
               hide: false
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: B
+              refId: C
               type: threshold
 
         for: 3m
@@ -200,7 +236,7 @@ groups:
         execErrState: Alerting
         annotations:
           summary: "[Staging] OGN ingest service is experiencing NATS publishing errors"
-          description: 'Staging NATS publish error rate: {{ printf "%.2f" $values.A.Value }} errors/min. Check NATS connectivity and queue depth.'
+          description: 'Staging NATS publish error rate: {{ printf "%.2f" $values.B.Value }} errors/min. Check NATS connectivity and queue depth.'
         labels:
           severity: warning
           service: ogn-ingest
