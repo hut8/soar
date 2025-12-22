@@ -431,6 +431,33 @@ GRAFANA_NEEDS_RESTART=false
 
 if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
     log_info "Installing Grafana provisioning configuration..."
+
+    # Install datasource provisioning
+    if [ -d "$DEPLOY_DIR/grafana-provisioning/datasources" ]; then
+        log_info "Installing Grafana datasource configuration..."
+        mkdir -p /etc/grafana/provisioning/datasources
+        for datasource_file in "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yml; do
+            if [ -f "$datasource_file" ]; then
+                filename=$(basename "$datasource_file")
+                cp "$datasource_file" /etc/grafana/provisioning/datasources/
+                chmod 640 "/etc/grafana/provisioning/datasources/$filename"
+                log_info "Installed datasource config: $filename"
+            fi
+        done
+
+        # Set ownership to grafana user
+        if id "grafana" &>/dev/null; then
+            chown -R grafana:grafana /etc/grafana/provisioning/datasources
+            log_info "Grafana datasource configuration installed successfully"
+            GRAFANA_NEEDS_RESTART=true
+        else
+            log_warn "grafana user not found, skipping ownership change"
+        fi
+    else
+        log_info "No datasource configuration found in deployment, skipping"
+    fi
+
+    # Install dashboard provisioning
     mkdir -p /etc/grafana/provisioning/dashboards
     cp -r "$DEPLOY_DIR/grafana-provisioning/dashboards"/*.yml /etc/grafana/provisioning/dashboards/
     chmod 644 /etc/grafana/provisioning/dashboards/*.yml
