@@ -5,13 +5,14 @@ use crate::locations_repo::LocationsRepository;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-/// Reverse geocoding is disabled for flight takeoffs and landings (takeoff_location_id/landing_location_id)
-/// When this is false, create_or_find_location will not perform reverse geocoding
-/// Note: start_location_id and end_location_id always use reverse geocoding via create_start_end_location
+/// DEPRECATED: Reverse geocoding for takeoff_location_id/landing_location_id fields (no longer used)
+/// These fields have been replaced by start_location_id/end_location_id
+/// This constant and create_or_find_location() are kept for backward compatibility only
 const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
 
-/// Reverse geocoding for start/end locations is disabled (Photon is currently disabled)
-/// When this is false, create_start_end_location will not perform reverse geocoding
+/// Enable reverse geocoding for start/end locations using Pelias
+/// When true, create_start_end_location() will use Pelias city-level reverse geocoding
+/// When false, start_location_id and end_location_id will be null
 const GEOCODING_ENABLED_FOR_START_END: bool = false;
 
 /// Find nearest airport within 2km of given coordinates
@@ -42,12 +43,12 @@ pub(crate) async fn get_airport_location_id(
     }
 }
 
-/// Create or find a location for given coordinates using reverse geocoding
-/// If an airport is present at these coordinates, use the airport's location instead
-/// Otherwise, perform reverse geocoding via Nominatim and create a new location
-/// Returns the location ID if successful
+/// DEPRECATED: Create or find a location for takeoff_location_id/landing_location_id (no longer used)
+/// This function is kept for backward compatibility but is not called in production.
+/// Use create_start_end_location() for start_location_id/end_location_id instead.
 ///
-/// Note: Geocoding is currently disabled via GEOCODING_ENABLED_FOR_TAKEOFF_LANDING constant
+/// Note: Geocoding is permanently disabled via GEOCODING_ENABLED_FOR_TAKEOFF_LANDING constant
+#[allow(dead_code)]
 pub(crate) async fn create_or_find_location(
     _airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
@@ -127,20 +128,21 @@ pub(crate) async fn create_or_find_location(
 }
 
 /// Create a start or end location with reverse geocoding for flight start/end tracking
-/// This function ONLY uses Photon reverse geocoding (no fallbacks to avoid hitting external APIs frequently)
+/// Uses Pelias city-level reverse geocoding (self-hosted, fast, no rate limits)
 /// Used for start_location_id and end_location_id fields to provide address context
 ///
-/// CURRENTLY DISABLED: Photon geocoding is temporarily disabled
+/// This provides city-level precision (e.g., "Albany, NY") which is sufficient for
+/// flight tracking without the overhead of detailed street-level geocoding.
 ///
 /// # Arguments
 /// * `locations_repo` - Repository for location database operations
 /// * `latitude` - Latitude coordinate to reverse geocode
 /// * `longitude` - Longitude coordinate to reverse geocode
-/// * `context` - Description for logging (e.g., "takeoff", "landing", "timeout")
+/// * `context` - Description for logging (e.g., "start (takeoff)", "end (landing)")
 ///
 /// # Returns
 /// * `Some(Uuid)` - Location ID if reverse geocoding and creation succeeded
-/// * `None` - If reverse geocoding or location creation failed
+/// * `None` - If geocoding is disabled, Pelias unavailable, or location creation failed
 pub(crate) async fn create_start_end_location(
     locations_repo: &LocationsRepository,
     latitude: f64,
@@ -159,31 +161,39 @@ pub(crate) async fn create_start_end_location(
     use std::time::Instant;
 
     debug!(
-        "Creating {} location for coordinates ({}, {}) with Photon reverse geocoding",
+        "Creating {} location for coordinates ({}, {}) with Pelias reverse geocoding",
         context, latitude, longitude
     );
 
-    let geocoder = Geocoder::new();
+    // Use Pelias-only geocoder for real-time flight tracking
+    let geocoder = match Geocoder::new_realtime_flight_tracking() {
+        Ok(g) => g,
+        Err(e) => {
+            warn!(
+                "Pelias not configured for real-time flight tracking: {}. Skipping location creation for {} at ({}, {})",
+                e, context, latitude, longitude
+            );
+            return None;
+        }
+    };
+
     let start = Instant::now();
 
-    // Only use Photon - don't fall back to Nominatim or Google Maps for flight locations
-    match geocoder
-        .reverse_geocode_with_photon_only(latitude, longitude)
-        .await
-    {
+    // Only use Pelias - don't fall back to external APIs for real-time flight locations
+    match geocoder.reverse_geocode(latitude, longitude).await {
         Ok(result) => {
             let latency_ms = start.elapsed().as_millis() as f64;
-            metrics::histogram!("flight_tracker.location.photon.latency_ms").record(latency_ms);
-            metrics::counter!("flight_tracker.location.photon.success").increment(1);
+            metrics::histogram!("flight_tracker.location.pelias.latency_ms").record(latency_ms);
+            metrics::counter!("flight_tracker.location.pelias.success").increment(1);
 
             // Check if we got structured data (city/state/country) vs just a generic name
             let has_structured_data =
                 result.city.is_some() || result.state.is_some() || result.country.is_some();
 
             if !has_structured_data {
-                metrics::counter!("flight_tracker.location.photon.no_structured_data").increment(1);
+                metrics::counter!("flight_tracker.location.pelias.no_structured_data").increment(1);
                 debug!(
-                    "Photon returned no structured data for {} location ({}, {}), only name: {}",
+                    "Pelias returned no structured data for {} location ({}, {}), only name: {}",
                     context, latitude, longitude, result.display_name
                 );
             }
@@ -245,7 +255,7 @@ pub(crate) async fn create_start_end_location(
             }
         }
         Err(e) => {
-            metrics::counter!("flight_tracker.location.photon.failure").increment(1);
+            metrics::counter!("flight_tracker.location.pelias.failure").increment(1);
             warn!(
                 "Reverse geocoding failed for {} location at coordinates ({}, {}): {}",
                 context, latitude, longitude, e

@@ -321,6 +321,98 @@ impl Geocoder {
         }
     }
 
+    /// Create a Geocoder for batch geocoding operations (receivers, clubs, airports, aircraft registrations)
+    /// Uses only Nominatim → Google Maps (no Pelias)
+    ///
+    /// This configuration is optimized for:
+    /// - High-quality address results (detailed street-level data)
+    /// - Non-time-critical batch processing
+    /// - Lower volume operations where rate limits are manageable
+    pub fn new_batch_geocoding() -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        let mut forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)> = Vec::new();
+        let mut reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)> = Vec::new();
+
+        // Add Nominatim (always available)
+        let nominatim = NominatimClient::new(
+            client.clone(),
+            "https://nominatim.openstreetmap.org".to_string(),
+            "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)".to_string(),
+        );
+        forward_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim.clone())));
+        reverse_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim)));
+
+        // Add Google Maps if API key is available
+        if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY")
+            && !api_key.trim().is_empty()
+        {
+            debug!("Initializing Google Maps client for batch geocoding");
+            match GoogleMapsClient::try_new(&api_key) {
+                Ok(gmaps_client) => {
+                    let google_maps = GoogleMapsGeocoderClient::new(gmaps_client);
+                    forward_geocoders
+                        .push((GeocodingService::GoogleMaps, Box::new(google_maps.clone())));
+                    reverse_geocoders.push((GeocodingService::GoogleMaps, Box::new(google_maps)));
+                }
+                Err(e) => {
+                    warn!("Failed to create Google Maps client: {}", e);
+                }
+            }
+        }
+
+        Self {
+            forward_geocoders,
+            reverse_geocoders,
+        }
+    }
+
+    /// Create a Geocoder for real-time flight tracking
+    /// Uses ONLY Pelias (city-level reverse geocoding, no fallbacks)
+    ///
+    /// This configuration is optimized for:
+    /// - High-frequency real-time operations
+    /// - City-level precision (sufficient for flight tracking)
+    /// - Fast response times (no fallback delays)
+    /// - No rate limiting concerns (self-hosted Pelias)
+    ///
+    /// Returns error if PELIAS_BASE_URL is not configured
+    pub fn new_realtime_flight_tracking() -> Result<Self> {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        let forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)> = Vec::new();
+        let mut reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)> = Vec::new();
+
+        // ONLY add Pelias for real-time flight tracking
+        let url = env::var("PELIAS_BASE_URL").map_err(|_| {
+            anyhow!("PELIAS_BASE_URL not set - required for real-time flight tracking")
+        })?;
+
+        if url.trim().is_empty() {
+            return Err(anyhow!(
+                "PELIAS_BASE_URL is empty - required for real-time flight tracking"
+            ));
+        }
+
+        debug!(
+            "Using Pelias geocoding server for real-time flight tracking at: {}",
+            url
+        );
+        let pelias = PeliasClient::new(client, url.trim().to_string());
+        reverse_geocoders.push((GeocodingService::Pelias, Box::new(pelias)));
+
+        Ok(Self {
+            forward_geocoders,
+            reverse_geocoders,
+        })
+    }
+
     /// Reverse geocode coordinates using ONLY Photon (no fallbacks)
     /// Used for high-frequency operations like flight start/end locations
     /// Returns error if Photon is unavailable or fails
