@@ -163,3 +163,21 @@ impl GoogleMapsGeocoderClient {
         })
     }
 }
+
+// Trait implementations
+use super::{ForwardGeocoder, ReverseGeocoder};
+use async_trait::async_trait;
+
+#[async_trait]
+impl ForwardGeocoder for GoogleMapsGeocoderClient {
+    async fn geocode(&self, address: &str) -> Result<Point> {
+        self.geocode(address).await
+    }
+}
+
+#[async_trait]
+impl ReverseGeocoder for GoogleMapsGeocoderClient {
+    async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult> {
+        self.reverse_geocode(latitude, longitude).await
+    }
+}

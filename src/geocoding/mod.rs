@@ -5,6 +5,7 @@ mod photon;
 
 use ::google_maps::Client as GoogleMapsClient;
 use anyhow::{Result, anyhow};
+use async_trait::async_trait;
 use reqwest;
 use std::env;
 use std::time::Duration;
@@ -16,6 +17,62 @@ use self::google_maps::GoogleMapsGeocoderClient;
 use nominatim::NominatimClient;
 use pelias::PeliasClient;
 use photon::PhotonClient;
+
+/// Trait for geocoding services that support forward geocoding (address → coordinates)
+///
+/// Forward geocoding converts a human-readable address string into geographic coordinates.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let client = NominatimClient::new(...);
+/// let point = client.geocode("1600 Pennsylvania Avenue, Washington, DC").await?;
+/// println!("Coordinates: {}, {}", point.latitude, point.longitude);
+/// ```
+#[async_trait]
+pub trait ForwardGeocoder: Send + Sync {
+    /// Geocode an address string to WGS84 coordinates
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address to geocode (e.g., "123 Main St, Albany, NY 12207")
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Point)` - The geographic coordinates of the address
+    /// * `Err(...)` - If the address cannot be geocoded or the service is unavailable
+    async fn geocode(&self, address: &str) -> Result<Point>;
+}
+
+/// Trait for geocoding services that support reverse geocoding (coordinates → address)
+///
+/// Reverse geocoding converts geographic coordinates into a human-readable address.
+///
+/// Note: Most services use nearest-point matching rather than point-in-polygon containment.
+/// See the Photon module documentation for details on this limitation.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let client = NominatimClient::new(...);
+/// let result = client.reverse_geocode(42.6526, -73.7562).await?;
+/// println!("Address: {}", result.display_name);
+/// ```
+#[async_trait]
+pub trait ReverseGeocoder: Send + Sync {
+    /// Reverse geocode coordinates to address components
+    ///
+    /// # Arguments
+    ///
+    /// * `latitude` - Latitude in WGS84 (-90.0 to 90.0)
+    /// * `longitude` - Longitude in WGS84 (-180.0 to 180.0)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(ReverseGeocodeResult)` - The address components and display name
+    /// * `Err(...)` - If the coordinates cannot be reverse geocoded or the service is unavailable
+    async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult>;
+}
 
 /// Geocoding service that was used to successfully geocode an address
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,19 +164,52 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
-        // Initialize Photon client if configured
-        let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
-            if !url.trim().is_empty() {
-                debug!("Using Photon geocoding server at: {}", url);
-                Some(PhotonClient::new(client.clone(), url.trim().to_string()))
-            } else {
-                debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
-                None
-            }
-        } else {
-            debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
-            None
-        };
+        // DISABLED: Photon client temporarily disabled for reverse geocoding
+        // Keeping code for potential future use
+        //
+        // Photon is disabled for two primary reasons:
+        //
+        // 1. NEAREST-POINT MATCHING INACCURACY:
+        //    Photon (like Nominatim) uses nearest-point matching instead of point-in-polygon
+        //    containment for reverse geocoding. This means it finds the nearest known geographic
+        //    feature and returns that object's address, not the address of the query point.
+        //
+        //    While you can filter by layer (e.g., layer=city via https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer),
+        //    this causes significant accuracy issues:
+        //    - Example: A coordinate in Albany, NY might return "Troy, NY" if Troy's city center
+        //      is geometrically closer than Albany's center
+        //    - Requires large search radii (we use progressive 1km/5km/10km) to ensure we always
+        //      find *some* city, making queries inefficient
+        //    - No guarantee the returned city is the one that actually contains the point
+        //
+        // 2. SCHEMA INCONSISTENCY ACROSS ENTITY TYPES:
+        //    To work around #1, we could avoid filtering by layer and let Photon return any
+        //    nearby object (buildings, streets, POIs, etc.). However, this creates new problems:
+        //    - Requires importing significantly more OSM data (every building, not just cities)
+        //    - Different entity types return different schemas:
+        //      * For type="city": city name is in the "name" field
+        //      * For type="house" or buildings: city name is in the "city" field
+        //    - Makes extracting consistent "city, state, postal_code, country" data extremely
+        //      cumbersome and error-prone
+        //
+        // See also:
+        // - Nominatim has the same nearest-point issue: https://nominatim.org/release-docs/latest/api/Faq/#2-when-doing-reverse-search-the-address-details-have-parts-that-dont-contain-the-point-i-was-looking-up
+        // - Photon layer filtering: https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer
+        //
+        // For now, we use Nominatim/Pelias/Google Maps which handle these complexities internally.
+        let photon = None;
+        // let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
+        //     if !url.trim().is_empty() {
+        //         debug!("Using Photon geocoding server at: {}", url);
+        //         Some(PhotonClient::new(client.clone(), url.trim().to_string()))
+        //     } else {
+        //         debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
+        //         None
+        //     }
+        // } else {
+        //     debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+        //     None
+        // };
 
         // Initialize Pelias client if configured
         let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
@@ -177,19 +267,52 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
-        // Initialize Photon client if configured
-        let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
-            if !url.trim().is_empty() {
-                debug!("Using Photon geocoding server at: {}", url);
-                Some(PhotonClient::new(client.clone(), url.trim().to_string()))
-            } else {
-                debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
-                None
-            }
-        } else {
-            debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
-            None
-        };
+        // DISABLED: Photon client temporarily disabled for reverse geocoding
+        // Keeping code for potential future use
+        //
+        // Photon is disabled for two primary reasons:
+        //
+        // 1. NEAREST-POINT MATCHING INACCURACY:
+        //    Photon (like Nominatim) uses nearest-point matching instead of point-in-polygon
+        //    containment for reverse geocoding. This means it finds the nearest known geographic
+        //    feature and returns that object's address, not the address of the query point.
+        //
+        //    While you can filter by layer (e.g., layer=city via https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer),
+        //    this causes significant accuracy issues:
+        //    - Example: A coordinate in Albany, NY might return "Troy, NY" if Troy's city center
+        //      is geometrically closer than Albany's center
+        //    - Requires large search radii (we use progressive 1km/5km/10km) to ensure we always
+        //      find *some* city, making queries inefficient
+        //    - No guarantee the returned city is the one that actually contains the point
+        //
+        // 2. SCHEMA INCONSISTENCY ACROSS ENTITY TYPES:
+        //    To work around #1, we could avoid filtering by layer and let Photon return any
+        //    nearby object (buildings, streets, POIs, etc.). However, this creates new problems:
+        //    - Requires importing significantly more OSM data (every building, not just cities)
+        //    - Different entity types return different schemas:
+        //      * For type="city": city name is in the "name" field
+        //      * For type="house" or buildings: city name is in the "city" field
+        //    - Makes extracting consistent "city, state, postal_code, country" data extremely
+        //      cumbersome and error-prone
+        //
+        // See also:
+        // - Nominatim has the same nearest-point issue: https://nominatim.org/release-docs/latest/api/Faq/#2-when-doing-reverse-search-the-address-details-have-parts-that-dont-contain-the-point-i-was-looking-up
+        // - Photon layer filtering: https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer
+        //
+        // For now, we use Nominatim/Pelias/Google Maps which handle these complexities internally.
+        let photon = None;
+        // let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
+        //     if !url.trim().is_empty() {
+        //         debug!("Using Photon geocoding server at: {}", url);
+        //         Some(PhotonClient::new(client.clone(), url.trim().to_string()))
+        //     } else {
+        //         debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
+        //         None
+        //     }
+        // } else {
+        //     debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+        //     None
+        // };
 
         // Initialize Pelias client if configured
         let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
@@ -239,26 +362,32 @@ impl Geocoder {
     /// Reverse geocode coordinates using ONLY Photon (no fallbacks)
     /// Used for high-frequency operations like flight start/end locations
     /// Returns error if Photon is unavailable or fails
+    ///
+    /// CURRENTLY DISABLED: Photon geocoding is temporarily disabled
     pub async fn reverse_geocode_with_photon_only(
         &self,
-        latitude: f64,
-        longitude: f64,
+        _latitude: f64,
+        _longitude: f64,
     ) -> Result<ReverseGeocodeResult> {
-        // Validate coordinates
-        if !(-90.0..=90.0).contains(&latitude) {
-            return Err(anyhow!("Invalid latitude: {}", latitude));
-        }
-        if !(-180.0..=180.0).contains(&longitude) {
-            return Err(anyhow!("Invalid longitude: {}", longitude));
-        }
+        // DISABLED: Photon is temporarily not in use
+        Err(anyhow!("Photon geocoding is currently disabled"))
 
-        // Only use Photon - no fallbacks
-        let photon = self
-            .photon
-            .as_ref()
-            .ok_or_else(|| anyhow!("Photon client not available"))?;
-
-        photon.reverse_geocode(latitude, longitude).await
+        // Keeping original code for potential future use:
+        // // Validate coordinates
+        // if !(-90.0..=90.0).contains(&latitude) {
+        //     return Err(anyhow!("Invalid latitude: {}", latitude));
+        // }
+        // if !(-180.0..=180.0).contains(&longitude) {
+        //     return Err(anyhow!("Invalid longitude: {}", longitude));
+        // }
+        //
+        // // Only use Photon - no fallbacks
+        // let photon = self
+        //     .photon
+        //     .as_ref()
+        //     .ok_or_else(|| anyhow!("Photon client not available"))?;
+        //
+        // photon.reverse_geocode(latitude, longitude).await
     }
 
     /// Reverse geocode coordinates to address with Photon, Nominatim, and Google Maps fallback

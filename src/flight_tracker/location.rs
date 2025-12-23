@@ -10,6 +10,10 @@ use uuid::Uuid;
 /// Note: start_location_id and end_location_id always use reverse geocoding via create_start_end_location
 const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
 
+/// Reverse geocoding for start/end locations is disabled (Photon is currently disabled)
+/// When this is false, create_start_end_location will not perform reverse geocoding
+const GEOCODING_ENABLED_FOR_START_END: bool = false;
+
 /// Find nearest airport within 2km of given coordinates
 /// Returns the airport ID (not the identifier string)
 pub(crate) async fn find_nearby_airport(
@@ -126,6 +130,8 @@ pub(crate) async fn create_or_find_location(
 /// This function ONLY uses Photon reverse geocoding (no fallbacks to avoid hitting external APIs frequently)
 /// Used for start_location_id and end_location_id fields to provide address context
 ///
+/// CURRENTLY DISABLED: Photon geocoding is temporarily disabled
+///
 /// # Arguments
 /// * `locations_repo` - Repository for location database operations
 /// * `latitude` - Latitude coordinate to reverse geocode
@@ -141,6 +147,15 @@ pub(crate) async fn create_start_end_location(
     longitude: f64,
     context: &str,
 ) -> Option<Uuid> {
+    // Check if geocoding is enabled for start/end locations
+    if !GEOCODING_ENABLED_FOR_START_END {
+        debug!(
+            "Geocoding disabled for {} location at coordinates ({}, {}), skipping location creation",
+            context, latitude, longitude
+        );
+        return None;
+    }
+
     use std::time::Instant;
 
     debug!(
