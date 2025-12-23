@@ -18,7 +18,7 @@ pub async fn geocode_receivers(
     info!("Starting receiver reverse geocoding task...");
 
     let receiver_repo = ReceiverRepository::new(diesel_pool);
-    let geocoder = Geocoder::new();
+    let geocoder = Geocoder::new_batch_geocoding();
 
     // Get ALL receivers that need geocoding
     let receivers = receiver_repo

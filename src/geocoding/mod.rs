@@ -113,12 +113,12 @@ pub struct ReverseGeocodeResult {
 ///
 /// ## Usage
 ///
-/// ### Basic usage without Google Maps fallback:
+/// ### Batch geocoding (Nominatim → Google Maps):
 /// ```rust,no_run
 /// use soar::geocoding::Geocoder;
 ///
 /// # async fn example() -> anyhow::Result<()> {
-/// let geocoder = Geocoder::new();
+/// let geocoder = Geocoder::new_batch_geocoding();
 /// let point = geocoder.geocode_address("1600 Pennsylvania Avenue, Washington, DC").await?;
 /// # Ok(())
 /// # }
@@ -136,7 +136,7 @@ pub struct ReverseGeocodeResult {
 /// use soar::geocoding::Geocoder;
 ///
 /// # async fn example() -> anyhow::Result<()> {
-/// let geocoder = Geocoder::new();
+/// let geocoder = Geocoder::new_batch_geocoding();
 /// let point = geocoder.geocode_address("123 Hard to Find Address").await?;
 /// // Will try Nominatim first, then Google Maps if it fails
 /// # Ok(())
@@ -546,8 +546,9 @@ impl Geocoder {
 }
 
 /// Convenience function to geocode a single address (returns just the point for backwards compatibility)
+/// Uses batch geocoding strategy (Nominatim → Google Maps)
 pub async fn geocode(address: &str) -> Result<Point> {
-    let geocoder = Geocoder::new();
+    let geocoder = Geocoder::new_batch_geocoding();
     let result = geocoder.geocode_address(address).await?;
     Ok(result.point)
 }
@@ -609,7 +610,7 @@ pub async fn geocode_components(
     }
 
     let address = parts.join(", ");
-    let geocoder = Geocoder::new();
+    let geocoder = Geocoder::new_batch_geocoding();
     geocoder.geocode_address(&address).await
 }
 
@@ -619,7 +620,7 @@ mod tests {
 
     #[test]
     fn test_geocoder_creation() {
-        let geocoder = Geocoder::new();
+        let geocoder = Geocoder::new_batch_geocoding();
         // Nominatim should always be in the forward and reverse geocoder lists
         assert!(
             geocoder
