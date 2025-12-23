@@ -62,6 +62,7 @@ struct NominatimAddress {
     country_code: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct NominatimClient {
     client: reqwest::Client,
     base_url: String,
@@ -282,5 +283,23 @@ impl NominatimClient {
             country: result.address.country,
             display_name: result.display_name,
         })
+    }
+}
+
+// Trait implementations
+use super::{ForwardGeocoder, ReverseGeocoder};
+use async_trait::async_trait;
+
+#[async_trait]
+impl ForwardGeocoder for NominatimClient {
+    async fn geocode(&self, address: &str) -> Result<Point> {
+        self.geocode(address).await
+    }
+}
+
+#[async_trait]
+impl ReverseGeocoder for NominatimClient {
+    async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult> {
+        self.reverse_geocode(latitude, longitude).await
     }
 }

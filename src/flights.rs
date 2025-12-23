@@ -125,18 +125,24 @@ pub struct Flight {
     /// NULL if no runways were determined (both takeoff and landing runways are null)
     pub runways_inferred: Option<bool>,
 
-    /// Takeoff location ID (foreign key to locations table)
+    /// DEPRECATED: Takeoff location ID (foreign key to locations table)
+    /// No longer populated. Use start_location_id instead.
+    /// Kept for backward compatibility with existing data.
     pub takeoff_location_id: Option<Uuid>,
 
-    /// Landing location ID (foreign key to locations table)
+    /// DEPRECATED: Landing location ID (foreign key to locations table)
+    /// No longer populated. Use end_location_id instead.
+    /// Kept for backward compatibility with existing data.
     pub landing_location_id: Option<Uuid>,
 
     /// Start location ID with reverse geocoded address (foreign key to locations table)
     /// Set to airport location if takeoff from airport, or reverse geocoded detection point if airborne
+    /// Uses Pelias city-level reverse geocoding for real-time performance
     pub start_location_id: Option<Uuid>,
 
     /// End location ID with reverse geocoded address (foreign key to locations table)
     /// Set to airport location if landing at airport, or reverse geocoded timeout point if timed out
+    /// Uses Pelias city-level reverse geocoding for real-time performance
     pub end_location_id: Option<Uuid>,
 
     /// Timestamp when flight was timed out (no beacons for 1+ hour)

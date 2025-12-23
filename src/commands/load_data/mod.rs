@@ -666,7 +666,7 @@ async fn geocode_airports(
             info!("Found {} airports to reverse geocode", total_airports);
             metrics.records_loaded = total_airports;
 
-            let geocoder = Geocoder::new();
+            let geocoder = Geocoder::new_batch_geocoding();
             let mut geocoded_count = 0;
 
             for airport in airports {

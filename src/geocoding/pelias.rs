@@ -177,6 +177,19 @@ impl PeliasClient {
     }
 }
 
+// Trait implementations
+use super::ReverseGeocoder;
+use async_trait::async_trait;
+
+// Note: PeliasClient only implements ReverseGeocoder, not ForwardGeocoder
+// Pelias is designed for city-level reverse geocoding using Who's on First data
+#[async_trait]
+impl ReverseGeocoder for PeliasClient {
+    async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult> {
+        self.reverse_geocode(latitude, longitude).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
