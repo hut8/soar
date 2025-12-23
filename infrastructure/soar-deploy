@@ -436,7 +436,9 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
     if [ -d "$DEPLOY_DIR/grafana-provisioning/datasources" ]; then
         log_info "Installing Grafana datasource configuration..."
         mkdir -p /etc/grafana/provisioning/datasources
-        for datasource_file in "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yml; do
+
+        # Copy both .yml and .yaml files (Grafana datasources require .yaml extension)
+        for datasource_file in "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yml "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yaml; do
             if [ -f "$datasource_file" ]; then
                 filename=$(basename "$datasource_file")
                 cp "$datasource_file" /etc/grafana/provisioning/datasources/
