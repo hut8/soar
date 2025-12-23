@@ -63,7 +63,7 @@ diesel = { version = "2.3", features = [
 ] }
 # For musl static builds: compile libpq from source with all internal static libraries
 # This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
-pq-sys = { version = "0.6", default-features = false }
+pq-sys = { version = "0.7", default-features = false }
 # OpenSSL is needed by bundled libpq - we use vendored feature for musl static builds
 openssl = { version = "0.10", optional = true }
 diesel_migrations = "2.2"
