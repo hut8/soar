@@ -9,14 +9,13 @@ use async_trait::async_trait;
 use reqwest;
 use std::env;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::locations::Point;
 
 use self::google_maps::GoogleMapsGeocoderClient;
 use nominatim::NominatimClient;
 use pelias::PeliasClient;
-use photon::PhotonClient;
 
 /// Trait for geocoding services that support forward geocoding (address → coordinates)
 ///
@@ -144,10 +143,8 @@ pub struct ReverseGeocodeResult {
 /// # }
 /// ```
 pub struct Geocoder {
-    nominatim: Option<NominatimClient>,
-    photon: Option<PhotonClient>,
-    pelias: Option<PeliasClient>,
-    google_maps: Option<GoogleMapsGeocoderClient>,
+    forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)>,
+    reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)>,
 }
 
 impl Default for Geocoder {
@@ -164,6 +161,9 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
+        let mut forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)> = Vec::new();
+        let mut reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)> = Vec::new();
+
         // DISABLED: Photon client temporarily disabled for reverse geocoding
         // Keeping code for potential future use
         //
@@ -197,66 +197,68 @@ impl Geocoder {
         // - Photon layer filtering: https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer
         //
         // For now, we use Nominatim/Pelias/Google Maps which handle these complexities internally.
-        let photon = None;
-        // let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
+        //
+        // if let Ok(url) = env::var("PHOTON_BASE_URL") {
         //     if !url.trim().is_empty() {
         //         debug!("Using Photon geocoding server at: {}", url);
-        //         Some(PhotonClient::new(client.clone(), url.trim().to_string()))
+        //         let photon = PhotonClient::new(client.clone(), url.trim().to_string());
+        //         forward_geocoders.push((GeocodingService::Photon, Box::new(photon.clone())));
+        //         reverse_geocoders.push((GeocodingService::Photon, Box::new(photon)));
         //     } else {
         //         debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
-        //         None
         //     }
         // } else {
         //     debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
-        //     None
-        // };
+        // }
 
-        // Initialize Pelias client if configured
-        let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
+        // Add Pelias for reverse geocoding (city-level only, no forward geocoding)
+        if let Ok(url) = env::var("PELIAS_BASE_URL") {
             if !url.trim().is_empty() {
                 debug!("Using Pelias geocoding server at: {}", url);
-                Some(PeliasClient::new(client.clone(), url.trim().to_string()))
+                let pelias = PeliasClient::new(client.clone(), url.trim().to_string());
+                reverse_geocoders.push((GeocodingService::Pelias, Box::new(pelias)));
             } else {
                 debug!("PELIAS_BASE_URL is set but empty, skipping Pelias");
-                None
             }
         } else {
             debug!("PELIAS_BASE_URL not set, Pelias geocoding unavailable");
-            None
-        };
+        }
 
-        // Initialize Nominatim client
-        let nominatim = Some(NominatimClient::new(
+        // Add Nominatim (always available)
+        let nominatim = NominatimClient::new(
             client.clone(),
             "https://nominatim.openstreetmap.org".to_string(),
             "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)".to_string(),
-        ));
+        );
+        forward_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim.clone())));
+        reverse_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim)));
 
-        // Initialize Google Maps client if API key is available
-        let google_maps = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
+        // Add Google Maps if API key is available
+        if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             if !api_key.trim().is_empty() {
                 debug!("Initializing Google Maps client as geocoding fallback");
                 match GoogleMapsClient::try_new(&api_key) {
-                    Ok(client) => Some(GoogleMapsGeocoderClient::new(client)),
+                    Ok(gmaps_client) => {
+                        let google_maps = GoogleMapsGeocoderClient::new(gmaps_client);
+                        forward_geocoders
+                            .push((GeocodingService::GoogleMaps, Box::new(google_maps.clone())));
+                        reverse_geocoders
+                            .push((GeocodingService::GoogleMaps, Box::new(google_maps)));
+                    }
                     Err(e) => {
                         warn!("Failed to create Google Maps client: {}", e);
-                        None
                     }
                 }
             } else {
                 debug!("GOOGLE_MAPS_API_KEY is set but empty, skipping Google Maps initialization");
-                None
             }
         } else {
             debug!("GOOGLE_MAPS_API_KEY not set, Google Maps fallback unavailable");
-            None
-        };
+        }
 
         Self {
-            nominatim,
-            photon,
-            pelias,
-            google_maps,
+            forward_geocoders,
+            reverse_geocoders,
         }
     }
 
@@ -267,95 +269,55 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
-        // DISABLED: Photon client temporarily disabled for reverse geocoding
-        // Keeping code for potential future use
-        //
-        // Photon is disabled for two primary reasons:
-        //
-        // 1. NEAREST-POINT MATCHING INACCURACY:
-        //    Photon (like Nominatim) uses nearest-point matching instead of point-in-polygon
-        //    containment for reverse geocoding. This means it finds the nearest known geographic
-        //    feature and returns that object's address, not the address of the query point.
-        //
-        //    While you can filter by layer (e.g., layer=city via https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer),
-        //    this causes significant accuracy issues:
-        //    - Example: A coordinate in Albany, NY might return "Troy, NY" if Troy's city center
-        //      is geometrically closer than Albany's center
-        //    - Requires large search radii (we use progressive 1km/5km/10km) to ensure we always
-        //      find *some* city, making queries inefficient
-        //    - No guarantee the returned city is the one that actually contains the point
-        //
-        // 2. SCHEMA INCONSISTENCY ACROSS ENTITY TYPES:
-        //    To work around #1, we could avoid filtering by layer and let Photon return any
-        //    nearby object (buildings, streets, POIs, etc.). However, this creates new problems:
-        //    - Requires importing significantly more OSM data (every building, not just cities)
-        //    - Different entity types return different schemas:
-        //      * For type="city": city name is in the "name" field
-        //      * For type="house" or buildings: city name is in the "city" field
-        //    - Makes extracting consistent "city, state, postal_code, country" data extremely
-        //      cumbersome and error-prone
-        //
-        // See also:
-        // - Nominatim has the same nearest-point issue: https://nominatim.org/release-docs/latest/api/Faq/#2-when-doing-reverse-search-the-address-details-have-parts-that-dont-contain-the-point-i-was-looking-up
-        // - Photon layer filtering: https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer
-        //
-        // For now, we use Nominatim/Pelias/Google Maps which handle these complexities internally.
-        let photon = None;
-        // let photon = if let Ok(url) = env::var("PHOTON_BASE_URL") {
-        //     if !url.trim().is_empty() {
-        //         debug!("Using Photon geocoding server at: {}", url);
-        //         Some(PhotonClient::new(client.clone(), url.trim().to_string()))
-        //     } else {
-        //         debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
-        //         None
-        //     }
-        // } else {
-        //     debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
-        //     None
-        // };
+        let mut forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)> = Vec::new();
+        let mut reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)> = Vec::new();
 
-        // Initialize Pelias client if configured
-        let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
+        // DISABLED: Photon - see comments in new() method for details
+
+        // Add Pelias for reverse geocoding (city-level only, no forward geocoding)
+        if let Ok(url) = env::var("PELIAS_BASE_URL") {
             if !url.trim().is_empty() {
                 debug!("Using Pelias geocoding server at: {}", url);
-                Some(PeliasClient::new(client.clone(), url.trim().to_string()))
+                let pelias = PeliasClient::new(client.clone(), url.trim().to_string());
+                reverse_geocoders.push((GeocodingService::Pelias, Box::new(pelias)));
             } else {
                 debug!("PELIAS_BASE_URL is set but empty, skipping Pelias");
-                None
             }
         } else {
             debug!("PELIAS_BASE_URL not set, Pelias geocoding unavailable");
-            None
-        };
+        }
 
-        // Initialize Nominatim client with custom settings
-        let nominatim = Some(NominatimClient::new(client.clone(), base_url, user_agent));
+        // Add Nominatim with custom settings
+        let nominatim = NominatimClient::new(client.clone(), base_url, user_agent);
+        forward_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim.clone())));
+        reverse_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim)));
 
-        // Initialize Google Maps client if API key is available
-        let google_maps = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
+        // Add Google Maps if API key is available
+        if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             if !api_key.trim().is_empty() {
                 debug!("Initializing Google Maps client as geocoding fallback");
                 match GoogleMapsClient::try_new(&api_key) {
-                    Ok(client) => Some(GoogleMapsGeocoderClient::new(client)),
+                    Ok(gmaps_client) => {
+                        let google_maps = GoogleMapsGeocoderClient::new(gmaps_client);
+                        forward_geocoders
+                            .push((GeocodingService::GoogleMaps, Box::new(google_maps.clone())));
+                        reverse_geocoders
+                            .push((GeocodingService::GoogleMaps, Box::new(google_maps)));
+                    }
                     Err(e) => {
                         warn!("Failed to create Google Maps client: {}", e);
-                        None
                     }
                 }
             } else {
                 debug!("GOOGLE_MAPS_API_KEY is set but empty, skipping Google Maps initialization");
-                None
             }
         } else {
             debug!("GOOGLE_MAPS_API_KEY not set, Google Maps fallback unavailable");
-            None
-        };
+        }
 
         Self {
-            nominatim,
-            photon,
-            pelias,
-            google_maps,
+            forward_geocoders,
+            reverse_geocoders,
         }
     }
 
@@ -390,7 +352,8 @@ impl Geocoder {
         // photon.reverse_geocode(latitude, longitude).await
     }
 
-    /// Reverse geocode coordinates to address with Photon, Nominatim, and Google Maps fallback
+    /// Reverse geocode coordinates to address with fallback chain
+    /// Tries each available reverse geocoder in priority order until one succeeds
     pub async fn reverse_geocode(
         &self,
         latitude: f64,
@@ -404,174 +367,89 @@ impl Geocoder {
             return Err(anyhow!("Invalid longitude: {}", longitude));
         }
 
+        if self.reverse_geocoders.is_empty() {
+            return Err(anyhow!(
+                "No reverse geocoding services available for ({}, {})",
+                latitude,
+                longitude
+            ));
+        }
+
         debug!(
             "Reverse geocoding coordinates: ({}, {})",
             latitude, longitude
         );
 
-        // First try Photon (local geocoding server on production/localhost)
-        if let Some(photon) = &self.photon {
-            match photon.reverse_geocode(latitude, longitude).await {
+        let mut last_error = None;
+
+        // Try each reverse geocoder in priority order
+        for (service, geocoder) in &self.reverse_geocoders {
+            match geocoder.reverse_geocode(latitude, longitude).await {
                 Ok(result) => {
                     debug!(
-                        "Successfully reverse geocoded with Photon: ({}, {})",
-                        latitude, longitude
+                        "Successfully reverse geocoded with {:?}: ({}, {})",
+                        service, latitude, longitude
                     );
                     return Ok(result);
                 }
-                Err(photon_error) => {
+                Err(e) => {
                     debug!(
-                        "Photon reverse geocoding failed for ({}, {}): {}",
-                        latitude, longitude, photon_error
+                        "Reverse geocoding failed with {:?} for ({}, {}): {}",
+                        service, latitude, longitude, e
                     );
-                    // Continue to fallback services
+                    last_error = Some(e);
+                    // Continue to next service
                 }
             }
         }
 
-        // Try Pelias (city-level geocoding with Who's on First data)
-        if let Some(pelias) = &self.pelias {
-            match pelias.reverse_geocode(latitude, longitude).await {
-                Ok(result) => {
-                    debug!(
-                        "Successfully reverse geocoded with Pelias: ({}, {})",
-                        latitude, longitude
-                    );
-                    return Ok(result);
-                }
-                Err(pelias_error) => {
-                    debug!(
-                        "Pelias reverse geocoding failed for ({}, {}): {}",
-                        latitude, longitude, pelias_error
-                    );
-                    // Continue to fallback services
-                }
-            }
-        }
-
-        // Fallback to Nominatim
-        if let Some(nominatim) = &self.nominatim {
-            match nominatim.reverse_geocode(latitude, longitude).await {
-                Ok(result) => {
-                    debug!(
-                        "Successfully reverse geocoded with Nominatim: ({}, {})",
-                        latitude, longitude
-                    );
-                    return Ok(result);
-                }
-                Err(nominatim_error) => {
-                    warn!(
-                        "Nominatim reverse geocoding failed for ({}, {}): {}",
-                        latitude, longitude, nominatim_error
-                    );
-                    // Continue to Google Maps fallback
-                }
-            }
-        }
-
-        // Try Google Maps as final fallback if available
-        if let Some(google_maps) = &self.google_maps {
-            info!(
-                "Attempting Google Maps fallback for reverse geocoding: ({}, {})",
-                latitude, longitude
-            );
-            match google_maps.reverse_geocode(latitude, longitude).await {
-                Ok(result) => {
-                    info!(
-                        "Successfully reverse geocoded with Google Maps fallback: ({}, {})",
-                        latitude, longitude
-                    );
-                    return Ok(result);
-                }
-                Err(google_error) => {
-                    warn!(
-                        "Google Maps reverse geocoding also failed for ({}, {}): {}",
-                        latitude, longitude, google_error
-                    );
-                    return Err(anyhow!(
-                        "All reverse geocoding services failed for ({}, {}). Photon, Pelias, Nominatim and Google Maps all failed.",
-                        latitude,
-                        longitude
-                    ));
-                }
-            }
-        }
-
-        Err(anyhow!(
-            "No reverse geocoding services available for ({}, {})",
-            latitude,
-            longitude
-        ))
+        // All services failed
+        Err(last_error.unwrap_or_else(|| {
+            anyhow!(
+                "All reverse geocoding services failed for ({}, {})",
+                latitude,
+                longitude
+            )
+        }))
     }
 
-    /// Geocode an address string to a WGS84 coordinate with Photon → Nominatim → Google Maps fallback
+    /// Geocode an address string to a WGS84 coordinate with fallback chain
+    /// Tries each available forward geocoder in priority order until one succeeds
     /// Note: Pelias is not used for forward geocoding, only reverse geocoding
     pub async fn geocode_address(&self, address: &str) -> Result<GeocodeResult> {
         if address.trim().is_empty() {
             return Err(anyhow!("Address cannot be empty"));
         }
 
+        if self.forward_geocoders.is_empty() {
+            return Err(anyhow!("No geocoding services available for '{}'", address));
+        }
+
         debug!("Geocoding address: {}", address);
 
-        // First try Photon if configured
-        if let Some(photon) = &self.photon {
-            match photon.geocode(address).await {
+        let mut last_error = None;
+
+        // Try each forward geocoder in priority order
+        for (service, geocoder) in &self.forward_geocoders {
+            match geocoder.geocode(address).await {
                 Ok(point) => {
-                    debug!("Successfully geocoded with Photon: {}", address);
-                    return Ok(GeocodeResult::new(point, GeocodingService::Photon));
+                    debug!("Successfully geocoded with {:?}: {}", service, address);
+                    return Ok(GeocodeResult::new(point, *service));
                 }
-                Err(photon_error) => {
+                Err(e) => {
                     debug!(
-                        "Photon geocoding failed for '{}': {}",
-                        address, photon_error
+                        "Geocoding failed with {:?} for '{}': {}",
+                        service, address, e
                     );
-                    // Continue to fallback services
+                    last_error = Some(e);
+                    // Continue to next service
                 }
             }
         }
 
-        // Fallback to Nominatim
-        if let Some(nominatim) = &self.nominatim {
-            match nominatim.geocode(address).await {
-                Ok(point) => {
-                    debug!("Successfully geocoded with Nominatim: {}", address);
-                    return Ok(GeocodeResult::new(point, GeocodingService::Nominatim));
-                }
-                Err(nominatim_error) => {
-                    warn!(
-                        "Nominatim geocoding failed for '{}': {}",
-                        address, nominatim_error
-                    );
-                    // Continue to Google Maps fallback
-                }
-            }
-        }
-
-        // Try Google Maps as final fallback if available
-        if let Some(google_maps) = &self.google_maps {
-            info!("Attempting Google Maps fallback for: {}", address);
-            match google_maps.geocode(address).await {
-                Ok(point) => {
-                    info!(
-                        "Successfully geocoded with Google Maps fallback: {}",
-                        address
-                    );
-                    return Ok(GeocodeResult::new(point, GeocodingService::GoogleMaps));
-                }
-                Err(google_error) => {
-                    warn!(
-                        "Google Maps geocoding also failed for '{}': {}",
-                        address, google_error
-                    );
-                    return Err(anyhow!(
-                        "All geocoding services failed for '{}'. Photon/Nominatim/Google Maps all failed.",
-                        address
-                    ));
-                }
-            }
-        }
-
-        Err(anyhow!("No geocoding services available for '{}'", address))
+        // All services failed
+        Err(last_error
+            .unwrap_or_else(|| anyhow!("All geocoding services failed for '{}'", address)))
     }
 }
 
@@ -650,12 +528,28 @@ mod tests {
     #[test]
     fn test_geocoder_creation() {
         let geocoder = Geocoder::new();
-        assert!(geocoder.nominatim.is_some());
-        // Google Maps client should be None unless API key is set
+        // Nominatim should always be in the forward and reverse geocoder lists
+        assert!(
+            geocoder
+                .forward_geocoders
+                .iter()
+                .any(|(service, _)| *service == GeocodingService::Nominatim)
+        );
+        assert!(
+            geocoder
+                .reverse_geocoders
+                .iter()
+                .any(|(service, _)| *service == GeocodingService::Nominatim)
+        );
+
+        // Google Maps client should be in lists only if API key is set
         if env::var("GOOGLE_MAPS_API_KEY").is_ok() {
-            assert!(geocoder.google_maps.is_some());
-        } else {
-            assert!(geocoder.google_maps.is_none());
+            assert!(
+                geocoder
+                    .forward_geocoders
+                    .iter()
+                    .any(|(service, _)| *service == GeocodingService::GoogleMaps)
+            );
         }
     }
 
@@ -663,12 +557,28 @@ mod tests {
     fn test_custom_geocoder() {
         let geocoder =
             Geocoder::with_settings("https://example.com".to_string(), "Test Agent".to_string());
-        assert!(geocoder.nominatim.is_some());
+        // Nominatim should always be in the forward and reverse geocoder lists
+        assert!(
+            geocoder
+                .forward_geocoders
+                .iter()
+                .any(|(service, _)| *service == GeocodingService::Nominatim)
+        );
+        assert!(
+            geocoder
+                .reverse_geocoders
+                .iter()
+                .any(|(service, _)| *service == GeocodingService::Nominatim)
+        );
+
         // Google Maps client availability depends on environment variable
         if env::var("GOOGLE_MAPS_API_KEY").is_ok() {
-            assert!(geocoder.google_maps.is_some());
-        } else {
-            assert!(geocoder.google_maps.is_none());
+            assert!(
+                geocoder
+                    .forward_geocoders
+                    .iter()
+                    .any(|(service, _)| *service == GeocodingService::GoogleMaps)
+            );
         }
     }
 

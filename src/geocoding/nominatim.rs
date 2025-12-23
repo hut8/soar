@@ -62,6 +62,7 @@ struct NominatimAddress {
     country_code: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct NominatimClient {
     client: reqwest::Client,
     base_url: String,

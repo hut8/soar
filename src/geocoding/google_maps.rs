@@ -7,6 +7,7 @@ use crate::locations::Point;
 
 use super::ReverseGeocodeResult;
 
+#[derive(Clone)]
 pub struct GoogleMapsGeocoderClient {
     client: GoogleMapsClient,
 }
