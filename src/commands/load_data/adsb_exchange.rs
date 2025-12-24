@@ -22,7 +22,7 @@ struct AdsbExchangeRecord {
     #[serde(rename = "ownop")]
     owner_operator: Option<String>,
     #[serde(rename = "year")]
-    _year: Option<i32>,
+    year: Option<i32>,
     #[serde(rename = "manufacturer")]
     _manufacturer: Option<String>,
     #[serde(rename = "model")]
@@ -31,7 +31,7 @@ struct AdsbExchangeRecord {
     faa_ladd: Option<bool>,
     short_type: Option<String>,
     #[serde(rename = "mil")]
-    _mil: Option<bool>,
+    is_military: Option<bool>,
 }
 
 /// Parse short_type format: [Category][NumEngines][EngineType]
@@ -97,6 +97,8 @@ struct NewAircraftAdsb {
     engine_type: Option<EngineType>,
     faa_pia: Option<bool>,
     faa_ladd: Option<bool>,
+    year: Option<i16>,
+    is_military: Option<bool>,
 }
 
 pub async fn load_adsb_exchange_data(
@@ -187,6 +189,8 @@ pub async fn load_adsb_exchange_data(
                 engine_type,
                 faa_pia: record.faa_pia,
                 faa_ladd: record.faa_ladd,
+                year: record.year.and_then(|y| i16::try_from(y).ok()),
+                is_military: record.is_military,
             });
         }
 
@@ -216,6 +220,9 @@ pub async fn load_adsb_exchange_data(
                         aircraft::engine_type.eq(diesel::dsl::sql("COALESCE(excluded.engine_type, aircraft.engine_type)")),
                         aircraft::faa_pia.eq(diesel::dsl::sql("COALESCE(excluded.faa_pia, aircraft.faa_pia)")),
                         aircraft::faa_ladd.eq(diesel::dsl::sql("COALESCE(excluded.faa_ladd, aircraft.faa_ladd)")),
+                        // Only update year and is_military if current value is NULL (FAA data is canonical)
+                        aircraft::year.eq(diesel::dsl::sql("COALESCE(aircraft.year, excluded.year)")),
+                        aircraft::is_military.eq(diesel::dsl::sql("COALESCE(aircraft.is_military, excluded.is_military)")),
                         aircraft::from_adsbx_ddb.eq(diesel::dsl::sql("true")),
                         aircraft::address_type.eq(diesel::dsl::sql("excluded.address_type")),
                         aircraft::updated_at.eq(diesel::dsl::now),

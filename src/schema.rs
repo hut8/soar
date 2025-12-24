@@ -128,6 +128,8 @@ diesel::table! {
         faa_ladd -> Nullable<Bool>,
         owner_operator -> Nullable<Text>,
         from_adsbx_ddb -> Bool,
+        year -> Nullable<Int2>,
+        is_military -> Nullable<Bool>,
     }
 }
 

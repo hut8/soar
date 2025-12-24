@@ -45,7 +45,6 @@ pub async fn handle_load_data(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
     aircraft_models_path: Option<String>,
     aircraft_registrations_path: Option<String>,
-    aircraft_types_path: Option<String>,
     airports_path: Option<String>,
     runways_path: Option<String>,
     receivers_path: Option<String>,
@@ -109,11 +108,9 @@ pub async fn handle_load_data(
         report.add_entity(metrics);
     }
 
-    // Load aircraft types reference data (ICAO/IATA type codes)
-    if let Some(metrics) =
-        aircraft_types::load_aircraft_types_with_metrics(diesel_pool.clone(), aircraft_types_path)
-            .await
+    // Load aircraft types reference data (ICAO/IATA type codes) from embedded data
     {
+        let metrics = aircraft_types::load_aircraft_types_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "aircraft_types");
         if !metrics.success
             && let Some(ref config) = email_config

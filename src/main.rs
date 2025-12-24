@@ -59,9 +59,6 @@ enum Commands {
         /// <https://registry.faa.gov/database/ReleasableAircraft.zip>
         #[arg(long)]
         aircraft_registrations: Option<String>,
-        /// Path to the aircraft types JSON file (ICAO/IATA type codes with descriptions)
-        #[arg(long)]
-        aircraft_types: Option<String>,
         /// Path to the airports CSV file (from "our airports" database)
         /// <https://davidmegginson.github.io/ourairports-data/airports.csv>
         #[arg(long)]
@@ -1034,7 +1031,6 @@ async fn main() -> Result<()> {
         Commands::LoadData {
             aircraft_models,
             aircraft_registrations,
-            aircraft_types,
             airports,
             runways,
             receivers,
@@ -1047,7 +1043,6 @@ async fn main() -> Result<()> {
                 diesel_pool,
                 aircraft_models,
                 aircraft_registrations,
-                aircraft_types,
                 airports,
                 runways,
                 receivers,

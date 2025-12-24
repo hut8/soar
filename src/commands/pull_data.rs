@@ -264,14 +264,10 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
 
-    // Aircraft types are checked into the repo, not downloaded
-    let aircraft_types_path = "data/aircraft-types-icao-iata.json";
-
     super::load_data::handle_load_data(
         diesel_pool.clone(),
-        Some(acftref_path),                    // aircraft_models
-        Some(master_path),                     // aircraft_registrations
-        Some(aircraft_types_path.to_string()), // aircraft_types
+        Some(acftref_path), // aircraft_models
+        Some(master_path),  // aircraft_registrations
         Some(airports_path),
         Some(runways_path),
         Some(receivers_path),

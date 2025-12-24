@@ -191,6 +191,8 @@ impl AircraftRepository {
             engine_type: None,
             faa_pia: None,
             faa_ladd: None,
+            year: None,
+            is_military: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -272,6 +274,8 @@ impl AircraftRepository {
                 engine_type: None,
                 faa_pia: None,
                 faa_ladd: None,
+                year: None,
+                is_military: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -556,6 +560,8 @@ impl AircraftRepository {
                         engine_type: None,       // Not selected in this query
                         faa_pia: None,           // Not selected in this query
                         faa_ladd: None,          // Not selected in this query
+                        year: None,
+                        is_military: None,
                     };
                     (
                         model,

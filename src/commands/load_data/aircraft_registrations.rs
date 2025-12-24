@@ -73,33 +73,44 @@ pub async fn load_aircraft_registrations_with_metrics(
     }
 }
 
-/// Copy owner data from aircraft_registrations to aircraft.owner_operator
-/// Only updates aircraft records where owner_operator is NULL or empty
+/// Copy owner data and year from aircraft_registrations to aircraft
+/// Owner data: Only updates aircraft records where owner_operator is NULL or empty
+/// Year data: Always updates (FAA data is canonical)
 pub async fn copy_owners_to_aircraft(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<usize> {
-    info!("Copying owner data from aircraft_registrations to aircraft...");
+    info!("Copying owner and year data from aircraft_registrations to aircraft...");
 
     tokio::task::spawn_blocking(move || {
         let mut conn = diesel_pool.get()?;
 
-        // Update aircraft.owner_operator from aircraft_registrations.registrant_name
-        // Only update if owner_operator is NULL or empty string
+        // Update aircraft.owner_operator and aircraft.year from aircraft_registrations
+        // owner_operator: Only update if current value is NULL or empty string
+        // year: Always update from FAA data (canonical source)
         let query = r#"
             UPDATE aircraft
-            SET owner_operator = ar.registrant_name,
+            SET owner_operator = CASE
+                    WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
+                         AND ar.registrant_name IS NOT NULL
+                         AND ar.registrant_name != ''
+                    THEN ar.registrant_name
+                    ELSE aircraft.owner_operator
+                END,
+                year = ar.year_mfr,
                 updated_at = CURRENT_TIMESTAMP
             FROM aircraft_registrations ar
             WHERE aircraft.id = ar.aircraft_id
-              AND ar.registrant_name IS NOT NULL
-              AND ar.registrant_name != ''
-              AND (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
+              AND (
+                  (ar.registrant_name IS NOT NULL AND ar.registrant_name != ''
+                   AND (aircraft.owner_operator IS NULL OR aircraft.owner_operator = ''))
+                  OR ar.year_mfr IS NOT NULL
+              )
         "#;
 
         let updated_count = diesel::sql_query(query).execute(&mut conn)?;
 
         info!(
-            "Successfully copied owner data to {} aircraft records",
+            "Successfully copied owner and year data to {} aircraft records",
             updated_count
         );
 

@@ -3,12 +3,14 @@ use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use serde::Deserialize;
-use std::fs;
 use std::time::Instant;
 use tracing::{error, info};
 
 use soar::email_reporter::EntityMetrics;
 use soar::schema::aircraft_types;
+
+// Statically embed the aircraft types JSON file into the binary
+const AIRCRAFT_TYPES_JSON: &str = include_str!("../../../data/aircraft-types-icao-iata.json");
 
 #[derive(Debug, Deserialize)]
 struct AircraftTypeRecord {
@@ -27,10 +29,10 @@ struct NewAircraftType {
     description: String,
 }
 
-fn read_aircraft_types_file(path: &str) -> Result<Vec<AircraftTypeRecord>> {
-    info!("Reading aircraft types from: {}", path);
-    let contents = fs::read_to_string(path)?;
-    let records: Vec<AircraftTypeRecord> = serde_json::from_str(&contents)?;
+fn read_aircraft_types_embedded() -> Result<Vec<AircraftTypeRecord>> {
+    info!("Reading aircraft types from embedded data");
+    let records: Vec<AircraftTypeRecord> = serde_json::from_str(AIRCRAFT_TYPES_JSON)?;
+    info!("Parsed {} aircraft types from embedded data", records.len());
     Ok(records)
 }
 
@@ -77,12 +79,10 @@ async fn get_aircraft_types_count(pool: Pool<ConnectionManager<PgConnection>>) -
 
 pub async fn load_aircraft_types(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-    aircraft_types_path: &str,
 ) -> Result<(usize, i64)> {
-    info!("Loading aircraft types from: {}", aircraft_types_path);
+    info!("Loading aircraft types from embedded data");
 
-    let types = read_aircraft_types_file(aircraft_types_path)?;
-    info!("Successfully loaded {} aircraft types", types.len());
+    let types = read_aircraft_types_embedded()?;
 
     info!("Upserting {} aircraft types into database...", types.len());
     let upserted_count = upsert_aircraft_types(diesel_pool.clone(), types).await?;
@@ -96,29 +96,23 @@ pub async fn load_aircraft_types(
 
 pub async fn load_aircraft_types_with_metrics(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-    aircraft_types_path: Option<String>,
-) -> Option<EntityMetrics> {
-    if let Some(path) = aircraft_types_path {
-        let start = Instant::now();
-        let mut metrics = EntityMetrics::new("Aircraft Types");
+) -> EntityMetrics {
+    let start = Instant::now();
+    let mut metrics = EntityMetrics::new("Aircraft Types");
 
-        match load_aircraft_types(diesel_pool, &path).await {
-            Ok((loaded, total)) => {
-                metrics.records_loaded = loaded;
-                metrics.records_in_db = Some(total);
-                metrics.success = true;
-            }
-            Err(e) => {
-                error!("Failed to load aircraft types: {}", e);
-                metrics.success = false;
-                metrics.error_message = Some(e.to_string());
-            }
+    match load_aircraft_types(diesel_pool).await {
+        Ok((loaded, total)) => {
+            metrics.records_loaded = loaded;
+            metrics.records_in_db = Some(total);
+            metrics.success = true;
         }
-
-        metrics.duration_secs = start.elapsed().as_secs_f64();
-        Some(metrics)
-    } else {
-        info!("Skipping aircraft types - no path provided");
-        None
+        Err(e) => {
+            error!("Failed to load aircraft types: {}", e);
+            metrics.success = false;
+            metrics.error_message = Some(e.to_string());
+        }
     }
+
+    metrics.duration_secs = start.elapsed().as_secs_f64();
+    metrics
 }

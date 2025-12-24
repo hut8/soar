@@ -175,6 +175,10 @@ pub struct Aircraft {
     pub faa_pia: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub faa_ladd: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_military: Option<bool>,
 }
 
 impl Aircraft {
@@ -229,6 +233,8 @@ pub struct AircraftModel {
     pub engine_type: Option<EngineType>,
     pub faa_pia: Option<bool>,
     pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
 }
 
 impl AircraftModel {
@@ -269,6 +275,8 @@ pub struct NewAircraft {
     pub engine_type: Option<EngineType>,
     pub faa_pia: Option<bool>,
     pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
 }
 
 impl From<Aircraft> for NewAircraft {
@@ -308,6 +316,8 @@ impl From<Aircraft> for NewAircraft {
             engine_type: device.engine_type,
             faa_pia: device.faa_pia,
             faa_ladd: device.faa_ladd,
+            year: device.year,
+            is_military: device.is_military,
         }
     }
 }
@@ -341,6 +351,8 @@ impl From<AircraftModel> for Aircraft {
             engine_type: model.engine_type,
             faa_pia: model.faa_pia,
             faa_ladd: model.faa_ladd,
+            year: model.year,
+            is_military: model.is_military,
         }
     }
 }
@@ -581,6 +593,8 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 engine_type: None,
                                 faa_pia: None,
                                 faa_ladd: None,
+                                year: None,
+                                is_military: None,
                             })
                         }
                         Err(e) => {
@@ -771,6 +785,8 @@ impl AircraftFetcher {
                                     engine_type: None,
                                     faa_pia: None,
                                     faa_ladd: None,
+                                    year: None,
+                                    is_military: None,
                                 })
                             }
                             Err(e) => {
@@ -939,6 +955,8 @@ impl AircraftFetcher {
                         engine_type: None,
                         faa_pia: None,
                         faa_ladd: None,
+                        year: None,
+                        is_military: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -1032,6 +1050,8 @@ mod tests {
             engine_type: None,
             faa_pia: None,
             faa_ladd: None,
+            year: None,
+            is_military: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1368,6 +1388,8 @@ mod tests {
             engine_type: None,
             faa_pia: None,
             faa_ladd: None,
+            year: None,
+            is_military: None,
         }
     }
 

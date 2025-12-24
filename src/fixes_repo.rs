@@ -764,6 +764,8 @@ impl FixesRepository {
                     engine_type: None,         // Not selected in this query
                     faa_pia: None,                  // Not selected in this query
                     faa_ladd: None,                 // Not selected in this query
+                    year: None,                     // Not selected in this query
+                    is_military: None,              // Not selected in this query
                 })
                 .collect();
 
