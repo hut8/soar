@@ -233,7 +233,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     download_text_file_atomically(&client, flarmnet_url, &flarmnet_path, max_retries).await?;
 
     // Download ADS-B Exchange basic aircraft database
-    let adsb_url = "http://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz";
+    let adsb_url = "https://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz";
     let adsb_gz_path = format!("{}/basic-ac-db.json.gz", temp_dir);
     let adsb_json_path = format!("{}/basic-ac-db.json", temp_dir);
 
