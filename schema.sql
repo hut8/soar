@@ -103,6 +103,48 @@ CREATE TYPE public.adsb_emitter_category AS ENUM (
 
 
 --
+-- Name: aircraft_category; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.aircraft_category AS ENUM (
+    'landplane',
+    'helicopter',
+    'balloon',
+    'amphibian',
+    'gyroplane',
+    'drone',
+    'powered_parachute',
+    'rotorcraft',
+    'seaplane',
+    'tiltrotor',
+    'vtol',
+    'electric',
+    'unknown'
+);
+
+
+--
+-- Name: aircraft_category_adsb; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.aircraft_category_adsb AS ENUM (
+    'landplane',
+    'helicopter',
+    'balloon',
+    'amphibian',
+    'gyroplane',
+    'drone',
+    'powered_parachute',
+    'rotorcraft',
+    'seaplane',
+    'tiltrotor',
+    'vtol',
+    'electric',
+    'unknown'
+);
+
+
+--
 -- Name: aircraft_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -231,6 +273,38 @@ CREATE TYPE public.altitude_reference AS ENUM (
     'STD',
     'GND',
     'UNL'
+);
+
+
+--
+-- Name: engine_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.engine_type AS ENUM (
+    'piston',
+    'jet',
+    'turbine',
+    'electric',
+    'rocket',
+    'special',
+    'none',
+    'unknown'
+);
+
+
+--
+-- Name: engine_type_adsb; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.engine_type_adsb AS ENUM (
+    'piston',
+    'jet',
+    'turbine',
+    'electric',
+    'rocket',
+    'special',
+    'none',
+    'unknown'
 );
 
 
@@ -1187,14 +1261,14 @@ CREATE TABLE public.aircraft (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    from_ddb boolean DEFAULT true NOT NULL,
+    from_ogn_ddb boolean DEFAULT true NOT NULL,
     frequency_mhz numeric(6,3),
     pilot_name text,
     home_base_airport_ident text,
     aircraft_type_ogn public.aircraft_type_ogn,
     last_fix_at timestamp with time zone,
     club_id uuid,
-    icao_model_code text,
+    icao_model_code character varying(4),
     adsb_emitter_category public.adsb_emitter_category,
     tracker_device_type text,
     country_code character(2),
@@ -1209,7 +1283,21 @@ END) STORED,
 CASE
     WHEN ((latitude IS NOT NULL) AND (longitude IS NOT NULL)) THEN (public.st_point(longitude, latitude))::public.geography
     ELSE NULL::public.geography
-END) STORED
+END) STORED,
+    icao_type_code text,
+    owner_operator text,
+    aircraft_category_adsb public.aircraft_category_adsb,
+    num_engines smallint,
+    engine_type_adsb public.engine_type_adsb,
+    faa_pia boolean,
+    faa_ladd boolean,
+    year smallint,
+    is_military boolean,
+    aircraft_category public.aircraft_category,
+    engine_count smallint,
+    engine_type public.engine_type,
+    from_adsbx_ddb boolean DEFAULT false NOT NULL,
+    CONSTRAINT icao_model_code_length_check CHECK (((icao_model_code IS NULL) OR (length((icao_model_code)::text) = ANY (ARRAY[3, 4]))))
 );
 
 
@@ -1316,6 +1404,19 @@ CREATE TABLE public.aircraft_registrations (
     aircraft_type public.aircraft_type,
     club_id uuid,
     CONSTRAINT aircraft_registrations_year_mfr_check CHECK (((year_mfr >= 1800) AND (year_mfr <= 2999)))
+);
+
+
+--
+-- Name: aircraft_types; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.aircraft_types (
+    icao_code text NOT NULL,
+    iata_code text,
+    description text NOT NULL,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 
@@ -1448,23 +1549,6 @@ CREATE TABLE public.clubs (
 CREATE TABLE public.countries (
     code character(2) NOT NULL,
     name text NOT NULL
-);
-
-
---
--- Name: data_quality_metrics_daily; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.data_quality_metrics_daily (
-    metric_date date NOT NULL,
-    total_fixes bigint DEFAULT 0 NOT NULL,
-    fixes_with_gaps_60s integer DEFAULT 0 NOT NULL,
-    fixes_with_gaps_300s integer DEFAULT 0 NOT NULL,
-    unparsed_aprs_messages integer DEFAULT 0 NOT NULL,
-    flights_timed_out integer DEFAULT 0 NOT NULL,
-    avg_fixes_per_flight numeric(10,2) DEFAULT 0 NOT NULL,
-    quality_score numeric(5,2) DEFAULT 100.0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -2104,6 +2188,251 @@ CREATE TABLE public.fixes_p20251224 (
 
 
 --
+-- Name: fixes_p20251225; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251225 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251226; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251226 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251227; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251227 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251228; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251228 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251229; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251229 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251230; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251230 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: fixes_p20251231; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes_p20251231 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    aprs_type character varying(9) NOT NULL,
+    via text[] NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid NOT NULL,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
 -- Name: flight_analytics_daily; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2477,6 +2806,111 @@ CREATE TABLE public.raw_messages_p20251223 (
 --
 
 CREATE TABLE public.raw_messages_p20251224 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251225; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251225 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251226; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251226 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251227; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251227 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251228; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251228 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251229; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251229 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251230; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251230 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251231; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251231 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     received_at timestamp with time zone NOT NULL,
     receiver_id uuid NOT NULL,
@@ -2899,6 +3333,55 @@ ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251224 FOR VALUES
 
 
 --
+-- Name: fixes_p20251225; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251225 FOR VALUES FROM ('2025-12-25 00:00:00+00') TO ('2025-12-26 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251226; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251226 FOR VALUES FROM ('2025-12-26 00:00:00+00') TO ('2025-12-27 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251227; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251227 FOR VALUES FROM ('2025-12-27 00:00:00+00') TO ('2025-12-28 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251228; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251228 FOR VALUES FROM ('2025-12-28 00:00:00+00') TO ('2025-12-29 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251229; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251229 FOR VALUES FROM ('2025-12-29 00:00:00+00') TO ('2025-12-30 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251230; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251230 FOR VALUES FROM ('2025-12-30 00:00:00+00') TO ('2025-12-31 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251231; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251231 FOR VALUES FROM ('2025-12-31 00:00:00+00') TO ('2026-01-01 00:00:00+00');
+
+
+--
 -- Name: raw_messages_p20251209; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
@@ -3011,6 +3494,55 @@ ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251
 
 
 --
+-- Name: raw_messages_p20251225; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251225 FOR VALUES FROM ('2025-12-25 00:00:00+00') TO ('2025-12-26 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251226; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251226 FOR VALUES FROM ('2025-12-26 00:00:00+00') TO ('2025-12-27 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251227; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251227 FOR VALUES FROM ('2025-12-27 00:00:00+00') TO ('2025-12-28 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251228; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251228 FOR VALUES FROM ('2025-12-28 00:00:00+00') TO ('2025-12-29 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251229; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251229 FOR VALUES FROM ('2025-12-29 00:00:00+00') TO ('2025-12-30 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251230; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251230 FOR VALUES FROM ('2025-12-30 00:00:00+00') TO ('2025-12-31 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251231; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251231 FOR VALUES FROM ('2025-12-31 00:00:00+00') TO ('2026-01-01 00:00:00+00');
+
+
+--
 -- Name: receivers_links id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -3086,6 +3618,14 @@ ALTER TABLE ONLY public.aircraft
 
 ALTER TABLE ONLY public.aircraft_registrations
     ADD CONSTRAINT aircraft_registrations_pkey PRIMARY KEY (registration_number);
+
+
+--
+-- Name: aircraft_types aircraft_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aircraft_types
+    ADD CONSTRAINT aircraft_types_pkey PRIMARY KEY (icao_code);
 
 
 --
@@ -3225,14 +3765,6 @@ ALTER TABLE ONLY public.countries
 
 
 --
--- Name: data_quality_metrics_daily data_quality_metrics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.data_quality_metrics_daily
-    ADD CONSTRAINT data_quality_metrics_daily_pkey PRIMARY KEY (metric_date);
-
-
---
 -- Name: fixes fixes_pkey1; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3366,6 +3898,62 @@ ALTER TABLE ONLY public.fixes_p20251223
 
 ALTER TABLE ONLY public.fixes_p20251224
     ADD CONSTRAINT fixes_p20251224_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251225 fixes_p20251225_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251225
+    ADD CONSTRAINT fixes_p20251225_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251226 fixes_p20251226_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251226
+    ADD CONSTRAINT fixes_p20251226_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251227 fixes_p20251227_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251227
+    ADD CONSTRAINT fixes_p20251227_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251228 fixes_p20251228_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251228
+    ADD CONSTRAINT fixes_p20251228_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251229 fixes_p20251229_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251229
+    ADD CONSTRAINT fixes_p20251229_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251230 fixes_p20251230_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251230
+    ADD CONSTRAINT fixes_p20251230_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251231 fixes_p20251231_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251231
+    ADD CONSTRAINT fixes_p20251231_pkey PRIMARY KEY (id, received_at);
 
 
 --
@@ -3510,6 +4098,62 @@ ALTER TABLE ONLY public.raw_messages_p20251223
 
 ALTER TABLE ONLY public.raw_messages_p20251224
     ADD CONSTRAINT raw_messages_p20251224_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251225 raw_messages_p20251225_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251225
+    ADD CONSTRAINT raw_messages_p20251225_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251226 raw_messages_p20251226_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251226
+    ADD CONSTRAINT raw_messages_p20251226_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251227 raw_messages_p20251227_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251227
+    ADD CONSTRAINT raw_messages_p20251227_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251228 raw_messages_p20251228_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251228
+    ADD CONSTRAINT raw_messages_p20251228_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251229 raw_messages_p20251229_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251229
+    ADD CONSTRAINT raw_messages_p20251229_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251230 raw_messages_p20251230_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251230
+    ADD CONSTRAINT raw_messages_p20251230_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: raw_messages_p20251231 raw_messages_p20251231_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages_p20251231
+    ADD CONSTRAINT raw_messages_p20251231_pkey PRIMARY KEY (id, received_at);
 
 
 --
@@ -4593,6 +5237,349 @@ CREATE INDEX fixes_p20251224_source_metadata_idx ON public.fixes_p20251224 USING
 
 
 --
+-- Name: fixes_p20251225_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_device_id_received_at_idx ON public.fixes_p20251225 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251225_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_expr_idx ON public.fixes_p20251225 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251225_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_flight_id_idx ON public.fixes_p20251225 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251225_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_location_geom_idx ON public.fixes_p20251225 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251225_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_location_idx ON public.fixes_p20251225 USING gist (location);
+
+
+--
+-- Name: fixes_p20251225_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_source_idx ON public.fixes_p20251225 USING btree (source);
+
+
+--
+-- Name: fixes_p20251225_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251225_source_metadata_idx ON public.fixes_p20251225 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251226_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_device_id_received_at_idx ON public.fixes_p20251226 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251226_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_expr_idx ON public.fixes_p20251226 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251226_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_flight_id_idx ON public.fixes_p20251226 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251226_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_location_geom_idx ON public.fixes_p20251226 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251226_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_location_idx ON public.fixes_p20251226 USING gist (location);
+
+
+--
+-- Name: fixes_p20251226_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_source_idx ON public.fixes_p20251226 USING btree (source);
+
+
+--
+-- Name: fixes_p20251226_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251226_source_metadata_idx ON public.fixes_p20251226 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251227_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_device_id_received_at_idx ON public.fixes_p20251227 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251227_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_expr_idx ON public.fixes_p20251227 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251227_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_flight_id_idx ON public.fixes_p20251227 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251227_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_location_geom_idx ON public.fixes_p20251227 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251227_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_location_idx ON public.fixes_p20251227 USING gist (location);
+
+
+--
+-- Name: fixes_p20251227_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_source_idx ON public.fixes_p20251227 USING btree (source);
+
+
+--
+-- Name: fixes_p20251227_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251227_source_metadata_idx ON public.fixes_p20251227 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251228_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_device_id_received_at_idx ON public.fixes_p20251228 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251228_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_expr_idx ON public.fixes_p20251228 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251228_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_flight_id_idx ON public.fixes_p20251228 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251228_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_location_geom_idx ON public.fixes_p20251228 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251228_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_location_idx ON public.fixes_p20251228 USING gist (location);
+
+
+--
+-- Name: fixes_p20251228_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_source_idx ON public.fixes_p20251228 USING btree (source);
+
+
+--
+-- Name: fixes_p20251228_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251228_source_metadata_idx ON public.fixes_p20251228 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251229_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_device_id_received_at_idx ON public.fixes_p20251229 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251229_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_expr_idx ON public.fixes_p20251229 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251229_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_flight_id_idx ON public.fixes_p20251229 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251229_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_location_geom_idx ON public.fixes_p20251229 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251229_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_location_idx ON public.fixes_p20251229 USING gist (location);
+
+
+--
+-- Name: fixes_p20251229_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_source_idx ON public.fixes_p20251229 USING btree (source);
+
+
+--
+-- Name: fixes_p20251229_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251229_source_metadata_idx ON public.fixes_p20251229 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251230_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_device_id_received_at_idx ON public.fixes_p20251230 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251230_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_expr_idx ON public.fixes_p20251230 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251230_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_flight_id_idx ON public.fixes_p20251230 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251230_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_location_geom_idx ON public.fixes_p20251230 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251230_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_location_idx ON public.fixes_p20251230 USING gist (location);
+
+
+--
+-- Name: fixes_p20251230_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_source_idx ON public.fixes_p20251230 USING btree (source);
+
+
+--
+-- Name: fixes_p20251230_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251230_source_metadata_idx ON public.fixes_p20251230 USING gin (source_metadata);
+
+
+--
+-- Name: fixes_p20251231_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_device_id_received_at_idx ON public.fixes_p20251231 USING btree (aircraft_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251231_expr_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_expr_idx ON public.fixes_p20251231 USING btree (((source_metadata ->> 'protocol'::text))) WHERE (source_metadata IS NOT NULL);
+
+
+--
+-- Name: fixes_p20251231_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_flight_id_idx ON public.fixes_p20251231 USING btree (flight_id);
+
+
+--
+-- Name: fixes_p20251231_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_location_geom_idx ON public.fixes_p20251231 USING gist (location_geom);
+
+
+--
+-- Name: fixes_p20251231_location_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_location_idx ON public.fixes_p20251231 USING gist (location);
+
+
+--
+-- Name: fixes_p20251231_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_source_idx ON public.fixes_p20251231 USING btree (source);
+
+
+--
+-- Name: fixes_p20251231_source_metadata_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251231_source_metadata_idx ON public.fixes_p20251231 USING gin (source_metadata);
+
+
+--
 -- Name: fixes_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4677,6 +5664,20 @@ CREATE INDEX idx_aircraft_approved_operations_registration_id ON public.aircraft
 
 
 --
+-- Name: idx_aircraft_category; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_category ON public.aircraft USING btree (aircraft_category) WHERE (aircraft_category IS NOT NULL);
+
+
+--
+-- Name: idx_aircraft_category_adsb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_category_adsb ON public.aircraft USING btree (aircraft_category_adsb) WHERE (aircraft_category_adsb IS NOT NULL);
+
+
+--
 -- Name: idx_aircraft_country_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4684,10 +5685,38 @@ CREATE INDEX idx_aircraft_country_code ON public.aircraft USING btree (country_c
 
 
 --
+-- Name: idx_aircraft_engine_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_engine_type ON public.aircraft USING btree (engine_type) WHERE (engine_type IS NOT NULL);
+
+
+--
+-- Name: idx_aircraft_engine_type_adsb; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_engine_type_adsb ON public.aircraft USING btree (engine_type_adsb) WHERE (engine_type_adsb IS NOT NULL);
+
+
+--
+-- Name: idx_aircraft_faa_ladd; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_faa_ladd ON public.aircraft USING btree (faa_ladd) WHERE (faa_ladd = true);
+
+
+--
+-- Name: idx_aircraft_faa_pia; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_faa_pia ON public.aircraft USING btree (faa_pia) WHERE (faa_pia = true);
+
+
+--
 -- Name: idx_aircraft_from_ddb; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_aircraft_from_ddb ON public.aircraft USING btree (from_ddb);
+CREATE INDEX idx_aircraft_from_ddb ON public.aircraft USING btree (from_ogn_ddb);
 
 
 --
@@ -4698,10 +5727,24 @@ CREATE INDEX idx_aircraft_icao_model_code ON public.aircraft USING btree (icao_m
 
 
 --
+-- Name: idx_aircraft_icao_type_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_icao_type_code ON public.aircraft USING btree (icao_type_code) WHERE (icao_type_code IS NOT NULL);
+
+
+--
 -- Name: idx_aircraft_identified; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_aircraft_identified ON public.aircraft USING btree (identified);
+
+
+--
+-- Name: idx_aircraft_is_military; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_is_military ON public.aircraft USING btree (is_military) WHERE (is_military = true);
 
 
 --
@@ -4761,6 +5804,13 @@ CREATE INDEX idx_aircraft_model_model_name ON public.aircraft_models USING btree
 
 
 --
+-- Name: idx_aircraft_owner_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_owner_operator ON public.aircraft USING btree (owner_operator) WHERE (owner_operator IS NOT NULL);
+
+
+--
 -- Name: idx_aircraft_registration; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4793,6 +5843,27 @@ CREATE INDEX idx_aircraft_tracked ON public.aircraft USING btree (tracked);
 --
 
 CREATE INDEX idx_aircraft_tracker_device_type ON public.aircraft USING btree (tracker_device_type) WHERE (tracker_device_type IS NOT NULL);
+
+
+--
+-- Name: idx_aircraft_types_description; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_types_description ON public.aircraft_types USING btree (description);
+
+
+--
+-- Name: idx_aircraft_types_iata_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_types_iata_code ON public.aircraft_types USING btree (iata_code);
+
+
+--
+-- Name: idx_aircraft_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_year ON public.aircraft USING btree (year) WHERE (year IS NOT NULL);
 
 
 --
@@ -4947,13 +6018,6 @@ CREATE INDEX idx_club_analytics_daily_club_date ON public.club_analytics_daily U
 --
 
 CREATE INDEX idx_club_analytics_daily_date ON public.club_analytics_daily USING btree (date DESC);
-
-
---
--- Name: idx_data_quality_metrics_daily_date_desc; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_data_quality_metrics_daily_date_desc ON public.data_quality_metrics_daily USING btree (metric_date DESC);
 
 
 --
@@ -6322,6 +7386,398 @@ ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p2025
 
 
 --
+-- Name: fixes_p20251225_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251225_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251225_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251225_expr_idx;
+
+
+--
+-- Name: fixes_p20251225_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251225_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251225_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251225_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251225_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251225_location_idx;
+
+
+--
+-- Name: fixes_p20251225_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251225_pkey;
+
+
+--
+-- Name: fixes_p20251225_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251225_source_idx;
+
+
+--
+-- Name: fixes_p20251225_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251225_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251226_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251226_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251226_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251226_expr_idx;
+
+
+--
+-- Name: fixes_p20251226_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251226_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251226_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251226_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251226_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251226_location_idx;
+
+
+--
+-- Name: fixes_p20251226_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251226_pkey;
+
+
+--
+-- Name: fixes_p20251226_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251226_source_idx;
+
+
+--
+-- Name: fixes_p20251226_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251226_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251227_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251227_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251227_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251227_expr_idx;
+
+
+--
+-- Name: fixes_p20251227_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251227_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251227_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251227_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251227_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251227_location_idx;
+
+
+--
+-- Name: fixes_p20251227_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251227_pkey;
+
+
+--
+-- Name: fixes_p20251227_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251227_source_idx;
+
+
+--
+-- Name: fixes_p20251227_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251227_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251228_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251228_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251228_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251228_expr_idx;
+
+
+--
+-- Name: fixes_p20251228_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251228_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251228_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251228_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251228_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251228_location_idx;
+
+
+--
+-- Name: fixes_p20251228_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251228_pkey;
+
+
+--
+-- Name: fixes_p20251228_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251228_source_idx;
+
+
+--
+-- Name: fixes_p20251228_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251228_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251229_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251229_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251229_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251229_expr_idx;
+
+
+--
+-- Name: fixes_p20251229_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251229_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251229_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251229_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251229_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251229_location_idx;
+
+
+--
+-- Name: fixes_p20251229_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251229_pkey;
+
+
+--
+-- Name: fixes_p20251229_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251229_source_idx;
+
+
+--
+-- Name: fixes_p20251229_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251229_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251230_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251230_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251230_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251230_expr_idx;
+
+
+--
+-- Name: fixes_p20251230_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251230_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251230_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251230_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251230_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251230_location_idx;
+
+
+--
+-- Name: fixes_p20251230_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251230_pkey;
+
+
+--
+-- Name: fixes_p20251230_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251230_source_idx;
+
+
+--
+-- Name: fixes_p20251230_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251230_source_metadata_idx;
+
+
+--
+-- Name: fixes_p20251231_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_aircraft_received_at ATTACH PARTITION public.fixes_p20251231_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251231_expr_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_protocol ATTACH PARTITION public.fixes_p20251231_expr_idx;
+
+
+--
+-- Name: fixes_p20251231_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251231_flight_id_idx;
+
+
+--
+-- Name: fixes_p20251231_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251231_location_geom_idx;
+
+
+--
+-- Name: fixes_p20251231_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251231_location_idx;
+
+
+--
+-- Name: fixes_p20251231_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251231_pkey;
+
+
+--
+-- Name: fixes_p20251231_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251231_source_idx;
+
+
+--
+-- Name: fixes_p20251231_source_metadata_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p20251231_source_metadata_idx;
+
+
+--
 -- Name: raw_messages_p20251216_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -6382,6 +7838,55 @@ ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251
 --
 
 ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251224_pkey;
+
+
+--
+-- Name: raw_messages_p20251225_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251225_pkey;
+
+
+--
+-- Name: raw_messages_p20251226_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251226_pkey;
+
+
+--
+-- Name: raw_messages_p20251227_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251227_pkey;
+
+
+--
+-- Name: raw_messages_p20251228_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251228_pkey;
+
+
+--
+-- Name: raw_messages_p20251229_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251229_pkey;
+
+
+--
+-- Name: raw_messages_p20251230_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251230_pkey;
+
+
+--
+-- Name: raw_messages_p20251231_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.raw_messages_p20251231_pkey;
 
 
 --

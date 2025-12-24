@@ -298,7 +298,11 @@ impl AircraftRepository {
                          THEN excluded.aircraft_model \
                          ELSE aircraft.aircraft_model END"
                     )),
-                    aircraft::registration.eq(&registration),
+                    aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Text>(&format!(
+                        "CASE WHEN '{}' = '' THEN aircraft.registration ELSE '{}' END",
+                        registration.replace('\'', "''"),
+                        registration.replace('\'', "''")
+                    ))),
                     aircraft::country_code.eq(&country_code),
                     aircraft::latitude.eq(latitude),
                     aircraft::longitude.eq(longitude),

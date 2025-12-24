@@ -179,6 +179,14 @@ pub struct Aircraft {
     pub year: Option<i16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_military: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_ogn_ddb: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_adsbx_ddb: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl Aircraft {
@@ -294,8 +302,8 @@ impl From<Aircraft> for NewAircraft {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
-            from_ogn_ddb: true,
-            from_adsbx_ddb: false,
+            from_ogn_ddb: device.from_ogn_ddb.unwrap_or(true),
+            from_adsbx_ddb: device.from_adsbx_ddb.unwrap_or(false),
             frequency_mhz: device
                 .frequency_mhz
                 .and_then(|f| f.to_string().parse().ok()),
@@ -353,6 +361,10 @@ impl From<AircraftModel> for Aircraft {
             faa_ladd: model.faa_ladd,
             year: model.year,
             is_military: model.is_military,
+            from_ogn_ddb: Some(model.from_ogn_ddb),
+            from_adsbx_ddb: Some(model.from_adsbx_ddb),
+            created_at: Some(model.created_at),
+            updated_at: Some(model.updated_at),
         }
     }
 }
@@ -595,6 +607,10 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 faa_ladd: None,
                                 year: None,
                                 is_military: None,
+                                from_ogn_ddb: Some(true),
+                                from_adsbx_ddb: Some(false),
+                                created_at: None,
+                                updated_at: None,
                             })
                         }
                         Err(e) => {
@@ -787,6 +803,10 @@ impl AircraftFetcher {
                                     faa_ladd: None,
                                     year: None,
                                     is_military: None,
+                                    from_ogn_ddb: Some(true),
+                                    from_adsbx_ddb: Some(false),
+                                    created_at: None,
+                                    updated_at: None,
                                 })
                             }
                             Err(e) => {
@@ -957,6 +977,10 @@ impl AircraftFetcher {
                         faa_ladd: None,
                         year: None,
                         is_military: None,
+                        from_ogn_ddb: Some(true),
+                        from_adsbx_ddb: Some(false),
+                        created_at: None,
+                        updated_at: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -1052,6 +1076,10 @@ mod tests {
             faa_ladd: None,
             year: None,
             is_military: None,
+            from_ogn_ddb: Some(true),
+            from_adsbx_ddb: Some(false),
+            created_at: None,
+            updated_at: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1390,6 +1418,10 @@ mod tests {
             faa_ladd: None,
             year: None,
             is_military: None,
+            from_ogn_ddb: Some(true),
+            from_adsbx_ddb: Some(false),
+            created_at: None,
+            updated_at: None,
         }
     }
 
