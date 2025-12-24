@@ -209,25 +209,11 @@ export class AircraftRegistry {
 	// Update aircraft from Aircraft data (from WebSocket or bbox search)
 	public async updateAircraftFromAircraftData(aircraft: Aircraft): Promise<Aircraft | null> {
 		try {
-			// Check if this is a new aircraft (not already in cache)
-			const isNewAircraft = !this.aircraft.has(aircraft.id);
-
 			// The aircraft is already in the correct format
 			this.setAircraft(aircraft);
 
-			// If this is a new aircraft, automatically load 8 hours of historical fixes
-			if (isNewAircraft) {
-				console.log(
-					`[REGISTRY] New aircraft encountered: ${aircraft.id}, loading 8 hours of fixes`
-				);
-				// Don't await - load in background to avoid blocking
-				this.loadRecentFixesFromAPI(aircraft.id, 8).catch((error) => {
-					console.warn(
-						`[REGISTRY] Failed to load historical fixes for new aircraft ${aircraft.id}:`,
-						error
-					);
-				});
-			}
+			// Don't automatically load fixes - they will come from WebSocket
+			// This reduces initial page load time and database load
 
 			return this.getAircraft(aircraft.id);
 		} catch (error) {
