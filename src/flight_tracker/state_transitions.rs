@@ -182,6 +182,71 @@ pub(crate) async fn process_state_transition(
                     (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
                 fix.time_gap_seconds = Some(time_gap_seconds);
 
+                // Check for large gap that indicates landing + new takeoff
+                let gap_hours = time_gap_seconds as f64 / 3600.0;
+                let large_gap = gap_hours >= 4.0; // 4+ hours suggests aircraft landed
+                let currently_climbing = fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
+
+                if large_gap && currently_climbing {
+                    // Large gap + climbing = likely landed and took off again
+                    info!(
+                        "Aircraft {} has {:.1}h gap and is climbing - ending flight {} and creating new flight",
+                        fix.aircraft_id, gap_hours, state.flight_id
+                    );
+                    metrics::counter!("flight_tracker.coalesce.rejected.gap_hours").increment(1);
+
+                    // End the current flight
+                    if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
+                        error!(
+                            "Failed to complete flight {} due to large gap: {}",
+                            state.flight_id, e
+                        );
+                    }
+
+                    // Remove from active flights
+                    {
+                        let mut flights = ctx.active_flights.write().await;
+                        flights.remove(&fix.aircraft_id);
+                    }
+
+                    // Create a new flight for this fix
+                    let new_flight_id = Uuid::new_v4();
+                    match create_flight(ctx, &fix, new_flight_id, false).await {
+                        Ok(flight_id) => {
+                            info!(
+                                "Created new flight {} for device {} after {:.1}h gap",
+                                flight_id, fix.aircraft_id, gap_hours
+                            );
+
+                            // Assign the new flight_id to this fix
+                            fix.flight_id = Some(flight_id);
+
+                            // Create new active flight state
+                            let mut new_state =
+                                CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                            new_state.last_altitude_msl_ft = fix.altitude_msl_feet;
+                            new_state.last_climb_fpm = fix.climb_fpm;
+                            new_state.last_position = (fix.latitude, fix.longitude);
+
+                            // Add to active flights
+                            let mut flights = ctx.active_flights.write().await;
+                            flights.insert(fix.aircraft_id, new_state);
+
+                            metrics::counter!("flight_tracker.flight_created.gap_split")
+                                .increment(1);
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to create new flight for device {} after gap: {}",
+                                fix.aircraft_id, e
+                            );
+                        }
+                    }
+
+                    // Early return - don't continue with normal flow
+                    return Ok(fix);
+                }
+
                 // Update last_fix_at in database
                 update_flight_timestamp(ctx.flights_repo, state.flight_id, fix.timestamp).await;
 
