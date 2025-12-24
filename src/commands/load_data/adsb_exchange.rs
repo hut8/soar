@@ -90,7 +90,7 @@ struct NewAircraftAdsb {
     identified: bool,
     from_ogn_ddb: bool,
     from_adsbx_ddb: bool,
-    icao_type_code: Option<String>,
+    icao_model_code: Option<String>,
     owner_operator: Option<String>,
     aircraft_category: Option<AircraftCategory>,
     engine_count: Option<i16>,
@@ -134,8 +134,18 @@ pub async fn load_adsb_exchange_data(
                 }
             };
 
+            // Validate icao_model_code is exactly 3 or 4 characters (per ICAO Doc 8643) if present
+            let icao_model_code = record
+                .icao_type_code
+                .as_ref()
+                .filter(|code| {
+                    let len = code.len();
+                    len == 3 || len == 4
+                })
+                .cloned();
+
             // Skip records with no useful data
-            if record.icao_type_code.is_none()
+            if icao_model_code.is_none()
                 && record.owner_operator.is_none()
                 && record.faa_pia.is_none()
                 && record.faa_ladd.is_none()
@@ -170,7 +180,7 @@ pub async fn load_adsb_exchange_data(
                 identified: true,
                 from_ogn_ddb: false,
                 from_adsbx_ddb: true,
-                icao_type_code: record.icao_type_code.clone(),
+                icao_model_code,
                 owner_operator: record.owner_operator.clone(),
                 aircraft_category: category,
                 engine_count,
@@ -194,7 +204,7 @@ pub async fn load_adsb_exchange_data(
                     .do_update()
                     .set((
                         aircraft::registration.eq(diesel::dsl::sql("COALESCE(NULLIF(excluded.registration, ''), aircraft.registration)")),
-                        aircraft::icao_type_code.eq(diesel::dsl::sql("COALESCE(excluded.icao_type_code, aircraft.icao_type_code)")),
+                        aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(excluded.icao_model_code, aircraft.icao_model_code)")),
                         // Only update owner_operator if current value is NULL or empty string
                         aircraft::owner_operator.eq(diesel::dsl::sql(
                             "CASE WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')

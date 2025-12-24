@@ -164,8 +164,6 @@ pub struct Aircraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub icao_type_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub owner_operator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aircraft_category: Option<AircraftCategory>,
@@ -225,7 +223,6 @@ pub struct AircraftModel {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
-    pub icao_type_code: Option<String>,
     pub owner_operator: Option<String>,
     pub aircraft_category: Option<AircraftCategory>,
     pub engine_count: Option<i16>,
@@ -266,7 +263,6 @@ pub struct NewAircraft {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
-    pub icao_type_code: Option<String>,
     pub owner_operator: Option<String>,
     pub aircraft_category: Option<AircraftCategory>,
     pub engine_count: Option<i16>,
@@ -306,7 +302,6 @@ impl From<Aircraft> for NewAircraft {
             country_code,
             latitude: None,  // Not provided by DDB
             longitude: None, // Not provided by DDB
-            icao_type_code: device.icao_type_code,
             owner_operator: device.owner_operator,
             aircraft_category: device.aircraft_category,
             engine_count: device.engine_count,
@@ -340,7 +335,6 @@ impl From<AircraftModel> for Aircraft {
             adsb_emitter_category: model.adsb_emitter_category,
             tracker_device_type: model.tracker_device_type,
             country_code: model.country_code,
-            icao_type_code: model.icao_type_code,
             owner_operator: model.owner_operator,
             aircraft_category: model.aircraft_category,
             engine_count: model.engine_count,
@@ -581,7 +575,6 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 adsb_emitter_category: None,
                                 tracker_device_type: None,
                                 country_code: None, // Not extracted from FLARM addresses
-                                icao_type_code: None,
                                 owner_operator: None,
                                 aircraft_category: None,
                                 engine_count: None,
@@ -772,7 +765,6 @@ impl AircraftFetcher {
                                     adsb_emitter_category: None,
                                     tracker_device_type: None,
                                     country_code: None, // Not extracted from FLARM addresses
-                                    icao_type_code: None,
                                     owner_operator: None,
                                     aircraft_category: None,
                                     engine_count: None,
@@ -941,7 +933,6 @@ impl AircraftFetcher {
                         country_code: glidernet_device
                             .country_code
                             .or(flarmnet_device.country_code),
-                        icao_type_code: None,
                         owner_operator: None,
                         aircraft_category: None,
                         engine_count: None,
@@ -1035,7 +1026,6 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
-            icao_type_code: None,
             owner_operator: None,
             aircraft_category: None,
             engine_count: None,
@@ -1372,7 +1362,6 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
-            icao_type_code: None,
             owner_operator: None,
             aircraft_category: None,
             engine_count: None,

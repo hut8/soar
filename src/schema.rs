@@ -14,6 +14,10 @@ pub mod sql_types {
     pub struct AircraftCategory;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "aircraft_category_adsb"))]
+    pub struct AircraftCategoryAdsb;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "aircraft_type"))]
     pub struct AircraftType;
 
@@ -40,6 +44,10 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "engine_type"))]
     pub struct EngineType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "engine_type_adsb"))]
+    pub struct EngineTypeAdsb;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "geography"))]
@@ -77,6 +85,8 @@ diesel::table! {
     use super::sql_types::AdsbEmitterCategory;
     use super::sql_types::Geometry;
     use super::sql_types::Geography;
+    use super::sql_types::AircraftCategoryAdsb;
+    use super::sql_types::EngineTypeAdsb;
     use super::sql_types::AircraftCategory;
     use super::sql_types::EngineType;
 
@@ -98,7 +108,8 @@ diesel::table! {
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         last_fix_at -> Nullable<Timestamptz>,
         club_id -> Nullable<Uuid>,
-        icao_model_code -> Nullable<Text>,
+        #[max_length = 4]
+        icao_model_code -> Nullable<Varchar>,
         adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
         tracker_device_type -> Nullable<Text>,
         #[max_length = 2]
@@ -107,13 +118,15 @@ diesel::table! {
         longitude -> Nullable<Float8>,
         location_geom -> Nullable<Geometry>,
         location_geog -> Nullable<Geography>,
-        icao_type_code -> Nullable<Text>,
-        owner_operator -> Nullable<Text>,
+        aircraft_category_adsb -> Nullable<AircraftCategoryAdsb>,
+        num_engines -> Nullable<Int2>,
+        engine_type_adsb -> Nullable<EngineTypeAdsb>,
         aircraft_category -> Nullable<AircraftCategory>,
         engine_count -> Nullable<Int2>,
         engine_type -> Nullable<EngineType>,
         faa_pia -> Nullable<Bool>,
         faa_ladd -> Nullable<Bool>,
+        owner_operator -> Nullable<Text>,
         from_adsbx_ddb -> Bool,
     }
 }

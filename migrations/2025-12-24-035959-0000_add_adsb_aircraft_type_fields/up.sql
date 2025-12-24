@@ -37,19 +37,22 @@ ADD COLUMN IF NOT EXISTS aircraft_category aircraft_category,
 ADD COLUMN IF NOT EXISTS engine_count SMALLINT,
 ADD COLUMN IF NOT EXISTS engine_type engine_type,
 ADD COLUMN IF NOT EXISTS faa_pia BOOLEAN,
-ADD COLUMN IF NOT EXISTS faa_ladd BOOLEAN;
+ADD COLUMN IF NOT EXISTS faa_ladd BOOLEAN,
+ADD COLUMN IF NOT EXISTS owner_operator TEXT;
+
+-- Rename from_ddb to from_ogn_ddb for clarity
+ALTER TABLE aircraft RENAME COLUMN from_ddb TO from_ogn_ddb;
+
+-- Add new column to track if aircraft came from ADS-B Exchange database
+ALTER TABLE aircraft
+ADD COLUMN IF NOT EXISTS from_adsbx_ddb BOOLEAN NOT NULL DEFAULT false;
 
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_aircraft_category ON aircraft (aircraft_category) WHERE aircraft_category IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_aircraft_engine_type ON aircraft (engine_type) WHERE engine_type IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_aircraft_faa_pia ON aircraft (faa_pia) WHERE faa_pia = true;
 CREATE INDEX IF NOT EXISTS idx_aircraft_faa_ladd ON aircraft (faa_ladd) WHERE faa_ladd = true;
-
--- Drop old columns with _adsb suffix if they exist
-ALTER TABLE aircraft
-DROP COLUMN IF EXISTS aircraft_category_adsb,
-DROP COLUMN IF EXISTS num_engines,
-DROP COLUMN IF EXISTS engine_type_adsb;
+CREATE INDEX IF NOT EXISTS idx_aircraft_owner_operator ON aircraft (owner_operator) WHERE owner_operator IS NOT NULL;
 
 -- Add comments
 COMMENT ON COLUMN aircraft.aircraft_category IS 'ICAO aircraft category (1st character of ICAO description from ICAO Doc 8643)';
@@ -57,3 +60,6 @@ COMMENT ON COLUMN aircraft.engine_count IS 'Number of engines (2nd character of 
 COMMENT ON COLUMN aircraft.engine_type IS 'ICAO engine type (3rd character of ICAO description from ICAO Doc 8643)';
 COMMENT ON COLUMN aircraft.faa_pia IS 'FAA Privacy ICAO Address (PIA) program participation';
 COMMENT ON COLUMN aircraft.faa_ladd IS 'FAA Limited Aircraft Data Displayed (LADD) program participation';
+COMMENT ON COLUMN aircraft.owner_operator IS 'Aircraft owner/operator name';
+COMMENT ON COLUMN aircraft.from_ogn_ddb IS 'Indicates if this aircraft record came from OGN/FlarmNet DDB';
+COMMENT ON COLUMN aircraft.from_adsbx_ddb IS 'Indicates if this aircraft record came from ADS-B Exchange database';

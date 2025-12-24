@@ -185,7 +185,6 @@ impl AircraftRepository {
             country_code,
             latitude: None,
             longitude: None,
-            icao_type_code: None,
             owner_operator: None,
             aircraft_category: None,
             engine_count: None,
@@ -267,7 +266,6 @@ impl AircraftRepository {
                 country_code: country_code.clone(),
                 latitude: None,
                 longitude: None,
-                icao_type_code: None,
                 owner_operator: None,
                 aircraft_category: None,
                 engine_count: None,
@@ -552,7 +550,6 @@ impl AircraftRepository {
                         country_code: row.country_code,
                         latitude: None,          // Not selected in this query
                         longitude: None,         // Not selected in this query
-                        icao_type_code: None,    // Not selected in this query
                         owner_operator: None,    // Not selected in this query
                         aircraft_category: None, // Not selected in this query
                         engine_count: None,      // Not selected in this query

@@ -758,7 +758,6 @@ impl FixesRepository {
                     country_code: row.country_code,
                     latitude: row.latitude,
                     longitude: row.longitude,
-                    icao_type_code: None,           // Not selected in this query
                     owner_operator: None,           // Not selected in this query
                     aircraft_category: None,   // Not selected in this query
                     engine_count: None,              // Not selected in this query
