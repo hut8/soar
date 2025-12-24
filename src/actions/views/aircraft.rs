@@ -157,10 +157,16 @@ impl AircraftView {
             tracked: device.tracked,
             identified: device.identified,
             club_id: device.club_id,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            from_ogn_ddb: false,
-            from_adsbx_ddb: false,
+            created_at: device
+                .created_at
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            updated_at: device
+                .updated_at
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            from_ogn_ddb: device.from_ogn_ddb.unwrap_or(false),
+            from_adsbx_ddb: device.from_adsbx_ddb.unwrap_or(false),
             frequency_mhz: device.frequency_mhz,
             pilot_name: device.pilot_name,
             home_base_airport_ident: device.home_base_airport_ident,
