@@ -185,6 +185,16 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     let elevation_service = soar::elevation::ElevationService::new_with_s3()
         .await
         .expect("Failed to create elevation service");
+
+    // Enable tracing for debugging
+    use tracing_subscriber::EnvFilter;
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("soar::flight_tracker=debug".parse().unwrap()),
+        )
+        .try_init();
+
     let fix_processor = FixProcessor::new(pool.clone()).with_sync_elevation(elevation_service);
 
     // Load test messages
@@ -263,6 +273,17 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
         .first(&mut conn)
         .expect("Failed to count aircraft");
     println!("📊 Found {} aircraft in database", aircraft_count);
+
+    // Check total flights in database (not just time range)
+    use soar::schema::flights;
+    let total_flights: i64 = flights::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count flights");
+    println!(
+        "📊 Found {} total flights in database (all time)",
+        total_flights
+    );
 
     // Query flights in the time range of our test messages
     let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
