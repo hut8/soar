@@ -662,6 +662,13 @@ jobs:
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
+
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
             cp -r infrastructure/prometheus-jobs deploy-pkg/
@@ -715,7 +722,7 @@ jobs:
           ssh soar@staging.glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@staging.glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@staging.glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
@@ -808,6 +815,13 @@ jobs:
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
+
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
             cp -r infrastructure/prometheus-jobs deploy-pkg/
@@ -861,7 +875,7 @@ jobs:
           ssh soar@glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 

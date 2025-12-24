@@ -18,7 +18,7 @@ async-nats = "0.45"
 async-trait = "0.1"
 bcrypt = "0.17"
 bigdecimal = { version = "0.4", features = ["serde"] }
-axum = { version = "0.8.7", features = ["macros", "ws"] }
+axum = { version = "0.8.8", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.1", features = ["typed-header"] }
 bytes = "1.11"
 http-body = "1.0"
@@ -28,7 +28,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = { version = "0.15" }
 fake = { version = "4.4.0", features = ["derive", "chrono", "uuid"] }
-google_maps = { version = "3.9.0", features = [
+google_maps = { version = "3.9.1", features = [
     "geocoding",
     "elevation",
     "reqwest-rustls-tls",
@@ -63,10 +63,10 @@ diesel = { version = "2.3", features = [
 ] }
 # For musl static builds: compile libpq from source with all internal static libraries
 # This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
-pq-sys = { version = "0.6", default-features = false }
+pq-sys = { version = "0.7", default-features = false }
 # OpenSSL is needed by bundled libpq - we use vendored feature for musl static builds
 openssl = { version = "0.10", optional = true }
-diesel_migrations = "2.2"
+diesel_migrations = "2.3"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 flate2 = "1.1"

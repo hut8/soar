@@ -73,6 +73,10 @@ enum Commands {
         /// Path to the devices file (unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>)
         #[arg(long)]
         devices: Option<String>,
+        /// Path to the ADS-B Exchange basic aircraft database JSON file
+        /// <http://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz>
+        #[arg(long)]
+        adsb_exchange: Option<String>,
         /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
         #[arg(long)]
         geocode: bool,
@@ -401,13 +405,32 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
 }
 
 #[tracing::instrument]
-async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
+async fn setup_diesel_database(
+    app_name_prefix: &str,
+) -> Result<Pool<ConnectionManager<PgConnection>>> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
     // Get the database URL from environment variables
-    let database_url =
+    let mut database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment variables");
+
+    // Construct application_name from command and environment
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let app_name = match soar_env.as_str() {
+        "staging" => format!("{}-staging", app_name_prefix),
+        "" => format!("{}-dev", app_name_prefix),
+        _ => app_name_prefix.to_string(), // production or other
+    };
+
+    // Append application_name to DATABASE_URL for PostgreSQL connection tracking
+    let separator = if database_url.contains('?') { '&' } else { '?' };
+    database_url = format!("{}{}application_name={}", database_url, separator, app_name);
+
+    info!(
+        "Connecting to PostgreSQL with application_name: {}",
+        app_name
+    );
 
     // Clone for schema dump later (database_url will be moved into ConnectionManager)
     let database_url_for_dump = database_url.clone();
@@ -977,7 +1000,26 @@ async fn main() -> Result<()> {
 
     // Set up database connection for commands that need it
     // This also runs migrations automatically
-    let diesel_pool = setup_diesel_database().await?;
+    // Determine application name prefix based on command
+    let app_name_prefix = match &cli.command {
+        Commands::Run { .. } => "soar-run",
+        Commands::Web { .. } => "soar-web",
+        Commands::Archive { .. } => "soar-archive",
+        Commands::Resurrect { .. } => "soar-resurrect",
+        Commands::LoadData { .. } => "soar-load-data",
+        Commands::PullData {} => "soar-pull-data",
+        Commands::PullAirspaces { .. } => "soar-pull-airspaces",
+        Commands::Sitemap { .. } => "soar-sitemap",
+        Commands::Migrate {} => "soar-migrate",
+        Commands::SeedTestData {} => "soar-seed-test-data",
+        // These should not reach here due to early returns
+        Commands::IngestOgn { .. } => unreachable!(),
+        Commands::IngestAdsb { .. } => unreachable!(),
+        Commands::VerifyRuntime { .. } => unreachable!(),
+        Commands::DumpUnifiedDdb { .. } => unreachable!(),
+    };
+
+    let diesel_pool = setup_diesel_database(app_name_prefix).await?;
 
     match cli.command {
         Commands::Sitemap { static_root } => {
@@ -993,6 +1035,7 @@ async fn main() -> Result<()> {
             runways,
             receivers,
             devices,
+            adsb_exchange,
             geocode,
             link_home_bases,
         } => {
@@ -1004,6 +1047,7 @@ async fn main() -> Result<()> {
                 runways,
                 receivers,
                 devices,
+                adsb_exchange,
                 geocode,
                 link_home_bases,
             )

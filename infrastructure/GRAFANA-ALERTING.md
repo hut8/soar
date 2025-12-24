@@ -21,7 +21,7 @@ SOAR uses **Grafana Alerting** (built into Grafana 8+) to monitor critical metri
 - **Condition**: Message ingestion rate drops below 1 message/minute
 - **Duration**: Alert if condition persists for 2 minutes
 - **Metric**: `rate(aprs_raw_message_processed_total[1m]) * 60`
-- **Repeat Interval**: 30 minutes
+- **Repeat Interval**: 12 hours
 - **Description**: Monitors the rate of APRS messages being processed. If the rate drops below 1 msg/min, it indicates the OGN ingest service may be disconnected or experiencing issues.
 
 ### OGN Ingest Service Disconnected
@@ -29,7 +29,7 @@ SOAR uses **Grafana Alerting** (built into Grafana 8+) to monitor critical metri
 - **Condition**: APRS connection gauge is 0 (disconnected)
 - **Duration**: Alert if condition persists for 1 minute
 - **Metric**: `aprs_connection_connected < 0.5`
-- **Repeat Interval**: 30 minutes
+- **Repeat Interval**: 12 hours
 - **Description**: Monitors the connection status to APRS-IS. Alerts when the service loses connection.
 
 ### OGN NATS Publishing Errors
@@ -37,7 +37,7 @@ SOAR uses **Grafana Alerting** (built into Grafana 8+) to monitor critical metri
 - **Condition**: NATS publish error rate exceeds 0.1 errors/minute
 - **Duration**: Alert if condition persists for 3 minutes
 - **Metric**: `rate(aprs_nats_publish_error_total[5m]) * 60`
-- **Repeat Interval**: 1 hour
+- **Repeat Interval**: 24 hours
 - **Description**: Monitors errors when publishing messages to NATS. Indicates potential issues with NATS connectivity or queue depth.
 
 ## Configuration Files
@@ -50,9 +50,10 @@ These files contain placeholders and are processed during deployment:
 infrastructure/
 ├── grafana-provisioning/
 │   └── alerting/
-│       ├── contact-points.yml.template    # Email contact configuration (has placeholders)
-│       ├── notification-policies.yml      # Routing and repeat intervals (no placeholders)
-│       └── alert-rules.yml                # Alert rule definitions (no placeholders)
+│       ├── contact-points.yml.template      # Email contact configuration (has placeholders)
+│       ├── notification-policies.yml        # Routing and repeat intervals (no placeholders)
+│       ├── alert-rules-production.yml       # Production alert rules (deployed to production only)
+│       └── alert-rules-staging.yml          # Staging alert rules (deployed to staging only)
 └── systemd/
     └── grafana-server.service.d-smtp.conf.template  # SMTP config for Grafana (has placeholders)
 ```
@@ -72,9 +73,9 @@ These files are generated during deployment with actual credentials:
 
 ```
 /etc/grafana/provisioning/alerting/
-├── contact-points.yml            # Processed from template
-├── notification-policies.yml     # Copied as-is
-└── alert-rules.yml               # Copied as-is
+├── contact-points.yml              # Processed from template
+├── notification-policies.yml       # Copied as-is
+└── alert-rules-{environment}.yml   # Environment-specific (production or staging)
 
 /etc/systemd/system/grafana-server.service.d/
 └── smtp.conf                     # Processed from template
@@ -101,8 +102,9 @@ sudo /usr/local/bin/soar-deploy staging /tmp/soar/deploy/YYYYMMDDHHMMSS
 1. **Extract SMTP Config**: Script sources `/etc/soar/env` (or `/etc/soar/env-staging`) to get SMTP credentials
 2. **Process Templates**: Substitutes placeholders in template files with actual values
 3. **Install Config Files**: Copies processed files to `/etc/grafana/provisioning/alerting/`
-4. **Configure SMTP**: Creates systemd drop-in file with Grafana SMTP environment variables
-5. **Reload Services**: Runs `systemctl daemon-reload` and restarts Grafana
+4. **Install Environment-Specific Alerts**: Only installs alert rules matching the deployment environment (production or staging)
+5. **Configure SMTP**: Creates systemd drop-in file with Grafana SMTP environment variables
+6. **Reload Services**: Runs `systemctl daemon-reload` and restarts Grafana
 
 ### Environment File Variables
 
@@ -153,15 +155,34 @@ To test the OGN message rate alert:
 
 5. **Check Email**: You should receive a "resolved" email once the service recovers
 
+## Environment-Specific Alert Deployment
+
+Alert rules are separated by environment to ensure that staging alerts are not deployed to production Grafana instances and vice versa:
+
+- **Production**: Only `alert-rules-production.yml` is deployed when running `soar-deploy production`
+- **Staging**: Only `alert-rules-staging.yml` is deployed when running `soar-deploy staging`
+
+This separation is important because:
+1. Staging and production use different Grafana instances
+2. Production alerts query metrics with `environment="production"` labels
+3. Staging alerts query metrics with `environment="staging"` labels
+4. Deploying both sets of alerts to the same Grafana instance would cause confusion
+
+To add alerts for both environments, you must update both `alert-rules-production.yml` and `alert-rules-staging.yml`.
+
 ## Managing Alerts
 
 ### Adding New Alert Rules
 
-1. **Edit Alert Rules**: Modify `infrastructure/grafana-provisioning/alerting/alert-rules.yml`
-2. **Add New Rule**: Add a new rule under the `rules:` section
-3. **Test Locally**: Use Grafana UI to test the query
-4. **Deploy**: Run `soar-deploy` to deploy the new alert
-5. **Verify**: Check Grafana UI to ensure the alert appears
+1. **Choose Environment**: Determine if the alert is for production, staging, or both
+2. **Edit Alert Rules**:
+   - For production: Modify `infrastructure/grafana-provisioning/alerting/alert-rules-production.yml`
+   - For staging: Modify `infrastructure/grafana-provisioning/alerting/alert-rules-staging.yml`
+   - For both: Update both files
+3. **Add New Rule**: Add a new rule under the `rules:` section with appropriate `environment` label filter
+4. **Test Locally**: Use Grafana UI to test the query
+5. **Deploy**: Run `soar-deploy` to deploy the new alert
+6. **Verify**: Check Grafana UI to ensure the alert appears
 
 Example alert rule structure:
 

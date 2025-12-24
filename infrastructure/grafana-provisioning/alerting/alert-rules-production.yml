@@ -1,0 +1,244 @@
+# Grafana Alerting Rules Configuration - PRODUCTION ONLY
+# This defines the alert conditions and thresholds for SOAR production monitoring
+#
+# This file should ONLY be deployed to production Grafana instances.
+# For staging alerts, see alert-rules-staging.yml
+
+apiVersion: 1
+
+groups:
+  # ============================================================================
+  # PRODUCTION ENVIRONMENT ALERTS
+  # ============================================================================
+  - orgId: 1
+    name: soar-ogn-ingest-alerts-production
+    folder: SOAR
+    interval: 1m
+    rules:
+      # Alert when production OGN/APRS message ingestion rate drops below 1 message per minute
+      - uid: ogn_message_rate_low_production
+        title: "[Production] OGN Message Ingestion Rate Too Low"
+        condition: D
+        data:
+          # Query A: Get the rate of APRS messages processed per minute (production only)
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aprs_raw_message_processed_total{environment="production"}[1m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Query B: Get the rate of messages published to NATS per minute (production only)
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aprs_nats_published_total{environment="production"}[1m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+
+          # Reduce C: Convert time series to single value using last()
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: C
+
+          # Condition D: Alert if metric is below 1 msg/min
+          - refId: D
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - D
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: C
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: D
+              type: threshold
+
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: "[Production] OGN/APRS message ingestion rate is critically low"
+          description: 'Production OGN ingestion rate: {{ printf "%.2f" $values.C.Value }} messages/min (threshold: 1.0 msg/min). Check if ingest-ogn service is running and connected to APRS-IS.'
+        labels:
+          severity: critical
+          service: ogn-ingest
+          environment: production
+          team: ops
+
+      # Alert when production OGN ingest service is disconnected
+      - uid: ogn_service_disconnected_production
+        title: "[Production] OGN Ingest Service Disconnected"
+        condition: C
+        data:
+          # Query A: Check if APRS connection is established (production only)
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: aprs_connection_connected{environment="production"}
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Reduce B: Convert time series to single value using last()
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+
+          # Condition C: Alert if connection gauge is 0 (disconnected)
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.5
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        for: 1m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: "[Production] OGN/APRS ingest service is disconnected"
+          description: 'The production OGN ingest service has lost connection to APRS-IS. Check service status and network connectivity.'
+        labels:
+          severity: critical
+          service: ogn-ingest
+          environment: production
+          team: ops
+
+      # Alert when production NATS publishing errors are occurring
+      - uid: ogn_nats_publish_errors_production
+        title: "[Production] OGN NATS Publishing Errors"
+        condition: C
+        data:
+          # Query A: Get the rate of NATS publish errors (production only)
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(aprs_nats_publish_error_total{environment="production"}[5m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Reduce B: Convert time series to single value using last()
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+
+          # Condition C: Alert if error rate > 0.1 errors/min
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        for: 3m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: "[Production] OGN ingest service is experiencing NATS publishing errors"
+          description: 'Production NATS publish error rate: {{ printf "%.2f" $values.B.Value }} errors/min. Check NATS connectivity and queue depth.'
+        labels:
+          severity: warning
+          service: ogn-ingest
+          environment: production
+          team: ops

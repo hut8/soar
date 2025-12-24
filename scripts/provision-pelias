@@ -2,7 +2,7 @@
 # SOAR Pelias Geocoding Service Provisioning Script
 #
 # This script provisions a Pelias geocoding server for SOAR by:
-# - Installing OpenSearch 2.x with required plugins
+# - Installing Elasticsearch 8 with required plugins
 # - Downloading and importing Who's on First data (city-level)
 # - Setting up Pelias API and PIP services (systemd, not Docker)
 # - Installing and configuring Caddy reverse proxy
@@ -16,6 +16,7 @@
 set -e
 set -u
 set -o pipefail
+set -x
 
 # Save the directory containing this script (repo root/scripts)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,26 +35,7 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Generate or load OpenSearch admin password
-OPENSEARCH_PASSWORD_FILE="/etc/opensearch/.admin_password"
-if [ -f "$OPENSEARCH_PASSWORD_FILE" ]; then
-    echo -e "${BLUE}Using existing OpenSearch admin password from $OPENSEARCH_PASSWORD_FILE${NC}"
-    OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(cat "$OPENSEARCH_PASSWORD_FILE")
-else
-    echo -e "${BLUE}Generating secure password for OpenSearch admin user...${NC}"
-    OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
-    # Ensure password meets complexity requirements by adding one of each required character
-    OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
-
-    # Save the password to a secure file for later reference
-    mkdir -p /etc/opensearch
-    echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
-    chmod 600 "$OPENSEARCH_PASSWORD_FILE"
-    echo -e "${GREEN}OpenSearch admin password saved to: $OPENSEARCH_PASSWORD_FILE${NC}"
-fi
-export OPENSEARCH_INITIAL_ADMIN_PASSWORD
-
-echo -e "${GREEN}Provisioning Pelias geocoding server with OpenSearch...${NC}"
+echo -e "${GREEN}Provisioning Pelias geocoding server with Elasticsearch 8...${NC}"
 
 # Detect OS
 if [ -f /etc/os-release ]; then
@@ -77,82 +59,108 @@ echo -e "${BLUE}Installing prerequisites...${NC}"
 apt-get update
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release gpg jq debian-keyring debian-archive-keyring
 
-# Install OpenSearch
-echo -e "${BLUE}Installing OpenSearch...${NC}"
+# Install Elasticsearch 8
+echo -e "${BLUE}Installing Elasticsearch 8...${NC}"
 
-# Add OpenSearch GPG key and repository
-if [ ! -f /usr/share/keyrings/opensearch-keyring ]; then
-    curl -o- https://artifacts.opensearch.org/publickeys/opensearch.pgp | \
-        gpg --dearmor --batch --yes -o /usr/share/keyrings/opensearch-keyring
+# Add Elasticsearch GPG key and repository
+if [ ! -f /usr/share/keyrings/elasticsearch-keyring.gpg ]; then
+    curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
+        gpg --dearmor --batch --yes -o /usr/share/keyrings/elasticsearch-keyring.gpg
 fi
 
-if [ ! -f /etc/apt/sources.list.d/opensearch-2.x.list ]; then
-    echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" | \
-        tee /etc/apt/sources.list.d/opensearch-2.x.list
+if [ ! -f /etc/apt/sources.list.d/elastic-8.x.list ]; then
+    echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | \
+        tee /etc/apt/sources.list.d/elastic-8.x.list
 fi
 
 apt-get update
-apt-get install -y opensearch
+apt-get install -y elasticsearch
 
 # Install ICU plugin if not already installed
-if /usr/share/opensearch/bin/opensearch-plugin list | grep -q analysis-icu; then
+if /usr/share/elasticsearch/bin/elasticsearch-plugin list | grep -q analysis-icu; then
     echo -e "${BLUE}ICU analysis plugin already installed${NC}"
 else
     echo -e "${BLUE}Installing ICU analysis plugin...${NC}"
-    /usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
+    /usr/share/elasticsearch/bin/elasticsearch-plugin install analysis-icu --batch
 fi
 
-# Add current user and soar user to opensearch group for access to logs and config
-echo -e "${BLUE}Adding users to opensearch group...${NC}"
+# Add current user and soar user to elasticsearch group for access to logs and config
+echo -e "${BLUE}Adding users to elasticsearch group...${NC}"
 CURRENT_USER="${SUDO_USER:-$USER}"
 if id "$CURRENT_USER" &>/dev/null; then
-    usermod -a -G opensearch "$CURRENT_USER"
-    echo -e "${GREEN}Added $CURRENT_USER to opensearch group${NC}"
+    usermod -a -G elasticsearch "$CURRENT_USER"
+    echo -e "${GREEN}Added $CURRENT_USER to elasticsearch group${NC}"
 fi
 if id soar &>/dev/null; then
-    usermod -a -G opensearch soar
-    echo -e "${GREEN}Added soar user to opensearch group${NC}"
+    usermod -a -G elasticsearch soar
+    echo -e "${GREEN}Added soar user to elasticsearch group${NC}"
 fi
 
 # Configure for Pelias
-if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null; then
-    echo -e "${BLUE}Adding Pelias configuration to opensearch.yml...${NC}"
-    cat >> /etc/opensearch/opensearch.yml <<EOF
+ELASTICSEARCH_CONFIG_CHANGED=false
+
+if ! grep -q "# Pelias configuration" /etc/elasticsearch/elasticsearch.yml 2>/dev/null; then
+    echo -e "${BLUE}Adding Pelias configuration to elasticsearch.yml...${NC}"
+    cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
 
 # Pelias configuration
 discovery.type: single-node
 indices.query.bool.max_clause_count: 4096
 
-# Disable security for local development (WARNING: Enable for production!)
-plugins.security.disabled: true
+# Network configuration - HTTP only on localhost
+network.host: 127.0.0.1
+http.port: 9200
+
+# Disable security features (no HTTPS, no authentication for localhost access)
+xpack.security.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: false
 EOF
+    ELASTICSEARCH_CONFIG_CHANGED=true
 else
-    echo -e "${BLUE}Pelias configuration already exists in opensearch.yml${NC}"
+    echo -e "${BLUE}Pelias configuration section found in elasticsearch.yml${NC}"
+    # Ensure network.host is set to 127.0.0.1 (localhost only - not exposed to internet)
+    if ! grep -q "^network.host: 127.0.0.1" /etc/elasticsearch/elasticsearch.yml; then
+        echo -e "${YELLOW}Updating network.host to 127.0.0.1 (localhost only)...${NC}"
+        if grep -q "^network.host:" /etc/elasticsearch/elasticsearch.yml; then
+            sed -i 's/^network.host:.*/network.host: 127.0.0.1/' /etc/elasticsearch/elasticsearch.yml
+        else
+            sed -i '/# Pelias configuration/a network.host: 127.0.0.1' /etc/elasticsearch/elasticsearch.yml
+        fi
+        ELASTICSEARCH_CONFIG_CHANGED=true
+    fi
 fi
 
 # Set JVM heap size (8GB - adjust based on RAM)
-mkdir -p /etc/opensearch/jvm.options.d
-cat > /etc/opensearch/jvm.options.d/heap.options <<EOF
+mkdir -p /etc/elasticsearch/jvm.options.d
+cat > /etc/elasticsearch/jvm.options.d/heap.options <<EOF
 -Xms8g
 -Xmx8g
 EOF
 
-# Enable and start
+# Enable and start/restart Elasticsearch
 systemctl daemon-reload
-systemctl enable opensearch
-systemctl start opensearch
+systemctl enable elasticsearch
 
-echo -e "${GREEN}OpenSearch installed and started${NC}"
+if [ "$ELASTICSEARCH_CONFIG_CHANGED" = true ]; then
+    echo -e "${BLUE}Restarting Elasticsearch to apply configuration changes...${NC}"
+    systemctl restart elasticsearch
+else
+    systemctl start elasticsearch 2>/dev/null || true
+fi
+
+echo -e "${GREEN}Elasticsearch configured and running${NC}"
 
 # Wait for search engine to be ready
-echo -e "${BLUE}Waiting for search engine to be ready...${NC}"
+echo -e "${BLUE}Waiting for Elasticsearch to be ready...${NC}"
 for i in {1..30}; do
     if curl -s http://localhost:9200 > /dev/null 2>&1; then
-        echo -e "${GREEN}Search engine is ready${NC}"
+        echo -e "${GREEN}Elasticsearch is ready on localhost${NC}"
         break
     fi
     if [ $i -eq 30 ]; then
-        echo -e "${RED}Error: Search engine failed to start${NC}"
+        echo -e "${RED}Error: Elasticsearch failed to start${NC}"
+        echo -e "${YELLOW}Check logs: journalctl -u elasticsearch -n 50${NC}"
         exit 1
     fi
     sleep 2
@@ -200,11 +208,11 @@ for i in {1..10}; do
     sleep 2
 done
 
-# Install Node.js 18.x (for Pelias services)
+# Install Node.js 20.x LTS (for Pelias services)
 if ! command -v node &> /dev/null; then
-    echo -e "${BLUE}Installing Node.js 18.x...${NC}"
+    echo -e "${BLUE}Installing Node.js 20.x LTS...${NC}"
 
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
 
     echo -e "${GREEN}Node.js $(node --version) installed${NC}"
@@ -230,12 +238,11 @@ else
     echo -e "${BLUE}pelias user already in docker group${NC}"
 fi
 
-# Create Pelias directories
+# Create base Pelias directory structure
 echo -e "${BLUE}Creating Pelias directory structure...${NC}"
-mkdir -p /opt/pelias/docker
+mkdir -p /opt/pelias
 mkdir -p /opt/pelias/api
 mkdir -p /opt/pelias/pip
-mkdir -p /opt/pelias/docker/data/whosonfirst
 chown -R pelias:pelias /opt/pelias
 
 # Clone Pelias docker repository (for import tools)
@@ -245,6 +252,10 @@ if [ ! -d /opt/pelias/docker/.git ]; then
 else
     echo -e "${BLUE}Pelias docker repository already exists${NC}"
 fi
+
+# Create data directory inside cloned repo
+mkdir -p /opt/pelias/docker/data/whosonfirst
+chown -R pelias:pelias /opt/pelias
 
 # Create pelias.json configuration
 echo -e "${BLUE}Creating pelias.json configuration...${NC}"
@@ -257,7 +268,8 @@ cat > /opt/pelias/docker/pelias.json <<EOF
   "esclient": {
     "hosts": [
       {
-        "host": "172.17.0.1",
+        "protocol": "http",
+        "host": "127.0.0.1",
         "port": 9200
       }
     ]
@@ -298,25 +310,57 @@ chown pelias:pelias /opt/pelias/docker/pelias.json
 # Create .env file for Docker
 cat > /opt/pelias/docker/.env <<EOF
 DATA_DIR=/opt/pelias/docker/data
+DOCKER_USER=$(id -u pelias):$(id -g pelias)
 EOF
 
 chown pelias:pelias /opt/pelias/docker/.env
 
+# Create minimal docker-compose.yml for data import
+echo -e "${BLUE}Creating docker-compose.yml for Pelias data import...${NC}"
+cat > /opt/pelias/docker/docker-compose.yml <<'EOF'
+services:
+  schema:
+    image: pelias/schema:master
+    container_name: pelias_schema
+    user: "${DOCKER_USER}"
+    network_mode: host
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+  whosonfirst:
+    image: pelias/whosonfirst:master
+    container_name: pelias_whosonfirst
+    user: "${DOCKER_USER}"
+    network_mode: host
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+      - "${DATA_DIR}:/data"
+EOF
+
+chown pelias:pelias /opt/pelias/docker/docker-compose.yml
+
 # Download Who's on First data
-cd /opt/pelias/docker
-if [ -d "/opt/pelias/docker/data/whosonfirst" ] && [ "$(find /opt/pelias/docker/data/whosonfirst -type f -name '*.geojson' 2>/dev/null | wc -l)" -gt 100 ]; then
+if [ -d "/opt/pelias/docker/data/whosonfirst/sqlite" ] && [ "$(find /opt/pelias/docker/data/whosonfirst/sqlite -type f -name '*.db' 2>/dev/null | wc -l)" -gt 0 ]; then
     echo -e "${BLUE}Who's on First data already downloaded (skipping)${NC}"
+    du -sh /opt/pelias/docker/data/whosonfirst/ | awk '{print "  Current data size: " $1}'
 else
     echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
-    sudo -u pelias docker compose run --rm whosonfirst npm run download
+    su - pelias -c "cd /opt/pelias/docker && ./pelias download wof"
 fi
 
 # Create Pelias index
-if curl -s "http://localhost:9200/pelias" | grep -q "pelias"; then
+if curl -s -o /dev/null -w "%{http_code}" "http://localhost:9200/pelias" | grep -q "200"; then
     echo -e "${BLUE}Pelias index already exists (skipping creation)${NC}"
 else
-    echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
-    sudo -u pelias docker compose run --rm schema npm run create_index
+    echo -e "${BLUE}Creating Pelias index in Elasticsearch...${NC}"
+    su - pelias -c "cd /opt/pelias/docker && ./pelias elastic create"
+
+    # Verify index was created successfully
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:9200/pelias" | grep -q "200"; then
+        echo -e "${GREEN}Pelias index created successfully${NC}"
+    else
+        echo -e "${RED}Error: Failed to create Pelias index${NC}"
+        exit 1
+    fi
 fi
 
 # Import Who's on First data
@@ -325,7 +369,7 @@ if [ "$DOC_COUNT" -gt 100000 ]; then
     echo -e "${BLUE}Who's on First data already imported ($DOC_COUNT documents, skipping)${NC}"
 else
     echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
-    sudo -u pelias docker compose run --rm whosonfirst npm start
+    su - pelias -c "cd /opt/pelias/docker && ./pelias import wof"
     echo -e "${GREEN}Data import complete${NC}"
 fi
 
@@ -354,9 +398,13 @@ cp /opt/pelias/docker/pelias.json /opt/pelias/api/pelias.json
 cp /opt/pelias/docker/pelias.json /opt/pelias/pip/pelias.json
 chown pelias:pelias /opt/pelias/api/pelias.json /opt/pelias/pip/pelias.json
 
-# Update pelias.json for production services (use localhost instead of Docker bridge)
+# Update pelias.json for production services
+# - Use localhost instead of Docker bridge IP
+# - Use absolute path for whosonfirst data instead of Docker volume path
 sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/api/pelias.json
 sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/pip/pelias.json
+sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/api/pelias.json
+sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/pip/pelias.json
 
 # Create systemd service for Pelias PIP
 echo -e "${BLUE}Creating Pelias PIP systemd service...${NC}"
@@ -364,8 +412,8 @@ cat > /etc/systemd/system/pelias-pip.service <<EOF
 [Unit]
 Description=Pelias PIP (Point in Polygon) Service
 Documentation=https://github.com/pelias/pip-service
-After=network.target opensearch.service
-Requires=opensearch.service
+After=network.target elasticsearch.service
+Requires=elasticsearch.service
 
 [Service]
 Type=simple
@@ -375,7 +423,7 @@ WorkingDirectory=/opt/pelias/pip
 Environment="NODE_ENV=production"
 Environment="PORT=4200"
 Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
-ExecStart=/usr/bin/node /opt/pelias/pip/index.js
+ExecStart=/usr/bin/node --max-old-space-size=28672 /opt/pelias/pip/index.js
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
@@ -384,7 +432,7 @@ SyslogIdentifier=pelias-pip
 
 # Resource limits
 LimitNOFILE=65536
-MemoryMax=16G
+MemoryMax=32G
 
 [Install]
 WantedBy=multi-user.target
@@ -550,7 +598,7 @@ echo -e "${GREEN}Pelias geocoding server setup complete!${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
 echo -e "${BLUE}Services:${NC}"
-echo -e "  - OpenSearch: http://localhost:9200"
+echo -e "  - Elasticsearch: http://localhost:9200"
 echo -e "  - Pelias API: http://localhost:4000"
 echo -e "  - Pelias PIP: http://localhost:4200"
 echo -e "  - Caddy reverse proxy: http://localhost (configured)"
@@ -562,7 +610,7 @@ echo ""
 echo -e "${BLUE}Service management:${NC}"
 echo -e "  sudo systemctl status pelias-api"
 echo -e "  sudo systemctl status pelias-pip"
-echo -e "  sudo systemctl status opensearch"
+echo -e "  sudo systemctl status elasticsearch"
 echo -e "  sudo systemctl status caddy"
 echo ""
 echo -e "${BLUE}View logs:${NC}"

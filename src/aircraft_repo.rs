@@ -17,6 +17,7 @@ pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 #[derive(Debug, Clone)]
 pub struct AircraftPacketFields {
     pub aircraft_type: Option<AircraftType>,
+    pub aircraft_model: Option<String>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
@@ -71,7 +72,7 @@ impl AircraftRepository {
                     )),
                     aircraft::tracked.eq(excluded(aircraft::tracked)),
                     aircraft::identified.eq(excluded(aircraft::identified)),
-                    aircraft::from_ddb.eq(excluded(aircraft::from_ddb)),
+                    aircraft::from_ogn_ddb.eq(excluded(aircraft::from_ogn_ddb)),
                     // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
                     aircraft::frequency_mhz.eq(diesel::dsl::sql(
                         "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
@@ -147,7 +148,7 @@ impl AircraftRepository {
     }
 
     /// Get or insert an aircraft by address
-    /// If the aircraft doesn't exist, it will be created with from_ddb=false, tracked=true, identified=true
+    /// If the aircraft doesn't exist, it will be created with from_ogn_ddb=false, tracked=true, identified=true
     /// Uses INSERT ... ON CONFLICT to handle race conditions atomically
     pub async fn get_or_insert_aircraft_by_address(
         &self,
@@ -171,7 +172,8 @@ impl AircraftRepository {
             competition_number: String::new(),
             tracked: true,
             identified: true,
-            from_ddb: false,
+            from_ogn_ddb: false,
+            from_adsbx_ddb: false,
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
@@ -184,6 +186,14 @@ impl AircraftRepository {
             country_code,
             latitude: None,
             longitude: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -240,12 +250,13 @@ impl AircraftRepository {
             let new_aircraft = NewAircraft {
                 address,
                 address_type,
-                aircraft_model: String::new(),
+                aircraft_model: packet_fields.aircraft_model.clone().unwrap_or_default(),
                 registration: registration.clone(),
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
-                from_ddb: false,
+                from_ogn_ddb: false,
+                from_adsbx_ddb: false,
                 frequency_mhz: None,
                 pilot_name: None,
                 home_base_airport_ident: None,
@@ -258,6 +269,14 @@ impl AircraftRepository {
                 country_code: country_code.clone(),
                 latitude: None,
                 longitude: None,
+                owner_operator: None,
+                aircraft_category: None,
+                engine_count: None,
+                engine_type: None,
+                faa_pia: None,
+                faa_ladd: None,
+                year: None,
+                is_military: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -273,6 +292,12 @@ impl AircraftRepository {
                     aircraft::icao_model_code.eq(packet_fields.icao_model_code),
                     aircraft::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
                     aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    // Only update aircraft_model if current value is NULL or empty string
+                    aircraft::aircraft_model.eq(diesel::dsl::sql(
+                        "CASE WHEN (aircraft.aircraft_model IS NULL OR aircraft.aircraft_model = '') \
+                         THEN excluded.aircraft_model \
+                         ELSE aircraft.aircraft_model END"
+                    )),
                     aircraft::registration.eq(&registration),
                     aircraft::country_code.eq(&country_code),
                     aircraft::latitude.eq(latitude),
@@ -476,7 +501,7 @@ impl AircraftRepository {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
                 id: uuid::Uuid,
                 #[diesel(sql_type = Bool)]
-                from_ddb: bool,
+                from_ogn_ddb: bool,
                 #[diesel(sql_type = Nullable<Numeric>)]
                 frequency_mhz: Option<bigdecimal::BigDecimal>,
                 #[diesel(sql_type = Nullable<Text>)]
@@ -522,7 +547,8 @@ impl AircraftRepository {
                         identified: row.identified,
                         created_at: row.created_at,
                         updated_at: row.updated_at,
-                        from_ddb: row.from_ddb,
+                        from_ogn_ddb: row.from_ogn_ddb,
+                        from_adsbx_ddb: false,
                         frequency_mhz: row.frequency_mhz,
                         pilot_name: row.pilot_name,
                         home_base_airport_ident: row.home_base_airport_ident,
@@ -533,8 +559,16 @@ impl AircraftRepository {
                         adsb_emitter_category: row.adsb_emitter_category,
                         tracker_device_type: row.tracker_device_type,
                         country_code: row.country_code,
-                        latitude: None,  // Not selected in this query
-                        longitude: None, // Not selected in this query
+                        latitude: None,          // Not selected in this query
+                        longitude: None,         // Not selected in this query
+                        owner_operator: None,    // Not selected in this query
+                        aircraft_category: None, // Not selected in this query
+                        engine_count: None,      // Not selected in this query
+                        engine_type: None,       // Not selected in this query
+                        faa_pia: None,           // Not selected in this query
+                        faa_ladd: None,          // Not selected in this query
+                        year: None,
+                        is_military: None,
                     };
                     (
                         model,

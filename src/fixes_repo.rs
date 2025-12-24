@@ -687,7 +687,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
                 id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
-                from_ddb: bool,
+                from_ogn_ddb: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
                 frequency_mhz: Option<bigdecimal::BigDecimal>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -744,7 +744,8 @@ impl FixesRepository {
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                     id: row.id,
-                    from_ddb: row.from_ddb,
+                    from_ogn_ddb: row.from_ogn_ddb,
+            from_adsbx_ddb: false,
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
@@ -757,6 +758,14 @@ impl FixesRepository {
                     country_code: row.country_code,
                     latitude: row.latitude,
                     longitude: row.longitude,
+                    owner_operator: None,           // Not selected in this query
+                    aircraft_category: None,   // Not selected in this query
+                    engine_count: None,              // Not selected in this query
+                    engine_type: None,         // Not selected in this query
+                    faa_pia: None,                  // Not selected in this query
+                    faa_ladd: None,                 // Not selected in this query
+                    year: None,                     // Not selected in this query
+                    is_military: None,              // Not selected in this query
                 })
                 .collect();
 

@@ -1,3 +1,56 @@
+//! Photon geocoding client (CURRENTLY DISABLED)
+//!
+//! Photon is a geocoding service based on OpenStreetMap data that can be self-hosted.
+//! This module is currently disabled for production use but kept for potential future use.
+//!
+//! # Why Photon is Disabled
+//!
+//! ## 1. Nearest-Point Matching Inaccuracy
+//!
+//! Photon (like Nominatim) uses **nearest-point matching** instead of **point-in-polygon**
+//! containment for reverse geocoding. This means it finds the nearest known geographic feature
+//! (like a building or city center) and returns that object's address, rather than determining
+//! which administrative boundary actually contains the query point.
+//!
+//! ### Layer Filtering Problems
+//!
+//! Photon supports filtering by layer (e.g., `layer=city`) via the API:
+//! <https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer>
+//!
+//! However, this creates significant accuracy issues:
+//! - **Example**: A coordinate in Albany, NY might return "Troy, NY" if the Troy city center
+//!   is geometrically closer than Albany's city center, even if the point is actually within
+//!   Albany's boundaries
+//! - Requires **large search radii** (our implementation uses progressive 1km/5km/10km retries)
+//!   to ensure we always find *some* city, making queries inefficient
+//! - **No guarantee** the returned city is the one that actually contains the point
+//!
+//! ## 2. Schema Inconsistency Across Entity Types
+//!
+//! To work around the nearest-point issue, we could avoid filtering by layer and let Photon
+//! return any nearby object (buildings, streets, POIs, etc.). However, this creates new problems:
+//!
+//! - **Data Import**: Requires importing significantly more OSM data (every building, street,
+//!   and POI, not just administrative boundaries)
+//! - **Inconsistent Schema**: Different entity types have different field structures:
+//!   - For `osm_value="city"`: city name is in the `"name"` field
+//!   - For `osm_value="house"` or buildings: city name is in the `"city"` field
+//! - **Extraction Complexity**: Makes extracting consistent `"city, state, postal_code, country"`
+//!   data extremely cumbersome and error-prone, requiring complex conditional logic based on
+//!   entity type
+//!
+//! ## See Also
+//!
+//! - Nominatim has the same nearest-point limitation:
+//!   <https://nominatim.org/release-docs/latest/api/Faq/#2-when-doing-reverse-search-the-address-details-have-parts-that-dont-contain-the-point-i-was-looking-up>
+//! - Photon layer filtering documentation:
+//!   <https://github.com/komoot/photon?tab=readme-ov-file#filter-results-by-layer>
+//!
+//! ## Current Alternatives
+//!
+//! For now, we use Nominatim, Pelias, and Google Maps geocoding services which handle
+//! these complexities internally and provide more consistent address extraction.
+
 use anyhow::{Result, anyhow};
 use reqwest;
 use serde::Deserialize;
@@ -58,6 +111,8 @@ pub struct PhotonClient {
     base_url: String,
 }
 
+// DISABLED: Photon is temporarily not in use, but keeping code for future use
+#[allow(dead_code)]
 impl PhotonClient {
     pub fn new(client: reqwest::Client, base_url: String) -> Self {
         Self { client, base_url }
@@ -277,5 +332,23 @@ impl PhotonClient {
             country: props.countrycode.clone(),
             display_name,
         })
+    }
+}
+
+// Trait implementations
+use super::{ForwardGeocoder, ReverseGeocoder};
+use async_trait::async_trait;
+
+#[async_trait]
+impl ForwardGeocoder for PhotonClient {
+    async fn geocode(&self, address: &str) -> Result<Point> {
+        self.geocode(address).await
+    }
+}
+
+#[async_trait]
+impl ReverseGeocoder for PhotonClient {
+    async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult> {
+        self.reverse_geocode(latitude, longitude).await
     }
 }
