@@ -390,6 +390,10 @@ jobs:
       - name: Run Rust tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          ELEVATION_DATA_PATH: /tmp/elevation
+          ELEVATION_S3_BUCKET: elevation-tiles-prod
+          ELEVATION_S3_PREFIX: skadi
+          AWS_REGION: us-east-1
         run: cargo nextest run
 
       - name: Cleanup PostgreSQL container
