@@ -290,10 +290,14 @@ pub(crate) async fn process_state_transition(
                     };
 
                     // Check 3: Phase-based validation - determine if this looks like a landing + new takeoff
+                    // Calculate the gap duration for time-based detection
+                    let gap_hours = (fix.timestamp - timed_out_flight.last_fix_at).num_hours();
+
                     let looks_like_landing = match timed_out_flight.timeout_phase {
                         Some(TimeoutPhase::Descending) => {
                             // Aircraft was descending when it timed out
-                            // Check if new fix is at low altitude climbing (indicates new takeoff)
+                            // This is the canonical "descended out of range while landing" case
+
                             let new_fix_low_altitude =
                                 fix.altitude_agl_feet.map(|agl| agl < 1000).unwrap_or(false);
 
@@ -301,9 +305,20 @@ pub(crate) async fn process_state_transition(
                                 fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
 
                             let far_apart = distance_km > 100.0; // More than 100km away
+                            let very_long_gap = gap_hours >= 4; // More than 4 hours suggests landing
 
-                            // If at low altitude, climbing, and far from timeout position → landed
-                            new_fix_low_altitude && new_fix_climbing && far_apart
+                            // Detect landing + new takeoff if:
+                            // 1. Classic case: Low altitude, climbing, far away (long cross-country)
+                            // 2. NEW: Long gap with climbing - even if nearby (landed, stayed on ground, took off again)
+                            //    Example: Descended out of range at 17:28, reappeared climbing at 04:46 (11h gap, 32km away)
+                            if very_long_gap && new_fix_climbing {
+                                // Very long gap + climbing = almost certainly landed and took off again
+                                // Even if distance is small (aircraft stayed at nearby airport)
+                                true
+                            } else {
+                                // Standard case: requires all three conditions
+                                new_fix_low_altitude && new_fix_climbing && far_apart
+                            }
                         }
                         Some(TimeoutPhase::Cruising) => {
                             // Aircraft was cruising - only reject if VERY far apart
@@ -326,10 +341,11 @@ pub(crate) async fn process_state_transition(
                     if !should_resume {
                         info!(
                             "Aircraft {} NOT coalescing - probable landing detected. \
-                             Phase: {:?}, Distance: {:.1}km, New alt AGL: {:?}ft, New climb: {:?}fpm",
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h, New alt AGL: {:?}ft, New climb: {:?}fpm",
                             fix.aircraft_id,
                             timed_out_flight.timeout_phase,
                             distance_km,
+                            gap_hours as f64,
                             fix.altitude_agl_feet,
                             fix.climb_fpm
                         );
@@ -337,18 +353,20 @@ pub(crate) async fn process_state_transition(
                             .increment(1);
                         metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
                             .record(distance_km);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                            .record(gap_hours as f64);
                         // Don't resume - fall through to create new flight
                     } else {
                         // Resume the timed-out flight
                         let flight_id = timed_out_flight.id;
                         info!(
                             "Aircraft {} resuming flight {} after timeout. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {}s",
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h",
                             fix.aircraft_id,
                             flight_id,
                             timed_out_flight.timeout_phase,
                             distance_km,
-                            (fix.timestamp - timed_out_flight.last_fix_at).num_seconds()
+                            gap_hours as f64
                         );
 
                         metrics::counter!("flight_tracker.coalesce.resumed").increment(1);

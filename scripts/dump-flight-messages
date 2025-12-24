@@ -148,7 +148,7 @@ SELECT
 FROM raw_messages rm
 JOIN fixes f ON f.raw_message_id = rm.id
 WHERE f.flight_id = '$FLIGHT_ID'
-  AND rm.source = 'aprs'
+  AND rm.source = 'ogn'
 ORDER BY rm.received_at ASC;
 "
 

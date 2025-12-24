@@ -124,3 +124,197 @@ async fn test_message_parsing_from_source() {
 //     // Verify flight timestamps and state
 //     // ...
 // }
+
+/// Test case: Aircraft descended out of range while landing, then took off hours later
+///
+/// **Scenario:**
+/// This test covers a canonical case of flight coalescing detection failure. The aircraft:
+/// 1. Started descending from FL182 at -1664fpm
+/// 2. Continued descending to FL034.56 at -896fpm
+/// 3. Went out of range at 17:28:16 UTC (last fix while descending)
+/// 4. Gap of 11.3 hours with only 32km horizontal movement
+/// 5. Reappeared at 04:46:34 UTC climbing at +3392fpm at FL046.51
+///
+/// **Current behavior (WRONG):**
+/// - Creates ONE excessively long flight spanning 11+ hours
+///
+/// **Expected behavior (CORRECT):**
+/// - Creates TWO separate flights:
+///   - Flight 1: Ends when aircraft descended out of range (landed)
+///   - Flight 2: Starts when aircraft reappeared climbing (new takeoff)
+///
+/// **Detection criteria:**
+/// - Average descent rate over last 10 fixes before gap was significant (-896fpm+)
+/// - Long gap (11+ hours) with minimal horizontal movement (32km)
+/// - Reappeared in climbing state (+3392fpm) only a short distance away
+/// - Clear indication of landing → ground time → new takeoff
+///
+/// Flight ID: 019b4d4a-a428-76f0-8e15-1fe429f4254c
+/// Environment: production
+/// Messages: 1183
+/// Device: ICA48683E
+/// Gap: 2025-12-23T17:28:16Z to 2025-12-24T04:46:34Z (11h 18m)
+/// Distance during gap: 32.29 km
+/// Generated: 2025-12-24 08:00:53 UTC
+#[tokio::test]
+async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
+    use diesel::PgConnection;
+    use diesel::r2d2::{ConnectionManager, Pool};
+    use soar::fix_processor::FixProcessor;
+    use soar::message_sources::{RawMessageSource, TestMessageSource};
+    use soar::packet_processors::generic::GenericProcessor;
+    use soar::raw_messages_repo::RawMessagesRepository;
+    use soar::receiver_repo::ReceiverRepository;
+
+    // ========== ARRANGE ==========
+
+    // Set up test database
+    let database_url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
+    let manager = ConnectionManager::<PgConnection>::new(database_url);
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create pool");
+
+    // Create repositories and processors
+    let receiver_repo = ReceiverRepository::new(pool.clone());
+    let raw_messages_repo = RawMessagesRepository::new(pool.clone());
+    let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
+    let fix_processor = FixProcessor::new(pool.clone());
+
+    // Load test messages
+    let mut source = TestMessageSource::from_file(
+        "tests/data/flights/descended-out-of-range-while-landing-then-took-off-hours-later.txt",
+    )
+    .await
+    .expect("Failed to load test messages");
+
+    println!("📝 Starting to process 1183 messages...");
+
+    // ========== ACT ==========
+
+    let mut messages_processed = 0;
+    let mut first_timestamp: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut last_timestamp: Option<chrono::DateTime<chrono::Utc>> = None;
+
+    while let Some(message) = source.next_message().await.unwrap() {
+        // Parse message: "YYYY-MM-DDTHH:MM:SS.SSSZ <aprs_message>"
+        let (timestamp_str, aprs_message) = message
+            .split_once(' ')
+            .expect("Message should have timestamp");
+
+        let received_at = chrono::DateTime::parse_from_rfc3339(timestamp_str)
+            .expect("Valid RFC3339 timestamp")
+            .with_timezone(&chrono::Utc);
+
+        // Track timestamp range for later queries
+        if first_timestamp.is_none() {
+            first_timestamp = Some(received_at);
+        }
+        last_timestamp = Some(received_at);
+
+        // Parse APRS packet
+        if let Ok(packet) = ogn_parser::parse(aprs_message) {
+            // First, process through generic processor to ensure aircraft/receiver exist and get context
+            if let Some(context) = generic_processor
+                .process_packet(&packet, aprs_message, received_at)
+                .await
+            {
+                // Process through fix processor with the context from generic processor
+                fix_processor
+                    .process_aprs_packet(packet, aprs_message, context)
+                    .await;
+            }
+        }
+
+        messages_processed += 1;
+        if messages_processed % 100 == 0 {
+            println!("   Processed {} messages...", messages_processed);
+        }
+    }
+
+    println!("✅ Processed all {} messages", messages_processed);
+
+    // ========== ASSERT ==========
+
+    let first_ts = first_timestamp.expect("Should have processed at least one message");
+    let last_ts = last_timestamp.expect("Should have processed at least one message");
+
+    // Query flights in the time range of our test messages
+    let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
+    let flights = flights_repo
+        .get_flights_in_time_range(first_ts, last_ts, None)
+        .await
+        .expect("Failed to query flights");
+
+    println!(
+        "\n📊 Found {} flight(s) in time range {} to {}",
+        flights.len(),
+        first_ts.format("%Y-%m-%d %H:%M:%S"),
+        last_ts.format("%Y-%m-%d %H:%M:%S")
+    );
+
+    for (i, flight) in flights.iter().enumerate() {
+        let takeoff = flight
+            .takeoff_time
+            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| "In-flight start".to_string());
+        let landing = flight
+            .landing_time
+            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+            .or_else(|| {
+                flight
+                    .timed_out_at
+                    .map(|t| format!("{} (timeout)", t.format("%Y-%m-%d %H:%M:%S")))
+            })
+            .unwrap_or_else(|| "In progress".to_string());
+        println!("   Flight {}: {} -> {}", i + 1, takeoff, landing);
+    }
+
+    // CRITICAL ASSERTION: Should create TWO flights, not one
+    assert_eq!(
+        flights.len(),
+        2,
+        "Should create 2 separate flights (one ending at landing, one starting at takeoff), not 1 long flight"
+    );
+
+    // Verify first flight ended (either landed or timed out)
+    let flight1 = &flights[0];
+    assert!(
+        flight1.landing_time.is_some() || flight1.timed_out_at.is_some(),
+        "First flight should have ended when aircraft descended out of range"
+    );
+
+    // Verify second flight started later
+    let flight2 = &flights[1];
+    let flight1_end = flight1
+        .landing_time
+        .or(flight1.timed_out_at)
+        .expect("Flight 1 should have ended");
+    let flight2_start = flight2.takeoff_time.unwrap_or(flight2.last_fix_at);
+    let gap = (flight2_start - flight1_end).num_seconds();
+    assert!(
+        gap > 10 * 3600,
+        "Gap between flights should be over 10 hours (actual: {} seconds = {:.1} hours)",
+        gap,
+        gap as f64 / 3600.0
+    );
+
+    println!("\n✅ Test passed: Two separate flights detected correctly");
+
+    let flight1_start_str = flight1
+        .takeoff_time
+        .map(|t| t.format("%H:%M:%S").to_string())
+        .unwrap_or_else(|| {
+            flight1
+                .last_fix_at
+                .format("%H:%M:%S (in-flight)")
+                .to_string()
+        });
+    let flight1_end_str = flight1_end.format("%H:%M:%S").to_string();
+    let flight2_start_str = flight2_start.format("%H:%M:%S").to_string();
+
+    println!("   Flight 1: {} -> {}", flight1_start_str, flight1_end_str);
+    println!("   Gap: {:.1} hours", gap as f64 / 3600.0);
+    println!("   Flight 2: {} -> ...", flight2_start_str);
+}
