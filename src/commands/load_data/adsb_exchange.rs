@@ -21,11 +21,8 @@ struct AdsbExchangeRecord {
     icao_type_code: Option<String>,
     #[serde(rename = "ownop")]
     owner_operator: Option<String>,
-    #[serde(rename = "year")]
     year: Option<i32>,
-    #[serde(rename = "manufacturer")]
     manufacturer: Option<String>,
-    #[serde(rename = "model")]
     model: Option<String>,
     faa_pia: Option<bool>,
     faa_ladd: Option<bool>,
