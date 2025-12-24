@@ -285,6 +285,39 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
         total_flights
     );
 
+    // If there's a flight but not in the time range, query it directly to see its timestamps
+    if total_flights > 0 {
+        use soar::schema::flights;
+        #[allow(clippy::type_complexity)]
+        let all_flights: Vec<(
+            Option<chrono::DateTime<chrono::Utc>>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            chrono::DateTime<chrono::Utc>,
+        )> = flights::table
+            .select((
+                flights::takeoff_time,
+                flights::landing_time,
+                flights::last_fix_at,
+            ))
+            .load(&mut conn)
+            .expect("Failed to query flight timestamps");
+
+        for (i, (takeoff, landing, last_fix)) in all_flights.iter().enumerate() {
+            println!(
+                "   Flight {}: takeoff={:?}, landing={:?}, last_fix_at={}",
+                i + 1,
+                takeoff.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+                landing.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+                last_fix.format("%Y-%m-%d %H:%M:%S")
+            );
+        }
+        println!(
+            "   Expected range: {} to {}",
+            first_ts.format("%Y-%m-%d %H:%M:%S"),
+            last_ts.format("%Y-%m-%d %H:%M:%S")
+        );
+    }
+
     // Query flights in the time range of our test messages
     let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
     let flights = flights_repo
