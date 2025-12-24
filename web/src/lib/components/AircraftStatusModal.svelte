@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
+	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation, Star } from '@lucide/svelte';
 	import type { Aircraft, Fix, AircraftRegistration, AircraftModel, Flight } from '$lib/types';
 	import {
 		formatTitleCase,
@@ -18,6 +18,7 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
+	import { watchlist } from '$lib/stores/watchlist';
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -45,15 +46,22 @@
 	let previousDirectionToAircraft: number = $state(0);
 	let locationPermissionDenied: boolean = $state(false);
 
+	// Watchlist state
+	let isInWatchlist: boolean = $state(false);
+	let addingToWatchlist: boolean = $state(false);
+
 	// Update data when device changes
 	$effect(() => {
 		if (selectedAircraft) {
 			loadAircraftData();
+			// Check if aircraft is in watchlist
+			isInWatchlist = watchlist.has(selectedAircraft.id);
 		} else {
 			aircraftRegistration = null;
 			aircraftModel = null;
 			currentFlight = null;
 			recentFixes = [];
+			isInWatchlist = false;
 		}
 	});
 
@@ -114,6 +122,25 @@
 	function closeModal() {
 		showModal = false;
 		selectedAircraft = null;
+	}
+
+	async function toggleWatchlist() {
+		if (!selectedAircraft) return;
+
+		addingToWatchlist = true;
+		try {
+			if (isInWatchlist) {
+				await watchlist.remove(selectedAircraft.id);
+				isInWatchlist = false;
+			} else {
+				await watchlist.add(selectedAircraft.id, false);
+				isInWatchlist = true;
+			}
+		} catch (error) {
+			console.error('Failed to toggle watchlist:', error);
+		} finally {
+			addingToWatchlist = false;
+		}
 	}
 
 	function formatSpeed(speed_knots: number | undefined): string {
@@ -362,6 +389,29 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
+					{#if selectedAircraft.active_flight_id}
+						<a
+							href="/flights/{selectedAircraft.active_flight_id}"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="btn preset-filled-success-500 btn-sm"
+							title="View current flight"
+						>
+							<Plane size={16} />
+							Current Flight
+						</a>
+					{/if}
+					<button
+						class="btn btn-sm {isInWatchlist
+							? 'preset-filled-warning-500'
+							: 'preset-tonal-surface-500'}"
+						onclick={toggleWatchlist}
+						disabled={addingToWatchlist}
+						title={isInWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+					>
+						<Star size={16} class={isInWatchlist ? 'fill-current' : ''} />
+						{isInWatchlist ? 'Remove' : 'Watch'}
+					</button>
 					<a
 						href="/aircraft/{selectedAircraft.id}"
 						target="_blank"
@@ -370,7 +420,7 @@
 						title="View detailed aircraft page"
 					>
 						<ExternalLink size={16} />
-						View Details
+						Details
 					</a>
 					<button class="preset-tonal-surface-500 btn btn-sm" onclick={closeModal}>
 						<X size={20} />
