@@ -834,7 +834,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SOAR BEAST Ingest",
+  "title": "SOAR Ingest ADS-B",
   "uid": "soar-beast-ingest",
   "version": 1
 }
