@@ -24,9 +24,9 @@ struct AdsbExchangeRecord {
     #[serde(rename = "year")]
     year: Option<i32>,
     #[serde(rename = "manufacturer")]
-    _manufacturer: Option<String>,
+    manufacturer: Option<String>,
     #[serde(rename = "model")]
-    _model: Option<String>,
+    model: Option<String>,
     faa_pia: Option<bool>,
     faa_ladd: Option<bool>,
     short_type: Option<String>,
@@ -75,6 +75,19 @@ fn canonicalize_registration(registration: &str) -> String {
     match parser.parse(registration, false, false) {
         Some(r) => r.canonical_callsign().to_string(),
         None => registration.to_string(),
+    }
+}
+
+/// Build aircraft model string from manufacturer and model
+/// Returns concatenation of manufacturer + " " + model if both present
+fn build_aircraft_model(manufacturer: Option<&String>, model: Option<&String>) -> String {
+    match (manufacturer, model) {
+        (Some(mfr), Some(mdl)) if !mfr.is_empty() && !mdl.is_empty() => {
+            format!("{} {}", mfr, mdl)
+        }
+        (Some(mfr), None) if !mfr.is_empty() => mfr.clone(),
+        (None, Some(mdl)) if !mdl.is_empty() => mdl.clone(),
+        _ => String::new(),
     }
 }
 
@@ -149,9 +162,13 @@ pub async fn load_adsb_exchange_data(
             // Skip records with no useful data
             if icao_model_code.is_none()
                 && record.owner_operator.is_none()
+                && record.manufacturer.is_none()
+                && record.model.is_none()
                 && record.faa_pia.is_none()
                 && record.faa_ladd.is_none()
                 && record.short_type.is_none()
+                && record.year.is_none()
+                && record.is_military.is_none()
             {
                 skipped_no_data += 1;
                 continue;
@@ -172,11 +189,15 @@ pub async fn load_adsb_exchange_data(
                 .map(|r| canonicalize_registration(r))
                 .unwrap_or_default();
 
+            // Build aircraft model from manufacturer and model
+            let aircraft_model =
+                build_aircraft_model(record.manufacturer.as_ref(), record.model.as_ref());
+
             batch_inserts.push(NewAircraftAdsb {
                 address,
                 address_type,
                 registration,
-                aircraft_model: String::new(),
+                aircraft_model,
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
@@ -209,6 +230,12 @@ pub async fn load_adsb_exchange_data(
                     .set((
                         aircraft::registration.eq(diesel::dsl::sql("COALESCE(NULLIF(excluded.registration, ''), aircraft.registration)")),
                         aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(excluded.icao_model_code, aircraft.icao_model_code)")),
+                        // Only update aircraft_model if current value is NULL or empty string
+                        aircraft::aircraft_model.eq(diesel::dsl::sql(
+                            "CASE WHEN (aircraft.aircraft_model IS NULL OR aircraft.aircraft_model = '')
+                             THEN excluded.aircraft_model
+                             ELSE aircraft.aircraft_model END"
+                        )),
                         // Only update owner_operator if current value is NULL or empty string
                         aircraft::owner_operator.eq(diesel::dsl::sql(
                             "CASE WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
