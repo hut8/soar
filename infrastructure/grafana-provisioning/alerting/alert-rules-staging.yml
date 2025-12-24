@@ -25,7 +25,7 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: prometheus
+            datasourceUid: Prometheus
             model:
               expr: rate(aprs_raw_message_processed_total{environment="staging"}[1m]) * 60
               intervalMs: 1000
@@ -37,7 +37,7 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: prometheus
+            datasourceUid: Prometheus
             model:
               expr: rate(aprs_nats_published_total{environment="staging"}[1m]) * 60
               intervalMs: 1000
@@ -112,7 +112,7 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: prometheus
+            datasourceUid: Prometheus
             model:
               expr: aprs_connection_connected{environment="staging"}
               intervalMs: 1000
@@ -187,7 +187,7 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
-            datasourceUid: prometheus
+            datasourceUid: Prometheus
             model:
               expr: rate(aprs_nats_publish_error_total{environment="staging"}[5m]) * 60
               intervalMs: 1000
