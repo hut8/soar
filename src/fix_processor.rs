@@ -233,10 +233,15 @@ impl FixProcessor {
                 };
 
                 // Extract all available fields from packet for device creation/update
+                // Validate icao_model_code is exactly 3 or 4 characters (per ICAO Doc 8643) if present
                 let icao_model_code: Option<String> = pos_packet
                     .comment
                     .model
                     .as_ref()
+                    .filter(|model| {
+                        let len = model.len();
+                        len == 3 || len == 4
+                    })
                     .map(|model| model.to_string());
                 let adsb_emitter_category = pos_packet
                     .comment
