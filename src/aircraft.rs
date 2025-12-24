@@ -11,6 +11,7 @@ use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
 // Import AircraftType and AdsbEmitterCategory for the cached fields
+use crate::aircraft_types::{AircraftCategory, EngineType};
 use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
@@ -162,6 +163,22 @@ pub struct Aircraft {
     pub tracker_device_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_operator: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_category: Option<AircraftCategory>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_count: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_type: Option<EngineType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub faa_pia: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub faa_ladd: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_military: Option<bool>,
 }
 
 impl Aircraft {
@@ -196,7 +213,8 @@ pub struct AircraftModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub id: uuid::Uuid,
-    pub from_ddb: bool,
+    pub from_ogn_ddb: bool,
+    pub from_adsbx_ddb: bool,
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
@@ -209,6 +227,14 @@ pub struct AircraftModel {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub owner_operator: Option<String>,
+    pub aircraft_category: Option<AircraftCategory>,
+    pub engine_count: Option<i16>,
+    pub engine_type: Option<EngineType>,
+    pub faa_pia: Option<bool>,
+    pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
 }
 
 impl AircraftModel {
@@ -229,7 +255,8 @@ pub struct NewAircraft {
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
-    pub from_ddb: bool,
+    pub from_ogn_ddb: bool,
+    pub from_adsbx_ddb: bool,
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
@@ -242,6 +269,14 @@ pub struct NewAircraft {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub owner_operator: Option<String>,
+    pub aircraft_category: Option<AircraftCategory>,
+    pub engine_count: Option<i16>,
+    pub engine_type: Option<EngineType>,
+    pub faa_pia: Option<bool>,
+    pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
 }
 
 impl From<Aircraft> for NewAircraft {
@@ -259,7 +294,8 @@ impl From<Aircraft> for NewAircraft {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
-            from_ddb: true,
+            from_ogn_ddb: true,
+            from_adsbx_ddb: false,
             frequency_mhz: device
                 .frequency_mhz
                 .and_then(|f| f.to_string().parse().ok()),
@@ -274,6 +310,14 @@ impl From<Aircraft> for NewAircraft {
             country_code,
             latitude: None,  // Not provided by DDB
             longitude: None, // Not provided by DDB
+            owner_operator: device.owner_operator,
+            aircraft_category: device.aircraft_category,
+            engine_count: device.engine_count,
+            engine_type: device.engine_type,
+            faa_pia: device.faa_pia,
+            faa_ladd: device.faa_ladd,
+            year: device.year,
+            is_military: device.is_military,
         }
     }
 }
@@ -301,6 +345,14 @@ impl From<AircraftModel> for Aircraft {
             adsb_emitter_category: model.adsb_emitter_category,
             tracker_device_type: model.tracker_device_type,
             country_code: model.country_code,
+            owner_operator: model.owner_operator,
+            aircraft_category: model.aircraft_category,
+            engine_count: model.engine_count,
+            engine_type: model.engine_type,
+            faa_pia: model.faa_pia,
+            faa_ladd: model.faa_ladd,
+            year: model.year,
+            is_military: model.is_military,
         }
     }
 }
@@ -535,6 +587,14 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 adsb_emitter_category: None,
                                 tracker_device_type: None,
                                 country_code: None, // Not extracted from FLARM addresses
+                                owner_operator: None,
+                                aircraft_category: None,
+                                engine_count: None,
+                                engine_type: None,
+                                faa_pia: None,
+                                faa_ladd: None,
+                                year: None,
+                                is_military: None,
                             })
                         }
                         Err(e) => {
@@ -719,6 +779,14 @@ impl AircraftFetcher {
                                     adsb_emitter_category: None,
                                     tracker_device_type: None,
                                     country_code: None, // Not extracted from FLARM addresses
+                                    owner_operator: None,
+                                    aircraft_category: None,
+                                    engine_count: None,
+                                    engine_type: None,
+                                    faa_pia: None,
+                                    faa_ladd: None,
+                                    year: None,
+                                    is_military: None,
                                 })
                             }
                             Err(e) => {
@@ -881,6 +949,14 @@ impl AircraftFetcher {
                         country_code: glidernet_device
                             .country_code
                             .or(flarmnet_device.country_code),
+                        owner_operator: None,
+                        aircraft_category: None,
+                        engine_count: None,
+                        engine_type: None,
+                        faa_pia: None,
+                        faa_ladd: None,
+                        year: None,
+                        is_military: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -968,6 +1044,14 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1298,6 +1382,14 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
         }
     }
 

@@ -73,6 +73,10 @@ enum Commands {
         /// Path to the devices file (unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>)
         #[arg(long)]
         devices: Option<String>,
+        /// Path to the ADS-B Exchange basic aircraft database JSON file
+        /// <http://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz>
+        #[arg(long)]
+        adsb_exchange: Option<String>,
         /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
         #[arg(long)]
         geocode: bool,
@@ -1031,6 +1035,7 @@ async fn main() -> Result<()> {
             runways,
             receivers,
             devices,
+            adsb_exchange,
             geocode,
             link_home_bases,
         } => {
@@ -1042,6 +1047,7 @@ async fn main() -> Result<()> {
                 runways,
                 receivers,
                 devices,
+                adsb_exchange,
                 geocode,
                 link_home_bases,
             )

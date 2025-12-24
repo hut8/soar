@@ -1,5 +1,7 @@
+mod adsb_exchange;
 mod aircraft_models;
 mod aircraft_registrations;
+mod aircraft_types;
 mod airports_runways;
 mod device_backfill;
 mod device_linking;
@@ -47,6 +49,7 @@ pub async fn handle_load_data(
     runways_path: Option<String>,
     receivers_path: Option<String>,
     devices_path: Option<String>,
+    adsb_exchange_path: Option<String>,
     geocode: bool,
     link_home_bases: bool,
 ) -> Result<()> {
@@ -93,6 +96,22 @@ pub async fn handle_load_data(
     .await
     {
         record_stage_metrics(&metrics, "aircraft_registrations");
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Load aircraft types reference data (ICAO/IATA type codes) from embedded data
+    {
+        let metrics = aircraft_types::load_aircraft_types_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "aircraft_types");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -202,6 +221,42 @@ pub async fn handle_load_data(
     {
         let metrics = device_linking::link_devices_to_clubs_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "link_devices_to_clubs");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Load ADS-B Exchange data to enhance aircraft records with ICAO type codes and owner/operator info
+    if let Some(metrics) =
+        adsb_exchange::load_adsb_exchange_with_metrics(diesel_pool.clone(), adsb_exchange_path)
+            .await
+    {
+        record_stage_metrics(&metrics, "adsb_exchange");
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Copy owner data from aircraft_registrations to aircraft (after ADS-B Exchange data loading)
+    {
+        let metrics =
+            aircraft_registrations::copy_owners_to_aircraft_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "copy_owners_to_aircraft");
 
         if !metrics.success
             && let Some(ref config) = email_config
