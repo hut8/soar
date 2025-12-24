@@ -722,7 +722,7 @@ jobs:
           ssh soar@staging.glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@staging.glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@staging.glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
@@ -875,7 +875,7 @@ jobs:
           ssh soar@glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
