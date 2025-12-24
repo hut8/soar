@@ -404,7 +404,7 @@ export class AircraftRegistry {
 				}
 				return data;
 			} catch (e) {
-				console.warn(`Failed to parse stored aircraft ${aircraftId}:`, e);
+				console.warn('Failed to parse stored aircraft %s:', aircraftId, e);
 				// Remove corrupted data
 				localStorage.removeItem(key);
 			}
