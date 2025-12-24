@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -95,7 +95,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"}",
@@ -110,7 +110,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -180,7 +180,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "max(process_is_up{component=\"run\",environment=\"$environment\"}) or on() vector(0)",
@@ -195,7 +195,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -279,7 +279,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"run\",environment=\"$environment\"}",
@@ -294,7 +294,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -417,7 +417,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_processed{component=\"run\",environment=\"$environment\"}[1m])",
@@ -428,7 +428,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_processed{component=\"run\",environment=\"$environment\"}[1m])",
@@ -439,7 +439,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_processed{component=\"run\",environment=\"$environment\"}[1m])",
@@ -450,7 +450,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_processed{component=\"run\",environment=\"$environment\"}[1m])",
@@ -461,7 +461,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_raw_message_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_aircraft_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_status_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_position_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_server_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -472,7 +472,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -483,7 +483,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -494,7 +494,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -505,7 +505,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -516,7 +516,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_raw_message_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
@@ -544,7 +544,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -604,7 +604,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_pelias_success_total{component=\"run\",environment=\"$environment\"}[5m]) / (rate(flight_tracker_location_pelias_success_total{component=\"run\",environment=\"$environment\"}[5m]) + rate(flight_tracker_location_pelias_failure_total{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -619,7 +619,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -679,7 +679,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_pelias_no_structured_data_total{component=\"run\",environment=\"$environment\"}[5m]) / rate(flight_tracker_location_pelias_success_total{component=\"run\",environment=\"$environment\"}[5m])",
@@ -694,7 +694,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -803,7 +803,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_pelias_success_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -814,7 +814,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_pelias_failure_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -829,7 +829,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -910,7 +910,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(flight_tracker_location_pelias_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -921,7 +921,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(flight_tracker_location_pelias_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -932,7 +932,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum by(le) (rate(flight_tracker_location_pelias_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -947,7 +947,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1027,7 +1027,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_takeoff\"}[$__rate_interval])",
@@ -1038,7 +1038,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_airborne\"}[$__rate_interval])",
@@ -1049,7 +1049,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_landing\"}[$__rate_interval])",
@@ -1060,7 +1060,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_timeout\"}[$__rate_interval])",
@@ -1075,7 +1075,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1133,7 +1133,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by(radius_km) (flight_tracker_location_pelias_retry_total{component=\"run\",environment=\"$environment\"})",
@@ -1161,7 +1161,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1261,7 +1261,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_success{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1272,7 +1272,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_failed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1287,7 +1287,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "description": "Tracks fixes inserted into the database, duplicates detected on redelivery, and fixes suppressed due to high frequency",
       "fieldConfig": {
@@ -1418,7 +1418,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_inserted{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1429,7 +1429,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_duplicate_on_redelivery{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1440,7 +1440,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_suppressed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1455,7 +1455,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "description": "Monitors router internal queue depth and disconnection events",
       "fieldConfig": {
@@ -1556,7 +1556,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_router_internal_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1567,7 +1567,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1582,7 +1582,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "description": "Detailed router processing metrics and aircraft position routing",
       "fieldConfig": {
@@ -1683,7 +1683,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_called{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1694,7 +1694,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1705,7 +1705,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_position_source_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1716,7 +1716,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
@@ -1743,7 +1743,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1835,7 +1835,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1846,7 +1846,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1857,7 +1857,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_receiver_status_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1868,7 +1868,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_receiver_position_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1879,7 +1879,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_server_status_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1890,7 +1890,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -1905,7 +1905,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1989,7 +1989,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_packet_type_position{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2000,7 +2000,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_packet_type_status{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2015,7 +2015,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2115,7 +2115,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_routed_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2126,7 +2126,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_generic_processor_success{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2137,7 +2137,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_generic_processor_failed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2152,7 +2152,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2236,7 +2236,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_created_takeoff{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2247,7 +2247,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_created_airborne{component=\"run\",environment=\"$environment\"}[5m])",
@@ -2262,7 +2262,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2337,7 +2337,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_consumed_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2352,7 +2352,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2427,7 +2427,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_process_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_decode_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_receive_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_ack_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2442,7 +2442,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2517,7 +2517,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_nats_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -2532,7 +2532,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2607,7 +2607,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_aircraft{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2618,7 +2618,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_receiver_status{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2629,7 +2629,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_receiver_position{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2640,7 +2640,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_server{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2655,7 +2655,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2730,7 +2730,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_skipped_aircraft_type{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2745,7 +2745,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2820,7 +2820,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_called{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2831,7 +2831,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2842,7 +2842,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_position_source_aircraft{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2853,7 +2853,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2868,7 +2868,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2943,7 +2943,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_acked_immediately{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2954,7 +2954,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_intake_queue_full{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -2969,7 +2969,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3044,7 +3044,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -3071,7 +3071,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3153,7 +3153,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_type_received{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3168,7 +3168,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3226,7 +3226,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) / (rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) + rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -3241,7 +3241,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3325,7 +3325,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3336,7 +3336,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3364,7 +3364,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3448,7 +3448,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_nats_consumed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3459,7 +3459,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_intake_processed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3474,7 +3474,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3574,7 +3574,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_decode_success{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3585,7 +3585,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_decode_failed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3600,7 +3600,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3684,7 +3684,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_fixes_processed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3695,7 +3695,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_no_fix_created{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3706,7 +3706,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(beast_run_raw_message_stored{component=\"run\",environment=\"$environment\"}[5m])",
@@ -3721,7 +3721,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3814,7 +3814,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, rate(beast_run_message_processing_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -3825,7 +3825,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, rate(beast_run_message_processing_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -3836,7 +3836,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, rate(beast_run_message_processing_latency_ms_bucket{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -3851,7 +3851,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3943,7 +3943,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "beast_run_nats_lag_seconds{component=\"run\",environment=\"$environment\"}",
@@ -3958,7 +3958,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4050,7 +4050,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "beast_run_nats_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -4078,7 +4078,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4208,7 +4208,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_sync_processed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4219,7 +4219,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum(rate(aprs_elevation_processed{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -4230,7 +4230,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_queued{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4241,7 +4241,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_channel_closed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4256,7 +4256,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4340,7 +4340,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
@@ -4351,7 +4351,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -4362,7 +4362,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
@@ -4373,7 +4373,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
@@ -4384,7 +4384,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -4395,7 +4395,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
@@ -4410,7 +4410,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4494,7 +4494,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4505,7 +4505,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_misses{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4520,7 +4520,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4578,7 +4578,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) / (rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) + rate(elevation_cache_misses{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -4593,7 +4593,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4651,7 +4651,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_cache_entries{component=\"run\",environment=\"$environment\"}",
@@ -4666,7 +4666,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4750,7 +4750,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4761,7 +4761,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_misses{component=\"run\",environment=\"$environment\"}[5m])",
@@ -4776,7 +4776,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4834,7 +4834,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) / (rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) + rate(elevation_tile_cache_misses{component=\"run\",environment=\"$environment\"}[5m]))",
@@ -4849,7 +4849,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4909,7 +4909,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_tile_cache_entries{component=\"run\",environment=\"$environment\"}",
@@ -4924,7 +4924,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5022,7 +5022,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_repo_latest_packet_at_skipped{component=\"run\",environment=\"$environment\"}[5m])",
@@ -5033,7 +5033,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_repo_latest_packet_at_updated{component=\"run\",environment=\"$environment\"}[5m])",
@@ -5048,7 +5048,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5132,7 +5132,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_tile_load_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -5143,7 +5143,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_interpolation_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -5154,7 +5154,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_lookup_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -5169,7 +5169,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5244,7 +5244,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(agl_batch_updates_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -5259,7 +5259,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5334,7 +5334,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(agl_batch_duration_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5345,7 +5345,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(agl_batch_duration_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5356,7 +5356,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(agl_batch_size_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5371,7 +5371,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5446,7 +5446,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "agl_db_queue_size{component=\"run\",environment=\"$environment\"}",
@@ -5461,7 +5461,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5536,7 +5536,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(agl_batch_errors_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -5563,7 +5563,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5638,7 +5638,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_total_processing_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5649,7 +5649,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_upsert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5660,7 +5660,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_device_lookup_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5671,7 +5671,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_fix_creation_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5682,7 +5682,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_process_fix_internal_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5693,7 +5693,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_flight_insert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5704,7 +5704,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_state_transition_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5715,7 +5715,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_callsign_update_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5726,7 +5726,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_elevation_queue_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5737,7 +5737,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_nats_publish_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5748,7 +5748,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_fix_db_insert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5759,7 +5759,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(aprs_aircraft_flight_update_last_fix_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5774,7 +5774,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -5849,7 +5849,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_total_processing_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5860,7 +5860,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_upsert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5871,7 +5871,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_device_lookup_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5882,7 +5882,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_fix_creation_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5893,7 +5893,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_process_fix_internal_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5904,7 +5904,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_flight_insert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5915,7 +5915,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_state_transition_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5926,7 +5926,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_callsign_update_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5937,7 +5937,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_elevation_queue_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5948,7 +5948,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_nats_publish_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5959,7 +5959,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_fix_db_insert_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5970,7 +5970,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(aprs_aircraft_flight_update_last_fix_ms_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -5998,7 +5998,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6098,7 +6098,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(nats_publisher_fixes_published{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6109,7 +6109,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6124,7 +6124,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6182,7 +6182,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "nats_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -6210,7 +6210,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6268,7 +6268,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "flight_tracker_active_aircraft{component=\"run\",environment=\"$environment\"}",
@@ -6283,7 +6283,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6367,7 +6367,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeouts_detected{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6382,7 +6382,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6466,7 +6466,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_ended_landed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6477,7 +6477,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_ended_timed_out{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6504,7 +6504,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6579,7 +6579,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_coalesce_resumed{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -6590,7 +6590,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_coalesce_callsign_mismatch{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -6601,7 +6601,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_coalesce_no_timeout_flight{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -6612,7 +6612,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_coalesce_rejected_callsign{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -6623,7 +6623,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_coalesce_rejected_probable_landing{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
@@ -6638,7 +6638,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6713,7 +6713,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(flight_tracker_coalesce_resumed_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -6724,7 +6724,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum by(le) (rate(flight_tracker_coalesce_rejected_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
@@ -6739,7 +6739,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6814,7 +6814,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeout_phase{component=\"run\",environment=\"$environment\",phase=\"climbing\"}[$__rate_interval])",
@@ -6825,7 +6825,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeout_phase{component=\"run\",environment=\"$environment\",phase=\"cruising\"}[$__rate_interval])",
@@ -6836,7 +6836,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeout_phase{component=\"run\",environment=\"$environment\",phase=\"descending\"}[$__rate_interval])",
@@ -6847,7 +6847,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeout_phase{component=\"run\",environment=\"$environment\",phase=\"unknown\"}[$__rate_interval])",
@@ -6875,7 +6875,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -6959,7 +6959,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_status_updates_total{component=\"run\",environment=\"$environment\"}[5m])",
@@ -6987,7 +6987,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -7071,7 +7071,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_total_connections{component=\"run\",environment=\"$environment\"}",
@@ -7082,7 +7082,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_active_connections{component=\"run\",environment=\"$environment\"}",
@@ -7093,7 +7093,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_idle_connections{component=\"run\",environment=\"$environment\"}",
@@ -7108,7 +7108,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -7196,7 +7196,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -7207,7 +7207,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -7218,7 +7218,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
@@ -7229,7 +7229,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
