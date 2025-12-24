@@ -21,7 +21,7 @@
 		"test": "npm run test:e2e"
 	},
 	"devDependencies": {
-		"@eslint/compat": "^1.4.1",
+		"@eslint/compat": "^2.0.0",
 		"@eslint/js": "^9.39.1",
 		"@playwright/test": "^1.57.0",
 		"@skeletonlabs/skeleton-svelte": "^4.5.1",
