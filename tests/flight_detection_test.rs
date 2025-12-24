@@ -180,7 +180,12 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     let receiver_repo = ReceiverRepository::new(pool.clone());
     let raw_messages_repo = RawMessagesRepository::new(pool.clone());
     let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
-    let fix_processor = FixProcessor::new(pool.clone());
+
+    // Set up elevation service for AGL calculation (required for flight creation)
+    let elevation_service = soar::elevation::ElevationService::new_with_s3()
+        .await
+        .expect("Failed to create elevation service");
+    let fix_processor = FixProcessor::new(pool.clone()).with_sync_elevation(elevation_service);
 
     // Load test messages
     let mut source = TestMessageSource::from_file(
