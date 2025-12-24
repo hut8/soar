@@ -82,27 +82,29 @@ impl AircraftType {
     }
 }
 
-/// ADS-B Exchange Aircraft Category (from short_type 1st character)
+/// ICAO Aircraft Category (1st character of ICAO description from ICAO Doc 8643)
+/// ICAO standard values: Landplane, Seaplane, Amphibian, Gyroplane, Helicopter, Tiltrotor
+/// Extended values for non-standard types: Balloon, Drone, PoweredParachute, Rotorcraft, Vtol, Electric
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftCategory")]
 pub enum AircraftCategory {
-    Landplane,        // L
-    Helicopter,       // H
-    Balloon,          // B
-    Amphibian,        // A
-    Gyroplane,        // G
-    Drone,            // D
-    PoweredParachute, // P
-    Rotorcraft,       // R
-    Seaplane,         // S
-    Tiltrotor,        // T
-    Vtol,             // V
-    Electric,         // E
-    Unknown,          // -
+    Landplane,        // L (ICAO Doc 8643)
+    Helicopter,       // H (ICAO Doc 8643)
+    Balloon,          // B (extended)
+    Amphibian,        // A (ICAO Doc 8643)
+    Gyroplane,        // G (ICAO Doc 8643 - gyrocopter)
+    Drone,            // D (extended)
+    PoweredParachute, // P (extended)
+    Rotorcraft,       // R (extended)
+    Seaplane,         // S (ICAO Doc 8643)
+    Tiltrotor,        // T (ICAO Doc 8643)
+    Vtol,             // V (extended)
+    Electric,         // E (extended)
+    Unknown,          // - (unknown/unspecified)
 }
 
 impl AircraftCategory {
-    /// Parse from ADS-B Exchange short_type first character
+    /// Parse from ICAO description first character (ICAO Doc 8643)
     pub fn from_short_type_char(c: char) -> Option<Self> {
         match c {
             'L' => Some(AircraftCategory::Landplane),
@@ -123,22 +125,24 @@ impl AircraftCategory {
     }
 }
 
-/// ADS-B Exchange Engine Type (from short_type 3rd character)
+/// ICAO Engine Type (3rd character of ICAO description from ICAO Doc 8643)
+/// ICAO standard values: Piston, Jet, Turbine (turboprop/turboshaft), Electric, Rocket
+/// Extended values: Special, None (for gliders/balloons)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::EngineType")]
 pub enum EngineType {
-    Piston,   // P
-    Jet,      // J
-    Turbine,  // T
-    Electric, // E
-    Rocket,   // R
-    Special,  // S
-    None,     // - (no engine)
-    Unknown,  // unknown
+    Piston,   // P (ICAO Doc 8643)
+    Jet,      // J (ICAO Doc 8643)
+    Turbine,  // T (ICAO Doc 8643 - turboprop/turboshaft)
+    Electric, // E (ICAO Doc 8643)
+    Rocket,   // R (ICAO Doc 8643)
+    Special,  // S (extended)
+    None,     // - (extended - no engine: glider, balloon, ground vehicle)
+    Unknown,  // unknown/unspecified
 }
 
 impl EngineType {
-    /// Parse from ADS-B Exchange short_type third character
+    /// Parse from ICAO description third character (ICAO Doc 8643)
     pub fn from_short_type_char(c: char) -> Option<Self> {
         match c {
             'P' => Some(EngineType::Piston),

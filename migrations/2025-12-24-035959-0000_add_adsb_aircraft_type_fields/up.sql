@@ -1,29 +1,33 @@
--- Create enum for aircraft category (first character of short_type)
+-- Create enum for aircraft category (first character of ICAO description from ICAO Doc 8643)
+-- ICAO standard values: L, S, A, G, H, T
+-- Extended values for non-standard aircraft types: B, D, P, R, V, E
 CREATE TYPE aircraft_category AS ENUM (
-    'landplane',           -- L
-    'helicopter',          -- H
-    'balloon',             -- B
-    'amphibian',           -- A
-    'gyroplane',           -- G
-    'drone',               -- D
-    'powered_parachute',   -- P
-    'rotorcraft',          -- R
-    'seaplane',            -- S
-    'tiltrotor',           -- T
-    'vtol',                -- V
-    'electric',            -- E (rarely used for category)
+    'landplane',           -- L (ICAO Doc 8643)
+    'helicopter',          -- H (ICAO Doc 8643)
+    'balloon',             -- B (extended)
+    'amphibian',           -- A (ICAO Doc 8643)
+    'gyroplane',           -- G (ICAO Doc 8643 - gyrocopter)
+    'drone',               -- D (extended)
+    'powered_parachute',   -- P (extended)
+    'rotorcraft',          -- R (extended)
+    'seaplane',            -- S (ICAO Doc 8643)
+    'tiltrotor',           -- T (ICAO Doc 8643)
+    'vtol',                -- V (extended)
+    'electric',            -- E (extended)
     'unknown'              -- - (unknown/unspecified)
 );
 
--- Create enum for engine type (third character of short_type)
+-- Create enum for engine type (third character of ICAO description from ICAO Doc 8643)
+-- ICAO standard values: J, T, P, E, R
+-- Extended values: S (special), - (none)
 CREATE TYPE engine_type AS ENUM (
-    'piston',              -- P
-    'jet',                 -- J
-    'turbine',             -- T (turboprop/turboshaft)
-    'electric',            -- E
-    'rocket',              -- R
-    'special',             -- S
-    'none',                -- - (no engine: glider, balloon, ground vehicle)
+    'piston',              -- P (ICAO Doc 8643)
+    'jet',                 -- J (ICAO Doc 8643)
+    'turbine',             -- T (ICAO Doc 8643 - turboprop/turboshaft)
+    'electric',            -- E (ICAO Doc 8643)
+    'rocket',              -- R (ICAO Doc 8643)
+    'special',             -- S (extended)
+    'none',                -- - (extended - no engine: glider, balloon, ground vehicle)
     'unknown'              -- unknown/unspecified
 );
 
@@ -48,8 +52,8 @@ DROP COLUMN IF EXISTS num_engines,
 DROP COLUMN IF EXISTS engine_type_adsb;
 
 -- Add comments
-COMMENT ON COLUMN aircraft.aircraft_category IS 'Aircraft category from ADS-B Exchange short_type (1st character)';
-COMMENT ON COLUMN aircraft.engine_count IS 'Number of engines from ADS-B Exchange short_type (2nd character)';
-COMMENT ON COLUMN aircraft.engine_type IS 'Engine type from ADS-B Exchange short_type (3rd character)';
-COMMENT ON COLUMN aircraft.faa_pia IS 'Privacy ICAO Address program participation (from ADS-B Exchange)';
-COMMENT ON COLUMN aircraft.faa_ladd IS 'Limited Aircraft Data Displayed program participation (from ADS-B Exchange)';
+COMMENT ON COLUMN aircraft.aircraft_category IS 'ICAO aircraft category (1st character of ICAO description from ICAO Doc 8643)';
+COMMENT ON COLUMN aircraft.engine_count IS 'Number of engines (2nd character of ICAO description from ICAO Doc 8643)';
+COMMENT ON COLUMN aircraft.engine_type IS 'ICAO engine type (3rd character of ICAO description from ICAO Doc 8643)';
+COMMENT ON COLUMN aircraft.faa_pia IS 'FAA Privacy ICAO Address (PIA) program participation';
+COMMENT ON COLUMN aircraft.faa_ladd IS 'FAA Limited Aircraft Data Displayed (LADD) program participation';
