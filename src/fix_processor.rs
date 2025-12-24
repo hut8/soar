@@ -233,16 +233,18 @@ impl FixProcessor {
                 };
 
                 // Extract all available fields from packet for device creation/update
-                // Validate icao_model_code is exactly 3 or 4 characters (per ICAO Doc 8643) if present
-                let icao_model_code: Option<String> = pos_packet
-                    .comment
-                    .model
-                    .as_ref()
-                    .filter(|model| {
-                        let len = model.len();
-                        len == 3 || len == 4
-                    })
-                    .map(|model| model.to_string());
+                // The model field can be either a 3-4 character ICAO code or a full model name
+                let model_string = pos_packet.comment.model.as_ref().map(|m| m.to_string());
+
+                // Use as aircraft_model unconditionally
+                let aircraft_model = model_string.clone();
+
+                // Only use as icao_model_code if it's exactly 3 or 4 characters (per ICAO Doc 8643)
+                let icao_model_code = model_string.filter(|model| {
+                    let len = model.len();
+                    len == 3 || len == 4
+                });
+
                 let adsb_emitter_category = pos_packet
                     .comment
                     .adsb_emitter_category
@@ -255,7 +257,8 @@ impl FixProcessor {
 
                 let packet_fields = AircraftPacketFields {
                     aircraft_type,
-                    icao_model_code: icao_model_code.clone(),
+                    aircraft_model,
+                    icao_model_code,
                     adsb_emitter_category,
                     tracker_device_type: Some(tracker_device_type.clone()),
                     registration: registration.clone(),

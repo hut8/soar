@@ -17,6 +17,7 @@ pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 #[derive(Debug, Clone)]
 pub struct AircraftPacketFields {
     pub aircraft_type: Option<AircraftType>,
+    pub aircraft_model: Option<String>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
@@ -249,7 +250,7 @@ impl AircraftRepository {
             let new_aircraft = NewAircraft {
                 address,
                 address_type,
-                aircraft_model: String::new(),
+                aircraft_model: packet_fields.aircraft_model.clone().unwrap_or_default(),
                 registration: registration.clone(),
                 competition_number: String::new(),
                 tracked: true,
@@ -291,6 +292,12 @@ impl AircraftRepository {
                     aircraft::icao_model_code.eq(packet_fields.icao_model_code),
                     aircraft::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
                     aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    // Only update aircraft_model if current value is NULL or empty string
+                    aircraft::aircraft_model.eq(diesel::dsl::sql(
+                        "CASE WHEN (aircraft.aircraft_model IS NULL OR aircraft.aircraft_model = '') \
+                         THEN excluded.aircraft_model \
+                         ELSE aircraft.aircraft_model END"
+                    )),
                     aircraft::registration.eq(&registration),
                     aircraft::country_code.eq(&country_code),
                     aircraft::latitude.eq(latitude),
