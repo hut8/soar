@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -109,7 +109,7 @@ jobs:
           timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -313,7 +313,7 @@ jobs:
           timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
