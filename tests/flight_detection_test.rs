@@ -240,6 +240,25 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     let first_ts = first_timestamp.expect("Should have processed at least one message");
     let last_ts = last_timestamp.expect("Should have processed at least one message");
 
+    // Debug: Check if fixes were created
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::{aircraft, fixes};
+
+    let mut conn = pool.get().expect("Failed to get database connection");
+
+    let fix_count: i64 = fixes::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count fixes");
+    println!("📊 Found {} fixes in database", fix_count);
+
+    let aircraft_count: i64 = aircraft::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count aircraft");
+    println!("📊 Found {} aircraft in database", aircraft_count);
+
     // Query flights in the time range of our test messages
     let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
     let flights = flights_repo
