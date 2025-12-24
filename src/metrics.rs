@@ -374,13 +374,6 @@ pub fn initialize_run_metrics() {
     // Receiver status metrics
     metrics::counter!("receiver_status_updates_total").absolute(0);
 
-    // AGL backfill metrics
-    metrics::counter!("agl_backfill_altitudes_computed_total").absolute(0);
-    metrics::counter!("agl_backfill_fixes_processed_total").absolute(0);
-    metrics::counter!("agl_backfill_no_elevation_data_total").absolute(0);
-    metrics::counter!("agl_backfill_fetch_errors_total").absolute(0);
-    metrics::gauge!("agl_backfill_pending_fixes").set(0.0);
-
     // Elevation cache metrics
     metrics::counter!("elevation_cache_hits").absolute(0);
     metrics::counter!("elevation_cache_misses").absolute(0);
