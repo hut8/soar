@@ -271,8 +271,8 @@ async fn search_devices_by_bbox(
 
     let fixes_repo = FixesRepository::new(pool.clone());
 
-    // Perform bounding box search - fetch the 10 most recent fixes per device
-    // This provides enough data for trail rendering without additional API calls
+    // Perform bounding box search - don't fetch fixes, only aircraft with latest position
+    // Fixes will come from WebSocket after page load
     match fixes_repo
         .get_aircraft_with_fixes_in_bounding_box(
             lat_max,
@@ -280,7 +280,7 @@ async fn search_devices_by_bbox(
             lat_min,
             lon_max,
             cutoff_time,
-            Some(10),
+            None,
         )
         .await
     {
@@ -568,7 +568,7 @@ pub(crate) async fn enrich_aircraft_with_registration_data(
     // Step 7: Build enriched results
     info!("Building enriched results");
     let mut enriched = Vec::new();
-    for (aircraft_model, aircraft_fixes) in aircraft_with_fixes {
+    for (aircraft_model, _aircraft_fixes) in aircraft_with_fixes {
         let aircraft_registration = registration_map.get(&aircraft_model.id).cloned();
 
         let faa_aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
@@ -582,9 +582,8 @@ pub(crate) async fn enrich_aircraft_with_registration_data(
         });
 
         // Convert AircraftModel to AircraftView
-        let mut aircraft_view = AircraftView::from_device_model(aircraft_model);
-        // Add the fixes to the aircraft view
-        aircraft_view.fixes = Some(aircraft_fixes);
+        let aircraft_view = AircraftView::from_device_model(aircraft_model);
+        // Don't include fixes - they will come from WebSocket after page load
 
         enriched.push(Aircraft {
             device: aircraft_view,

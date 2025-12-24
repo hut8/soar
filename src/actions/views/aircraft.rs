@@ -225,8 +225,8 @@ impl AircraftView {
             tracker_device_type: device_model.tracker_device_type,
             icao_model_code: device_model.icao_model_code,
             country_code: device_model.country_code,
-            latest_latitude: None,
-            latest_longitude: None,
+            latest_latitude: device_model.latitude,
+            latest_longitude: device_model.longitude,
             active_flight_id: None,
             fixes: None,
         }

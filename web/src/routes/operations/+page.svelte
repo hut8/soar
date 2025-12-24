@@ -335,7 +335,7 @@
 
 	// Load area tracker state from localStorage
 	function loadAreaTrackerState(): boolean {
-		if (!browser) return false;
+		if (!browser) return true;
 
 		try {
 			const saved = localStorage.getItem(AREA_TRACKER_KEY);
@@ -348,8 +348,8 @@
 			console.warn('[AREA TRACKER] Failed to load state from localStorage:', e);
 		}
 
-		console.log('[AREA TRACKER] Using default state: false');
-		return false;
+		console.log('[AREA TRACKER] Using default state: true');
+		return true;
 	}
 
 	// Save map type to localStorage
@@ -450,11 +450,7 @@
 			} else if (event.type === 'aircraft_updated') {
 				// When a device is updated, create or update its marker if we have a map
 				if (map) {
-					const fixes = event.aircraft.fixes || [];
-					const latestFix = fixes.length > 0 ? fixes[0] : null;
-					if (latestFix) {
-						updateAircraftMarkerFromDevice(event.aircraft, latestFix);
-					}
+					updateAircraftMarkerFromAircraft(event.aircraft);
 				}
 			} else if (event.type === 'fix_added') {
 				console.log('Fix added to aircraft:', event.aircraft.id, event.fix);
@@ -483,12 +479,8 @@
 			activeDevices.length,
 			'aircraft'
 		);
-		activeDevices.forEach((device) => {
-			const fixes = device.fixes || [];
-			const latestFix = fixes.length > 0 ? fixes[0] : null;
-			if (latestFix) {
-				updateAircraftMarkerFromDevice(device, latestFix);
-			}
+		activeDevices.forEach((aircraft) => {
+			updateAircraftMarkerFromAircraft(aircraft);
 		});
 
 		initialMarkersRendered = true;
@@ -511,6 +503,7 @@
 						areaTrackerActive = savedAreaTrackerState;
 						if (areaTrackerActive) {
 							// Activate area tracker with saved state
+							// Fetch initial aircraft with latest positions only
 							(async () => {
 								await fetchAndDisplayDevicesInViewport();
 								updateAreaSubscriptions();
@@ -1337,6 +1330,50 @@
 		});
 	}
 
+	// Update aircraft marker using latest position from aircraft object or fixes
+	function updateAircraftMarkerFromAircraft(aircraft: Aircraft): void {
+		if (!map) return;
+
+		// Try to use latest_latitude/latest_longitude from aircraft object
+		if (aircraft.latest_latitude != null && aircraft.latest_longitude != null) {
+			console.log('[MARKER] Using latest position from aircraft:', {
+				id: aircraft.id,
+				lat: aircraft.latest_latitude,
+				lng: aircraft.latest_longitude
+			});
+
+			// Create a pseudo-fix from latest position
+			const pseudoFix: Fix = {
+				id: '', // Not needed for marker display
+				aircraft_id: aircraft.id,
+				device_address_hex: aircraft.address,
+				latitude: aircraft.latest_latitude,
+				longitude: aircraft.latest_longitude,
+				timestamp: aircraft.last_fix_at || new Date().toISOString(),
+				altitude_msl_feet: undefined,
+				altitude_agl_feet: undefined,
+				track_degrees: undefined,
+				ground_speed_knots: undefined,
+				climb_fpm: undefined,
+				registration: aircraft.registration,
+				model: aircraft.aircraft_model,
+				flight_id: aircraft.active_flight_id || undefined,
+				active: aircraft.active_flight_id != null
+			};
+
+			updateAircraftMarkerFromDevice(aircraft, pseudoFix);
+		} else {
+			// Fallback to using fixes array if present
+			const fixes = aircraft.fixes || [];
+			const latestFix = fixes.length > 0 ? fixes[0] : null;
+			if (latestFix) {
+				updateAircraftMarkerFromDevice(aircraft, latestFix);
+			} else {
+				console.log('[MARKER] No position data available for aircraft:', aircraft.id);
+			}
+		}
+	}
+
 	function updateAircraftMarkerFromDevice(aircraft: Aircraft, latestFix: Fix): void {
 		console.log('[MARKER] updateAircraftMarkerFromDevice called:', {
 			deviceId: aircraft.id,
@@ -1859,30 +1896,26 @@
 		try {
 			console.log('[REST] Fetching aircraft in viewport...');
 
-			// Calculate "after" timestamp based on position fix window
-			const afterTime = dayjs().utc().subtract(currentSettings.positionFixWindow, 'hour');
-			const afterTimestamp = afterTime.toISOString();
-
-			// Fetch from REST endpoint
-			const devicesWithFixes = await fixFeed.fetchAircraftInBoundingBox(
+			// Fetch aircraft with their latest position only (no fix history)
+			// Fixes will accumulate from WebSocket after this
+			const aircraft = await fixFeed.fetchAircraftInBoundingBox(
 				sw.lat(), // latMin
 				ne.lat(), // latMax
 				sw.lng(), // lonMin
-				ne.lng(), // lonMax
-				afterTimestamp
+				ne.lng() // lonMax
+				// No 'after' parameter - backend doesn't fetch fixes anymore
 			);
 
-			console.log(`[REST] Received ${devicesWithFixes.length} aircraft`);
+			console.log(`[REST] Received ${aircraft.length} aircraft with latest positions`);
 
 			// Process each aircraft and add to registry
-			// The backend now includes the last 10 fixes per aircraft, so we don't need
-			// to make additional API calls for trail data
-			for (const aircraft of devicesWithFixes) {
-				// Register the aircraft with all its fixes
-				await deviceRegistry.updateAircraftFromAircraftData(aircraft);
+			// They will have latest_latitude/latest_longitude but no fixes array
+			for (const a of aircraft) {
+				// Register the aircraft - markers will be created from latest position
+				await deviceRegistry.updateAircraftFromAircraftData(a);
 			}
 
-			console.log('[REST] Aircraft loaded with fixes from backend');
+			console.log('[REST] Aircraft loaded, markers created from latest positions');
 		} catch (error) {
 			console.error('[REST] Failed to fetch aircraft in viewport:', error);
 		}
