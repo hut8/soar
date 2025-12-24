@@ -100,6 +100,7 @@ pub struct AircraftView {
     pub created_at: String,
     pub updated_at: String,
     pub from_ogn_ddb: bool,
+    pub from_adsbx_ddb: bool,
     pub frequency_mhz: Option<f64>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
@@ -159,6 +160,7 @@ impl AircraftView {
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
             from_ogn_ddb: false,
+            from_adsbx_ddb: false,
             frequency_mhz: device.frequency_mhz,
             pilot_name: device.pilot_name,
             home_base_airport_ident: device.home_base_airport_ident,
@@ -212,6 +214,7 @@ impl AircraftView {
             created_at: device_model.created_at.to_rfc3339(),
             updated_at: device_model.updated_at.to_rfc3339(),
             from_ogn_ddb: device_model.from_ogn_ddb,
+            from_adsbx_ddb: device_model.from_adsbx_ddb,
             frequency_mhz: device_model
                 .frequency_mhz
                 .and_then(|bd| bd.to_string().parse().ok()),
