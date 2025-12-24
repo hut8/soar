@@ -141,14 +141,15 @@ mkdir -p "$OUTPUT_DIR"
 echo -e "${GREEN}✓ Output directory ready${NC}"
 
 # SQL query to extract raw messages
+# Note: Backslash-escape quotes for proper remote execution via SSH
 SQL_QUERY="
 SELECT
-    TO_CHAR(rm.received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS timestamp,
+    TO_CHAR(rm.received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\\\"T\\\"HH24:MI:SS.MS\\\"Z\\\"') AS timestamp,
     encode(rm.raw_message, 'escape') AS raw_message
 FROM raw_messages rm
 JOIN fixes f ON f.raw_message_id = rm.id
 WHERE f.flight_id = '$FLIGHT_ID'
-  AND rm.source = 'aprs'
+  AND rm.source = 'ogn'
 ORDER BY rm.received_at ASC;
 "
 

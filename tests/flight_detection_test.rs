@@ -124,3 +124,207 @@ async fn test_message_parsing_from_source() {
 //     // Verify flight timestamps and state
 //     // ...
 // }
+
+/// Test case: Aircraft descended out of range while landing, then took off hours later
+///
+/// **Scenario:**
+/// This test covers a canonical case of flight coalescing detection failure. The aircraft:
+/// 1. Started descending from FL182 at -1664fpm
+/// 2. Continued descending to FL034.56 at -896fpm
+/// 3. Went out of range at 17:28:16 UTC (last fix while descending)
+/// 4. Gap of 11.3 hours with only 32km horizontal movement
+/// 5. Reappeared at 04:46:34 UTC climbing at +3392fpm at FL046.51
+///
+/// **Current behavior (WRONG):**
+/// - Creates ONE excessively long flight spanning 11+ hours
+///
+/// **Expected behavior (CORRECT):**
+/// - Creates TWO separate flights:
+///   - Flight 1: Ends when aircraft descended out of range (landed)
+///   - Flight 2: Starts when aircraft reappeared climbing (new takeoff)
+///
+/// **Detection criteria:**
+/// - Average descent rate over last 10 fixes before gap was significant (-896fpm+)
+/// - Long gap (11+ hours) with minimal horizontal movement (32km)
+/// - Reappeared in climbing state (+3392fpm) only a short distance away
+/// - Clear indication of landing → ground time → new takeoff
+///
+/// Flight ID: 019b4d4a-a428-76f0-8e15-1fe429f4254c
+/// Environment: production
+/// Messages: 1183
+/// Device: ICA48683E
+/// Gap: 2025-12-23T17:28:16Z to 2025-12-24T04:46:34Z (11h 18m)
+/// Distance during gap: 32.29 km
+/// Generated: 2025-12-24 08:00:53 UTC
+#[tokio::test]
+async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
+    use diesel::PgConnection;
+    use diesel::r2d2::{ConnectionManager, Pool};
+    use soar::fix_processor::FixProcessor;
+    use soar::message_sources::{RawMessageSource, TestMessageSource};
+    use soar::packet_processors::generic::GenericProcessor;
+    use soar::raw_messages_repo::RawMessagesRepository;
+    use soar::receiver_repo::ReceiverRepository;
+
+    // ========== ARRANGE ==========
+
+    // Set up test database
+    let database_url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
+    let manager = ConnectionManager::<PgConnection>::new(database_url);
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create pool");
+
+    // Create repositories and processors
+    let receiver_repo = ReceiverRepository::new(pool.clone());
+    let raw_messages_repo = RawMessagesRepository::new(pool.clone());
+    let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
+
+    // Set up elevation service for AGL calculation (required for flight creation)
+    let elevation_service = soar::elevation::ElevationService::new_with_s3()
+        .await
+        .expect("Failed to create elevation service");
+
+    // Enable tracing for debugging
+    use tracing_subscriber::EnvFilter;
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("soar::flight_tracker=debug".parse().unwrap()),
+        )
+        .try_init();
+
+    let fix_processor = FixProcessor::new(pool.clone()).with_sync_elevation(elevation_service);
+
+    // Load test messages
+    let mut source = TestMessageSource::from_file(
+        "tests/data/flights/descended-out-of-range-while-landing-then-took-off-hours-later.txt",
+    )
+    .await
+    .expect("Failed to load test messages");
+
+    println!("📝 Starting to process 1183 messages...");
+
+    // ========== ACT ==========
+
+    let mut messages_processed = 0;
+    let mut first_timestamp: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut last_timestamp: Option<chrono::DateTime<chrono::Utc>> = None;
+
+    while let Some(message) = source.next_message().await.unwrap() {
+        // Parse message: "YYYY-MM-DDTHH:MM:SS.SSSZ <aprs_message>"
+        let (timestamp_str, aprs_message) = message
+            .split_once(' ')
+            .expect("Message should have timestamp");
+
+        let received_at = chrono::DateTime::parse_from_rfc3339(timestamp_str)
+            .expect("Valid RFC3339 timestamp")
+            .with_timezone(&chrono::Utc);
+
+        // Track timestamp range for later queries
+        if first_timestamp.is_none() {
+            first_timestamp = Some(received_at);
+        }
+        last_timestamp = Some(received_at);
+
+        // Parse APRS packet
+        if let Ok(packet) = ogn_parser::parse(aprs_message) {
+            // First, process through generic processor to ensure aircraft/receiver exist and get context
+            if let Some(context) = generic_processor
+                .process_packet(&packet, aprs_message, received_at)
+                .await
+            {
+                // Process through fix processor with the context from generic processor
+                fix_processor
+                    .process_aprs_packet(packet, aprs_message, context)
+                    .await;
+            }
+        }
+
+        messages_processed += 1;
+        if messages_processed % 100 == 0 {
+            println!("   Processed {} messages...", messages_processed);
+        }
+    }
+
+    println!("✅ Processed all {} messages", messages_processed);
+
+    // ========== ASSERT ==========
+
+    let first_ts = first_timestamp.expect("Should have processed at least one message");
+    let last_ts = last_timestamp.expect("Should have processed at least one message");
+
+    // Debug: Check if fixes were created
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::{aircraft, fixes};
+
+    let mut conn = pool.get().expect("Failed to get database connection");
+
+    let fix_count: i64 = fixes::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count fixes");
+    println!("📊 Found {} fixes in database", fix_count);
+
+    let aircraft_count: i64 = aircraft::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count aircraft");
+    println!("📊 Found {} aircraft in database", aircraft_count);
+
+    // Check total flights in database (not just time range)
+    use soar::schema::flights;
+    let total_flights: i64 = flights::table
+        .select(count_star())
+        .first(&mut conn)
+        .expect("Failed to count flights");
+    println!(
+        "📊 Found {} total flights in database (all time)",
+        total_flights
+    );
+
+    // If there's a flight but not in the time range, query it directly to see its timestamps
+    if total_flights > 0 {
+        use soar::schema::flights;
+        #[allow(clippy::type_complexity)]
+        let all_flights: Vec<(
+            Option<chrono::DateTime<chrono::Utc>>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            chrono::DateTime<chrono::Utc>,
+        )> = flights::table
+            .select((
+                flights::takeoff_time,
+                flights::landing_time,
+                flights::last_fix_at,
+            ))
+            .load(&mut conn)
+            .expect("Failed to query flight timestamps");
+
+        for (i, (takeoff, landing, last_fix)) in all_flights.iter().enumerate() {
+            println!(
+                "   Flight {}: takeoff={:?}, landing={:?}, last_fix_at={}",
+                i + 1,
+                takeoff.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+                landing.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()),
+                last_fix.format("%Y-%m-%d %H:%M:%S")
+            );
+        }
+        println!(
+            "   Expected range: {} to {}",
+            first_ts.format("%Y-%m-%d %H:%M:%S"),
+            last_ts.format("%Y-%m-%d %H:%M:%S")
+        );
+    }
+
+    // CRITICAL ASSERTION: Should create TWO flights, not one
+    // Note: We use total_flights count because get_flights_in_time_range() filters
+    // by takeoff_time, which excludes mid-flight starts (takeoff_time=None)
+    assert_eq!(
+        total_flights, 2,
+        "Should create 2 separate flights (one ending at landing, one starting at takeoff), not {} long flight(s). \
+         Current behavior creates {} flight(s). This test documents the bug that needs fixing.",
+        total_flights, total_flights
+    );
+}

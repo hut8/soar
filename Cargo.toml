@@ -100,6 +100,8 @@ moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
 kml = "0.12"
 hex = "0.4.3"
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.80"
 
 [dev-dependencies]
 hex-literal = "1.1"

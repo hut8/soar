@@ -18,7 +18,7 @@ use ogn_parser::AprsPacket;
 #[derive(Clone)]
 pub enum ElevationMode {
     /// Synchronous: Calculate elevation inline before database insert
-    Sync { elevation_db: ElevationService },
+    Sync { elevation_db: Box<ElevationService> },
     /// Asynchronous: Queue elevation tasks for processing by dedicated workers
     Async {
         channel: flume::Sender<ElevationTask>,
@@ -57,7 +57,9 @@ impl FixProcessor {
 
     /// Configure synchronous elevation processing
     pub fn with_sync_elevation(mut self, elevation_db: ElevationService) -> Self {
-        self.elevation_mode = Some(ElevationMode::Sync { elevation_db });
+        self.elevation_mode = Some(ElevationMode::Sync {
+            elevation_db: Box::new(elevation_db),
+        });
         self
     }
 
