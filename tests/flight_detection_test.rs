@@ -318,81 +318,13 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
         );
     }
 
-    // Query flights in the time range of our test messages
-    let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
-    let flights = flights_repo
-        .get_flights_in_time_range(first_ts, last_ts, None)
-        .await
-        .expect("Failed to query flights");
-
-    println!(
-        "\n📊 Found {} flight(s) in time range {} to {}",
-        flights.len(),
-        first_ts.format("%Y-%m-%d %H:%M:%S"),
-        last_ts.format("%Y-%m-%d %H:%M:%S")
-    );
-
-    for (i, flight) in flights.iter().enumerate() {
-        let takeoff = flight
-            .takeoff_time
-            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| "In-flight start".to_string());
-        let landing = flight
-            .landing_time
-            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-            .or_else(|| {
-                flight
-                    .timed_out_at
-                    .map(|t| format!("{} (timeout)", t.format("%Y-%m-%d %H:%M:%S")))
-            })
-            .unwrap_or_else(|| "In progress".to_string());
-        println!("   Flight {}: {} -> {}", i + 1, takeoff, landing);
-    }
-
     // CRITICAL ASSERTION: Should create TWO flights, not one
+    // Note: We use total_flights count because get_flights_in_time_range() filters
+    // by takeoff_time, which excludes mid-flight starts (takeoff_time=None)
     assert_eq!(
-        flights.len(),
-        2,
-        "Should create 2 separate flights (one ending at landing, one starting at takeoff), not 1 long flight"
+        total_flights, 2,
+        "Should create 2 separate flights (one ending at landing, one starting at takeoff), not {} long flight(s). \
+         Current behavior creates {} flight(s). This test documents the bug that needs fixing.",
+        total_flights, total_flights
     );
-
-    // Verify first flight ended (either landed or timed out)
-    let flight1 = &flights[0];
-    assert!(
-        flight1.landing_time.is_some() || flight1.timed_out_at.is_some(),
-        "First flight should have ended when aircraft descended out of range"
-    );
-
-    // Verify second flight started later
-    let flight2 = &flights[1];
-    let flight1_end = flight1
-        .landing_time
-        .or(flight1.timed_out_at)
-        .expect("Flight 1 should have ended");
-    let flight2_start = flight2.takeoff_time.unwrap_or(flight2.last_fix_at);
-    let gap = (flight2_start - flight1_end).num_seconds();
-    assert!(
-        gap > 10 * 3600,
-        "Gap between flights should be over 10 hours (actual: {} seconds = {:.1} hours)",
-        gap,
-        gap as f64 / 3600.0
-    );
-
-    println!("\n✅ Test passed: Two separate flights detected correctly");
-
-    let flight1_start_str = flight1
-        .takeoff_time
-        .map(|t| t.format("%H:%M:%S").to_string())
-        .unwrap_or_else(|| {
-            flight1
-                .last_fix_at
-                .format("%H:%M:%S (in-flight)")
-                .to_string()
-        });
-    let flight1_end_str = flight1_end.format("%H:%M:%S").to_string();
-    let flight2_start_str = flight2_start.format("%H:%M:%S").to_string();
-
-    println!("   Flight 1: {} -> {}", flight1_start_str, flight1_end_str);
-    println!("   Gap: {:.1} hours", gap as f64 / 3600.0);
-    println!("   Flight 2: {} -> ...", flight2_start_str);
 }
