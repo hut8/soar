@@ -297,7 +297,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                 competition_number.eq(""),
                 tracked.eq(true),
                 identified.eq(true),
-                from_ddb.eq(false),
+                from_ogn_ddb.eq(false),
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
@@ -352,7 +352,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                 competition_number.eq(""),
                 tracked.eq(i % 2 == 0), // Half are tracked
                 identified.eq(true),
-                from_ddb.eq(false),
+                from_ogn_ddb.eq(false),
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))

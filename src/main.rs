@@ -59,6 +59,9 @@ enum Commands {
         /// <https://registry.faa.gov/database/ReleasableAircraft.zip>
         #[arg(long)]
         aircraft_registrations: Option<String>,
+        /// Path to the aircraft types JSON file (ICAO/IATA type codes with descriptions)
+        #[arg(long)]
+        aircraft_types: Option<String>,
         /// Path to the airports CSV file (from "our airports" database)
         /// <https://davidmegginson.github.io/ourairports-data/airports.csv>
         #[arg(long)]
@@ -73,6 +76,10 @@ enum Commands {
         /// Path to the devices file (unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>)
         #[arg(long)]
         devices: Option<String>,
+        /// Path to the ADS-B Exchange basic aircraft database JSON file
+        /// <http://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz>
+        #[arg(long)]
+        adsb_exchange: Option<String>,
         /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
         #[arg(long)]
         geocode: bool,
@@ -1027,10 +1034,12 @@ async fn main() -> Result<()> {
         Commands::LoadData {
             aircraft_models,
             aircraft_registrations,
+            aircraft_types,
             airports,
             runways,
             receivers,
             devices,
+            adsb_exchange,
             geocode,
             link_home_bases,
         } => {
@@ -1038,10 +1047,12 @@ async fn main() -> Result<()> {
                 diesel_pool,
                 aircraft_models,
                 aircraft_registrations,
+                aircraft_types,
                 airports,
                 runways,
                 receivers,
                 devices,
+                adsb_exchange,
                 geocode,
                 link_home_bases,
             )

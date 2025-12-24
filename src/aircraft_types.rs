@@ -81,3 +81,74 @@ impl AircraftType {
         }
     }
 }
+
+/// ADS-B Exchange Aircraft Category (from short_type 1st character)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftCategory")]
+pub enum AircraftCategory {
+    Landplane,        // L
+    Helicopter,       // H
+    Balloon,          // B
+    Amphibian,        // A
+    Gyroplane,        // G
+    Drone,            // D
+    PoweredParachute, // P
+    Rotorcraft,       // R
+    Seaplane,         // S
+    Tiltrotor,        // T
+    Vtol,             // V
+    Electric,         // E
+    Unknown,          // -
+}
+
+impl AircraftCategory {
+    /// Parse from ADS-B Exchange short_type first character
+    pub fn from_short_type_char(c: char) -> Option<Self> {
+        match c {
+            'L' => Some(AircraftCategory::Landplane),
+            'H' => Some(AircraftCategory::Helicopter),
+            'B' => Some(AircraftCategory::Balloon),
+            'A' => Some(AircraftCategory::Amphibian),
+            'G' => Some(AircraftCategory::Gyroplane),
+            'D' => Some(AircraftCategory::Drone),
+            'P' => Some(AircraftCategory::PoweredParachute),
+            'R' => Some(AircraftCategory::Rotorcraft),
+            'S' => Some(AircraftCategory::Seaplane),
+            'T' => Some(AircraftCategory::Tiltrotor),
+            'V' => Some(AircraftCategory::Vtol),
+            'E' => Some(AircraftCategory::Electric),
+            '-' => Some(AircraftCategory::Unknown),
+            _ => None,
+        }
+    }
+}
+
+/// ADS-B Exchange Engine Type (from short_type 3rd character)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::EngineType")]
+pub enum EngineType {
+    Piston,   // P
+    Jet,      // J
+    Turbine,  // T
+    Electric, // E
+    Rocket,   // R
+    Special,  // S
+    None,     // - (no engine)
+    Unknown,  // unknown
+}
+
+impl EngineType {
+    /// Parse from ADS-B Exchange short_type third character
+    pub fn from_short_type_char(c: char) -> Option<Self> {
+        match c {
+            'P' => Some(EngineType::Piston),
+            'J' => Some(EngineType::Jet),
+            'T' => Some(EngineType::Turbine),
+            'E' => Some(EngineType::Electric),
+            'R' => Some(EngineType::Rocket),
+            'S' => Some(EngineType::Special),
+            '-' => Some(EngineType::None),
+            _ => None,
+        }
+    }
+}

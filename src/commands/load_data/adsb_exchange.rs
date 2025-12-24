@@ -1,0 +1,272 @@
+use anyhow::{Context, Result};
+use diesel::prelude::*;
+use diesel::r2d2::ConnectionManager;
+use r2d2::Pool;
+use serde::Deserialize;
+use std::fs;
+use std::time::Instant;
+use tracing::{debug, error, info};
+
+use soar::aircraft::AddressType;
+use soar::aircraft_types::{AircraftCategory, EngineType};
+use soar::email_reporter::EntityMetrics;
+use soar::schema::aircraft;
+
+#[derive(Debug, Deserialize)]
+struct AdsbExchangeRecord {
+    icao: String,
+    #[serde(rename = "reg")]
+    registration: Option<String>,
+    #[serde(rename = "icaotype")]
+    icao_type_code: Option<String>,
+    #[serde(rename = "ownop")]
+    owner_operator: Option<String>,
+    #[serde(rename = "year")]
+    _year: Option<i32>,
+    #[serde(rename = "manufacturer")]
+    _manufacturer: Option<String>,
+    #[serde(rename = "model")]
+    _model: Option<String>,
+    faa_pia: Option<bool>,
+    faa_ladd: Option<bool>,
+    short_type: Option<String>,
+    #[serde(rename = "mil")]
+    _mil: Option<bool>,
+}
+
+/// Parse short_type format: [Category][NumEngines][EngineType]
+/// Example: "L2J" = Landplane, 2 engines, Jet
+fn parse_short_type(
+    short_type: &str,
+) -> (Option<AircraftCategory>, Option<i16>, Option<EngineType>) {
+    let chars: Vec<char> = short_type.chars().collect();
+
+    if chars.len() < 3 {
+        return (None, None, None);
+    }
+
+    let category = AircraftCategory::from_short_type_char(chars[0]);
+
+    let engine_count = chars[1].to_digit(10).map(|n| n as i16);
+
+    let engine_type = EngineType::from_short_type_char(chars[2]);
+
+    (category, engine_count, engine_type)
+}
+
+/// Parse ICAO hex address and determine address type
+/// If ICAO starts with '~', it's a non-ICAO address (e.g., from TIS-B)
+fn parse_icao_address(icao_hex: &str) -> Result<(i32, AddressType)> {
+    let (cleaned_hex, address_type) = if let Some(stripped) = icao_hex.strip_prefix('~') {
+        (stripped, AddressType::Unknown)
+    } else {
+        (icao_hex, AddressType::Icao)
+    };
+
+    let address = i32::from_str_radix(cleaned_hex, 16)
+        .with_context(|| format!("Failed to parse ICAO hex address: {}", icao_hex))?;
+
+    Ok((address, address_type))
+}
+
+/// Canonicalize registration using flydent
+fn canonicalize_registration(registration: &str) -> String {
+    let parser = flydent::Parser::new();
+    match parser.parse(registration, false, false) {
+        Some(r) => r.canonical_callsign().to_string(),
+        None => registration.to_string(),
+    }
+}
+
+#[derive(Debug, Insertable)]
+#[diesel(table_name = aircraft)]
+struct NewAircraftAdsb {
+    address: i32,
+    address_type: AddressType,
+    registration: String,
+    aircraft_model: String,
+    competition_number: String,
+    tracked: bool,
+    identified: bool,
+    from_ogn_ddb: bool,
+    from_adsbx_ddb: bool,
+    icao_type_code: Option<String>,
+    owner_operator: Option<String>,
+    aircraft_category: Option<AircraftCategory>,
+    engine_count: Option<i16>,
+    engine_type: Option<EngineType>,
+    faa_pia: Option<bool>,
+    faa_ladd: Option<bool>,
+}
+
+pub async fn load_adsb_exchange_data(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+    adsb_path: &str,
+) -> Result<(usize, usize)> {
+    info!("Loading ADS-B Exchange data from: {}", adsb_path);
+
+    // Read and parse the JSON file
+    let file_content = fs::read_to_string(adsb_path)?;
+    let records: Vec<AdsbExchangeRecord> = serde_json::from_str(&file_content)?;
+    info!(
+        "Successfully parsed {} records from ADS-B Exchange",
+        records.len()
+    );
+
+    let mut inserted_count = 0;
+    let mut skipped_invalid_icao = 0;
+    let mut skipped_no_data = 0;
+
+    // Process records in batches for better performance
+    const BATCH_SIZE: usize = 1000;
+
+    for batch in records.chunks(BATCH_SIZE) {
+        let mut batch_inserts = Vec::new();
+
+        for record in batch {
+            // Parse ICAO address
+            let (address, address_type) = match parse_icao_address(&record.icao) {
+                Ok(parsed) => parsed,
+                Err(e) => {
+                    debug!("Skipping record with invalid ICAO {}: {}", record.icao, e);
+                    skipped_invalid_icao += 1;
+                    continue;
+                }
+            };
+
+            // Skip records with no useful data
+            if record.icao_type_code.is_none()
+                && record.owner_operator.is_none()
+                && record.faa_pia.is_none()
+                && record.faa_ladd.is_none()
+                && record.short_type.is_none()
+            {
+                skipped_no_data += 1;
+                continue;
+            }
+
+            // Parse short_type into components
+            let (category, engine_count, engine_type) = record
+                .short_type
+                .as_ref()
+                .map(|st| parse_short_type(st))
+                .unwrap_or((None, None, None));
+
+            // Canonicalize registration if present
+            let registration = record
+                .registration
+                .as_ref()
+                .filter(|r| !r.is_empty())
+                .map(|r| canonicalize_registration(r))
+                .unwrap_or_default();
+
+            batch_inserts.push(NewAircraftAdsb {
+                address,
+                address_type,
+                registration,
+                aircraft_model: String::new(),
+                competition_number: String::new(),
+                tracked: true,
+                identified: true,
+                from_ogn_ddb: false,
+                from_adsbx_ddb: true,
+                icao_type_code: record.icao_type_code.clone(),
+                owner_operator: record.owner_operator.clone(),
+                aircraft_category: category,
+                engine_count,
+                engine_type,
+                faa_pia: record.faa_pia,
+                faa_ladd: record.faa_ladd,
+            });
+        }
+
+        // Insert/update batch
+        if !batch_inserts.is_empty() {
+            let pool = diesel_pool.clone();
+            match tokio::task::spawn_blocking(move || {
+                let mut conn = pool.get()?;
+
+                // Use ON CONFLICT to handle existing records
+                // Only update owner_operator if it's currently NULL or empty
+                let result = diesel::insert_into(aircraft::table)
+                    .values(&batch_inserts)
+                    .on_conflict(aircraft::address)
+                    .do_update()
+                    .set((
+                        aircraft::registration.eq(diesel::dsl::sql("COALESCE(NULLIF(excluded.registration, ''), aircraft.registration)")),
+                        aircraft::icao_type_code.eq(diesel::dsl::sql("COALESCE(excluded.icao_type_code, aircraft.icao_type_code)")),
+                        // Only update owner_operator if current value is NULL or empty string
+                        aircraft::owner_operator.eq(diesel::dsl::sql(
+                            "CASE WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
+                             THEN excluded.owner_operator
+                             ELSE aircraft.owner_operator END"
+                        )),
+                        aircraft::aircraft_category.eq(diesel::dsl::sql("COALESCE(excluded.aircraft_category, aircraft.aircraft_category)")),
+                        aircraft::engine_count.eq(diesel::dsl::sql("COALESCE(excluded.engine_count, aircraft.engine_count)")),
+                        aircraft::engine_type.eq(diesel::dsl::sql("COALESCE(excluded.engine_type, aircraft.engine_type)")),
+                        aircraft::faa_pia.eq(diesel::dsl::sql("COALESCE(excluded.faa_pia, aircraft.faa_pia)")),
+                        aircraft::faa_ladd.eq(diesel::dsl::sql("COALESCE(excluded.faa_ladd, aircraft.faa_ladd)")),
+                        aircraft::from_adsbx_ddb.eq(diesel::dsl::sql("true")),
+                        aircraft::address_type.eq(diesel::dsl::sql("excluded.address_type")),
+                        aircraft::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+
+                Ok::<usize, anyhow::Error>(result)
+            })
+            .await
+            {
+                Ok(Ok(rows_affected)) => {
+                    // Note: rows_affected includes both inserts and updates
+                    // We can't easily distinguish between them with this approach
+                    inserted_count += rows_affected;
+                }
+                Ok(Err(e)) => {
+                    error!("Failed to insert/update batch: {}", e);
+                }
+                Err(e) => {
+                    error!("Task failed for batch: {}", e);
+                }
+            }
+        }
+    }
+
+    info!(
+        "ADS-B Exchange data processing complete: {} aircraft inserted/updated",
+        inserted_count
+    );
+    info!(
+        "Skipped: {} invalid ICAO addresses, {} records with no data",
+        skipped_invalid_icao, skipped_no_data
+    );
+
+    Ok((inserted_count, 0))
+}
+
+pub async fn load_adsb_exchange_with_metrics(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+    adsb_path: Option<String>,
+) -> Option<EntityMetrics> {
+    if let Some(path) = adsb_path {
+        let start = Instant::now();
+        let mut metrics = EntityMetrics::new("ADS-B Exchange Data");
+
+        match load_adsb_exchange_data(diesel_pool, &path).await {
+            Ok((loaded, _updated)) => {
+                metrics.records_loaded = loaded;
+                metrics.success = true;
+            }
+            Err(e) => {
+                error!("Failed to load ADS-B Exchange data: {}", e);
+                metrics.success = false;
+                metrics.error_message = Some(e.to_string());
+            }
+        }
+
+        metrics.duration_secs = start.elapsed().as_secs_f64();
+        Some(metrics)
+    } else {
+        info!("Skipping ADS-B Exchange data - no path provided");
+        None
+    }
+}
