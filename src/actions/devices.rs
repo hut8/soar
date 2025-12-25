@@ -261,8 +261,8 @@ async fn search_devices_by_bbox(
         .into_response();
     }
 
-    // Set default cutoff time to 24 hours ago if not provided
-    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
+    // Set default cutoff time to 1 hour ago if not provided
+    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(1));
 
     info!(
         "Performing bounding box search with cutoff_time: {}",

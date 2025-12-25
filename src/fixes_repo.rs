@@ -200,12 +200,17 @@ impl FixesRepository {
                         new_fix.longitude
                     );
 
-                    // Update aircraft's current_fix column with the new fix
+                    // Update aircraft's current_fix, latitude, and longitude columns with the new fix
+                    // The latitude/longitude columns are used to generate location_geom for spatial queries
                     if let Ok(fix_json) = serde_json::to_value(&new_fix) {
                         use crate::schema::aircraft;
                         let _ = diesel::update(aircraft::table)
                             .filter(aircraft::id.eq(new_fix.aircraft_id))
-                            .set(aircraft::current_fix.eq(fix_json))
+                            .set((
+                                aircraft::current_fix.eq(fix_json),
+                                aircraft::latitude.eq(new_fix.latitude),
+                                aircraft::longitude.eq(new_fix.longitude),
+                            ))
                             .execute(&mut conn);
                     }
 
@@ -648,7 +653,8 @@ impl FixesRepository {
                         $1::double precision AS left_lng,
                         $2::double precision AS bottom_lat,
                         $3::double precision AS right_lng,
-                        $4::double precision AS top_lat
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time
                 ),
                 parts AS (
                     SELECT
@@ -661,12 +667,13 @@ impl FixesRepository {
                                 ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
                                 ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
                             ]
-                        END AS boxes
+                        END AS boxes,
+                        cutoff_time
                     FROM params
                 )
                 SELECT d.*
                 FROM aircraft d, parts
-                WHERE d.last_fix_at >= NOW() - INTERVAL '1 hour'
+                WHERE d.last_fix_at >= parts.cutoff_time
                   AND d.location_geom IS NOT NULL
                   AND (
                       d.location_geom && parts.boxes[1]
@@ -729,6 +736,7 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
                 .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
                 .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)  // cutoff_time
                 .load(&mut conn)?;
 
             info!("First query returned {} aircraft rows", aircraft_rows.len());
