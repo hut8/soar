@@ -162,16 +162,16 @@
 				...flight,
 				id: `playback-${flight.id}`,
 				registration: flight.registration || flight.device_address,
-				device_address: flight.device_address,
-				address_type: '',
+				addressType: '',
 				address: '',
-				aircraft_model: flight.aircraft_model || '',
-				competition_number: '',
+				aircraftModel: flight.aircraft_model || '',
+				competitionNumber: '',
 				tracked: false,
 				identified: false,
-				created_at: flight.created_at || '',
-				updated_at: flight.updated_at || '',
-				from_ddb: false
+				createdAt: flight.created_at || '',
+				updatedAt: flight.updated_at || '',
+				fromOgnDdb: false,
+				fromAdsbxDdb: false
 			},
 			fix
 		);

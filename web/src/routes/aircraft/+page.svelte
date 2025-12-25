@@ -22,7 +22,7 @@
 	let error = $state('');
 	let searchQuery = $state('');
 	let searchType = $state<'registration' | 'device' | 'club'>('registration');
-	let deviceAddressType = $state('I'); // ICAO, OGN, FLARM
+	let aircraftAddressType = $state('I'); // ICAO, OGN, FLARM
 
 	// Aircraft type filter state (for recently active aircraft only)
 	let selectedAircraftTypes = new SvelteSet<string>();
@@ -104,7 +104,7 @@
 			} else {
 				// Aircraft address search
 				const address = searchQuery.trim().toUpperCase();
-				endpoint += `address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(deviceAddressType)}`;
+				endpoint += `address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(aircraftAddressType)}`;
 			}
 
 			const response = await serverCall<{ aircraft: Aircraft[] }>(endpoint);
@@ -303,11 +303,11 @@
 					<div class="space-y-3">
 						<SegmentedControl
 							name="address-type"
-							value={deviceAddressType}
+							value={aircraftAddressType}
 							orientation="vertical"
 							onValueChange={(event: { value: string | null }) => {
 								if (event.value) {
-									deviceAddressType = event.value;
+									aircraftAddressType = event.value;
 									error = '';
 								}
 							}}
@@ -421,11 +421,11 @@
 							<div class="flex items-start gap-3">
 								<SegmentedControl
 									name="address-type-desktop"
-									value={deviceAddressType}
+									value={aircraftAddressType}
 									orientation="vertical"
 									onValueChange={(event: { value: string | null }) => {
 										if (event.value) {
-											deviceAddressType = event.value;
+											aircraftAddressType = event.value;
 											error = '';
 										}
 									}}

@@ -122,12 +122,12 @@
 
 		try {
 			// Load aircraft data
-			const deviceData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			aircraft = deviceData;
+			const aircraftData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
+			aircraft = aircraftData;
 
 			// Initialize selected club ID if aircraft has one
-			if (aircraft.club_id) {
-				selectedClubId = aircraft.club_id;
+			if (aircraft.clubId) {
+				selectedClubId = aircraft.clubId;
 			}
 
 			// Load aircraft registration and model data in parallel
@@ -330,20 +330,20 @@
 							<div>
 								<h1 class="h1">
 									{aircraft.registration || 'Unknown'}
-									{#if aircraft.competition_number}
-										<span class="text-surface-600-300-token">({aircraft.competition_number})</span>
+									{#if aircraft.competitionNumber}
+										<span class="text-surface-600-300-token">({aircraft.competitionNumber})</span>
 									{/if}
 								</h1>
-								{#if aircraft.aircraft_model}
-									<p class="text-lg">{aircraft.aircraft_model}</p>
+								{#if aircraft.aircraftModel}
+									<p class="text-lg">{aircraft.aircraftModel}</p>
 								{/if}
-								{#if aircraft.icao_model_code}
+								{#if aircraft.icaoModelCode}
 									<p class="text-surface-600-300-token text-sm">
-										ICAO Model Code: <span class="font-mono">{aircraft.icao_model_code}</span>
+										ICAO Model Code: <span class="font-mono">{aircraft.icaoModelCode}</span>
 									</p>
 								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {formatAircraftAddress(aircraft.address_type, aircraft.address)}
+									Address: {formatAircraftAddress(aircraft.addressType, aircraft.address)}
 								</p>
 							</div>
 						</div>
@@ -364,36 +364,34 @@
 								{aircraft.identified ? 'Identified' : 'Unidentified'}
 							</span>
 							<span
-								class="badge {aircraft.from_ddb
+								class="badge {aircraft.fromOgnDdb
 									? 'preset-filled-success-500'
 									: 'preset-filled-secondary-500'}"
 							>
-								{aircraft.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+								{aircraft.fromOgnDdb ? 'From OGN DB' : 'Not in OGN DB'}
 							</span>
-							{#if aircraft.aircraft_type_ogn}
-								<span class="badge {getAircraftTypeColor(aircraft.aircraft_type_ogn)} text-xs">
-									{getAircraftTypeOgnDescription(aircraft.aircraft_type_ogn)}
+							{#if aircraft.aircraftTypeOgn}
+								<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
+									{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
 								</span>
 							{/if}
-							{#if aircraft.tracker_device_type}
+							{#if aircraft.trackerDeviceType}
 								<span class="preset-tonal-primary-500 badge text-xs">
-									{aircraft.tracker_device_type}
+									{aircraft.trackerDeviceType}
 								</span>
 							{/if}
-							{#if aircraft.country_code}
-								{@const countryName = getCountryName(aircraft.country_code)}
-								{@const flagPath = getFlagPath(aircraft.country_code)}
+							{#if aircraft.countryCode}
+								{@const countryName = getCountryName(aircraft.countryCode)}
+								{@const flagPath = getFlagPath(aircraft.countryCode)}
 								<span class="preset-tonal-tertiary-500 badge flex items-center gap-1.5 text-xs">
 									{#if flagPath}
 										<img
 											src={flagPath}
-											alt="{aircraft.country_code} flag"
+											alt="{aircraft.countryCode} flag"
 											class="h-3 w-4 object-cover"
 										/>
 									{/if}
-									{countryName
-										? `${countryName} (${aircraft.country_code})`
-										: aircraft.country_code}
+									{countryName ? `${countryName} (${aircraft.countryCode})` : aircraft.countryCode}
 								</span>
 							{/if}
 						</div>

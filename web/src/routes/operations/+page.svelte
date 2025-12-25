@@ -77,7 +77,7 @@
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
 	// Compass rose variables
-	let deviceHeading: number = 0;
+	let aircraftHeading: number = 0;
 	let compassHeading: number = $state(0);
 	let previousCompassHeading: number = 0;
 	let isCompassActive: boolean = $state(false);
@@ -428,7 +428,7 @@
 	});
 
 	// Get singleton instances
-	const deviceRegistry = AircraftRegistry.getInstance();
+	const aircraftRegistry = AircraftRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
 
 	// Subscribe to device registry and update aircraft markers
@@ -444,7 +444,7 @@
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
 
 	$effect(() => {
-		const unsubscribeRegistry = deviceRegistry.subscribe((event: AircraftRegistryEvent) => {
+		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
 			if (event.type === 'aircraft_changed') {
 				activeDevices = event.aircraft;
 			} else if (event.type === 'aircraft_updated') {
@@ -462,7 +462,7 @@
 		});
 
 		// Initialize active aircraft
-		activeDevices = deviceRegistry.getAllAircraft();
+		activeDevices = aircraftRegistry.getAllAircraft();
 
 		return () => {
 			unsubscribeRegistry();
@@ -1256,13 +1256,13 @@
 		if (event.alpha !== null) {
 			isCompassActive = true;
 			// Store the raw device heading
-			deviceHeading = event.alpha;
-			displayHeading = Math.round(deviceHeading);
+			aircraftHeading = event.alpha;
+			displayHeading = Math.round(aircraftHeading);
 
-			// Use deviceHeading directly (not inverted) to keep north arrow pointing north
+			// Use aircraftHeading directly (not inverted) to keep north arrow pointing north
 			// When phone rotates clockwise (alpha increases), we rotate compass counter-clockwise
 			// by using the heading value directly in the CSS transform
-			let newHeading = deviceHeading;
+			let newHeading = aircraftHeading;
 
 			// Normalize to 0-360 range
 			newHeading = ((newHeading % 360) + 360) % 360;
@@ -1335,11 +1335,11 @@
 		if (!map) return;
 
 		// Try to use latest_latitude/latest_longitude from aircraft object
-		if (aircraft.latest_latitude != null && aircraft.latest_longitude != null) {
+		if (aircraft.latestLatitude != null && aircraft.latestLongitude != null) {
 			console.log('[MARKER] Using latest position from aircraft:', {
 				id: aircraft.id,
-				lat: aircraft.latest_latitude,
-				lng: aircraft.latest_longitude
+				lat: aircraft.latestLatitude,
+				lng: aircraft.latestLongitude
 			});
 
 			// Create a pseudo-fix from latest position
@@ -1347,18 +1347,18 @@
 				id: '', // Not needed for marker display
 				aircraft_id: aircraft.id,
 				device_address_hex: aircraft.address,
-				latitude: aircraft.latest_latitude,
-				longitude: aircraft.latest_longitude,
-				timestamp: aircraft.last_fix_at || new Date().toISOString(),
+				latitude: aircraft.latestLatitude,
+				longitude: aircraft.latestLongitude,
+				timestamp: aircraft.lastFixAt || new Date().toISOString(),
 				altitude_msl_feet: undefined,
 				altitude_agl_feet: undefined,
 				track_degrees: undefined,
 				ground_speed_knots: undefined,
 				climb_fpm: undefined,
-				registration: aircraft.registration,
-				model: aircraft.aircraft_model,
-				flight_id: aircraft.active_flight_id || undefined,
-				active: aircraft.active_flight_id != null
+				registration: aircraft.registration ?? undefined,
+				model: aircraft.aircraftModel,
+				flight_id: aircraft.activeFlightId || undefined,
+				active: aircraft.activeFlightId != null
 			};
 
 			updateAircraftMarkerFromDevice(aircraft, pseudoFix);
@@ -1392,27 +1392,27 @@
 			return;
 		}
 
-		const deviceKey = aircraft.id;
-		if (!deviceKey) {
+		const aircraftKey = aircraft.id;
+		if (!aircraftKey) {
 			console.warn('[MARKER] No device ID available');
 			return;
 		}
 
 		// Update latest fix for this device
-		latestFixes.set(deviceKey, latestFix);
-		console.log('[MARKER] Updated latest fix for aircraft:', deviceKey);
+		latestFixes.set(aircraftKey, latestFix);
+		console.log('[MARKER] Updated latest fix for aircraft:', aircraftKey);
 
 		// Get or create marker for this aircraft
-		let marker = aircraftMarkers.get(deviceKey);
+		let marker = aircraftMarkers.get(aircraftKey);
 
 		if (!marker) {
-			console.log('[MARKER] Creating new marker for aircraft:', deviceKey);
+			console.log('[MARKER] Creating new marker for aircraft:', aircraftKey);
 			// Create new aircraft marker with device info
 			marker = createAircraftMarkerFromDevice(aircraft, latestFix);
-			aircraftMarkers.set(deviceKey, marker);
+			aircraftMarkers.set(aircraftKey, marker);
 			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
 		} else {
-			console.log('[MARKER] Updating existing marker for aircraft:', deviceKey);
+			console.log('[MARKER] Updating existing marker for aircraft:', aircraftKey);
 			// Update existing marker position and info
 			updateAircraftMarkerPositionFromDevice(marker, aircraft, latestFix);
 		}
@@ -1467,7 +1467,7 @@
 		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
 		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		// Use aircraft_model string from device, or detailed model name if available
-		const aircraftModel = aircraft.aircraft_model || null;
+		const aircraftModel = aircraft.aircraftModel || null;
 
 		console.log('[MARKER] Aircraft info:', {
 			tailNumber,
@@ -1501,8 +1501,8 @@
 
 		// Create the marker with proper title including aircraft model and full timestamp
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
-		const title = aircraft.aircraft_model
-			? `${tailNumber} (${aircraft.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+		const title = aircraft.aircraftModel
+			? `${tailNumber} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
@@ -1585,7 +1585,7 @@
 					fix.timestamp
 				);
 				// Use aircraft_model string from device
-				const aircraftModel = aircraft.aircraft_model || null;
+				const aircraftModel = aircraft.aircraftModel || null;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
@@ -1621,8 +1621,8 @@
 		// Update the marker title with full timestamp
 		const { altitudeText } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
-		const title = aircraft.aircraft_model
-			? `${aircraft.registration || aircraft.address} (${aircraft.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+		const title = aircraft.aircraftModel
+			? `${aircraft.registration || aircraft.address} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${aircraft.registration || aircraft.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		marker.title = title;
@@ -1912,7 +1912,7 @@
 			// They will have latest_latitude/latest_longitude but no fixes array
 			for (const a of aircraft) {
 				// Register the aircraft - markers will be created from latest position
-				await deviceRegistry.updateAircraftFromAircraftData(a);
+				await aircraftRegistry.updateAircraftFromAircraftData(a);
 			}
 
 			console.log('[REST] Aircraft loaded, markers created from latest positions');

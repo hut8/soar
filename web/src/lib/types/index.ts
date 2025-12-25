@@ -146,31 +146,33 @@ export interface AircraftModel {
 }
 
 // Aircraft interface matching backend AircraftView exactly
+// Backend uses camelCase serialization
 export interface Aircraft {
 	id: string;
-	device_address: string; // Formatted like "FLARM-A0B380"
-	address_type: string; // F, O, I, or empty string
+	addressType: string; // F, O, I, or empty string
 	address: string; // Hex format like "ABCDEF"
-	aircraft_model: string; // Short string from device database (e.g., "Cessna 172")
-	registration: string;
-	competition_number: string;
+	aircraftModel: string; // Short string from device database (e.g., "Cessna 172")
+	registration: string | null;
+	competitionNumber: string;
 	tracked: boolean;
 	identified: boolean;
-	club_id?: string | null;
-	created_at: string;
-	updated_at: string;
-	from_ddb: boolean;
-	frequency_mhz?: number | null;
-	pilot_name?: string | null;
-	home_base_airport_ident?: string | null;
-	aircraft_type_ogn?: string | null;
-	last_fix_at?: string | null;
-	tracker_device_type?: string | null;
-	icao_model_code?: string | null;
-	country_code?: string | null;
-	latest_latitude?: number | null;
-	latest_longitude?: number | null;
-	active_flight_id?: string | null;
+	clubId?: string | null;
+	createdAt: string;
+	updatedAt: string;
+	fromOgnDdb: boolean;
+	fromAdsbxDdb: boolean;
+	frequencyMhz?: number | null;
+	pilotName?: string | null;
+	homeBaseAirportIdent?: string | null;
+	aircraftTypeOgn?: string | null;
+	lastFixAt?: string | null;
+	trackerDeviceType?: string | null;
+	icaoModelCode?: string | null;
+	countryCode?: string | null;
+	latestLatitude?: number | null;
+	latestLongitude?: number | null;
+	activeFlightId?: string | null;
+	currentFix?: Fix | null;
 	fixes?: Fix[];
 }
 

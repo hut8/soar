@@ -450,16 +450,20 @@ impl Flight {
     fn get_aircraft_identifier(&self, device: Option<&crate::aircraft::Aircraft>) -> String {
         if let Some(device) = device {
             let has_model = !device.aircraft_model.is_empty();
-            let has_registration = !device.registration.is_empty();
+            let has_registration = device.registration.as_ref().is_some_and(|r| !r.is_empty());
 
             match (has_model, has_registration) {
                 (true, true) => {
                     // Both model and registration available: "Piper Pacer N8437D"
-                    format!("{} {}", device.aircraft_model, device.registration)
+                    format!(
+                        "{} {}",
+                        device.aircraft_model,
+                        device.registration.as_deref().unwrap()
+                    )
                 }
                 (false, true) => {
                     // Only registration: "N8437D"
-                    device.registration.clone()
+                    device.registration.as_ref().unwrap().clone()
                 }
                 (true, false) => {
                     // Only model: "Piper Pacer"

@@ -188,7 +188,7 @@ pub async fn get_club_flights(
                     match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
                         Ok(Some(aircraft)) => Some(AircraftInfo {
                             aircraft_model: Some(aircraft.aircraft_model),
-                            registration: Some(aircraft.registration),
+                            registration: aircraft.registration,
                             aircraft_type_ogn: aircraft.aircraft_type_ogn,
                             country_code: aircraft.country_code,
                         }),

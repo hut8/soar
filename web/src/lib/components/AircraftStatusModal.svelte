@@ -92,13 +92,15 @@
 			});
 
 			// Check if aircraft has registration/model data
-			aircraftRegistration = selectedAircraft.aircraft_registration || null;
-			aircraftModel = selectedAircraft.aircraft_model_details || null;
+			aircraftRegistration = selectedAircraft.aircraftRegistration || null;
+			aircraftModel = selectedAircraft.aircraftModelDetails || null;
 
-			// Load current flight if aircraft has an active flight
-			if (selectedAircraft.active_flight_id) {
+			// Load current flight - use currentFix.flight if available, otherwise fetch
+			if (selectedAircraft.currentFix?.flight) {
+				currentFlight = selectedAircraft.currentFix.flight;
+			} else if (selectedAircraft.activeFlightId) {
 				try {
-					currentFlight = await serverCall(`/flights/${selectedAircraft.active_flight_id}`);
+					currentFlight = await serverCall(`/flights/${selectedAircraft.activeFlightId}`);
 				} catch (error) {
 					console.warn('Failed to load flight data:', error);
 					currentFlight = null;
@@ -389,9 +391,9 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					{#if selectedAircraft.active_flight_id}
+					{#if selectedAircraft.activeFlightId}
 						<a
-							href="/flights/{selectedAircraft.active_flight_id}"
+							href="/flights/{selectedAircraft.activeFlightId}"
 							target="_blank"
 							rel="noopener noreferrer"
 							class="btn preset-filled-success-500 btn-sm"

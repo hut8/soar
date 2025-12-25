@@ -14,6 +14,7 @@ import {
 } from 'cesium';
 import type { Aircraft, Fix, Flight, Airport, Receiver } from '$lib/types';
 import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
+import { formatAircraftAddress } from '$lib/formatters';
 
 /**
  * Feet to meters conversion factor
@@ -71,9 +72,12 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 	// Create icon URL with aircraft heading
 	const iconUrl = createAircraftIconSVG(color, fix.track_degrees || 0);
 
+	const displayName =
+		aircraft.registration || formatAircraftAddress(aircraft.address, aircraft.addressType);
+
 	return new Entity({
 		id: aircraft.id,
-		name: aircraft.registration || aircraft.device_address,
+		name: displayName,
 		position: Cartesian3.fromDegrees(fix.longitude, fix.latitude, altitudeMeters),
 		billboard: {
 			image: iconUrl,
@@ -83,7 +87,7 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 			heightReference: HeightReference.NONE // Use absolute altitude
 		},
 		label: {
-			text: `${aircraft.registration || aircraft.device_address}\n${altitudeText}`,
+			text: `${displayName}\n${altitudeText}`,
 			font: '12px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
@@ -93,8 +97,8 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 			disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show label
 		},
 		description: `
-			<h3>${aircraft.registration || aircraft.device_address}</h3>
-			<p><strong>Model:</strong> ${aircraft.aircraft_model || 'Unknown'}</p>
+			<h3>${displayName}</h3>
+			<p><strong>Model:</strong> ${aircraft.aircraftModel || 'Unknown'}</p>
 			<p><strong>Altitude:</strong> ${altitude} ft MSL</p>
 			<p><strong>Speed:</strong> ${fix.ground_speed_knots || '---'} kts</p>
 			<p><strong>Heading:</strong> ${fix.track_degrees || '---'}°</p>

@@ -136,7 +136,7 @@ pub struct Aircraft {
     )]
     pub address: u32,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     #[serde(rename(deserialize = "cn", serialize = "cn"))]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
@@ -214,7 +214,7 @@ pub struct AircraftModel {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
@@ -243,6 +243,7 @@ pub struct AircraftModel {
     pub faa_ladd: Option<bool>,
     pub year: Option<i16>,
     pub is_military: Option<bool>,
+    pub current_fix: Option<serde_json::Value>,
 }
 
 impl AircraftModel {
@@ -259,7 +260,7 @@ pub struct NewAircraft {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
@@ -285,6 +286,7 @@ pub struct NewAircraft {
     pub faa_ladd: Option<bool>,
     pub year: Option<i16>,
     pub is_military: Option<bool>,
+    pub current_fix: Option<serde_json::Value>,
 }
 
 impl From<Aircraft> for NewAircraft {
@@ -326,6 +328,7 @@ impl From<Aircraft> for NewAircraft {
             faa_ladd: device.faa_ladd,
             year: device.year,
             is_military: device.is_military,
+            current_fix: None, // Will be populated when fixes are processed
         }
     }
 }
@@ -434,11 +437,12 @@ impl Aircraft {
     /// Determines the registration country based on the registration format
     /// Returns UnitedStates if the registration follows U.S. N-number format, otherwise Other
     pub fn registration_country(&self) -> RegistrationCountry {
-        if self.is_us_n_number(&self.registration) {
-            RegistrationCountry::UnitedStates
-        } else {
-            RegistrationCountry::Other
+        if let Some(ref reg) = self.registration
+            && self.is_us_n_number(reg)
+        {
+            return RegistrationCountry::UnitedStates;
         }
+        RegistrationCountry::Other
     }
 
     /// Checks if a registration follows U.S. N-number format
@@ -562,13 +566,21 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
 
                             // Normalize registration using thread-local parser
                             let registration = PARSER.with(|parser| {
-                                match parser.borrow().parse(&record.registration, false, false) {
-                                    Some(r) => r.canonical_callsign().to_string(),
-                                    None => {
-                                        // If flydent can't parse it, return the original
-                                        // This handles edge cases where the registration format is unusual
-                                        record.registration.clone()
-                                    }
+                                let normalized =
+                                    match parser.borrow().parse(&record.registration, false, false)
+                                    {
+                                        Some(r) => r.canonical_callsign().to_string(),
+                                        None => {
+                                            // If flydent can't parse it, return the original
+                                            // This handles edge cases where the registration format is unusual
+                                            record.registration.clone()
+                                        }
+                                    };
+                                // Convert empty strings to None
+                                if normalized.is_empty() {
+                                    None
+                                } else {
+                                    Some(normalized)
                                 }
                             });
 
@@ -757,14 +769,23 @@ impl AircraftFetcher {
 
                                 // Normalize registration using thread-local parser
                                 let registration = PARSER.with(|parser| {
-                                    match parser.borrow().parse(&record.registration, false, false)
-                                    {
+                                    let normalized = match parser.borrow().parse(
+                                        &record.registration,
+                                        false,
+                                        false,
+                                    ) {
                                         Some(r) => r.canonical_callsign().to_string(),
                                         None => {
                                             // If flydent can't parse it, return the original
                                             // This handles edge cases where the registration format is unusual
                                             record.registration.clone()
                                         }
+                                    };
+                                    // Convert empty strings to None
+                                    if normalized.is_empty() {
+                                        None
+                                    } else {
+                                        Some(normalized)
                                     }
                                 });
 
@@ -863,17 +884,19 @@ impl AircraftFetcher {
         let reg_parser = flydent::Parser::new();
 
         let device_normalizer = |mut d: Aircraft| {
-            let reg = reg_parser.parse(&d.registration, false, false);
-            match reg {
+            let reg = reg_parser.parse(d.registration.as_deref().unwrap_or(""), false, false);
+            d.registration = match reg {
                 Some(r) => {
-                    d.registration = r.canonical_callsign().to_string();
-                    d
+                    let canonical = r.canonical_callsign().to_string();
+                    if canonical.is_empty() {
+                        None
+                    } else {
+                        Some(canonical)
+                    }
                 }
-                None => {
-                    d.registration = "".into();
-                    d
-                }
-            }
+                None => None,
+            };
+            d
         };
 
         // Canonicalize registrations using "flydent" crate
@@ -910,18 +933,12 @@ impl AircraftFetcher {
                 // Only log a warning if the devices actually have different data
                 if glidernet_device != flarmnet_device {
                     let (registration, source) = match (
-                        glidernet_device.registration.is_empty(),
-                        flarmnet_device.registration.is_empty(),
+                        &glidernet_device.registration,
+                        &flarmnet_device.registration,
                     ) {
-                        (true, true) => ("".to_string(), AircraftSource::Glidernet),
-                        (true, false) => (
-                            flarmnet_device.registration.clone(),
-                            AircraftSource::Flarmnet,
-                        ),
-                        (false, _) => (
-                            glidernet_device.registration.clone(),
-                            AircraftSource::Glidernet,
-                        ),
+                        (None, None) => (None, AircraftSource::Glidernet),
+                        (None, Some(f)) => (Some(f.clone()), AircraftSource::Flarmnet),
+                        (Some(g), _) => (Some(g.clone()), AircraftSource::Glidernet),
                     };
 
                     conflicts += 1;
@@ -933,11 +950,11 @@ impl AircraftFetcher {
                         "Aircraft conflict for ID {}: using {} data: {} (over {})",
                         glidernet_device.address,
                         better_label,
-                        registration,
+                        registration.as_deref().unwrap_or("(none)"),
                         if source == AircraftSource::Glidernet {
-                            &flarmnet_device.registration
+                            flarmnet_device.registration.as_deref().unwrap_or("(none)")
                         } else {
-                            &glidernet_device.registration
+                            glidernet_device.registration.as_deref().unwrap_or("(none)")
                         }
                     );
                     let merged_device = Aircraft {
@@ -1054,7 +1071,7 @@ mod tests {
             address_type: AddressType::Flarm,
             address: 0x000000,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
-            registration: "HA-4403".to_string(),
+            registration: Some("HA-4403".to_string()),
             competition_number: "J".to_string(),
             tracked: true,
             identified: false,
@@ -1396,7 +1413,7 @@ mod tests {
             address_type: AddressType::Flarm,
             address: 0x123456,
             aircraft_model: "Test Aircraft".to_string(),
-            registration: registration.to_string(),
+            registration: Some(registration.to_string()),
             competition_number: "T".to_string(),
             tracked: true,
             identified: true,

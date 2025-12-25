@@ -208,16 +208,16 @@
 				aircraft: aircraft || {
 					id: entry.aircraft_id,
 					registration: 'Unknown',
-					aircraft_model: 'Unknown',
-					address_type: 'Unknown',
+					aircraftModel: 'Unknown',
+					addressType: 'Unknown',
 					address: 'Unknown',
-					competition_number: '',
+					competitionNumber: '',
 					tracked: false,
 					identified: false,
-					device_address: 'Unknown',
-					created_at: '',
-					updated_at: '',
-					from_ddb: false
+					createdAt: '',
+					updatedAt: '',
+					fromOgnDdb: false,
+					fromAdsbxDdb: false
 				}
 			};
 		})
@@ -243,8 +243,8 @@
 		// Get unique club IDs from all aircraft
 		const clubIds: string[] = [];
 		for (const entry of entriesWithAircraft) {
-			if (entry.aircraft.club_id && !clubIds.includes(entry.aircraft.club_id)) {
-				clubIds.push(entry.aircraft.club_id);
+			if (entry.aircraft.clubId && !clubIds.includes(entry.aircraft.clubId)) {
+				clubIds.push(entry.aircraft.clubId);
 			}
 		}
 
@@ -423,7 +423,7 @@
 																<div
 																	class="truncate text-xs text-surface-600 dark:text-surface-400"
 																>
-																	{aircraft.aircraft_model || 'Unknown Model'}
+																	{aircraft.aircraftModel || 'Unknown Model'}
 																</div>
 															</div>
 															{#if isAircraftInWatchlist(aircraft.id)}
@@ -609,7 +609,7 @@
 																		<div
 																			class="truncate text-xs text-surface-600 dark:text-surface-400"
 																		>
-																			{aircraft.aircraft_model || 'Unknown Model'}
+																			{aircraft.aircraftModel || 'Unknown Model'}
 																		</div>
 																	</div>
 																	{#if isAircraftInWatchlist(aircraft.id)}
@@ -714,24 +714,24 @@
 															<span class="truncate text-lg font-medium"
 																>{entry.aircraft.registration || 'Unknown Registration'}</span
 															>
-															{#if entry.aircraft.competition_number}
+															{#if entry.aircraft.competitionNumber}
 																<span
 																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-																	>{entry.aircraft.competition_number}</span
+																	>{entry.aircraft.competitionNumber}</span
 																>
 															{/if}
 														</div>
 														<div class="truncate text-sm text-surface-700 dark:text-surface-300">
-															{entry.aircraft.aircraft_model || 'Unknown Aircraft Model'}
+															{entry.aircraft.aircraftModel || 'Unknown Aircraft Model'}
 														</div>
-														{#if entry.aircraft.club_id}
+														{#if entry.aircraft.clubId}
 															<div class="truncate text-xs text-surface-600 dark:text-surface-400">
-																Club: {clubNames.get(entry.aircraft.club_id) || 'Loading...'}
+																Club: {clubNames.get(entry.aircraft.clubId) || 'Loading...'}
 															</div>
 														{/if}
 														<div class="text-xs text-surface-600 dark:text-surface-400">
 															<div class="truncate">
-																{getAddressTypeLabel(entry.aircraft.address_type)}: {entry.aircraft
+																{getAddressTypeLabel(entry.aircraft.addressType)}: {entry.aircraft
 																	.address}
 															</div>
 															<div class="mt-1 flex flex-wrap gap-1">

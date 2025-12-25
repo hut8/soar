@@ -185,8 +185,13 @@ export class AircraftRegistry {
 		// Add fix to the beginning (most recent first)
 		cached.fixes.unshift(fix);
 
-		// Clean up old fixes
+		// Clean up old fixes (by age)
 		cached.fixes = this.cleanupOldFixes(cached.fixes);
+
+		// Limit to most recent 100 fixes
+		if (cached.fixes.length > 100) {
+			cached.fixes = cached.fixes.slice(0, 100);
+		}
 
 		// Update the map
 		this.aircraft.set(aircraftId, cached);
@@ -270,18 +275,18 @@ export class AircraftRegistry {
 				console.log('[REGISTRY] Creating minimal aircraft for fix:', aircraftId);
 				aircraft = {
 					id: aircraftId,
-					device_address: fix.device_address_hex || '',
-					address_type: '',
+					addressType: '',
 					address: fix.device_address_hex || '',
-					aircraft_model: fix.model || '',
-					registration: fix.registration || '',
-					competition_number: '',
+					aircraftModel: fix.model || '',
+					registration: fix.registration || null,
+					competitionNumber: '',
 					tracked: false,
 					identified: false,
-					club_id: null,
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-					from_ddb: false,
+					clubId: null,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					fromOgnDdb: false,
+					fromAdsbxDdb: false,
 					fixes: []
 				};
 			}
@@ -507,7 +512,7 @@ export class AircraftRegistry {
 			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
 
 			const response = await serverCall<{ fixes: Fix[] }>(`/aircraft/${aircraftId}/fixes`, {
-				params: { after, per_page: 1000 }
+				params: { after }
 			});
 			if (response.fixes) {
 				// Add fixes to aircraft
