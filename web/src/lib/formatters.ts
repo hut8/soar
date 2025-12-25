@@ -189,22 +189,23 @@ export function formatTransponderCode(transponderCode: number | null | undefined
 /**
  * Get the title/display name for an aircraft card
  * Priority:
- * 1. If both registration and aircraft_model: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
+ * 1. If both registration and aircraftModel: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
- * 3. Otherwise: device_address (e.g., "FLARM-A0B380")
+ * 3. Otherwise: formatted address (e.g., "FLARM-A0B380")
  */
 export function getAircraftTitle(aircraft: {
 	registration?: string | null;
-	aircraft_model?: string | null;
-	competition_number?: string | null;
-	device_address: string;
+	aircraftModel?: string | null;
+	competitionNumber?: string | null;
+	addressType: string;
+	address: string;
 }): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
-	const hasModel = aircraft.aircraft_model && aircraft.aircraft_model.trim() !== '';
+	const hasModel = aircraft.aircraftModel && aircraft.aircraftModel.trim() !== '';
 
 	// If both registration and model are available
 	if (hasRegistration && hasModel) {
-		return `${aircraft.aircraft_model} - ${aircraft.registration}`;
+		return `${aircraft.aircraftModel} - ${aircraft.registration}`;
 	}
 
 	// If only registration
@@ -212,8 +213,8 @@ export function getAircraftTitle(aircraft: {
 		return aircraft.registration!;
 	}
 
-	// Default to device address
-	return aircraft.device_address;
+	// Default to formatted address
+	return formatAircraftAddress(aircraft.address, aircraft.addressType);
 }
 
 /**

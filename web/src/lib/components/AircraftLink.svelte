@@ -38,13 +38,6 @@
 		lg: 'h-4'
 	};
 
-	// Helper to format device address for Flight objects
-	function formatDeviceAddress(address: string, addressType?: string): string {
-		if (!addressType) return address;
-		const typePrefix = addressType === 'Flarm' ? 'FLARM' : addressType === 'Ogn' ? 'OGN' : 'ICAO';
-		return `${typePrefix}-${address}`;
-	}
-
 	// Get aircraft ID and title
 	const id = $derived(
 		aircraftId ||
@@ -58,11 +51,13 @@
 		// Check if this is a Flight object (has aircraft_id instead of id)
 		if ('aircraft_id' in aircraft) {
 			const flight = aircraft as Flight;
+			// Map Flight (snake_case) fields to getAircraftTitle's expected format (camelCase)
 			return getAircraftTitle({
 				registration: flight.registration,
-				aircraft_model: flight.aircraft_model,
-				competition_number: null,
-				device_address: formatDeviceAddress(flight.device_address, flight.device_address_type)
+				aircraftModel: flight.aircraft_model,
+				competitionNumber: null,
+				addressType: flight.device_address_type || '',
+				address: flight.device_address || ''
 			});
 		}
 
@@ -73,9 +68,9 @@
 	// Get country code (only available on Aircraft objects, not Flight)
 	const countryCode = $derived(() => {
 		if (!aircraft) return null;
-		// Only Aircraft objects have country_code
-		if ('country_code' in aircraft) {
-			const code = (aircraft as Aircraft).country_code;
+		// Only Aircraft objects have countryCode
+		if ('countryCode' in aircraft) {
+			const code = (aircraft as Aircraft).countryCode;
 			return code && code.trim() !== '' ? code.toUpperCase() : null;
 		}
 		return null;

@@ -199,6 +199,16 @@ impl FixesRepository {
                         new_fix.latitude,
                         new_fix.longitude
                     );
+
+                    // Update aircraft's current_fix column with the new fix
+                    if let Ok(fix_json) = serde_json::to_value(&new_fix) {
+                        use crate::schema::aircraft;
+                        let _ = diesel::update(aircraft::table)
+                            .filter(aircraft::id.eq(new_fix.aircraft_id))
+                            .set(aircraft::current_fix.eq(fix_json))
+                            .execute(&mut conn);
+                    }
+
                     Ok(())
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -672,8 +682,8 @@ impl FixesRepository {
                 address_type: crate::aircraft::AddressType,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 aircraft_model: String,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                registration: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                registration: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 competition_number: String,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
@@ -766,6 +776,7 @@ impl FixesRepository {
                     faa_ladd: None,                 // Not selected in this query
                     year: None,                     // Not selected in this query
                     is_military: None,              // Not selected in this query
+                    current_fix: None,              // Not selected in this query
                 })
                 .collect();
 

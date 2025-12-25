@@ -83,16 +83,14 @@ pub struct AircraftWithDeviceView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftView {
     pub id: uuid::Uuid,
-
-    /// Formatted device address with prefix (e.g., "OGN-8B570F", "FLARM-123456", "ICAO-ABCDEF")
-    pub device_address: String,
 
     pub address_type: String,
     pub address: String,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
@@ -115,6 +113,9 @@ pub struct AircraftView {
     pub latest_longitude: Option<f64>,
     /// Active flight ID if device is currently on an active flight
     pub active_flight_id: Option<Uuid>,
+    /// Current fix (latest position data for this aircraft)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_fix: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
@@ -123,17 +124,6 @@ impl AircraftView {
     pub fn from_device(device: crate::aircraft::Aircraft) -> Self {
         // Format address as 6-digit hex
         let address_hex = format!("{:06X}", device.address);
-
-        // Create prefix based on address type
-        let prefix = match device.address_type {
-            crate::aircraft::AddressType::Ogn => "OGN",
-            crate::aircraft::AddressType::Flarm => "FLARM",
-            crate::aircraft::AddressType::Icao => "ICAO",
-            crate::aircraft::AddressType::Unknown => "UNKNOWN",
-        };
-
-        // Combine prefix and address
-        let device_address = format!("{}-{}", prefix, address_hex);
 
         // Address type as single character for backward compatibility
         let address_type = match device.address_type {
@@ -148,7 +138,6 @@ impl AircraftView {
             id: device
                 .id
                 .expect("Aircraft must have an ID to create AircraftView"),
-            device_address,
             address_type,
             address: address_hex,
             aircraft_model: device.aircraft_model,
@@ -178,6 +167,7 @@ impl AircraftView {
             latest_latitude: None,
             latest_longitude: None,
             active_flight_id: None,
+            current_fix: None,
             fixes: None,
         }
     }
@@ -185,17 +175,6 @@ impl AircraftView {
     pub fn from_device_model(device_model: crate::aircraft::AircraftModel) -> Self {
         // Format address as 6-digit hex
         let address_hex = format!("{:06X}", device_model.address as u32);
-
-        // Create prefix based on address type
-        let prefix = match device_model.address_type {
-            crate::aircraft::AddressType::Ogn => "OGN",
-            crate::aircraft::AddressType::Flarm => "FLARM",
-            crate::aircraft::AddressType::Icao => "ICAO",
-            crate::aircraft::AddressType::Unknown => "UNKNOWN",
-        };
-
-        // Combine prefix and address
-        let device_address = format!("{}-{}", prefix, address_hex);
 
         // Address type as single character for backward compatibility
         let address_type = match device_model.address_type {
@@ -208,7 +187,6 @@ impl AircraftView {
 
         Self {
             id: device_model.id,
-            device_address,
             address_type,
             address: address_hex,
             aircraft_model: device_model.aircraft_model,
@@ -234,6 +212,7 @@ impl AircraftView {
             latest_latitude: device_model.latitude,
             latest_longitude: device_model.longitude,
             active_flight_id: None,
+            current_fix: device_model.current_fix,
             fixes: None,
         }
     }

@@ -140,7 +140,7 @@
 							{#each duplicateDevices as device (device.id || device.address)}
 								<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
 									<td class="p-3 font-mono font-semibold">{formatAddress(device.address)}</td>
-									<td class="p-3">{device.address_type}</td>
+									<td class="p-3">{device.addressType}</td>
 									<td class="p-3">
 										{#if device.id}
 											<AircraftLink aircraft={device} size="sm" />
@@ -148,10 +148,10 @@
 											{device.registration}
 										{/if}
 									</td>
-									<td class="p-3">{device.aircraft_model || '-'}</td>
-									<td class="p-3">{device.from_ddb ? 'Yes' : 'No'}</td>
+									<td class="p-3">{device.aircraftModel || '-'}</td>
+									<td class="p-3">{device.fromOgnDdb ? 'Yes' : 'No'}</td>
 									<td class="p-3">{device.tracked ? 'Yes' : 'No'}</td>
-									<td class="p-3">{formatDate(device.last_fix_at)}</td>
+									<td class="p-3">{formatDate(device.lastFixAt)}</td>
 								</tr>
 							{/each}
 						</tbody>

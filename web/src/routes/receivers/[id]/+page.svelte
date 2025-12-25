@@ -917,14 +917,14 @@
 																		{:else}
 																			<span class="font-semibold">{aircraftCount.aircraft_id}</span>
 																		{/if}
-																		{#if aircraftCount.aircraft?.aircraft_type_ogn}
+																		{#if aircraftCount.aircraft?.aircraftTypeOgn}
 																			<span
 																				class="badge {getAircraftTypeColor(
-																					aircraftCount.aircraft.aircraft_type_ogn
+																					aircraftCount.aircraft.aircraftTypeOgn
 																				)} text-xs"
 																			>
 																				{getAircraftTypeOgnDescription(
-																					aircraftCount.aircraft.aircraft_type_ogn
+																					aircraftCount.aircraft.aircraftTypeOgn
 																				)}
 																			</span>
 																		{/if}
@@ -953,14 +953,14 @@
 																	<span>{aircraftCount.aircraft_id}</span>
 																{/if}
 															</div>
-															{#if aircraftCount.aircraft?.aircraft_type_ogn}
+															{#if aircraftCount.aircraft?.aircraftTypeOgn}
 																<span
 																	class="badge {getAircraftTypeColor(
-																		aircraftCount.aircraft.aircraft_type_ogn
+																		aircraftCount.aircraft.aircraftTypeOgn
 																	)} mt-1 text-xs"
 																>
 																	{getAircraftTypeOgnDescription(
-																		aircraftCount.aircraft.aircraft_type_ogn
+																		aircraftCount.aircraft.aircraftTypeOgn
 																	)}
 																</span>
 															{/if}

@@ -161,8 +161,7 @@ impl AircraftRepository {
         let country_code = Aircraft::extract_country_code_from_icao(address as u32, address_type);
 
         // Extract tail number from ICAO address if it's a US aircraft
-        let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type)
-            .unwrap_or_default();
+        let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type);
 
         let new_aircraft = NewAircraft {
             address,
@@ -194,6 +193,7 @@ impl AircraftRepository {
             faa_ladd: None,
             year: None,
             is_military: None,
+            current_fix: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -251,7 +251,7 @@ impl AircraftRepository {
                 address,
                 address_type,
                 aircraft_model: packet_fields.aircraft_model.clone().unwrap_or_default(),
-                registration: registration.clone(),
+                registration: if registration.is_empty() { None } else { Some(registration.clone()) },
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
@@ -277,11 +277,20 @@ impl AircraftRepository {
                 faa_ladd: None,
                 year: None,
                 is_military: None,
+                current_fix: None, // Will be populated when fix is inserted
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
             // On conflict, update all packet-derived fields atomically in one operation
             // This eliminates the need for separate async update tasks
+
+            // Prepare registration SQL expression
+            let registration_sql = if !registration.is_empty() {
+                format!("'{}'::text", registration.replace('\'', "''"))
+            } else {
+                "aircraft.registration".to_string()
+            };
+
             let model = diesel::insert_into(aircraft::table)
                 .values(&new_aircraft)
                 .on_conflict((aircraft::address_type, aircraft::address))
@@ -298,11 +307,7 @@ impl AircraftRepository {
                          THEN excluded.aircraft_model \
                          ELSE aircraft.aircraft_model END"
                     )),
-                    aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Text>(&format!(
-                        "CASE WHEN '{}' = '' THEN aircraft.registration ELSE '{}' END",
-                        registration.replace('\'', "''"),
-                        registration.replace('\'', "''")
-                    ))),
+                    aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>(&registration_sql)),
                     aircraft::country_code.eq(&country_code),
                     aircraft::latitude.eq(latitude),
                     aircraft::longitude.eq(longitude),
@@ -490,8 +495,8 @@ impl AircraftRepository {
                 address_type: crate::aircraft::AddressType,
                 #[diesel(sql_type = Text)]
                 aircraft_model: String,
-                #[diesel(sql_type = Text)]
-                registration: String,
+                #[diesel(sql_type = Nullable<Text>)]
+                registration: Option<String>,
                 #[diesel(sql_type = Text)]
                 competition_number: String,
                 #[diesel(sql_type = Bool)]
@@ -573,6 +578,7 @@ impl AircraftRepository {
                         faa_ladd: None,          // Not selected in this query
                         year: None,
                         is_military: None,
+                        current_fix: None, // Not selected in this query
                     };
                     (
                         model,

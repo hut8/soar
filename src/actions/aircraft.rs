@@ -160,26 +160,32 @@ pub async fn get_device_aircraft_registration(
     // Fallback: Get aircraft and look up by registration number
     match aircraft_repository.get_aircraft_by_id(id).await {
         Ok(Some(aircraft)) => {
-            // Try to find aircraft registration by registration number
-            match aircraft_repo
-                .get_aircraft_registration_model_by_n_number(&aircraft.registration)
-                .await
-            {
-                Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-                Ok(None) => (StatusCode::NOT_FOUND).into_response(),
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
-                        id,
-                        aircraft.registration,
-                        e
-                    );
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to get aircraft registration",
-                    )
-                    .into_response()
+            // Check if aircraft has a registration
+            if let Some(ref registration) = aircraft.registration {
+                // Try to find aircraft registration by registration number
+                match aircraft_repo
+                    .get_aircraft_registration_model_by_n_number(registration)
+                    .await
+                {
+                    Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
+                    Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
+                            id,
+                            registration,
+                            e
+                        );
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to get aircraft registration",
+                        )
+                        .into_response()
+                    }
                 }
+            } else {
+                // No registration available
+                (StatusCode::NOT_FOUND).into_response()
             }
         }
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
@@ -215,27 +221,32 @@ pub async fn get_device_aircraft_model(
 
             match aircraft_repository.get_aircraft_by_id(id).await {
                 Ok(Some(aircraft)) => {
-                    match aircraft_repo
-                        .get_aircraft_registration_model_by_n_number(&aircraft.registration)
-                        .await
-                    {
-                        Ok(Some(aircraft_model)) => aircraft_model,
-                        Ok(None) => {
-                            return (StatusCode::NOT_FOUND).into_response();
+                    if let Some(ref registration) = aircraft.registration {
+                        match aircraft_repo
+                            .get_aircraft_registration_model_by_n_number(registration)
+                            .await
+                        {
+                            Ok(Some(aircraft_model)) => aircraft_model,
+                            Ok(None) => {
+                                return (StatusCode::NOT_FOUND).into_response();
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
+                                    id,
+                                    registration,
+                                    e
+                                );
+                                return json_error(
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Failed to get aircraft registration",
+                                )
+                                .into_response();
+                            }
                         }
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
-                                id,
-                                aircraft.registration,
-                                e
-                            );
-                            return json_error(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to get aircraft registration",
-                            )
-                            .into_response();
-                        }
+                    } else {
+                        // No registration available
+                        return (StatusCode::NOT_FOUND).into_response();
                     }
                 }
                 Ok(None) => {

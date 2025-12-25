@@ -1402,9 +1402,9 @@
 						{#if data.device.registration}
 							<span class="font-mono font-semibold">
 								{data.device.registration}
-								{#if data.device.competition_number}
+								{#if data.device.competitionNumber}
 									<span class="text-surface-500-400-token ml-1"
-										>({data.device.competition_number})</span
+										>({data.device.competitionNumber})</span
 									>
 								{/if}
 							</span>
@@ -1416,17 +1416,17 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraft_model}
-							<span class="font-semibold">{data.device.aircraft_model}</span>
+						{#if data.device.aircraftModel}
+							<span class="font-semibold">{data.device.aircraftModel}</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraft_type_ogn}
+						{#if data.device.aircraftTypeOgn}
 							<span
 								class="chip {getAircraftTypeColor(
-									data.device.aircraft_type_ogn
+									data.device.aircraftTypeOgn
 								)} text-xs font-semibold"
 							>
-								{getAircraftTypeOgnDescription(data.device.aircraft_type_ogn)}
+								{getAircraftTypeOgnDescription(data.device.aircraftTypeOgn)}
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}

@@ -218,17 +218,17 @@
 				// Create minimal aircraft data from fix
 				aircraft = {
 					id: aircraftId,
-					device_address: fix.device_address_hex || '',
-					address_type: '',
-					address: '',
-					aircraft_model: fix.model || '',
-					registration: fix.registration || '',
-					competition_number: '',
+					addressType: '',
+					address: fix.device_address_hex || '',
+					aircraftModel: fix.model || '',
+					registration: fix.registration || null,
+					competitionNumber: '',
 					tracked: false,
 					identified: false,
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-					from_ddb: false,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					fromOgnDdb: false,
+					fromAdsbxDdb: false,
 					fixes: [fix]
 				};
 				aircraftData.set(aircraftId, aircraft);

@@ -12,19 +12,17 @@
 
 	// Build the operations map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		aircraft.latest_latitude && aircraft.latest_longitude
-			? `/operations?lat=${aircraft.latest_latitude}&lng=${aircraft.latest_longitude}&zoom=13`
+		aircraft.latestLatitude && aircraft.latestLongitude
+			? `/operations?lat=${aircraft.latestLatitude}&lng=${aircraft.latestLongitude}&zoom=13`
 			: null
 	);
 
 	// Build the flight detail URL from active flight ID
-	let flightUrl = $derived(
-		aircraft.active_flight_id ? `/flights/${aircraft.active_flight_id}` : null
-	);
+	let flightUrl = $derived(aircraft.activeFlightId ? `/flights/${aircraft.activeFlightId}` : null);
 
 	// Get country code for flag display
 	const countryCode = $derived(() => {
-		const code = aircraft.country_code;
+		const code = aircraft.countryCode;
 		return code && code.trim() !== '' ? code.toUpperCase() : null;
 	});
 
@@ -68,15 +66,15 @@
 				<Antenna class="h-4 w-4 text-surface-500" />
 				<div>
 					<p class="text-surface-600-300-token text-xs">Aircraft Model</p>
-					<p class="text-sm">{aircraft.aircraft_model || 'Unknown'}</p>
+					<p class="text-sm">{aircraft.aircraftModel || 'Unknown'}</p>
 				</div>
 			</div>
-			{#if aircraft.competition_number}
+			{#if aircraft.competitionNumber}
 				<div class="flex items-center gap-2">
 					<Activity class="h-4 w-4 text-surface-500" />
 					<div>
 						<p class="text-surface-600-300-token text-xs">Competition Number</p>
-						<p class="font-mono text-sm">{aircraft.competition_number}</p>
+						<p class="font-mono text-sm">{aircraft.competitionNumber}</p>
 					</div>
 				</div>
 			{/if}
@@ -108,15 +106,15 @@
 				{/if}
 				{aircraft.identified ? 'Identified' : 'Unidentified'}
 			</span>
-			{#if aircraft.from_ddb}
+			{#if aircraft.fromOgnDdb}
 				<span class="badge preset-filled-success-500 text-xs">
 					<Check class="mr-1 h-3 w-3" />
 					OGN DB
 				</span>
 			{/if}
-			{#if aircraft.aircraft_type_ogn}
-				<span class="badge {getAircraftTypeColor(aircraft.aircraft_type_ogn)} text-xs">
-					{getAircraftTypeOgnDescription(aircraft.aircraft_type_ogn)}
+			{#if aircraft.aircraftTypeOgn}
+				<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
+					{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
 				</span>
 			{/if}
 		</div>
