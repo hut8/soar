@@ -185,8 +185,13 @@ export class AircraftRegistry {
 		// Add fix to the beginning (most recent first)
 		cached.fixes.unshift(fix);
 
-		// Clean up old fixes
+		// Clean up old fixes (by age)
 		cached.fixes = this.cleanupOldFixes(cached.fixes);
+
+		// Limit to most recent 100 fixes
+		if (cached.fixes.length > 100) {
+			cached.fixes = cached.fixes.slice(0, 100);
+		}
 
 		// Update the map
 		this.aircraft.set(aircraftId, cached);

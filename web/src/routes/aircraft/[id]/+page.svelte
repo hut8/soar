@@ -122,8 +122,8 @@
 
 		try {
 			// Load aircraft data
-			const deviceData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			aircraft = deviceData;
+			const aircraftData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
+			aircraft = aircraftData;
 
 			// Initialize selected club ID if aircraft has one
 			if (aircraft.clubId) {

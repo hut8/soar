@@ -1397,14 +1397,14 @@
 						{/if}
 					</div>
 				</div>
-				{#if data.device}
+				{#if data.aircraft}
 					<div class="flex flex-wrap items-center gap-2 text-sm">
-						{#if data.device.registration}
+						{#if data.aircraft.registration}
 							<span class="font-mono font-semibold">
-								{data.device.registration}
-								{#if data.device.competitionNumber}
+								{data.aircraft.registration}
+								{#if data.aircraft.competitionNumber}
 									<span class="text-surface-500-400-token ml-1"
-										>({data.device.competitionNumber})</span
+										>({data.aircraft.competitionNumber})</span
 									>
 								{/if}
 							</span>
@@ -1416,17 +1416,17 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraftModel}
-							<span class="font-semibold">{data.device.aircraftModel}</span>
+						{#if data.aircraft.aircraftModel}
+							<span class="font-semibold">{data.aircraft.aircraftModel}</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraftTypeOgn}
+						{#if data.aircraft.aircraftTypeOgn}
 							<span
 								class="chip {getAircraftTypeColor(
-									data.device.aircraftTypeOgn
+									data.aircraft.aircraftTypeOgn
 								)} text-xs font-semibold"
 							>
-								{getAircraftTypeOgnDescription(data.device.aircraftTypeOgn)}
+								{getAircraftTypeOgnDescription(data.aircraft.aircraftTypeOgn)}
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}

@@ -77,7 +77,7 @@
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
 	// Compass rose variables
-	let deviceHeading: number = 0;
+	let aircraftHeading: number = 0;
 	let compassHeading: number = $state(0);
 	let previousCompassHeading: number = 0;
 	let isCompassActive: boolean = $state(false);
@@ -428,7 +428,7 @@
 	});
 
 	// Get singleton instances
-	const deviceRegistry = AircraftRegistry.getInstance();
+	const aircraftRegistry = AircraftRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
 
 	// Subscribe to device registry and update aircraft markers
@@ -444,7 +444,7 @@
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
 
 	$effect(() => {
-		const unsubscribeRegistry = deviceRegistry.subscribe((event: AircraftRegistryEvent) => {
+		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
 			if (event.type === 'aircraft_changed') {
 				activeDevices = event.aircraft;
 			} else if (event.type === 'aircraft_updated') {
@@ -462,7 +462,7 @@
 		});
 
 		// Initialize active aircraft
-		activeDevices = deviceRegistry.getAllAircraft();
+		activeDevices = aircraftRegistry.getAllAircraft();
 
 		return () => {
 			unsubscribeRegistry();
@@ -1256,13 +1256,13 @@
 		if (event.alpha !== null) {
 			isCompassActive = true;
 			// Store the raw device heading
-			deviceHeading = event.alpha;
-			displayHeading = Math.round(deviceHeading);
+			aircraftHeading = event.alpha;
+			displayHeading = Math.round(aircraftHeading);
 
-			// Use deviceHeading directly (not inverted) to keep north arrow pointing north
+			// Use aircraftHeading directly (not inverted) to keep north arrow pointing north
 			// When phone rotates clockwise (alpha increases), we rotate compass counter-clockwise
 			// by using the heading value directly in the CSS transform
-			let newHeading = deviceHeading;
+			let newHeading = aircraftHeading;
 
 			// Normalize to 0-360 range
 			newHeading = ((newHeading % 360) + 360) % 360;
@@ -1392,27 +1392,27 @@
 			return;
 		}
 
-		const deviceKey = aircraft.id;
-		if (!deviceKey) {
+		const aircraftKey = aircraft.id;
+		if (!aircraftKey) {
 			console.warn('[MARKER] No device ID available');
 			return;
 		}
 
 		// Update latest fix for this device
-		latestFixes.set(deviceKey, latestFix);
-		console.log('[MARKER] Updated latest fix for aircraft:', deviceKey);
+		latestFixes.set(aircraftKey, latestFix);
+		console.log('[MARKER] Updated latest fix for aircraft:', aircraftKey);
 
 		// Get or create marker for this aircraft
-		let marker = aircraftMarkers.get(deviceKey);
+		let marker = aircraftMarkers.get(aircraftKey);
 
 		if (!marker) {
-			console.log('[MARKER] Creating new marker for aircraft:', deviceKey);
+			console.log('[MARKER] Creating new marker for aircraft:', aircraftKey);
 			// Create new aircraft marker with device info
 			marker = createAircraftMarkerFromDevice(aircraft, latestFix);
-			aircraftMarkers.set(deviceKey, marker);
+			aircraftMarkers.set(aircraftKey, marker);
 			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
 		} else {
-			console.log('[MARKER] Updating existing marker for aircraft:', deviceKey);
+			console.log('[MARKER] Updating existing marker for aircraft:', aircraftKey);
 			// Update existing marker position and info
 			updateAircraftMarkerPositionFromDevice(marker, aircraft, latestFix);
 		}
@@ -1912,7 +1912,7 @@
 			// They will have latest_latitude/latest_longitude but no fixes array
 			for (const a of aircraft) {
 				// Register the aircraft - markers will be created from latest position
-				await deviceRegistry.updateAircraftFromAircraftData(a);
+				await aircraftRegistry.updateAircraftFromAircraftData(a);
 			}
 
 			console.log('[REST] Aircraft loaded, markers created from latest positions');
