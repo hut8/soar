@@ -11,4 +11,4 @@ test-threads = 4
 # These tests share the same TEST_DATABASE_URL and need strict isolation
 [[profile.default.overrides]]
 filter = 'binary(flight_detection_test)'
-threads-required = 1
+test-threads = 1
