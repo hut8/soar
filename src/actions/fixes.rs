@@ -20,6 +20,9 @@ use crate::web::AppState;
 use super::devices::enrich_aircraft_with_registration_data;
 use super::json_error;
 
+/// Area tracker configuration
+const AREA_TRACKER_LIMIT_ENABLED: bool = false;
+
 #[derive(Debug, Deserialize)]
 pub struct FixesQueryParams {
     pub aircraft_id: Option<uuid::Uuid>,
@@ -67,6 +70,11 @@ fn validate_bounds(bounds: &GeoBounds) -> anyhow::Result<()> {
             bounds.south,
             bounds.north
         ));
+    }
+
+    // When limit is disabled, skip size validation
+    if !AREA_TRACKER_LIMIT_ENABLED {
+        return Ok(());
     }
 
     // Calculate number of squares (accounting for date line crossing)

@@ -415,6 +415,41 @@ else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
 fi
 
+# Install Prometheus scrape-configs files (backward compatibility for old prometheus.yml)
+if [ -d "$DEPLOY_DIR/prometheus-scrape-configs" ]; then
+    log_info "Installing Prometheus scrape-configs files (legacy file_sd_configs)..."
+    mkdir -p /etc/prometheus/scrape-configs
+
+    # Remove old SOAR scrape-config files that aren't in the deployment
+    if [ -d "/etc/prometheus/scrape-configs" ]; then
+        log_info "Cleaning up old scrape-config files..."
+        for old_config in /etc/prometheus/scrape-configs/soar-*.yml; do
+            if [ -f "$old_config" ]; then
+                config_basename=$(basename "$old_config")
+                if [ ! -f "$DEPLOY_DIR/prometheus-scrape-configs/$config_basename" ]; then
+                    log_info "Removing obsolete scrape-config: $config_basename"
+                    rm -f "$old_config"
+                fi
+            fi
+        done
+    fi
+
+    cp "$DEPLOY_DIR/prometheus-scrape-configs"/*.yml /etc/prometheus/scrape-configs/
+    chmod 644 /etc/prometheus/scrape-configs/*.yml
+
+    # Set ownership to prometheus user if it exists
+    if id "prometheus" &>/dev/null; then
+        chown -R prometheus:prometheus /etc/prometheus/scrape-configs
+        log_info "Prometheus scrape-config files installed and ownership set"
+        PROMETHEUS_NEEDS_RELOAD=true
+    else
+        log_warn "prometheus user not found, skipping ownership change"
+        log_info "Prometheus scrape-config files installed"
+    fi
+else
+    log_warn "prometheus-scrape-configs directory not found in deployment, skipping legacy Prometheus configuration"
+fi
+
 # Reload Prometheus if job configurations were updated
 if [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
     if systemctl is-active --quiet prometheus; then
@@ -614,13 +649,28 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
         DATASOURCE_VALIDATION_FAILED=false
 
         # Check for prometheus datasource (required for alerts and dashboards)
-        if ! sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='prometheus';" 2>/dev/null | grep -q "prometheus"; then
-            log_error "Required datasource 'prometheus' not found in Grafana"
-            log_error "Alerts and dashboards will not work without this datasource"
-            log_error "To fix: Add Prometheus datasource with uid='prometheus' in Grafana UI or provisioning"
-            DATASOURCE_VALIDATION_FAILED=true
+        # First check by exact UID match (provisioned as uid='prometheus')
+        PROM_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='prometheus';" 2>/dev/null || true)
+        
+        if [ -n "$PROM_UID_EXISTS" ]; then
+            log_info "Datasource 'prometheus': ${GREEN}FOUND (by UID)${NC}"
         else
-            log_info "Datasource 'prometheus': ${GREEN}FOUND${NC}"
+            # Check if datasource exists with different UID but matching name (case-insensitive)
+            PROM_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid, name FROM data_source WHERE LOWER(name)='prometheus';" 2>/dev/null || true)
+            
+            if [ -n "$PROM_NAME_EXISTS" ]; then
+                log_warn "Prometheus datasource found by name but with different UID: $PROM_NAME_EXISTS"
+                log_warn "Expected uid='prometheus' per provisioning config at infrastructure/grafana-provisioning/datasources/prometheus.yaml"
+                log_warn "This may indicate Grafana provisioning didn't run or was overridden manually"
+                log_warn "Alerts and dashboards reference uid='prometheus' and may not work correctly"
+                DATASOURCE_VALIDATION_FAILED=true
+            else
+                log_warn "Prometheus datasource not found in Grafana database"
+                log_warn "Expected datasource with uid='prometheus' per provisioning config"
+                log_warn "Alerts and dashboards will not work without this datasource"
+                log_warn "Grafana should auto-provision this datasource on next restart if config is present"
+                DATASOURCE_VALIDATION_FAILED=true
+            fi
         fi
 
         # Check for PostgreSQL datasource (required for flight analysis dashboard)
@@ -634,8 +684,8 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
         fi
 
         # Check if datasource exists by UID or name
-        POSTGRES_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='$POSTGRES_DATASOURCE_UID';" 2>/dev/null)
-        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME' OR name='soar-postgres';" 2>/dev/null)
+        POSTGRES_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='$POSTGRES_DATASOURCE_UID';" 2>/dev/null || true)
+        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME' OR name='soar-postgres';" 2>/dev/null || true)
 
         if [ -n "$POSTGRES_UID_EXISTS" ]; then
             log_info "Datasource '$POSTGRES_DATASOURCE_UID': ${GREEN}FOUND (by UID)${NC}"
@@ -650,8 +700,9 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
         fi
 
         if [ "$DATASOURCE_VALIDATION_FAILED" = true ]; then
-            log_error "${RED}Datasource validation failed - Grafana alerts may not work${NC}"
-            log_error "Fix datasource configuration before alerts will evaluate correctly"
+            log_warn "${YELLOW}Datasource validation warnings detected - Grafana alerts may not work${NC}"
+            log_warn "Review datasource configuration in Grafana UI or check provisioning logs"
+            log_warn "Continuing with deployment..."
         fi
     else
         log_warn "Grafana is not running, skipping restart and datasource validation"

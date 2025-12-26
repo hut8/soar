@@ -25,12 +25,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: web-build
           path: web/build/
@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
@@ -109,7 +109,7 @@ jobs:
           timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -119,7 +119,7 @@ jobs:
         run: npm ci
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -151,7 +151,7 @@ jobs:
 
       - name: Cache Diesel CLI
         id: cache-diesel
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/diesel
           key: ${{ runner.os }}-diesel-cli-2.2.0
@@ -270,7 +270,7 @@ jobs:
 
       - name: Upload E2E test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-test-artifacts
           path: |
@@ -286,7 +286,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
@@ -313,7 +313,7 @@ jobs:
           timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -360,7 +360,7 @@ jobs:
 
       - name: Cache Diesel CLI
         id: cache-diesel
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/diesel
           key: ${{ runner.os }}-diesel-cli-2.2.0
@@ -376,7 +376,7 @@ jobs:
 
       - name: Cache cargo-nextest
         id: cache-nextest
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cargo-nextest
           key: ${{ runner.os }}-cargo-nextest-0.9.68
@@ -412,12 +412,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -437,7 +437,7 @@ jobs:
 
       - name: Cache cross
         id: cache-cross
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cross
           key: ${{ runner.os }}-cross-0.2.5
@@ -473,7 +473,7 @@ jobs:
           tar -czf soar-linux-x64.tar.gz -C release .
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: soar-linux-x64
           path: soar-linux-x64.tar.gz
@@ -499,12 +499,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -524,7 +524,7 @@ jobs:
 
       - name: Cache cross
         id: cache-cross
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cross
           key: ${{ runner.os }}-cross-0.2.5
@@ -553,7 +553,7 @@ jobs:
           tar -czf soar-linux-arm64.tar.gz -C release .
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: soar-linux-arm64
           path: soar-linux-arm64.tar.gz
@@ -573,7 +573,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
@@ -599,12 +599,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
@@ -752,12 +752,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
