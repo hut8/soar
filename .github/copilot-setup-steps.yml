@@ -301,19 +301,32 @@ documentation_files:
     - web/e2e/README.md: E2E testing guide
 
 key_directories:
-  - src/: Rust backend source code
-    - src/actions/: HTTP API handlers
-    - src/models/: Database models (Diesel)
-    - src/ingest/: Data ingestion (OGN, ADS-B)
-    - src/flight_tracker/: Flight detection logic
+  src:
+    description: Rust backend source code
+    subdirs:
+      - actions: HTTP API handlers
+      - models: Database models (Diesel)
+      - ingest: Data ingestion (OGN, ADS-B)
+      - flight_tracker: Flight detection logic
 
-  - web/: SvelteKit frontend
-    - web/src/routes/: Page routes and components
-    - web/src/lib/: Shared components and utilities
-    - web/e2e/: Playwright E2E tests
+  web:
+    description: SvelteKit frontend
+    subdirs:
+      - src/routes: Page routes and components
+      - src/lib: Shared components and utilities
+      - e2e: Playwright E2E tests
 
-  - migrations/: Diesel database migrations
-  - infrastructure/: Deployment configs and systemd services
-  - scripts/: Utility scripts
-  - tests/: Integration tests
-  - docs/: Technical documentation
+  migrations:
+    description: Diesel database migrations
+
+  infrastructure:
+    description: Deployment configs and systemd services
+
+  scripts:
+    description: Utility scripts
+
+  tests:
+    description: Integration tests
+
+  docs:
+    description: Technical documentation
