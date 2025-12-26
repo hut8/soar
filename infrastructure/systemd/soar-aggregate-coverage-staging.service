@@ -14,7 +14,7 @@ WorkingDirectory=/var/soar
 # Aggregate yesterday's fixes at all three resolutions (6, 7, 8)
 # Uses shell date command to calculate yesterday's date dynamically
 # Double %% is required in systemd unit files for date command
-ExecStart=/bin/bash -c 'source /etc/soar/env-staging && /usr/local/bin/soar-staging aggregate-coverage --start-date $(date -d yesterday +%%Y-%%m-%%d) --end-date $(date -d yesterday +%%Y-%%m-%%d) --resolutions 6,7,8'
+ExecStart=/bin/sh -c '/usr/local/bin/soar-staging aggregate-coverage --start-date $(date -d yesterday +%%Y-%%m-%%d) --end-date $(date -d yesterday +%%Y-%%m-%%d) --resolutions 6,7,8'
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging
