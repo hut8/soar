@@ -1,0 +1,14 @@
+# Nextest configuration for SOAR project
+#
+# This configuration ensures that tests marked with #[serial] run sequentially
+# and don't interfere with each other.
+
+[profile.default]
+# Default: run tests in parallel with 4 threads
+test-threads = 4
+
+# Force flight detection tests to run serially with a single thread
+# These tests share the same TEST_DATABASE_URL and need strict isolation
+[[profile.default.overrides]]
+filter = 'test(flight_detection_test::)'
+threads-required = 1
