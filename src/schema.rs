@@ -14,10 +14,6 @@ pub mod sql_types {
     pub struct AircraftCategory;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "aircraft_category_adsb"))]
-    pub struct AircraftCategoryAdsb;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "aircraft_type"))]
     pub struct AircraftType;
 
@@ -44,10 +40,6 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "engine_type"))]
     pub struct EngineType;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "engine_type_adsb"))]
-    pub struct EngineTypeAdsb;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "geography"))]
@@ -85,8 +77,6 @@ diesel::table! {
     use super::sql_types::AdsbEmitterCategory;
     use super::sql_types::Geometry;
     use super::sql_types::Geography;
-    use super::sql_types::AircraftCategoryAdsb;
-    use super::sql_types::EngineTypeAdsb;
     use super::sql_types::AircraftCategory;
     use super::sql_types::EngineType;
 
@@ -118,9 +108,6 @@ diesel::table! {
         longitude -> Nullable<Float8>,
         location_geom -> Nullable<Geometry>,
         location_geog -> Nullable<Geography>,
-        aircraft_category_adsb -> Nullable<AircraftCategoryAdsb>,
-        num_engines -> Nullable<Int2>,
-        engine_type_adsb -> Nullable<EngineTypeAdsb>,
         aircraft_category -> Nullable<AircraftCategory>,
         engine_count -> Nullable<Int2>,
         engine_type -> Nullable<EngineType>,
@@ -515,7 +502,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251211 (id, received_at) {
+    fixes_p20251223 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -554,7 +541,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251212 (id, received_at) {
+    fixes_p20251224 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -593,7 +580,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251213 (id, received_at) {
+    fixes_p20251225 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -632,7 +619,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251214 (id, received_at) {
+    fixes_p20251226 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -671,7 +658,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251215 (id, received_at) {
+    fixes_p20251227 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -710,7 +697,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251216 (id, received_at) {
+    fixes_p20251228 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -749,7 +736,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251217 (id, received_at) {
+    fixes_p20251229 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -928,7 +915,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251211 (id, received_at) {
+    raw_messages_p20251223 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -943,7 +930,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251212 (id, received_at) {
+    raw_messages_p20251224 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -958,7 +945,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251213 (id, received_at) {
+    raw_messages_p20251225 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -973,7 +960,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251214 (id, received_at) {
+    raw_messages_p20251226 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -988,7 +975,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251215 (id, received_at) {
+    raw_messages_p20251227 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -1003,7 +990,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251216 (id, received_at) {
+    raw_messages_p20251228 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -1018,7 +1005,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
-    raw_messages_p20251217 (id, received_at) {
+    raw_messages_p20251229 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -1313,39 +1300,39 @@ diesel::joinable!(fixes_default -> receivers (receiver_id));
 diesel::joinable!(fixes_old -> aircraft (aircraft_id));
 diesel::joinable!(fixes_old -> flights (flight_id));
 diesel::joinable!(fixes_old -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251211 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251211 -> flights (flight_id));
-diesel::joinable!(fixes_p20251211 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251212 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251212 -> flights (flight_id));
-diesel::joinable!(fixes_p20251212 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251213 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251213 -> flights (flight_id));
-diesel::joinable!(fixes_p20251213 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251214 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251214 -> flights (flight_id));
-diesel::joinable!(fixes_p20251214 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251215 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251215 -> flights (flight_id));
-diesel::joinable!(fixes_p20251215 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251216 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251216 -> flights (flight_id));
-diesel::joinable!(fixes_p20251216 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251217 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251217 -> flights (flight_id));
-diesel::joinable!(fixes_p20251217 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251223 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251223 -> flights (flight_id));
+diesel::joinable!(fixes_p20251223 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251224 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251224 -> flights (flight_id));
+diesel::joinable!(fixes_p20251224 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251225 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251225 -> flights (flight_id));
+diesel::joinable!(fixes_p20251225 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251226 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251226 -> flights (flight_id));
+diesel::joinable!(fixes_p20251226 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251227 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251227 -> flights (flight_id));
+diesel::joinable!(fixes_p20251227 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251228 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251228 -> flights (flight_id));
+diesel::joinable!(fixes_p20251228 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251229 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251229 -> flights (flight_id));
+diesel::joinable!(fixes_p20251229 -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> users (user_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(raw_messages_default -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251211 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251212 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251213 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251214 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251215 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251216 -> receivers (receiver_id));
-diesel::joinable!(raw_messages_p20251217 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251223 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251224 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251225 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251226 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251227 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251228 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251229 -> receivers (receiver_id));
 diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
@@ -1373,13 +1360,13 @@ diesel::allow_tables_to_appear_in_same_query!(
     fixes,
     fixes_default,
     fixes_old,
-    fixes_p20251211,
-    fixes_p20251212,
-    fixes_p20251213,
-    fixes_p20251214,
-    fixes_p20251215,
-    fixes_p20251216,
-    fixes_p20251217,
+    fixes_p20251223,
+    fixes_p20251224,
+    fixes_p20251225,
+    fixes_p20251226,
+    fixes_p20251227,
+    fixes_p20251228,
+    fixes_p20251229,
     flight_analytics_daily,
     flight_analytics_hourly,
     flight_duration_buckets,
@@ -1388,13 +1375,13 @@ diesel::allow_tables_to_appear_in_same_query!(
     locations,
     raw_messages,
     raw_messages_default,
-    raw_messages_p20251211,
-    raw_messages_p20251212,
-    raw_messages_p20251213,
-    raw_messages_p20251214,
-    raw_messages_p20251215,
-    raw_messages_p20251216,
-    raw_messages_p20251217,
+    raw_messages_p20251223,
+    raw_messages_p20251224,
+    raw_messages_p20251225,
+    raw_messages_p20251226,
+    raw_messages_p20251227,
+    raw_messages_p20251228,
+    raw_messages_p20251229,
     receiver_coverage_h3,
     receiver_statuses,
     receivers,

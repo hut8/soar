@@ -5,7 +5,9 @@
 //!
 //! Test data files are located in tests/data/flights/ and can be generated
 //! using the dump-flight-messages.sh script.
-use serial_test::serial;
+mod common;
+
+use common::TestDatabase;
 use soar::message_sources::{RawMessageSource, TestMessageSource};
 
 /// Example test showing how to read messages from a test file
@@ -158,10 +160,7 @@ async fn test_message_parsing_from_source() {
 /// Distance during gap: 32.29 km
 /// Generated: 2025-12-24 08:00:53 UTC
 #[tokio::test]
-#[serial]
 async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
-    use diesel::PgConnection;
-    use diesel::r2d2::{ConnectionManager, Pool};
     use soar::fix_processor::FixProcessor;
     use soar::message_sources::{RawMessageSource, TestMessageSource};
     use soar::packet_processors::generic::GenericProcessor;
@@ -170,27 +169,11 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
 
     // ========== ARRANGE ==========
 
-    // Set up test database
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
-    let manager = ConnectionManager::<PgConnection>::new(database_url);
-    let pool = Pool::builder()
-        .build(manager)
-        .expect("Failed to create pool");
-
-    // Clean up test database before running test
-    {
-        use diesel::prelude::*;
-        use soar::schema::{fixes, flights};
-        let mut conn = pool.get().expect("Failed to get connection");
-        diesel::delete(fixes::table)
-            .execute(&mut conn)
-            .expect("Failed to clean fixes");
-        diesel::delete(flights::table)
-            .execute(&mut conn)
-            .expect("Failed to clean flights");
-    }
+    // Set up isolated test database
+    let test_db = TestDatabase::new()
+        .await
+        .expect("Failed to create test database");
+    let pool = test_db.pool();
 
     // Create repositories and processors
     let receiver_repo = ReceiverRepository::new(pool.clone());
@@ -381,10 +364,7 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
 /// Time span: 2025-12-26T01:43:46Z to 2025-12-26T01:44:40Z (~54 seconds)
 /// Location: 38°42.32'N 094°27.59'W (same location for all fixes)
 #[tokio::test]
-#[serial]
 async fn test_no_active_fixes_should_not_create_flight() {
-    use diesel::PgConnection;
-    use diesel::r2d2::{ConnectionManager, Pool};
     use soar::fix_processor::FixProcessor;
     use soar::message_sources::{RawMessageSource, TestMessageSource};
     use soar::packet_processors::generic::GenericProcessor;
@@ -393,27 +373,11 @@ async fn test_no_active_fixes_should_not_create_flight() {
 
     // ========== ARRANGE ==========
 
-    // Set up test database
-    dotenvy::dotenv().ok();
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
-    let manager = ConnectionManager::<PgConnection>::new(database_url);
-    let pool = Pool::builder()
-        .build(manager)
-        .expect("Failed to create pool");
-
-    // Clean up test database before running test
-    {
-        use diesel::prelude::*;
-        use soar::schema::{fixes, flights};
-        let mut conn = pool.get().expect("Failed to get connection");
-        diesel::delete(fixes::table)
-            .execute(&mut conn)
-            .expect("Failed to clean fixes");
-        diesel::delete(flights::table)
-            .execute(&mut conn)
-            .expect("Failed to clean flights");
-    }
+    // Set up isolated test database
+    let test_db = TestDatabase::new()
+        .await
+        .expect("Failed to create test database");
+    let pool = test_db.pool();
 
     // Create repositories and processors
     let receiver_repo = ReceiverRepository::new(pool.clone());
