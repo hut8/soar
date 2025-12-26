@@ -79,7 +79,7 @@
 							{selectedAirspace.properties.name}
 						</h2>
 						<p class="text-sm text-surface-600 dark:text-surface-400">
-							{getAirspaceTypeDisplay(selectedAirspace.properties.airspace_type)}
+							{getAirspaceTypeDisplay(selectedAirspace.properties.airspaceType)}
 						</p>
 					</div>
 				</div>
@@ -106,17 +106,17 @@
 									<dd class="mt-1">
 										<span
 											class="badge preset-filled-{getAirspaceColor(
-												selectedAirspace.properties.airspace_class
+												selectedAirspace.properties.airspaceClass
 											)}"
 										>
-											{getAirspaceClassDisplay(selectedAirspace.properties.airspace_class)}
+											{getAirspaceClassDisplay(selectedAirspace.properties.airspaceClass)}
 										</span>
 									</dd>
 								</div>
 								<div>
 									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">Type</dt>
 									<dd class="mt-1 text-sm">
-										{getAirspaceTypeDisplay(selectedAirspace.properties.airspace_type)}
+										{getAirspaceTypeDisplay(selectedAirspace.properties.airspaceType)}
 									</dd>
 								</div>
 							</div>
@@ -132,13 +132,13 @@
 								</div>
 							{/if}
 
-							{#if selectedAirspace.properties.activity_type}
+							{#if selectedAirspace.properties.activityType}
 								<div>
 									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
 										Activity Type
 									</dt>
 									<dd class="mt-1 text-sm">
-										{getAirspaceTypeDisplay(selectedAirspace.properties.activity_type)}
+										{getAirspaceTypeDisplay(selectedAirspace.properties.activityType)}
 									</dd>
 								</div>
 							{/if}
@@ -159,7 +159,7 @@
 										Lower Limit
 									</dt>
 									<dd class="mt-1 font-mono text-sm">
-										{selectedAirspace.properties.lower_limit}
+										{selectedAirspace.properties.lowerLimit}
 									</dd>
 								</div>
 								<div>
@@ -167,7 +167,7 @@
 										Upper Limit
 									</dt>
 									<dd class="mt-1 font-mono text-sm">
-										{selectedAirspace.properties.upper_limit}
+										{selectedAirspace.properties.upperLimit}
 									</dd>
 								</div>
 							</div>

@@ -61,9 +61,9 @@
 				method: 'POST',
 				body: JSON.stringify({
 					pilot_id: selectedPilotId,
-					is_tow_pilot: selectedRole === 'tow_pilot',
+					isTowPilot: selectedRole === 'tow_pilot',
 					is_student: selectedRole === 'student',
-					is_instructor: selectedRole === 'instructor'
+					isInstructor: selectedRole === 'instructor'
 				})
 			});
 
@@ -160,9 +160,9 @@
 						<option value="">-- Select a pilot --</option>
 						{#each pilots as pilot (pilot.id)}
 							<option value={pilot.id}>
-								{pilot.first_name}
-								{pilot.last_name}
-								{pilot.is_licensed ? '(Licensed)' : '(Unlicensed)'}
+								{pilot.firstName}
+								{pilot.lastName}
+								{pilot.isLicensed ? '(Licensed)' : '(Unlicensed)'}
 							</option>
 						{/each}
 					</select>

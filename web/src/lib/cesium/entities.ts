@@ -60,7 +60,7 @@ export function createAircraftIconSVG(color: string, heading: number = 0): strin
  * @returns Cesium Entity configured as aircraft marker
  */
 export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
-	const altitude = fix.altitude_msl_feet || 0;
+	const altitude = fix.altitudeMslFeet || 0;
 	const altitudeMeters = altitude * FEET_TO_METERS;
 
 	// Get altitude-based color
@@ -70,7 +70,7 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 	const { altitudeText, isOld } = formatAltitudeWithTime(altitude, fix.timestamp);
 
 	// Create icon URL with aircraft heading
-	const iconUrl = createAircraftIconSVG(color, fix.track_degrees || 0);
+	const iconUrl = createAircraftIconSVG(color, fix.trackDegrees || 0);
 
 	const displayName =
 		aircraft.registration || formatAircraftAddress(aircraft.address, aircraft.addressType);
@@ -100,8 +100,8 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 			<h3>${displayName}</h3>
 			<p><strong>Model:</strong> ${aircraft.aircraftModel || 'Unknown'}</p>
 			<p><strong>Altitude:</strong> ${altitude} ft MSL</p>
-			<p><strong>Speed:</strong> ${fix.ground_speed_knots || '---'} kts</p>
-			<p><strong>Heading:</strong> ${fix.track_degrees || '---'}°</p>
+			<p><strong>Speed:</strong> ${fix.groundSpeedKnots || '---'} kts</p>
+			<p><strong>Heading:</strong> ${fix.trackDegrees || '---'}°</p>
 			<p><strong>Last seen:</strong> ${altitudeText}</p>
 		`,
 		properties: {
@@ -135,14 +135,14 @@ export function createFlightPathEntity(
 	// For simple solid color polyline (average color)
 	// Convert fixes to Cartesian3 positions
 	const positions = fixes.map((fix) => {
-		const altitude = fix.altitude_msl_feet || 0;
+		const altitude = fix.altitudeMslFeet || 0;
 		return Cartesian3.fromDegrees(fix.longitude, fix.latitude, altitude * FEET_TO_METERS);
 	});
 
 	// Calculate average color for the path
 	let pathColor: Color;
 	if (colorScheme === 'altitude') {
-		const altitudes = fixes.map((f) => f.altitude_msl_feet || 0);
+		const altitudes = fixes.map((f) => f.altitudeMslFeet || 0);
 		const avgAltitude = altitudes.reduce((a, b) => a + b, 0) / altitudes.length;
 		const minAlt = Math.min(...altitudes);
 		const maxAlt = Math.max(...altitudes);
@@ -155,7 +155,7 @@ export function createFlightPathEntity(
 
 	return new Entity({
 		id: `flight-${flight.id}`,
-		name: `Flight ${flight.registration || flight.device_address}`,
+		name: `Flight ${flight.registration || flight.deviceAddress}`,
 		polyline: {
 			positions,
 			width: 3,
@@ -164,17 +164,17 @@ export function createFlightPathEntity(
 		},
 		description: `
 			<h3>Flight Path</h3>
-			<p><strong>Aircraft:</strong> ${flight.registration || flight.device_address}</p>
-			<p><strong>Takeoff:</strong> ${flight.takeoff_time ? new Date(flight.takeoff_time).toLocaleString() : 'Unknown'}</p>
-			<p><strong>Landing:</strong> ${flight.landing_time ? new Date(flight.landing_time).toLocaleString() : 'In Progress'}</p>
-			<p><strong>Duration:</strong> ${flight.duration_seconds ? Math.round(flight.duration_seconds / 60) + ' min' : 'N/A'}</p>
-			<p><strong>Max Altitude:</strong> ${Math.max(...fixes.map((f) => f.altitude_msl_feet || 0))} ft</p>
+			<p><strong>Aircraft:</strong> ${flight.registration || flight.deviceAddress}</p>
+			<p><strong>Takeoff:</strong> ${flight.takeoffTime ? new Date(flight.takeoffTime).toLocaleString() : 'Unknown'}</p>
+			<p><strong>Landing:</strong> ${flight.landingTime ? new Date(flight.landingTime).toLocaleString() : 'In Progress'}</p>
+			<p><strong>Duration:</strong> ${flight.durationSeconds ? Math.round(flight.durationSeconds / 60) + ' min' : 'N/A'}</p>
+			<p><strong>Max Altitude:</strong> ${Math.max(...fixes.map((f) => f.altitudeMslFeet || 0))} ft</p>
 		`,
 		properties: {
 			flightId: flight.id,
-			aircraftId: flight.aircraft_id,
-			takeoffTime: flight.takeoff_time,
-			landingTime: flight.landing_time,
+			aircraftId: flight.aircraftId,
+			takeoffTime: flight.takeoffTime,
+			landingTime: flight.landingTime,
 			colorScheme
 		}
 	});
@@ -186,9 +186,9 @@ export function createFlightPathEntity(
  * @returns Cesium Entity configured as airport marker
  */
 export function createAirportEntity(airport: Airport): Entity {
-	const latitude = parseFloat(airport.latitude_deg || '0');
-	const longitude = parseFloat(airport.longitude_deg || '0');
-	const elevation = (airport.elevation_ft || 0) * FEET_TO_METERS;
+	const latitude = parseFloat(airport.latitudeDeg || '0');
+	const longitude = parseFloat(airport.longitudeDeg || '0');
+	const elevation = (airport.elevationFt || 0) * FEET_TO_METERS;
 
 	// Create simple airport icon SVG
 	const iconSvg = `
@@ -220,16 +220,16 @@ export function createAirportEntity(airport: Airport): Entity {
 		description: `
 			<h3>${airport.name}</h3>
 			<p><strong>Identifier:</strong> ${airport.ident}</p>
-			<p><strong>Type:</strong> ${airport.airport_type}</p>
-			<p><strong>Elevation:</strong> ${airport.elevation_ft || '---'} ft</p>
-			<p><strong>Location:</strong> ${airport.municipality || '---'}, ${airport.iso_country || '---'}</p>
-			${airport.icao_code ? `<p><strong>ICAO:</strong> ${airport.icao_code}</p>` : ''}
-			${airport.iata_code ? `<p><strong>IATA:</strong> ${airport.iata_code}</p>` : ''}
+			<p><strong>Type:</strong> ${airport.airportType}</p>
+			<p><strong>Elevation:</strong> ${airport.elevationFt || '---'} ft</p>
+			<p><strong>Location:</strong> ${airport.municipality || '---'}, ${airport.isoCountry || '---'}</p>
+			${airport.icaoCode ? `<p><strong>ICAO:</strong> ${airport.icaoCode}</p>` : ''}
+			${airport.iataCode ? `<p><strong>IATA:</strong> ${airport.iataCode}</p>` : ''}
 		`,
 		properties: {
 			airportId: airport.id,
 			ident: airport.ident,
-			type: airport.airport_type
+			type: airport.airportType
 		}
 	});
 }

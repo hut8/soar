@@ -30,7 +30,7 @@
 	let submitting = $state(false);
 
 	let clubId = $derived($page.params.id || '');
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.club_id === clubId);
+	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
 
 	onMount(async () => {
 		if (clubId) {
@@ -97,13 +97,13 @@
 			await serverCall('/pilots', {
 				method: 'POST',
 				body: JSON.stringify({
-					first_name: formFirstName.trim(),
-					last_name: formLastName.trim(),
-					is_licensed: formIsLicensed,
-					is_instructor: formIsInstructor,
-					is_tow_pilot: formIsTowPilot,
-					is_examiner: formIsExaminer,
-					club_id: clubId
+					firstName: formFirstName.trim(),
+					lastName: formLastName.trim(),
+					isLicensed: formIsLicensed,
+					isInstructor: formIsInstructor,
+					isTowPilot: formIsTowPilot,
+					isExaminer: formIsExaminer,
+					clubId: clubId
 				})
 			});
 
@@ -199,32 +199,32 @@
 							{#each pilots as pilot (pilot.id)}
 								<tr>
 									<td class="font-medium">
-										{pilot.first_name}
-										{pilot.last_name}
+										{pilot.firstName}
+										{pilot.lastName}
 									</td>
 									<td>
-										{#if pilot.is_licensed}
+										{#if pilot.isLicensed}
 											<Check class="h-5 w-5 text-success-500" />
 										{:else}
 											<X class="h-5 w-5 text-surface-400" />
 										{/if}
 									</td>
 									<td>
-										{#if pilot.is_instructor}
+										{#if pilot.isInstructor}
 											<Check class="h-5 w-5 text-success-500" />
 										{:else}
 											<X class="h-5 w-5 text-surface-400" />
 										{/if}
 									</td>
 									<td>
-										{#if pilot.is_tow_pilot}
+										{#if pilot.isTowPilot}
 											<Check class="h-5 w-5 text-success-500" />
 										{:else}
 											<X class="h-5 w-5 text-surface-400" />
 										{/if}
 									</td>
 									<td>
-										{#if pilot.is_examiner}
+										{#if pilot.isExaminer}
 											<Check class="h-5 w-5 text-success-500" />
 										{:else}
 											<X class="h-5 w-5 text-surface-400" />
@@ -242,13 +242,13 @@
 				{#each pilots as pilot (pilot.id)}
 					<div class="card p-4">
 						<div class="mb-3 text-lg font-medium">
-							{pilot.first_name}
-							{pilot.last_name}
+							{pilot.firstName}
+							{pilot.lastName}
 						</div>
 
 						<div class="grid grid-cols-2 gap-3 text-sm">
 							<div class="flex items-center gap-2">
-								{#if pilot.is_licensed}
+								{#if pilot.isLicensed}
 									<Check class="h-5 w-5 text-success-500" />
 								{:else}
 									<X class="h-5 w-5 text-surface-400" />
@@ -256,7 +256,7 @@
 								<span class="text-surface-600-300-token">Licensed</span>
 							</div>
 							<div class="flex items-center gap-2">
-								{#if pilot.is_instructor}
+								{#if pilot.isInstructor}
 									<Check class="h-5 w-5 text-success-500" />
 								{:else}
 									<X class="h-5 w-5 text-surface-400" />
@@ -264,7 +264,7 @@
 								<span class="text-surface-600-300-token">Instructor</span>
 							</div>
 							<div class="flex items-center gap-2">
-								{#if pilot.is_tow_pilot}
+								{#if pilot.isTowPilot}
 									<Check class="h-5 w-5 text-success-500" />
 								{:else}
 									<X class="h-5 w-5 text-surface-400" />
@@ -272,7 +272,7 @@
 								<span class="text-surface-600-300-token">Tow Pilot</span>
 							</div>
 							<div class="flex items-center gap-2">
-								{#if pilot.is_examiner}
+								{#if pilot.isExaminer}
 									<Check class="h-5 w-5 text-success-500" />
 								{:else}
 									<X class="h-5 w-5 text-surface-400" />

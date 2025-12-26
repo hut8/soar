@@ -220,15 +220,15 @@
 									{formatCoordinates(fix.latitude, fix.longitude)}
 								</a>
 							</td>
-							<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_msl_feet)}</td>
-							<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
-							<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
-							<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
+							<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitudeMslFeet)}</td>
+							<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitudeAglFeet)}</td>
+							<td class="px-3 py-2 text-sm">{formatSpeed(fix.groundSpeedKnots)}</td>
+							<td class="px-3 py-2 text-sm">{formatTrack(fix.trackDegrees)}</td>
 							{#if showClimb}
-								<td class="px-3 py-2 text-sm">{formatClimb(fix.climb_fpm)}</td>
+								<td class="px-3 py-2 text-sm">{formatClimb(fix.climbFpm)}</td>
 							{/if}
 						</tr>
-						{#if showRawData && fix.raw_packet}
+						{#if showRawData && fix.rawPacket}
 							<tr
 								class="border-surface-200-700-token border-b {index % 2 === 0
 									? 'bg-surface-100-800-token'
@@ -238,7 +238,7 @@
 									colspan={showClimb ? (showTimeIntervals ? 8 : 7) : showTimeIntervals ? 7 : 6}
 									class="px-3 py-2 font-mono text-sm"
 								>
-									{fix.raw_packet}
+									{fix.rawPacket}
 								</td>
 							</tr>
 						{/if}
@@ -281,32 +281,32 @@
 						</div>
 						<div class="flex justify-between gap-4">
 							<dt class="text-surface-600-300-token">Altitude MSL</dt>
-							<dd class="font-medium">{formatAltitude(fix.altitude_msl_feet)}</dd>
+							<dd class="font-medium">{formatAltitude(fix.altitudeMslFeet)}</dd>
 						</div>
 						<div class="flex justify-between gap-4">
 							<dt class="text-surface-600-300-token">Altitude AGL</dt>
-							<dd class="font-medium">{formatAltitude(fix.altitude_agl_feet)}</dd>
+							<dd class="font-medium">{formatAltitude(fix.altitudeAglFeet)}</dd>
 						</div>
 						<div class="flex justify-between gap-4">
 							<dt class="text-surface-600-300-token">Speed</dt>
-							<dd class="font-medium">{formatSpeed(fix.ground_speed_knots)}</dd>
+							<dd class="font-medium">{formatSpeed(fix.groundSpeedKnots)}</dd>
 						</div>
 						<div class="flex justify-between gap-4">
 							<dt class="text-surface-600-300-token">Track</dt>
-							<dd class="font-medium">{formatTrack(fix.track_degrees)}</dd>
+							<dd class="font-medium">{formatTrack(fix.trackDegrees)}</dd>
 						</div>
 						{#if showClimb}
 							<div class="flex justify-between gap-4">
 								<dt class="text-surface-600-300-token">Climb</dt>
-								<dd class="font-medium">{formatClimb(fix.climb_fpm)}</dd>
+								<dd class="font-medium">{formatClimb(fix.climbFpm)}</dd>
 							</div>
 						{/if}
 					</dl>
 
-					{#if showRawData && fix.raw_packet}
+					{#if showRawData && fix.rawPacket}
 						<div class="border-t border-surface-300 pt-3 dark:border-surface-600">
 							<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
-							<div class="overflow-x-auto font-mono text-xs">{fix.raw_packet}</div>
+							<div class="overflow-x-auto font-mono text-xs">{fix.rawPacket}</div>
 						</div>
 					{/if}
 				</div>

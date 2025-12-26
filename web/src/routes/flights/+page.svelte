@@ -7,7 +7,7 @@
 
 	interface FlightsListResponse {
 		flights: Flight[];
-		total_count: number;
+		totalCount: number;
 	}
 
 	let completedFlights: Flight[] = [];
@@ -55,9 +55,9 @@
 			]);
 
 			activeFlights = activeResponse.flights || [];
-			activeTotalCount = activeResponse.total_count || 0;
+			activeTotalCount = activeResponse.totalCount || 0;
 			completedFlights = completedResponse.flights || [];
-			completedTotalCount = completedResponse.total_count || 0;
+			completedTotalCount = completedResponse.totalCount || 0;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load flights: ${errorMessage}`;

@@ -15,7 +15,7 @@
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import AircraftTile from '$lib/components/AircraftTile.svelte';
 	import { onMount } from 'svelte';
-	import type { Aircraft } from '$lib/types';
+	import type { Aircraft, DataListResponse } from '$lib/types';
 
 	let aircraft = $state<Aircraft[]>([]);
 	let loading = $state(false);
@@ -74,8 +74,8 @@
 				endpoint += `?aircraft-types=${encodeURIComponent(typesParam)}`;
 			}
 
-			const response = await serverCall<{ aircraft: Aircraft[] }>(endpoint);
-			aircraft = response.aircraft || [];
+			const response = await serverCall<DataListResponse<Aircraft>>(endpoint);
+			aircraft = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load recent aircraft: ${errorMessage}`;
@@ -107,8 +107,8 @@
 				endpoint += `address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(aircraftAddressType)}`;
 			}
 
-			const response = await serverCall<{ aircraft: Aircraft[] }>(endpoint);
-			aircraft = response.aircraft || [];
+			const response = await serverCall<DataListResponse<Aircraft>>(endpoint);
+			aircraft = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search aircraft: ${errorMessage}`;
@@ -140,10 +140,10 @@
 		currentPage = 0; // Reset to first page on new search
 
 		try {
-			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
+			const response = await serverCall<DataListResponse<Aircraft>>(`/clubs/${clubId}/aircraft`);
 			// Only update if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubAircraft = response.aircraft || [];
+				clubAircraft = response.data || [];
 				// Set the main aircraft list to show club aircraft
 				aircraft = clubAircraft;
 			}

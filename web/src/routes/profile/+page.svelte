@@ -30,8 +30,8 @@
 	onMount(() => {
 		if (!$auth.isAuthenticated) {
 			goto(resolve('/login'));
-		} else if ($auth.user?.club_id) {
-			loadClubName($auth.user.club_id);
+		} else if ($auth.user?.clubId) {
+			loadClubName($auth.user.clubId);
 		}
 	});
 
@@ -61,7 +61,7 @@
 			// Update local auth state
 			auth.updateUser({
 				...$auth.user,
-				club_id: undefined
+				clubId: undefined
 			});
 
 			clubName = null;
@@ -115,7 +115,7 @@
 			auth.updateUser({
 				...$auth.user,
 				email: newEmail,
-				email_verified: false // Email needs to be verified again
+				emailVerified: false // Email needs to be verified again
 			});
 
 			closeChangeEmailModal();
@@ -183,7 +183,7 @@
 {#if $auth.isAuthenticated && $auth.user}
 	<div class="space-y-6">
 		<div class="text-center">
-			<h1 class="text-3xl font-bold">Welcome, {$auth.user.first_name}!</h1>
+			<h1 class="text-3xl font-bold">Welcome, {$auth.user.firstName}!</h1>
 			<p class="text-surface-600-300-token mt-2">Your account dashboard</p>
 		</div>
 
@@ -195,15 +195,15 @@
 				<div>
 					<div class="text-surface-700-200-token">
 						Full name:
-						{$auth.user.first_name}
-						{$auth.user.last_name}
+						{$auth.user.firstName}
+						{$auth.user.lastName}
 					</div>
 				</div>
 
 				<div>
 					<div class="text-surface-700-200-token">
 						Email: {$auth.user.email}
-						{#if !$auth.user.email_verified}
+						{#if !$auth.user.emailVerified}
 							<span class="ml-2 badge preset-filled-warning-500">Unverified</span>
 						{:else}
 							<span class="ml-2 badge preset-filled-success-500">Verified</span>
@@ -213,14 +213,14 @@
 
 				<div>
 					<div class="text-surface-700-200-token">
-						Access Level: {$auth.user.is_admin ? 'Admin' : 'User'}
-						{#if $auth.user.is_admin}
+						Access Level: {$auth.user.isAdmin ? 'Admin' : 'User'}
+						{#if $auth.user.isAdmin}
 							<span class="ml-2 badge preset-filled-primary-500">Administrator</span>
 						{/if}
 					</div>
 				</div>
 
-				{#if $auth.user.club_id}
+				{#if $auth.user.clubId}
 					<div>
 						<div class="text-surface-700-200-token">
 							Member of club:
@@ -230,7 +230,7 @@
 								<span class="text-error-500">{clubError}</span>
 							{:else if clubName}
 								<a
-									href={resolve(`/clubs/${$auth.user.club_id}`)}
+									href={resolve(`/clubs/${$auth.user.clubId}`)}
 									class="text-primary-500 underline hover:text-primary-600"
 								>
 									{clubName}
@@ -277,21 +277,21 @@
 			<div class="card p-4 text-center">
 				<div class="text-surface-600-300-token text-sm">Account Status</div>
 				<div class="text-lg font-semibold">
-					{$auth.user.email_verified ? 'Verified' : 'Pending Verification'}
+					{$auth.user.emailVerified ? 'Verified' : 'Pending Verification'}
 				</div>
 			</div>
 
 			<div class="card p-4 text-center">
 				<div class="text-surface-600-300-token text-sm">Access Level</div>
 				<div class="text-lg font-semibold">
-					{$auth.user.is_admin ? 'Admin' : 'User'}
+					{$auth.user.isAdmin ? 'Admin' : 'User'}
 				</div>
 			</div>
 
 			<div class="card p-4 text-center">
 				<div class="text-surface-600-300-token text-sm">Club Membership</div>
 				<div class="text-lg font-semibold">
-					{$auth.user.club_id ? 'Member' : 'Independent'}
+					{$auth.user.clubId ? 'Member' : 'Independent'}
 				</div>
 			</div>
 		</div>

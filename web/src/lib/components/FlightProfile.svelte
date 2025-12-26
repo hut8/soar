@@ -117,9 +117,9 @@
 
 				// Add current fix data - use null instead of 0 for missing values
 				timestamps.push(timestamp);
-				altitudesMsl.push(fix.altitude_msl_feet ?? null);
-				altitudesAgl.push(fix.altitude_agl_feet ?? null);
-				groundSpeeds.push(fix.ground_speed_knots ?? null);
+				altitudesMsl.push(fix.altitudeMslFeet ?? null);
+				altitudesAgl.push(fix.altitudeAglFeet ?? null);
+				groundSpeeds.push(fix.groundSpeedKnots ?? null);
 			}
 
 			const traces = [

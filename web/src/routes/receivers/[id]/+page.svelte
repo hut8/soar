@@ -49,7 +49,7 @@
 	interface StatusesResponse {
 		statuses: ReceiverStatus[];
 		page: number;
-		total_pages: number;
+		totalPages: number;
 	}
 
 	interface RawMessage {
@@ -63,7 +63,7 @@
 	interface RawMessagesResponse {
 		messages: RawMessage[];
 		page: number;
-		total_pages: number;
+		totalPages: number;
 	}
 
 	interface AprsTypeCount {
@@ -72,7 +72,7 @@
 	}
 
 	interface AircraftFixCount {
-		aircraft_id: string;
+		aircraftId: string;
 		count: number;
 		aircraft?: Aircraft | null; // Aircraft details fetched separately
 	}
@@ -177,10 +177,10 @@
 
 		try {
 			const response = await serverCall<FixesResponse>(
-				`/receivers/${receiverId}/fixes?page=${fixesPage}&per_page=100`
+				`/receivers/${receiverId}/fixes?page=${fixesPage}&perPage=100`
 			);
 			fixes = response.fixes || [];
-			fixesTotalPages = response.total_pages || 1;
+			fixesTotalPages = response.totalPages || 1;
 
 			// Fetch aircraft information for the fixes
 			await loadAircraftForFixes(fixes);
@@ -196,7 +196,7 @@
 
 	async function loadAircraftForFixes(fixesList: Fix[]) {
 		// Extract unique aircraft IDs from fixes
-		const aircraftIds = [...new Set(fixesList.map((fix) => fix.aircraft_id).filter(Boolean))];
+		const aircraftIds = [...new Set(fixesList.map((fix) => fix.aircraftId).filter(Boolean))];
 
 		if (aircraftIds.length === 0) return;
 
@@ -228,10 +228,10 @@
 
 		try {
 			const response = await serverCall<StatusesResponse>(
-				`/receivers/${receiverId}/statuses?page=${statusesPage}&per_page=100`
+				`/receivers/${receiverId}/statuses?page=${statusesPage}&perPage=100`
 			);
 			statuses = response.statuses || [];
-			statusesTotalPages = response.total_pages || 1;
+			statusesTotalPages = response.totalPages || 1;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			statusesError = `Failed to load statuses: ${errorMessage}`;
@@ -272,13 +272,10 @@
 				await Promise.all(
 					aggregateStats.fix_counts_by_aircraft.map(async (aircraftCount) => {
 						try {
-							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraft_id}`);
+							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraftId}`);
 							aircraftCount.aircraft = aircraft;
 						} catch (err) {
-							console.warn(
-								`Failed to load aircraft details for ${aircraftCount.aircraft_id}:`,
-								err
-							);
+							console.warn(`Failed to load aircraft details for ${aircraftCount.aircraftId}:`, err);
 							aircraftCount.aircraft = null;
 						}
 					})
@@ -303,10 +300,10 @@
 
 		try {
 			const response = await serverCall<RawMessagesResponse>(
-				`/receivers/${receiverId}/raw-messages?page=${rawMessagesPage}&per_page=100`
+				`/receivers/${receiverId}/raw-messages?page=${rawMessagesPage}&perPage=100`
 			);
 			rawMessages = response.messages || [];
-			rawMessagesTotalPages = response.total_pages || 1;
+			rawMessagesTotalPages = response.totalPages || 1;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			rawMessagesError = `Failed to load raw messages: ${errorMessage}`;
@@ -465,7 +462,7 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
-							{#if receiver.from_ogn_db}
+							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
 						</div>
@@ -474,8 +471,8 @@
 						{/if}
 					</div>
 					<div class="text-surface-500-400-token text-sm">
-						<div>Last heard: {formatRelativeTime(receiver.updated_at)}</div>
-						<div class="text-xs">Added: {formatDateTime(receiver.created_at)}</div>
+						<div>Last heard: {formatRelativeTime(receiver.updatedAt)}</div>
+						<div class="text-xs">Added: {formatDateTime(receiver.createdAt)}</div>
 					</div>
 				</div>
 			</div>
@@ -580,9 +577,9 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Updated</p>
-									<p class="text-sm">{formatDateTime(receiver.updated_at)}</p>
+									<p class="text-sm">{formatDateTime(receiver.updatedAt)}</p>
 									<p class="text-surface-500-400-token text-xs">
-										{formatRelativeTime(receiver.updated_at)}
+										{formatRelativeTime(receiver.updatedAt)}
 									</p>
 								</div>
 							</div>
@@ -908,14 +905,14 @@
 														</tr>
 													</thead>
 													<tbody>
-														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraftId)}
 															<tr>
 																<td>
 																	<div class="flex items-center gap-2">
 																		{#if aircraftCount.aircraft}
 																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																		{:else}
-																			<span class="font-semibold">{aircraftCount.aircraft_id}</span>
+																			<span class="font-semibold">{aircraftCount.aircraftId}</span>
 																		{/if}
 																		{#if aircraftCount.aircraft?.aircraftTypeOgn}
 																			<span
@@ -942,7 +939,7 @@
 
 										<!-- Mobile: Cards -->
 										<div class="space-y-3 md:hidden">
-											{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+											{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraftId)}
 												<div class="card p-4">
 													<div class="flex items-start justify-between gap-3">
 														<div class="min-w-0 flex-1">
@@ -950,7 +947,7 @@
 																{#if aircraftCount.aircraft}
 																	<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																{:else}
-																	<span>{aircraftCount.aircraft_id}</span>
+																	<span>{aircraftCount.aircraftId}</span>
 																{/if}
 															</div>
 															{#if aircraftCount.aircraft?.aircraftTypeOgn}
@@ -1138,27 +1135,25 @@
 															</div>
 														</td>
 														<td class="font-mono text-xs">
-															{fix.device_address_hex || '—'}
+															{fix.deviceAddressHex || '—'}
 														</td>
 														<td class="font-mono text-sm">{fix.registration || '—'}</td>
 														<td class="font-mono text-xs">
 															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 														</td>
 														<td
-															>{fix.altitude_msl_feet !== null &&
-															fix.altitude_msl_feet !== undefined
-																? `${fix.altitude_msl_feet} ft`
+															>{fix.altitudeMslFeet !== null && fix.altitudeMslFeet !== undefined
+																? `${fix.altitudeMslFeet} ft`
 																: '—'}</td
 														>
 														<td
-															>{fix.ground_speed_knots !== null &&
-															fix.ground_speed_knots !== undefined
-																? `${fix.ground_speed_knots.toFixed(0)} kt`
+															>{fix.groundSpeedKnots !== null && fix.groundSpeedKnots !== undefined
+																? `${fix.groundSpeedKnots.toFixed(0)} kt`
 																: '—'}</td
 														>
 														<td
-															>{fix.snr_db !== null && fix.snr_db !== undefined
-																? `${fix.snr_db.toFixed(1)} dB`
+															>{fix.snrDb !== null && fix.snrDb !== undefined
+																? `${fix.snrDb.toFixed(1)} dB`
 																: '—'}</td
 														>
 													</tr>
@@ -1189,7 +1184,7 @@
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Device</dt>
 													<dd class="font-mono text-xs">
-														{fix.device_address_hex || '—'}
+														{fix.deviceAddressHex || '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
@@ -1201,24 +1196,24 @@
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Altitude</dt>
 													<dd class="font-medium">
-														{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
-															? `${fix.altitude_msl_feet} ft`
+														{fix.altitudeMslFeet !== null && fix.altitudeMslFeet !== undefined
+															? `${fix.altitudeMslFeet} ft`
 															: '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Speed</dt>
 													<dd class="font-medium">
-														{fix.ground_speed_knots !== null && fix.ground_speed_knots !== undefined
-															? `${fix.ground_speed_knots.toFixed(0)} kt`
+														{fix.groundSpeedKnots !== null && fix.groundSpeedKnots !== undefined
+															? `${fix.groundSpeedKnots.toFixed(0)} kt`
 															: '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">SNR</dt>
 													<dd class="font-medium">
-														{fix.snr_db !== null && fix.snr_db !== undefined
-															? `${fix.snr_db.toFixed(1)} dB`
+														{fix.snrDb !== null && fix.snrDb !== undefined
+															? `${fix.snrDb.toFixed(1)} dB`
 															: '—'}
 													</dd>
 												</div>
@@ -1340,7 +1335,7 @@
 																	</tr>
 																</thead>
 																<tbody>
-																	{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+																	{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraftId)}
 																		<tr>
 																			<td>
 																				{#if aircraftCount.aircraft}
@@ -1350,10 +1345,10 @@
 																					/>
 																				{:else}
 																					<a
-																						href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																						href={resolve(`/aircraft/${aircraftCount.aircraftId}`)}
 																						class="font-mono text-primary-500 hover:text-primary-600"
 																					>
-																						{aircraftCount.aircraft_id}
+																						{aircraftCount.aircraftId}
 																					</a>
 																				{/if}
 																			</td>
@@ -1369,7 +1364,7 @@
 
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
-														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraftId)}
 															<div class="card p-4">
 																<div class="flex items-center justify-between gap-4">
 																	<div class="font-medium">
@@ -1377,10 +1372,10 @@
 																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																		{:else}
 																			<a
-																				href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																				href={resolve(`/aircraft/${aircraftCount.aircraftId}`)}
 																				class="font-mono text-primary-500 hover:text-primary-600"
 																			>
-																				{aircraftCount.aircraft_id}
+																				{aircraftCount.aircraftId}
 																			</a>
 																		{/if}
 																	</div>

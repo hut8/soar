@@ -168,7 +168,7 @@
 		if (club.location.street2) parts.push(club.location.street2);
 		if (club.location.city) parts.push(club.location.city);
 		if (club.location.state) parts.push(club.location.state);
-		if (club.location.zip_code) parts.push(club.location.zip_code);
+		if (club.location.zipCode) parts.push(club.location.zipCode);
 		return parts.join(', ') || 'Address not available';
 	}
 </script>
@@ -428,15 +428,15 @@
 									</div>
 								</td>
 								<td>
-									{#if club.home_base_airport_ident}
+									{#if club.homeBaseAirportIdent}
 										<a
-											href={resolve(`/airports/${club.home_base_airport_id}`)}
+											href={resolve(`/airports/${club.homeBaseAirportId}`)}
 											target="_blank"
 											rel="noopener noreferrer"
 											class="flex items-center gap-1 anchor font-mono text-sm text-primary-500 hover:text-primary-600"
 										>
 											<Plane class="h-4 w-4" />
-											<span>{club.home_base_airport_ident}</span>
+											<span>{club.homeBaseAirportIdent}</span>
 											<ExternalLink class="h-3 w-3" />
 										</a>
 									{:else}
@@ -496,18 +496,18 @@
 							<span class="text-surface-600-300-token flex-1">{formatAddress(club)}</span>
 						</div>
 
-						{#if club.home_base_airport_ident}
+						{#if club.homeBaseAirportIdent}
 							<div class="flex items-center gap-2">
 								<Plane class="h-4 w-4 flex-shrink-0 text-surface-500" />
 								<span class="text-surface-600-300-token">
 									Airport:
 									<a
-										href={resolve(`/airports/${club.home_base_airport_id}`)}
+										href={resolve(`/airports/${club.homeBaseAirportId}`)}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="inline-flex items-center gap-1 anchor font-mono text-primary-500 hover:text-primary-600"
 									>
-										{club.home_base_airport_ident}
+										{club.homeBaseAirportIdent}
 										<ExternalLink class="h-3 w-3" />
 									</a>
 								</span>

@@ -86,18 +86,18 @@ export function timeToColor(fixIndex: number, totalFixes: number): string {
  * Format altitude with relative time
  * Shows altitude in feet with time since last fix (e.g., "5000ft 2 minutes ago")
  *
- * @param altitude_msl_feet - Altitude in feet MSL
+ * @param altitudeMslFeet - Altitude in feet MSL
  * @param timestamp - ISO 8601 timestamp string
  * @returns Object with formatted text and isOld flag
  */
 export function formatAltitudeWithTime(
-	altitude_msl_feet: number | null | undefined,
+	altitudeMslFeet: number | null | undefined,
 	timestamp: string
 ): {
 	altitudeText: string;
 	isOld: boolean;
 } {
-	const altitudeFt = altitude_msl_feet ? `${altitude_msl_feet}ft` : '---ft';
+	const altitudeFt = altitudeMslFeet ? `${altitudeMslFeet}ft` : '---ft';
 
 	// Calculate relative time, handling edge cases
 	const fixTime = dayjs(timestamp);
@@ -126,17 +126,17 @@ export function formatAltitudeWithTime(
  * Inactive fixes show as gray, active fixes use altitude-based color
  *
  * @param isActive - Whether the fix belongs to an active flight
- * @param altitude_msl_feet - Altitude in feet MSL
+ * @param altitudeMslFeet - Altitude in feet MSL
  * @returns RGB color string
  */
 export function getMarkerColor(
 	isActive: boolean,
-	altitude_msl_feet: number | null | undefined
+	altitudeMslFeet: number | null | undefined
 ): string {
 	// Use gray for inactive fixes (no current flight)
 	if (!isActive) {
 		return 'rgb(156, 163, 175)'; // Tailwind gray-400
 	}
 	// Use altitude-based color for active fixes
-	return altitudeToColor(altitude_msl_feet);
+	return altitudeToColor(altitudeMslFeet);
 }

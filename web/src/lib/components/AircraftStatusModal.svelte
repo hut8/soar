@@ -150,15 +150,15 @@
 		return `${Math.round(speed_knots)} kts`;
 	}
 
-	function formatClimbRate(climb_fpm: number | undefined): string {
-		if (climb_fpm === undefined || climb_fpm === null) return 'Unknown';
-		const sign = climb_fpm >= 0 ? '+' : '';
-		return `${sign}${Math.round(climb_fpm)} fpm`;
+	function formatClimbRate(climbFpm: number | undefined): string {
+		if (climbFpm === undefined || climbFpm === null) return 'Unknown';
+		const sign = climbFpm >= 0 ? '+' : '';
+		return `${sign}${Math.round(climbFpm)} fpm`;
 	}
 
-	function formatTrack(track_degrees: number | undefined): string {
-		if (track_degrees === undefined || track_degrees === null) return 'Unknown';
-		return `${Math.round(track_degrees)}°`;
+	function formatTrack(trackDegrees: number | undefined): string {
+		if (trackDegrees === undefined || trackDegrees === null) return 'Unknown';
+		return `${Math.round(trackDegrees)}°`;
 	}
 
 	function formatCoordinates(lat: number, lng: number): string {
@@ -555,36 +555,36 @@
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Owner</dt>
-										<dd>{aircraftRegistration.registrant_name}</dd>
+										<dd>{aircraftRegistration.registrantName}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Serial Number
 										</dt>
-										<dd class="font-mono">{aircraftRegistration.serial_number}</dd>
+										<dd class="font-mono">{aircraftRegistration.serialNumber}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Transponder Code
 										</dt>
 										<dd class="font-mono">
-											{formatTransponderCode(aircraftRegistration.transponder_code)}
+											{formatTransponderCode(aircraftRegistration.transponderCode)}
 										</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Year</dt>
-										<dd>{aircraftRegistration.year_mfr}</dd>
+										<dd>{aircraftRegistration.yearMfr}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Type</dt>
-										<dd>{getAircraftTypeDescription(aircraftRegistration.type_aircraft)}</dd>
+										<dd>{getAircraftTypeDescription(aircraftRegistration.typeAircraft)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Status</dt>
 										<dd>
-											{getStatusCodeDescription(aircraftRegistration.status_code)}
+											{getStatusCodeDescription(aircraftRegistration.statusCode)}
 											<span class="ml-1 text-xs text-surface-500 dark:text-surface-500"
-												>({aircraftRegistration.status_code})</span
+												>({aircraftRegistration.statusCode})</span
 											>
 										</dd>
 									</div>
@@ -592,21 +592,21 @@
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Certificate Issue
 										</dt>
-										<dd>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</dd>
+										<dd>{dayjs(aircraftRegistration.certIssueDate).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Expiration</dt>
-										<dd>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</dd>
+										<dd>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Airworthiness
 										</dt>
-										<dd>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</dd>
+										<dd>{dayjs(aircraftRegistration.airWorthDate).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Last Action</dt>
-										<dd>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</dd>
+										<dd>{dayjs(aircraftRegistration.lastActionDate).format('YYYY-MM-DD')}</dd>
 									</div>
 								</dl>
 							</div>
@@ -626,53 +626,53 @@
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Manufacturer</dt>
-										<dd>{aircraftModel.manufacturer_name || 'Unknown'}</dd>
+										<dd>{aircraftModel.manufacturerName || 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Model</dt>
-										<dd>{aircraftModel.model_name || 'Unknown'}</dd>
+										<dd>{aircraftModel.modelName || 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Aircraft Type
 										</dt>
-										<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
+										<dd>{formatTitleCase(aircraftModel.aircraftType)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Engine Type</dt>
-										<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
+										<dd>{formatTitleCase(aircraftModel.engineType)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Category</dt>
-										<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
+										<dd>{formatTitleCase(aircraftModel.aircraftCategory)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Builder Certification
 										</dt>
-										<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
+										<dd>{formatTitleCase(aircraftModel.builderCertification)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Seats</dt>
-										<dd>{aircraftModel.number_of_seats ?? 'Unknown'}</dd>
+										<dd>{aircraftModel.numberOfSeats ?? 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Engines</dt>
-										<dd>{aircraftModel.number_of_engines ?? 'Unknown'}</dd>
+										<dd>{aircraftModel.numberOfEngines ?? 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Cruising Speed
 										</dt>
 										<dd>
-											{aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0
-												? `${aircraftModel.cruising_speed} kts`
+											{aircraftModel.cruisingSpeed && aircraftModel.cruisingSpeed > 0
+												? `${aircraftModel.cruisingSpeed} kts`
 												: 'Unknown'}
 										</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Weight Class</dt>
-										<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
+										<dd>{formatTitleCase(aircraftModel.weightClass)}</dd>
 									</div>
 								</dl>
 							</div>
@@ -688,27 +688,27 @@
 							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
 								<h4 class="font-medium text-surface-900 dark:text-surface-100">Current Flight</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
-									{#if currentFlight.departure_airport}
+									{#if currentFlight.departureAirport}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
 											<dd>
-												{currentFlight.departure_airport}
-												{#if currentFlight.takeoff_time}
+												{currentFlight.departureAirport}
+												{#if currentFlight.takeoffTime}
 													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.takeoff_time).format('HH:mm')}
+														{dayjs(currentFlight.takeoffTime).format('HH:mm')}
 													</div>
 												{/if}
 											</dd>
 										</div>
 									{/if}
-									{#if currentFlight.arrival_airport}
+									{#if currentFlight.arrivalAirport}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
 											<dd>
-												{currentFlight.arrival_airport}
-												{#if currentFlight.landing_time}
+												{currentFlight.arrivalAirport}
+												{#if currentFlight.landingTime}
 													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.landing_time).format('HH:mm')}
+														{dayjs(currentFlight.landingTime).format('HH:mm')}
 													</div>
 												{/if}
 											</dd>
@@ -722,21 +722,21 @@
 											</span>
 										</dd>
 									</div>
-									{#if currentFlight.duration_seconds}
+									{#if currentFlight.durationSeconds}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Duration</dt>
 											<dd>
-												{Math.floor(currentFlight.duration_seconds / 3600)}h
-												{Math.floor((currentFlight.duration_seconds % 3600) / 60)}m
+												{Math.floor(currentFlight.durationSeconds / 3600)}h
+												{Math.floor((currentFlight.durationSeconds % 3600) / 60)}m
 											</dd>
 										</div>
 									{/if}
-									{#if currentFlight.latest_altitude_msl_feet}
+									{#if currentFlight.latestAltitudeMslFeet}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">
 												Current Altitude
 											</dt>
-											<dd>{currentFlight.latest_altitude_msl_feet.toLocaleString()} ft MSL</dd>
+											<dd>{currentFlight.latestAltitudeMslFeet.toLocaleString()} ft MSL</dd>
 										</div>
 									{/if}
 									<div class="col-span-2">
@@ -782,10 +782,10 @@
 											Altitude (ft)
 										</dt>
 										<dd>
-											{#if latestFix.altitude_msl_feet !== undefined && latestFix.altitude_msl_feet !== null}
-												{latestFix.altitude_msl_feet.toLocaleString()} MSL
-												{#if latestFix.altitude_agl_feet !== undefined && latestFix.altitude_agl_feet !== null}
-													/ {latestFix.altitude_agl_feet.toLocaleString()} AGL
+											{#if latestFix.altitudeMslFeet !== undefined && latestFix.altitudeMslFeet !== null}
+												{latestFix.altitudeMslFeet.toLocaleString()} MSL
+												{#if latestFix.altitudeAglFeet !== undefined && latestFix.altitudeAglFeet !== null}
+													/ {latestFix.altitudeAglFeet.toLocaleString()} AGL
 												{/if}
 											{:else}
 												Unknown
@@ -794,23 +794,23 @@
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
-										<dd>{formatSpeed(latestFix.ground_speed_knots)}</dd>
+										<dd>{formatSpeed(latestFix.groundSpeedKnots)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
-										<dd>{formatTrack(latestFix.track_degrees)}</dd>
+										<dd>{formatTrack(latestFix.trackDegrees)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
 										<dd>
 											<span
-												class="{latestFix.climb_fpm !== undefined &&
-												latestFix.climb_fpm !== null &&
-												latestFix.climb_fpm < 0
+												class="{latestFix.climbFpm !== undefined &&
+												latestFix.climbFpm !== null &&
+												latestFix.climbFpm < 0
 													? 'text-red-600 dark:text-red-400'
 													: 'text-green-600 dark:text-green-400'} font-semibold"
 											>
-												{formatClimbRate(latestFix.climb_fpm)}
+												{formatClimbRate(latestFix.climbFpm)}
 											</span>
 										</dd>
 									</div>

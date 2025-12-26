@@ -59,9 +59,9 @@
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
-		$auth.user?.club_id ? resolve(`/clubs/${$auth.user.club_id}/operations`) : ''
+		$auth.user?.clubId ? resolve(`/clubs/${$auth.user.clubId}/operations`) : ''
 	);
-	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.club_id);
+	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
 
 	// Initialize auth, theme, and backend mode from localStorage on mount
 	onMount(() => {
@@ -269,7 +269,7 @@
 									onclick={() => (showUserMenu = !showUserMenu)}
 								>
 									<User size={16} />
-									{$auth.user.first_name}
+									{$auth.user.firstName}
 								</button>
 
 								{#if showUserMenu}
@@ -279,8 +279,8 @@
 										<div class="space-y-1">
 											<div class="px-3 py-2 text-sm">
 												<div class="font-medium">
-													{$auth.user.first_name}
-													{$auth.user.last_name}
+													{$auth.user.firstName}
+													{$auth.user.lastName}
 												</div>
 												<div class="text-surface-600-300-token">{$auth.user.email}</div>
 											</div>

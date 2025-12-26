@@ -49,7 +49,7 @@
 		try {
 			await authApi.confirmPasswordReset({
 				token,
-				new_password: newPassword
+				newPassword: newPassword
 			});
 			success = true;
 

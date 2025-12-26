@@ -55,7 +55,7 @@
 	interface FlightGap {
 		gap_start: string;
 		gap_end: string;
-		duration_seconds: number;
+		durationSeconds: number;
 		distance_meters: number;
 		callsign_before: string | null;
 		callsign_after: string | null;
@@ -122,11 +122,11 @@
 
 	// Calculate flight duration
 	const duration = $derived.by(() => {
-		if (!data.flight.takeoff_time || !data.flight.landing_time) {
+		if (!data.flight.takeoffTime || !data.flight.landingTime) {
 			return null;
 		}
-		const start = new Date(data.flight.takeoff_time);
-		const end = new Date(data.flight.landing_time);
+		const start = new Date(data.flight.takeoffTime);
+		const end = new Date(data.flight.landingTime);
 		const diffMs = end.getTime() - start.getTime();
 		const hours = Math.floor(diffMs / (1000 * 60 * 60));
 		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -135,11 +135,11 @@
 
 	// Calculate fixes per second rate
 	const fixesPerSecond = $derived.by(() => {
-		if (!data.flight.takeoff_time || !data.flight.landing_time || data.fixesCount === 0) {
+		if (!data.flight.takeoffTime || !data.flight.landingTime || data.fixesCount === 0) {
 			return null;
 		}
-		const start = new Date(data.flight.takeoff_time);
-		const end = new Date(data.flight.landing_time);
+		const start = new Date(data.flight.takeoffTime);
+		const end = new Date(data.flight.landingTime);
 		const durationSeconds = (end.getTime() - start.getTime()) / 1000;
 		if (durationSeconds <= 0) return null;
 		return (data.fixesCount / durationSeconds).toFixed(2);
@@ -148,7 +148,7 @@
 	// Calculate maximum altitude from fixes
 	const maxAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
-		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
+		const maxMsl = Math.max(...data.fixes.map((f) => f.altitudeMslFeet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
@@ -156,7 +156,7 @@
 	const minAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const validAltitudes = data.fixes
-			.map((f) => f.altitude_msl_feet)
+			.map((f) => f.altitudeMslFeet)
 			.filter((alt): alt is number => alt !== null && alt !== undefined);
 		if (validAltitudes.length === 0) return null;
 		return Math.min(...validAltitudes);
@@ -294,7 +294,7 @@
 			// Get color based on segment index
 			if (index >= fixes.length) return;
 			const fix = fixes[index];
-			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fixTime = new Date(fix.timestamp);
@@ -348,7 +348,7 @@
 			const fix2 = fixesInOrder[i + 1];
 
 			// Use the starting fix's color for the segment
-			const color = getFixColor(i, fix1.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(i, fix1.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fix1Time = new Date(fix1.timestamp);
@@ -396,25 +396,23 @@
 	// Calculate maximum AGL altitude from fixes
 	const maxAglAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
-		const maxAgl = Math.max(...data.fixes.map((f) => f.altitude_agl_feet || 0));
+		const maxAgl = Math.max(...data.fixes.map((f) => f.altitudeAglFeet || 0));
 		return maxAgl > 0 ? maxAgl : null;
 	});
 
 	// Check if this is an outlanding (flight complete with known departure but no arrival airport)
 	const isOutlanding = $derived(
-		data.flight.landing_time !== null &&
-			data.flight.landing_time !== undefined &&
-			data.flight.departure_airport &&
-			!data.flight.arrival_airport
+		data.flight.landingTime !== null &&
+			data.flight.landingTime !== undefined &&
+			data.flight.departureAirport &&
+			!data.flight.arrivalAirport
 	);
 
 	// Check if any fix has AGL data available
 	const hasAglData = $derived(
 		data.fixes.some(
 			(fix) =>
-				fix.altitude_agl_feet !== null &&
-				fix.altitude_agl_feet !== undefined &&
-				fix.altitude_agl_feet > 0
+				fix.altitudeAglFeet !== null && fix.altitudeAglFeet !== undefined && fix.altitudeAglFeet > 0
 		)
 	);
 
@@ -882,7 +880,7 @@
 				}
 
 				// Get color based on current scheme
-				const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+				const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 				// Create SVG arrow element (12x12 pixels, twice the original size)
 				const arrowSvg = document.createElement('div');
@@ -899,18 +897,15 @@
 				});
 
 				marker.addListener('click', () => {
-					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+					const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
+					const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
 					const heading =
-						fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+						fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
 					const turnRate =
-						fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
-					const climbRate =
-						fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+						fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
+					const climbRate = fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 					const groundSpeed =
-						fix.ground_speed_knots !== undefined
-							? Math.round(fix.ground_speed_knots) + ' kt'
-							: 'N/A';
+						fix.groundSpeedKnots !== undefined ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
 					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 					const content = `
@@ -954,7 +949,7 @@
 			});
 
 			// Add landing marker if flight is complete
-			if (data.flight.landing_time && fixesInOrder.length > 0) {
+			if (data.flight.landingTime && fixesInOrder.length > 0) {
 				const last = fixesInOrder[fixesInOrder.length - 1];
 				const landingPin = document.createElement('div');
 				landingPin.innerHTML = `
@@ -1078,7 +1073,7 @@
 				}
 
 				// Add landing marker (red) if flight is complete - last fix chronologically
-				if (data.flight.landing_time && fixesInOrder.length > 0) {
+				if (data.flight.landingTime && fixesInOrder.length > 0) {
 					const last = fixesInOrder[fixesInOrder.length - 1];
 					const landingPin = document.createElement('div');
 					landingPin.innerHTML = `
@@ -1125,7 +1120,7 @@
 					}
 
 					// Get color based on current scheme
-					const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+					const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 					// Create SVG arrow element (12x12 pixels, twice the original size)
 					const arrowSvg = document.createElement('div');
@@ -1142,18 +1137,16 @@
 					});
 
 					marker.addListener('click', () => {
-						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+						const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
+						const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
 						const heading =
-							fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+							fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
 						const turnRate =
-							fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
+							fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
 						const climbRate =
-							fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+							fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 						const groundSpeed =
-							fix.ground_speed_knots !== undefined
-								? Math.round(fix.ground_speed_knots) + ' kt'
-								: 'N/A';
+							fix.groundSpeedKnots !== undefined ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
 						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 						const content = `
@@ -1372,7 +1365,7 @@
 </script>
 
 <svelte:head>
-	<title>Flight {data.flight.device_address} | SOAR</title>
+	<title>Flight {data.flight.deviceAddress} | SOAR</title>
 </svelte:head>
 
 <div class="container mx-auto space-y-4 p-4">
@@ -1430,26 +1423,23 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.flight.aircraft_id && data.flight.device_address && data.flight.device_address_type}
-							{#if data.flight.aircraft_country_code}
+						{#if data.flight.aircraftId && data.flight.deviceAddress && data.flight.deviceAddressType}
+							{#if data.flight.aircraftCountryCode}
 								<img
-									src={getFlagPath(data.flight.aircraft_country_code)}
-									alt={getCountryName(data.flight.aircraft_country_code) || ''}
-									title={getCountryName(data.flight.aircraft_country_code) || ''}
+									src={getFlagPath(data.flight.aircraftCountryCode)}
+									alt={getCountryName(data.flight.aircraftCountryCode) || ''}
+									title={getCountryName(data.flight.aircraftCountryCode) || ''}
 									class="h-4 rounded-sm"
 								/>
 							{/if}
 							<a
-								href="/aircraft/{data.flight.aircraft_id}"
+								href="/aircraft/{data.flight.aircraftId}"
 								target="_blank"
 								rel="noopener noreferrer"
 								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
 							>
 								<span class="font-mono text-xs">
-									{formatAircraftAddress(
-										data.flight.device_address_type,
-										data.flight.device_address
-									)}
+									{formatAircraftAddress(data.flight.deviceAddressType, data.flight.deviceAddress)}
 								</span>
 								<ExternalLink class="h-3 w-3" />
 							</a>
@@ -1458,11 +1448,11 @@
 				{/if}
 			</div>
 			<div class="flex items-center gap-2">
-				{#if data.flight.previous_flight_id || data.flight.next_flight_id}
+				{#if data.flight.previousFlightId || data.flight.nextFlightId}
 					<div class="flex items-center gap-1">
-						{#if data.flight.previous_flight_id}
+						{#if data.flight.previousFlightId}
 							<a
-								href="/flights/{data.flight.previous_flight_id}"
+								href="/flights/{data.flight.previousFlightId}"
 								class="btn preset-tonal btn-sm"
 								title="Previous flight for this device"
 							>
@@ -1475,9 +1465,9 @@
 								Previous
 							</button>
 						{/if}
-						{#if data.flight.next_flight_id}
+						{#if data.flight.nextFlightId}
 							<a
-								href="/flights/{data.flight.next_flight_id}"
+								href="/flights/{data.flight.nextFlightId}"
 								class="btn preset-tonal btn-sm"
 								title="Next flight for this device"
 							>
@@ -1510,44 +1500,44 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Takeoff</div>
 					<div class="font-semibold">
-						{#if data.flight.takeoff_time}
+						{#if data.flight.takeoffTime}
 							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoffTime)}</span>
 							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
+							<span class="hidden md:inline">{formatDateTime(data.flight.takeoffTime)}</span>
 						{:else}
 							Unknown
 						{/if}
 					</div>
 					<div class="text-surface-600-300-token text-sm">
-						{#if data.flight.departure_airport && data.flight.departure_airport_id}
-							{#if data.flight.departure_airport_country}
+						{#if data.flight.departureAirport && data.flight.departureAirportId}
+							{#if data.flight.departureAirportCountry}
 								<img
-									src={getFlagPath(data.flight.departure_airport_country)}
+									src={getFlagPath(data.flight.departureAirportCountry)}
 									alt=""
 									class="mr-1 inline-block h-3.5 rounded-sm"
 								/>
 							{/if}
-							<a href="/airports/{data.flight.departure_airport_id}" class="anchor">
-								{data.flight.departure_airport}
+							<a href="/airports/{data.flight.departureAirportId}" class="anchor">
+								{data.flight.departureAirport}
 							</a>
-						{:else if data.flight.departure_airport}
-							{#if data.flight.departure_airport_country}
+						{:else if data.flight.departureAirport}
+							{#if data.flight.departureAirportCountry}
 								<img
-									src={getFlagPath(data.flight.departure_airport_country)}
+									src={getFlagPath(data.flight.departureAirportCountry)}
 									alt=""
 									class="mr-1 inline-block h-3.5 rounded-sm"
 								/>
 							{/if}
-							{data.flight.departure_airport}
+							{data.flight.departureAirport}
 						{:else}
 							Unknown
 						{/if}
 					</div>
-					{#if data.flight.takeoff_runway_ident}
+					{#if data.flight.takeoffRunwayIdent}
 						<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-							<span>Runway {data.flight.takeoff_runway_ident}</span>
-							{#if data.flight.runways_inferred === true}
+							<span>Runway {data.flight.takeoffRunwayIdent}</span>
+							{#if data.flight.runwaysInferred === true}
 								<span
 									class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
 									title="This runway was inferred from the aircraft's heading during takeoff, not matched to airport runway data"
@@ -1557,14 +1547,14 @@
 								</span>
 							{/if}
 						</div>
-					{:else if data.flight.departure_airport}
+					{:else if data.flight.departureAirport}
 						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
 					{/if}
 				</div>
 			</div>
 
 			<!-- Landing / Timeout (hidden for active flights) -->
-			{#if data.flight.state === 'timed_out' || data.flight.landing_time}
+			{#if data.flight.state === 'timed_out' || data.flight.landingTime}
 				<div class="flex items-start gap-3">
 					<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
@@ -1572,52 +1562,52 @@
 							{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
 						</div>
 						<div class="font-semibold">
-							{#if data.flight.state === 'timed_out' && data.flight.timed_out_at}
+							{#if data.flight.state === 'timed_out' && data.flight.timedOutAt}
 								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.timed_out_at)}</span>
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.timedOutAt)}</span>
 								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.timed_out_at)}</span>
-							{:else if data.flight.landing_time}
+								<span class="hidden md:inline">{formatDateTime(data.flight.timedOutAt)}</span>
+							{:else if data.flight.landingTime}
 								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.landingTime)}</span>
 								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
+								<span class="hidden md:inline">{formatDateTime(data.flight.landingTime)}</span>
 							{/if}
 						</div>
 						<div class="text-surface-600-300-token text-sm">
 							{#if data.flight.state === 'timed_out'}
 								No beacons received for 5+ minutes
-							{:else if data.flight.landing_time}
-								{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
-									{#if data.flight.arrival_airport_country}
+							{:else if data.flight.landingTime}
+								{#if data.flight.arrivalAirport && data.flight.arrivalAirportId}
+									{#if data.flight.arrivalAirportCountry}
 										<img
-											src={getFlagPath(data.flight.arrival_airport_country)}
+											src={getFlagPath(data.flight.arrivalAirportCountry)}
 											alt=""
 											class="mr-1 inline-block h-3.5 rounded-sm"
 										/>
 									{/if}
-									<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
-										{data.flight.arrival_airport}
+									<a href="/airports/{data.flight.arrivalAirportId}" class="anchor">
+										{data.flight.arrivalAirport}
 									</a>
-								{:else if data.flight.arrival_airport}
-									{#if data.flight.arrival_airport_country}
+								{:else if data.flight.arrivalAirport}
+									{#if data.flight.arrivalAirportCountry}
 										<img
-											src={getFlagPath(data.flight.arrival_airport_country)}
+											src={getFlagPath(data.flight.arrivalAirportCountry)}
 											alt=""
 											class="mr-1 inline-block h-3.5 rounded-sm"
 										/>
 									{/if}
-									{data.flight.arrival_airport}
+									{data.flight.arrivalAirport}
 								{:else}
 									Unknown
 								{/if}
 							{/if}
 						</div>
-						{#if data.flight.landing_time && data.flight.arrival_airport}
-							{#if data.flight.landing_runway_ident}
+						{#if data.flight.landingTime && data.flight.arrivalAirport}
+							{#if data.flight.landingRunwayIdent}
 								<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-									<span>Runway {data.flight.landing_runway_ident}</span>
-									{#if data.flight.runways_inferred === true}
+									<span>Runway {data.flight.landingRunwayIdent}</span>
+									{#if data.flight.runwaysInferred === true}
 										<span
 											class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
 											title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
@@ -1665,40 +1655,40 @@
 			{/if}
 
 			<!-- Total Distance -->
-			{#if data.flight.total_distance_meters}
+			{#if data.flight.totalDistanceMeters}
 				<div class="flex items-start gap-3">
 					<Route class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Total Distance</div>
-						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
+						<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Maximum Displacement -->
-			{#if data.flight.maximum_displacement_meters}
+			{#if data.flight.maximumDisplacementMeters}
 				<div class="flex items-start gap-3">
 					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
 						<div class="font-semibold">
-							{formatDistance(data.flight.maximum_displacement_meters)}
+							{formatDistance(data.flight.maximumDisplacementMeters)}
 						</div>
 						<div class="text-surface-600-300-token text-sm">
-							from {data.flight.departure_airport}
+							from {data.flight.departureAirport}
 						</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Tow Aircraft -->
-			{#if data.flight.towed_by_aircraft_id}
+			{#if data.flight.towedByAircraftId}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
 						<div class="font-semibold">
-							<TowAircraftLink aircraftId={data.flight.towed_by_aircraft_id} size="md" />
+							<TowAircraftLink aircraftId={data.flight.towedByAircraftId} size="md" />
 						</div>
 					</div>
 				</div>
@@ -1711,9 +1701,9 @@
 					<div class="text-surface-600-300-token text-sm">Recognized at</div>
 					<div class="font-semibold">
 						<!-- Mobile: relative time only -->
-						<span class="md:hidden">{formatDateTimeMobile(data.flight.created_at)}</span>
+						<span class="md:hidden">{formatDateTimeMobile(data.flight.createdAt)}</span>
 						<!-- Desktop: relative time with full datetime -->
-						<span class="hidden md:inline">{formatDateTime(data.flight.created_at)}</span>
+						<span class="hidden md:inline">{formatDateTime(data.flight.createdAt)}</span>
 					</div>
 					<div class="text-surface-600-300-token text-sm">When flight was first detected</div>
 				</div>
@@ -2002,7 +1992,7 @@
 							<span class="chip preset-filled-warning-500 text-sm font-semibold">
 								Gap #{index + 1}
 							</span>
-							<span class="text-lg font-semibold">{formatDuration(gap.duration_seconds)}</span>
+							<span class="text-lg font-semibold">{formatDuration(gap.durationSeconds)}</span>
 						</div>
 
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

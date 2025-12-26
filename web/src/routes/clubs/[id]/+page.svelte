@@ -18,82 +18,26 @@
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { ClubWithSoaring, User } from '$lib/types';
+	import type {
+		ClubWithSoaring,
+		User,
+		Aircraft,
+		Airport,
+		AircraftModel,
+		AircraftRegistration,
+		DataResponse,
+		DataListResponse
+	} from '$lib/types';
 	import { getStatusCodeDescription, getAircraftTypeOgnDescription } from '$lib/formatters';
 
-	interface Aircraft {
-		registration_number: string;
-		serial_number: string;
-		manufacturer_model_code?: string;
-		engine_manufacturer_model_code?: string;
-		year_manufactured?: number;
-		registrant_type?: string;
-		registrant_name?: string;
-		aircraft_type?: string;
-		engine_type?: number;
-		status_code?: string;
-		transponder_code?: number;
-		airworthiness_class?: string;
-		airworthiness_date?: string;
-		certificate_issue_date?: string;
-		expiration_date?: string;
-		club_id?: string;
-		home_base_airport_id?: string;
-		kit_manufacturer_name?: string;
-		kit_model_name?: string;
-		other_names: string[];
-		light_sport_type?: string;
-		device_id?: string;
-		aircraft_type_ogn?: string;
-		model?: {
-			manufacturer_name?: string;
-			model_name?: string;
-			number_of_engines?: number;
-		};
-	}
-
-	interface RunwayEnd {
-		ident: string | null;
-		latitude_deg: number | null;
-		longitude_deg: number | null;
-		elevation_ft: number | null;
-		heading_degt: number | null;
-		displaced_threshold_ft: number | null;
-	}
-
-	interface Runway {
-		id: number;
-		length_ft: number | null;
-		width_ft: number | null;
-		surface: string | null;
-		lighted: boolean;
-		closed: boolean;
-		low: RunwayEnd;
-		high: RunwayEnd;
-	}
-
-	interface Airport {
-		id: number;
-		ident: string;
-		airport_type: string;
-		name: string;
-		latitude_deg: string | null;
-		longitude_deg: string | null;
-		elevation_ft: number | null;
-		continent: string | null;
-		iso_country: string | null;
-		iso_region: string | null;
-		municipality: string | null;
-		scheduled_service: boolean;
-		icao_code: string | null;
-		iata_code: string | null;
-		gps_code: string | null;
-		local_code: string | null;
-		runways: Runway[];
+	// Local interface for club aircraft data which may include model and registration info
+	interface ClubAircraftData extends Aircraft {
+		model?: AircraftModel;
+		aircraftRegistration?: AircraftRegistration;
 	}
 
 	let club: ClubWithSoaring | null = null;
-	let aircraft: Aircraft[] = [];
+	let aircraft: ClubAircraftData[] = [];
 	let airport: Airport | null = null;
 	let loading = true;
 	let loadingAircraft = false;
@@ -105,7 +49,7 @@
 	let settingClub = false;
 
 	$: clubId = $page.params.id || '';
-	$: isCurrentClub = $auth.user?.club_id === clubId;
+	$: isCurrentClub = $auth.user?.clubId === clubId;
 
 	onMount(async () => {
 		if (clubId) {
@@ -114,8 +58,8 @@
 		}
 	});
 
-	$: if (club?.home_base_airport_id) {
-		loadAirport(club.home_base_airport_id);
+	$: if (club?.homeBaseAirportId) {
+		loadAirport(club.homeBaseAirportId);
 	}
 
 	async function loadClub() {
@@ -123,7 +67,8 @@
 		error = '';
 
 		try {
-			club = await serverCall<ClubWithSoaring>(`/clubs/${clubId}`);
+			const response = await serverCall<DataResponse<ClubWithSoaring>>(`/clubs/${clubId}`);
+			club = response.data;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load club: ${errorMessage}`;
@@ -140,8 +85,10 @@
 		aircraftError = '';
 
 		try {
-			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
-			aircraft = response.aircraft || [];
+			const response = await serverCall<DataListResponse<ClubAircraftData>>(
+				`/clubs/${clubId}/aircraft`
+			);
+			aircraft = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aircraftError = `Failed to load aircraft: ${errorMessage}`;
@@ -160,7 +107,8 @@
 		airportError = '';
 
 		try {
-			airport = await serverCall<Airport>(`/airports/${airportId}`);
+			const response = await serverCall<DataResponse<Airport>>(`/airports/${airportId}`);
+			airport = response.data;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			airportError = `Failed to load airport: ${errorMessage}`;
@@ -177,7 +125,7 @@
 		try {
 			const updatedUser = await serverCall<User>(`/users/set-club`, {
 				method: 'PUT',
-				body: JSON.stringify({ club_id: club.id })
+				body: JSON.stringify({ clubId: club.id })
 			});
 
 			// Update the auth store with the new user data
@@ -241,7 +189,7 @@
 							<Building class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{club.name}</h1>
 						</div>
-						{#if club.is_soaring}
+						{#if club.isSoaring}
 							<div
 								class="inline-flex items-center gap-2 rounded-full bg-primary-500 px-3 py-1 text-sm text-white"
 							>
@@ -295,7 +243,7 @@
 			</div>
 
 			<!-- Home Base Airport Section -->
-			{#if club.home_base_airport_id}
+			{#if club.homeBaseAirportId}
 				<div class="space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
 						<MapPin class="h-6 w-6" />
@@ -321,15 +269,15 @@
 										<p class="font-semibold">{airport.name} ({airport.ident})</p>
 										{#if airport.municipality}
 											<p class="text-surface-600-300-token text-sm">
-												{airport.municipality}{airport.iso_region ? `, ${airport.iso_region}` : ''}
+												{airport.municipality}{airport.isoRegion ? `, ${airport.isoRegion}` : ''}
 											</p>
 										{/if}
 									</div>
 
-									{#if airport.elevation_ft}
+									{#if airport.elevationFt}
 										<p class="text-sm">
 											<span class="text-surface-600-300-token">Elevation:</span>
-											{airport.elevation_ft} ft
+											{airport.elevationFt} ft
 										</p>
 									{/if}
 
@@ -343,9 +291,9 @@
 															<span class="font-medium">
 																{runway.low.ident || 'N/A'}/{runway.high.ident || 'N/A'}
 															</span>
-															{#if runway.length_ft}
+															{#if runway.lengthFt}
 																<span class="text-surface-600-300-token">
-																	{runway.length_ft}' × {runway.width_ft || 0}'
+																	{runway.lengthFt}' × {runway.widthFt || 0}'
 																</span>
 															{/if}
 														</div>
@@ -364,7 +312,7 @@
 								</div>
 							{:else}
 								<p class="text-surface-600-300-token text-sm">
-									Airport ID: {club.home_base_airport_id}
+									Airport ID: {club.homeBaseAirportId}
 								</p>
 							{/if}
 						</div>
@@ -400,11 +348,11 @@
 					</div>
 				{:else}
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						{#each aircraft as plane (plane.registration_number)}
+						{#each aircraft as plane (plane.registration)}
 							<div class="card p-4">
 								<div class="mb-3 flex flex-wrap items-center gap-2">
-									<h3 class="h3 font-semibold">{plane.registration_number}</h3>
-									{#if plane.aircraft_type_ogn === 'tow_tug'}
+									<h3 class="h3 font-semibold">{plane.registration}</h3>
+									{#if plane.aircraftTypeOgn === 'tow_tug'}
 										<span
 											class="btn preset-filled-warning-500 btn-sm"
 											title="This aircraft is a tow plane"
@@ -416,9 +364,9 @@
 								</div>
 
 								<div class="mb-3 flex flex-wrap gap-2">
-									{#if plane.device_id}
+									{#if plane.id}
 										<a
-											href={`/aircraft/${plane.device_id}`}
+											href={`/aircraft/${plane.id}`}
 											target="_blank"
 											rel="noopener noreferrer"
 											class="preset-tonal-primary-500 btn btn-sm"
@@ -429,7 +377,7 @@
 										</a>
 									{/if}
 									<a
-										href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
+										href={`https://www.flightaware.com/photos/aircraft/${plane.registration}`}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="preset-tonal-primary-500 btn btn-sm"
@@ -441,93 +389,92 @@
 								</div>
 
 								<div class="space-y-2 text-sm">
-									{#if plane.transponder_code}
+									{#if plane.aircraftRegistration?.transponderCode}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">ICAO Code:</span>
 											<span class="ml-2"
-												>{plane.transponder_code.toString(16).toUpperCase().padStart(4, '0')}</span
+												>{plane.aircraftRegistration?.transponderCode
+													.toString(16)
+													.toUpperCase()
+													.padStart(4, '0')}</span
 											>
 										</div>
 									{/if}
-									{#if plane.manufacturer_model_code}
+									{#if plane.aircraftModel}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Model:</span>
-											<span class="ml-2">{plane.manufacturer_model_code}</span>
+											<span class="ml-2">{plane.aircraftModel}</span>
 										</div>
 									{/if}
-									{#if plane.year_manufactured}
+									{#if plane.aircraftRegistration?.yearMfr}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Year:</span>
-											<span class="ml-2">{plane.year_manufactured}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.yearMfr}</span>
 										</div>
 									{/if}
-									{#if plane.serial_number}
+									{#if plane.aircraftRegistration?.serialNumber}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Serial:</span>
-											<span class="ml-2">{plane.serial_number}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.serialNumber}</span>
 										</div>
 									{/if}
-									{#if plane.registrant_name}
+									{#if plane.aircraftRegistration?.registrantName}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Owner:</span>
-											<span class="ml-2">{plane.registrant_name}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.registrantName}</span>
 										</div>
 									{/if}
-									{#if plane.aircraft_type}
+									{#if plane.aircraftRegistration?.typeAircraft}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Type:</span>
-											<span class="ml-2">{plane.aircraft_type}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.typeAircraft}</span>
 										</div>
 									{/if}
-									{#if plane.model?.manufacturer_name && plane.model?.model_name}
+									{#if plane.model?.manufacturerName && plane.model?.modelName}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Make and Model:</span>
 											<span class="ml-2"
-												>{plane.model.manufacturer_name}
-												{plane.model.model_name}</span
+												>{plane.model.manufacturerName}
+												{plane.model.modelName}</span
 											>
 										</div>
 									{/if}
-									{#if plane.aircraft_type_ogn}
+									{#if plane.aircraftTypeOgn}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium"
 												>Aircraft Type (OGN):</span
 											>
 											<span class="ml-2"
-												>{getAircraftTypeOgnDescription(plane.aircraft_type_ogn)}</span
+												>{getAircraftTypeOgnDescription(plane.aircraftTypeOgn)}</span
 											>
 										</div>
 									{/if}
-									{#if plane.engine_manufacturer_model_code}
+									{#if plane.aircraftRegistration?.engMfrMdl}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Engine:</span>
-											<span class="ml-2">{plane.engine_manufacturer_model_code}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.engMfrMdl}</span>
 										</div>
 									{/if}
-									{#if plane.status_code}
+									{#if plane.aircraftRegistration?.statusCode}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Status:</span>
-											<span class="ml-2">{getStatusCodeDescription(plane.status_code)}</span>
+											<span class="ml-2"
+												>{getStatusCodeDescription(plane.aircraftRegistration?.statusCode)}</span
+											>
 										</div>
 									{/if}
-									{#if plane.airworthiness_class}
+									{#if plane.model?.builderCertification}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium"
 												>Airworthiness Class:</span
 											>
-											<span class="ml-2">{plane.airworthiness_class}</span>
+											<span class="ml-2">{plane.model?.builderCertification}</span>
 										</div>
 									{/if}
-									{#if plane.light_sport_type}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Light Sport Type:</span>
-											<span class="ml-2">{plane.light_sport_type}</span>
-										</div>
-									{/if}
-									{#if plane.model?.number_of_engines}
+									{#if plane.model?.numberOfEngines}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Number of Engines:</span>
-											<span class="ml-2">{plane.model.number_of_engines}</span>
+											<span class="ml-2">{plane.model.numberOfEngines}</span>
 										</div>
 									{/if}
 								</div>
@@ -538,7 +485,7 @@
 			</div>
 
 			<!-- Map Section - Shows home base airport if available -->
-			{#if airport && airport.latitude_deg && airport.longitude_deg}
+			{#if airport && airport.latitudeDeg && airport.longitudeDeg}
 				<div class="card p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
@@ -547,7 +494,7 @@
 					<div class="border-surface-300-600-token overflow-hidden rounded-lg border">
 						<!-- Embedded Google Map -->
 						<iframe
-							src={`https://maps.google.com/maps?q=${airport.latitude_deg},${airport.longitude_deg}&output=embed`}
+							src={`https://maps.google.com/maps?q=${airport.latitudeDeg},${airport.longitudeDeg}&output=embed`}
 							width="100%"
 							height="500"
 							style="border:0;"
@@ -559,7 +506,7 @@
 					</div>
 					<div class="mt-3 flex flex-wrap gap-2">
 						<a
-							href={`https://www.google.com/maps/search/?api=1&query=${airport.latitude_deg},${airport.longitude_deg}`}
+							href={`https://www.google.com/maps/search/?api=1&query=${airport.latitudeDeg},${airport.longitudeDeg}`}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="preset-tonal-primary-500 btn btn-sm"
@@ -568,7 +515,7 @@
 							View Larger Map
 						</a>
 						<a
-							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
+							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitudeDeg},${airport.longitudeDeg}`}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="preset-tonal-secondary-500 btn btn-sm"

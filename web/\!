@@ -1,0 +1,1064 @@
+
+> web@0.0.0-git check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json /tmp/check-output2.txt
+
+Loading svelte-check in workspace: /home/liam/soar-worktrees/feat/api-consistency/web
+Getting Svelte diagnostics...
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/lib/components/FixesList.svelte:37:27
+Warn: This reference only captures the initial value of `showRawValue`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+
+	let showRawData = $state(showRawValue);
+	let useRelativeTime = $state(useRelativeTimes);
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/lib/components/FixesList.svelte:38:31
+Warn: This reference only captures the initial value of `useRelativeTimes`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+	let showRawData = $state(showRawValue);
+	let useRelativeTime = $state(useRelativeTimes);
+	let showTimeIntervals = $state(false);
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/+page.svelte:70:15
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+
+		if (airport.iso_region) {
+			// Extract state/province from iso_region (format: US-CA -> CA)
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/+page.svelte:72:27
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+			// Extract state/province from iso_region (format: US-CA -> CA)
+			const region = airport.iso_region.split('-').pop() || airport.iso_region;
+			parts.push(region);
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/+page.svelte:72:66
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+			// Extract state/province from iso_region (format: US-CA -> CA)
+			const region = airport.iso_region.split('-').pop() || airport.iso_region;
+			parts.push(region);
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/+page.svelte:84:58
+Error: Property 'gps_code' does not exist on type 'Airport'. Did you mean 'gpsCode'? (ts)
+	function getAirportCode(airport: Airport): string {
+		return airport.icaoCode || airport.iataCode || airport.gps_code || airport.local_code || '—';
+	}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/+page.svelte:84:78
+Error: Property 'local_code' does not exist on type 'Airport'. Did you mean 'localCode'? (ts)
+	function getAirportCode(airport: Airport): string {
+		return airport.icaoCode || airport.iataCode || airport.gps_code || airport.local_code || '—';
+	}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:133:12
+Error: Property 'gps_code' does not exist on type 'Airport'. Did you mean 'gpsCode'? (ts)
+			airport.iataCode ||
+			airport.gps_code ||
+			airport.local_code ||
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:134:12
+Error: Property 'local_code' does not exist on type 'Airport'. Did you mean 'localCode'? (ts)
+			airport.gps_code ||
+			airport.local_code ||
+			airport.ident
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:157:35
+Error: Cannot find name 'FlightView'. (ts)
+
+	function getFlightStatus(flight: FlightView): string {
+		if (!flight.landingTime) return 'In Progress';
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:162:33
+Error: Cannot find name 'FlightView'. (ts)
+
+	function getFlightType(flight: FlightView, currentAirportId: string): string {
+		const isDeparture = flight.departureAirport === currentAirportId;
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:227:21
+Error: Property 'scheduled_service' does not exist on type 'Airport'. Did you mean 'scheduledService'? (ts)
+							</span>
+							{#if airport.scheduled_service}
+								<span class="badge preset-filled-success-500"> Scheduled Service </span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:245:44
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+					<div class="space-y-3">
+						{#if airport.municipality || airport.iso_region}
+							<div class="flex items-start gap-3">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:252:24
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+										{airport.municipality || '—'}
+										{#if airport.iso_region}
+											<span class="text-surface-500">, {airport.iso_region}</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:253:54
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+										{#if airport.iso_region}
+											<span class="text-surface-500">, {airport.iso_region}</span>
+										{/if}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:333:20
+Error: Property 'gps_code' does not exist on type 'Airport'. Did you mean 'gpsCode'? (ts)
+						{/if}
+						{#if airport.gps_code}
+							<div class="flex justify-between">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:336:56
+Error: Property 'gps_code' does not exist on type 'Airport'. Did you mean 'gpsCode'? (ts)
+								<span class="text-surface-600-300-token">GPS Code:</span>
+								<span class="font-mono font-semibold">{airport.gps_code}</span>
+							</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:339:20
+Error: Property 'local_code' does not exist on type 'Airport'. Did you mean 'localCode'? (ts)
+						{/if}
+						{#if airport.local_code}
+							<div class="flex justify-between">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:342:56
+Error: Property 'local_code' does not exist on type 'Airport'. Did you mean 'localCode'? (ts)
+								<span class="text-surface-600-300-token">Local Code:</span>
+								<span class="font-mono font-semibold">{airport.local_code}</span>
+							</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:347:19
+Error: Property 'home_link' does not exist on type 'Airport'. Did you mean 'homeLink'? (ts)
+
+					{#if airport.home_link || airport.wikipedia_link}
+						<div class="border-surface-200-700-token border-t pt-3">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:347:40
+Error: Property 'wikipedia_link' does not exist on type 'Airport'. Did you mean 'wikipediaLink'? (ts)
+
+					{#if airport.home_link || airport.wikipedia_link}
+						<div class="border-surface-200-700-token border-t pt-3">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:350:22
+Error: Property 'home_link' does not exist on type 'Airport'. Did you mean 'homeLink'? (ts)
+							<div class="flex flex-wrap gap-2">
+								{#if airport.home_link}
+									<a
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:352:25
+Error: Property 'home_link' does not exist on type 'Airport'. Did you mean 'homeLink'? (ts)
+									<a
+										href={airport.home_link}
+										target="_blank"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:361:22
+Error: Property 'wikipedia_link' does not exist on type 'Airport'. Did you mean 'wikipediaLink'? (ts)
+								{/if}
+								{#if airport.wikipedia_link}
+									<a
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:363:25
+Error: Property 'wikipedia_link' does not exist on type 'Airport'. Did you mean 'wikipediaLink'? (ts)
+									<a
+										href={airport.wikipedia_link}
+										target="_blank"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:425:25
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+											<tbody>
+												{#if runway.length_ft}
+													<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:428:27
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+														<td class="w-1/3 font-medium">Length</td>
+														<td>{runway.length_ft.toLocaleString()} ft</td>
+													</tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:431:25
+Error: Property 'width_ft' does not exist on type 'Runway'. Did you mean 'widthFt'? (ts)
+												{/if}
+												{#if runway.width_ft}
+													<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:434:27
+Error: Property 'width_ft' does not exist on type 'Runway'. Did you mean 'widthFt'? (ts)
+														<td class="w-1/3 font-medium">Width</td>
+														<td>{runway.width_ft} ft</td>
+													</tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:450:22
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+								<dl class="mb-4 space-y-2 md:hidden">
+									{#if runway.length_ft}
+										<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:453:46
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+											<dt class="text-surface-600-300-token font-medium">Length</dt>
+											<dd class="font-semibold">{runway.length_ft.toLocaleString()} ft</dd>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:456:22
+Error: Property 'width_ft' does not exist on type 'Runway'. Did you mean 'widthFt'? (ts)
+									{/if}
+									{#if runway.width_ft}
+										<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:459:46
+Error: Property 'width_ft' does not exist on type 'Runway'. Did you mean 'widthFt'? (ts)
+											<dt class="text-surface-600-300-token font-medium">Width</dt>
+											<dd class="font-semibold">{runway.width_ft} ft</dd>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:483:31
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+													<tbody>
+														{#if runway.low.heading_degt !== null}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:486:61
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+																<td class="w-2/3 text-sm">True Heading</td>
+																<td class="text-sm font-medium">{runway.low.heading_degt}°</td>
+															</tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:495:31
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+														{/if}
+														{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:495:77
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+														{/if}
+														{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:499:31
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+																<td class="text-sm font-medium"
+																	>{runway.low.displaced_threshold_ft} ft</td
+																>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:510:28
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+										<dl class="space-y-2 text-sm md:hidden">
+											{#if runway.low.heading_degt !== null}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:513:50
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+													<dt class="text-surface-600-300-token">True Heading</dt>
+													<dd class="font-medium">{runway.low.heading_degt}°</dd>
+												</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:522:28
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+											{/if}
+											{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:522:74
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+											{/if}
+											{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:525:50
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
+													<dd class="font-medium">{runway.low.displaced_threshold_ft} ft</dd>
+												</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:542:32
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+													<tbody>
+														{#if runway.high.heading_degt !== null}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:545:62
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+																<td class="w-2/3 text-sm">True Heading</td>
+																<td class="text-sm font-medium">{runway.high.heading_degt}°</td>
+															</tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:554:32
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+														{/if}
+														{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:554:79
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+														{/if}
+														{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+															<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:558:32
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+																<td class="text-sm font-medium"
+																	>{runway.high.displaced_threshold_ft} ft</td
+																>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:569:29
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+										<dl class="space-y-2 text-sm md:hidden">
+											{#if runway.high.heading_degt !== null}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:572:51
+Error: Property 'heading_degt' does not exist on type 'RunwayEnd'. Did you mean 'headingDegt'? (ts)
+													<dt class="text-surface-600-300-token">True Heading</dt>
+													<dd class="font-medium">{runway.high.heading_degt}°</dd>
+												</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:581:29
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+											{/if}
+											{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:581:76
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+											{/if}
+											{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:584:51
+Error: Property 'displaced_threshold_ft' does not exist on type 'RunwayEnd'. Did you mean 'displacedThresholdFt'? (ts)
+													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
+													<dd class="font-medium">{runway.high.displaced_threshold_ft} ft</dd>
+												</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:690:52
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+									<tbody>
+										{#each flights as flightData (flightData.flight.id)}
+											<tr>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:693:30
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+												<td>
+													{#if flightData.device}
+														<div class="flex flex-col">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:696:30
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+															<span class="font-mono font-semibold"
+																>{flightData.device.registration || 'Unknown'}</span
+															>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:698:32
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+															>
+															{#if flightData.device.competitionNumber}
+																<span class="text-sm text-surface-500"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:700:31
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+																<span class="text-sm text-surface-500"
+																	>{flightData.device.competitionNumber}</span
+																>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:705:51
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+													{:else}
+														<span class="font-mono">{flightData.flight.deviceAddress}</span>
+													{/if}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:712:27
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+														class:preset-tonal-primary-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:716:27
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+														class:preset-tonal-success-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:720:27
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+														class:preset-tonal-secondary-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:724:41
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+													>
+														{getFlightType(flightData.flight, airport?.ident || '')}
+													</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:729:27
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+													<span class="font-mono text-sm">
+														{flightData.flight.departureAirport || '—'}
+													</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:734:27
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+													<span class="font-mono text-sm">
+														{flightData.flight.arrivalAirport || '—'}
+													</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:737:44
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												</td>
+												<td>{formatDateTime(flightData.flight.takeoffTime)}</td>
+												<td>{formatDateTime(flightData.flight.landingTime)}</td>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:738:44
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												<td>{formatDateTime(flightData.flight.takeoffTime)}</td>
+												<td>{formatDateTime(flightData.flight.landingTime)}</td>
+												<td>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:740:46
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												<td>
+													{#if getFlightStatus(flightData.flight) === 'In Progress'}
+														<span class="badge preset-filled-warning-500">In Progress</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:748:52
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+													<a
+														href={resolve(`/flights/${flightData.flight.id}`)}
+														class="preset-tonal-primary-500 btn btn-sm"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:763:49
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+						<div class="space-y-4 md:hidden">
+							{#each flights as flightData (flightData.flight.id)}
+								<div class="card p-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:767:28
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+										<div>
+											{#if flightData.device}
+												<div class="font-mono font-semibold">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:769:26
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+												<div class="font-mono font-semibold">
+													{flightData.device.registration || 'Unknown'}
+												</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:771:29
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+												</div>
+												{#if flightData.device.competitionNumber}
+													<div class="text-sm text-surface-500">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:773:27
+Error: Property 'device' does not exist on type 'Flight'. (ts)
+													<div class="text-sm text-surface-500">
+														{flightData.device.competitionNumber}
+													</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:777:48
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											{:else}
+												<div class="font-mono">{flightData.flight.deviceAddress}</div>
+											{/if}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:784:25
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												class:preset-tonal-primary-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:788:25
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												class:preset-tonal-success-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:792:25
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+												class:preset-tonal-secondary-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:796:39
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											>
+												{getFlightType(flightData.flight, airport?.ident || '')}
+											</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:798:44
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											</span>
+											{#if getFlightStatus(flightData.flight) === 'In Progress'}
+												<span class="badge preset-filled-warning-500 text-xs">In Progress</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:810:25
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											<dd class="font-mono font-medium">
+												{flightData.flight.departureAirport || '—'}
+											</dd>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:816:25
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											<dd class="font-mono font-medium">
+												{flightData.flight.arrivalAirport || '—'}
+											</dd>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:821:63
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											<dt class="text-surface-600-300-token">Takeoff</dt>
+											<dd class="font-medium">{formatDateTime(flightData.flight.takeoffTime)}</dd>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:825:63
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+											<dt class="text-surface-600-300-token">Landing</dt>
+											<dd class="font-medium">{formatDateTime(flightData.flight.landingTime)}</dd>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/airports/[id]/+page.svelte:830:48
+Error: Property 'flight' does not exist on type 'Flight'. (ts)
+									<a
+										href={resolve(`/flights/${flightData.flight.id}`)}
+										class="preset-tonal-primary-500 btn w-full btn-sm"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/+page.svelte:171:21
+Error: Property 'zip_code' does not exist on type 'Location'. Did you mean 'zipCode'? (ts)
+		if (club.location.state) parts.push(club.location.state);
+		if (club.location.zip_code) parts.push(club.location.zip_code);
+		return parts.join(', ') || 'Address not available';
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/+page.svelte:171:56
+Error: Property 'zip_code' does not exist on type 'Location'. Did you mean 'zipCode'? (ts)
+		if (club.location.state) parts.push(club.location.state);
+		if (club.location.zip_code) parts.push(club.location.zip_code);
+		return parts.join(', ') || 'Address not available';
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:270:44
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+											<p class="text-surface-600-300-token text-sm">
+												{airport.municipality}{airport.iso_region ? `, ${airport.iso_region}` : ''}
+											</p>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:270:70
+Error: Property 'iso_region' does not exist on type 'Airport'. Did you mean 'isoRegion'? (ts)
+											<p class="text-surface-600-300-token text-sm">
+												{airport.municipality}{airport.iso_region ? `, ${airport.iso_region}` : ''}
+											</p>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:292:28
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+															</span>
+															{#if runway.length_ft}
+																<span class="text-surface-600-300-token">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:294:26
+Error: Property 'length_ft' does not exist on type 'Runway'. Did you mean 'lengthFt'? (ts)
+																<span class="text-surface-600-300-token">
+																	{runway.length_ft}' × {runway.width_ft || 0}'
+																</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:294:48
+Error: Property 'width_ft' does not exist on type 'Runway'. Did you mean 'widthFt'? (ts)
+																<span class="text-surface-600-300-token">
+																	{runway.length_ft}' × {runway.width_ft || 0}'
+																</span>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:349:39
+Error: Property 'registration_number' does not exist on type 'Aircraft'. (ts)
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+						{#each aircraft as plane (plane.registration_number)}
+							<div class="card p-4">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:352:46
+Error: Property 'registration_number' does not exist on type 'Aircraft'. (ts)
+								<div class="mb-3 flex flex-wrap items-center gap-2">
+									<h3 class="h3 font-semibold">{plane.registration_number}</h3>
+									{#if plane.aircraftTypeOgn === 'tow_tug'}
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:365:21
+Error: Property 'device_id' does not exist on type 'Aircraft'. (ts)
+								<div class="mb-3 flex flex-wrap gap-2">
+									{#if plane.device_id}
+										<a
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:367:37
+Error: Property 'device_id' does not exist on type 'Aircraft'. (ts)
+										<a
+											href={`/aircraft/${plane.device_id}`}
+											target="_blank"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:378:70
+Error: Property 'registration_number' does not exist on type 'Aircraft'. (ts)
+									<a
+										href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
+										target="_blank"
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:390:21
+Error: Property 'transponderCode' does not exist on type 'Aircraft'. (ts)
+								<div class="space-y-2 text-sm">
+									{#if plane.transponderCode}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:394:21
+Error: Property 'transponderCode' does not exist on type 'Aircraft'. (ts)
+											<span class="ml-2"
+												>{plane.transponderCode.toString(16).toUpperCase().padStart(4, '0')}</span
+											>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:398:21
+Error: Property 'manufacturer_model_code' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.manufacturer_model_code}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:401:38
+Error: Property 'manufacturer_model_code' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Model:</span>
+											<span class="ml-2">{plane.manufacturer_model_code}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:404:21
+Error: Property 'year_manufactured' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.year_manufactured}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:407:38
+Error: Property 'year_manufactured' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Year:</span>
+											<span class="ml-2">{plane.year_manufactured}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:410:21
+Error: Property 'serialNumber' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.serialNumber}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:413:38
+Error: Property 'serialNumber' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Serial:</span>
+											<span class="ml-2">{plane.serialNumber}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:416:21
+Error: Property 'registrantName' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.registrantName}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:419:38
+Error: Property 'registrantName' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Owner:</span>
+											<span class="ml-2">{plane.registrantName}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:422:21
+Error: Property 'aircraftType' does not exist on type 'Aircraft'. Did you mean 'aircraftTypeOgn'? (ts)
+									{/if}
+									{#if plane.aircraftType}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:425:38
+Error: Property 'aircraftType' does not exist on type 'Aircraft'. Did you mean 'aircraftTypeOgn'? (ts)
+											<span class="text-surface-600-300-token font-medium">Type:</span>
+											<span class="ml-2">{plane.aircraftType}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:428:21
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.model?.manufacturerName && plane.model?.modelName}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:428:54
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.model?.manufacturerName && plane.model?.modelName}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:432:21
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+											<span class="ml-2"
+												>{plane.model.manufacturerName}
+												{plane.model.modelName}</span
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:433:20
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+												>{plane.model.manufacturerName}
+												{plane.model.modelName}</span
+											>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:447:21
+Error: Property 'engine_manufacturer_model_code' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.engine_manufacturer_model_code}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:450:38
+Error: Property 'engine_manufacturer_model_code' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Engine:</span>
+											<span class="ml-2">{plane.engine_manufacturer_model_code}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:453:21
+Error: Property 'statusCode' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.statusCode}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:456:63
+Error: Property 'statusCode' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Status:</span>
+											<span class="ml-2">{getStatusCodeDescription(plane.statusCode)}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:459:21
+Error: Property 'airworthiness_class' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.airworthiness_class}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:464:38
+Error: Property 'airworthiness_class' does not exist on type 'Aircraft'. (ts)
+											>
+											<span class="ml-2">{plane.airworthiness_class}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:467:21
+Error: Property 'light_sport_type' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.light_sport_type}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:470:38
+Error: Property 'light_sport_type' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Light Sport Type:</span>
+											<span class="ml-2">{plane.light_sport_type}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:473:21
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+									{/if}
+									{#if plane.model?.numberOfEngines}
+										<div class="border-surface-200-700-token border-b pb-2">
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/clubs/[id]/+page.svelte:476:38
+Error: Property 'model' does not exist on type 'Aircraft'. (ts)
+											<span class="text-surface-600-300-token font-medium">Number of Engines:</span>
+											<span class="ml-2">{plane.model.numberOfEngines}</span>
+										</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/info/+page.svelte:60:7
+Warn: `<svelte:component>` is deprecated in runes mode — components are dynamic by default
+https://svelte.dev/e/svelte_component_deprecated (svelte)
+					<div class="flex-shrink-0 pt-1">
+						<svelte:component
+							this={metric.icon}
+							size={24}
+							class="text-primary-500 group-hover:text-white"
+						/>
+					</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/operations/+page.svelte:2084:54
+Error: Type 'Airport | null' is not assignable to type 'AirportView | null'.
+  Type 'Airport' is missing the following properties from type 'AirportView': airport_type, latitude_deg, longitude_deg, elevation_ft, and 9 more. (ts)
+<!-- Airport Modal -->
+<AirportModal bind:showModal={showAirportModal} bind:selectedAirport />
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/profile/+page.svelte:321:3
+Warn: Elements with the 'dialog' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus (svelte)
+	>
+		<div
+			role="dialog"
+			aria-labelledby="change-email-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="flex items-center justify-between">
+				<h2 id="change-email-heading" class="text-xl font-bold">Change Email</h2>
+				<button onclick={closeChangeEmailModal} class="preset-tonal-surface-500 btn btn-sm">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="space-y-4">
+				<div>
+					<label for="new-email" class="label">
+						<span>New Email Address</span>
+					</label>
+					<input
+						id="new-email"
+						type="email"
+						bind:value={newEmail}
+						placeholder="your.email@example.com"
+						class="input"
+						disabled={changingEmail}
+					/>
+				</div>
+
+				<div>
+					<label for="confirm-password" class="label">
+						<span>Confirm Password</span>
+					</label>
+					<input
+						id="confirm-password"
+						type="password"
+						bind:value={confirmPassword}
+						placeholder="Enter your password"
+						class="input"
+						disabled={changingEmail}
+					/>
+				</div>
+
+				{#if emailChangeError}
+					<div class="alert preset-filled-error-500">
+						<p>{emailChangeError}</p>
+					</div>
+				{/if}
+
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={closeChangeEmailModal}
+						class="preset-tonal-surface-500 btn"
+						disabled={changingEmail}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleChangeEmail}
+						class="btn preset-filled-primary-500"
+						disabled={changingEmail}
+					>
+						{changingEmail ? 'Updating...' : 'Update Email'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/profile/+page.svelte:321:3
+Warn: Visible, non-interactive elements with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+	>
+		<div
+			role="dialog"
+			aria-labelledby="change-email-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="flex items-center justify-between">
+				<h2 id="change-email-heading" class="text-xl font-bold">Change Email</h2>
+				<button onclick={closeChangeEmailModal} class="preset-tonal-surface-500 btn btn-sm">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="space-y-4">
+				<div>
+					<label for="new-email" class="label">
+						<span>New Email Address</span>
+					</label>
+					<input
+						id="new-email"
+						type="email"
+						bind:value={newEmail}
+						placeholder="your.email@example.com"
+						class="input"
+						disabled={changingEmail}
+					/>
+				</div>
+
+				<div>
+					<label for="confirm-password" class="label">
+						<span>Confirm Password</span>
+					</label>
+					<input
+						id="confirm-password"
+						type="password"
+						bind:value={confirmPassword}
+						placeholder="Enter your password"
+						class="input"
+						disabled={changingEmail}
+					/>
+				</div>
+
+				{#if emailChangeError}
+					<div class="alert preset-filled-error-500">
+						<p>{emailChangeError}</p>
+					</div>
+				{/if}
+
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={closeChangeEmailModal}
+						class="preset-tonal-surface-500 btn"
+						disabled={changingEmail}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleChangeEmail}
+						class="btn preset-filled-primary-500"
+						disabled={changingEmail}
+					>
+						{changingEmail ? 'Updating...' : 'Update Email'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/profile/+page.svelte:404:3
+Warn: Elements with the 'dialog' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus (svelte)
+	>
+		<div
+			role="dialog"
+			aria-labelledby="delete-account-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="flex items-center justify-between">
+				<h2 id="delete-account-heading" class="text-xl font-bold text-error-500">Delete Account</h2>
+				<button onclick={closeDeleteAccountModal} class="preset-tonal-surface-500 btn btn-sm">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="space-y-4">
+				<div class="alert preset-filled-warning-500">
+					<p class="font-semibold">Warning: This action cannot be undone!</p>
+					<p class="text-sm">All your data will be permanently deleted.</p>
+				</div>
+
+				<div>
+					<label for="delete-password" class="label">
+						<span>Confirm Password</span>
+					</label>
+					<input
+						id="delete-password"
+						type="password"
+						bind:value={deleteConfirmPassword}
+						placeholder="Enter your password"
+						class="input"
+						disabled={deletingAccount}
+					/>
+				</div>
+
+				<div>
+					<label for="delete-confirm" class="label">
+						<span>Type "DELETE" to confirm</span>
+					</label>
+					<input
+						id="delete-confirm"
+						type="text"
+						bind:value={deleteConfirmText}
+						placeholder="DELETE"
+						class="input"
+						disabled={deletingAccount}
+					/>
+				</div>
+
+				{#if deleteAccountError}
+					<div class="alert preset-filled-error-500">
+						<p>{deleteAccountError}</p>
+					</div>
+				{/if}
+
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={closeDeleteAccountModal}
+						class="preset-tonal-surface-500 btn"
+						disabled={deletingAccount}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleDeleteAccount}
+						class="btn preset-filled-error-500"
+						disabled={deletingAccount}
+					>
+						{deletingAccount ? 'Deleting...' : 'Delete Account'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+/home/liam/soar-worktrees/feat/api-consistency/web/src/routes/profile/+page.svelte:404:3
+Warn: Visible, non-interactive elements with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+	>
+		<div
+			role="dialog"
+			aria-labelledby="delete-account-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="flex items-center justify-between">
+				<h2 id="delete-account-heading" class="text-xl font-bold text-error-500">Delete Account</h2>
+				<button onclick={closeDeleteAccountModal} class="preset-tonal-surface-500 btn btn-sm">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="space-y-4">
+				<div class="alert preset-filled-warning-500">
+					<p class="font-semibold">Warning: This action cannot be undone!</p>
+					<p class="text-sm">All your data will be permanently deleted.</p>
+				</div>
+
+				<div>
+					<label for="delete-password" class="label">
+						<span>Confirm Password</span>
+					</label>
+					<input
+						id="delete-password"
+						type="password"
+						bind:value={deleteConfirmPassword}
+						placeholder="Enter your password"
+						class="input"
+						disabled={deletingAccount}
+					/>
+				</div>
+
+				<div>
+					<label for="delete-confirm" class="label">
+						<span>Type "DELETE" to confirm</span>
+					</label>
+					<input
+						id="delete-confirm"
+						type="text"
+						bind:value={deleteConfirmText}
+						placeholder="DELETE"
+						class="input"
+						disabled={deletingAccount}
+					/>
+				</div>
+
+				{#if deleteAccountError}
+					<div class="alert preset-filled-error-500">
+						<p>{deleteAccountError}</p>
+					</div>
+				{/if}
+
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={closeDeleteAccountModal}
+						class="preset-tonal-surface-500 btn"
+						disabled={deletingAccount}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleDeleteAccount}
+						class="btn preset-filled-error-500"
+						disabled={deletingAccount}
+					>
+						{deletingAccount ? 'Deleting...' : 'Delete Account'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+====================================
+svelte-check found 122 errors and 7 warnings in 8 files

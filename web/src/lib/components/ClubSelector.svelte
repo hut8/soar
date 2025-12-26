@@ -117,7 +117,7 @@
 					<Combobox.Item item={{ label: clubItem.label, value: clubItem.value }}>
 						<div class="flex w-full items-center space-x-2">
 							<span class="flex-1 text-left">{clubItem.label}</span>
-							{#if clubItem.club.is_soaring}
+							{#if clubItem.club.isSoaring}
 								<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span
 								>
 							{/if}

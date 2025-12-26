@@ -145,19 +145,19 @@ export class FixFeed {
 						// Transform WebSocket fix data to match Fix interface
 						const fix: Fix = {
 							id: rawMessage.id,
-							aircraft_id: rawMessage.aircraft_id,
-							device_address_hex: rawMessage.device_address_hex,
+							aircraftId: rawMessage.aircraftId,
+							deviceAddressHex: rawMessage.deviceAddressHex,
 							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
 							longitude: rawMessage.longitude,
-							altitude_msl_feet: rawMessage.altitude_msl_feet,
-							altitude_agl_feet: rawMessage.altitude_agl_feet,
-							track_degrees: rawMessage.track,
-							ground_speed_knots: rawMessage.ground_speed,
-							climb_fpm: rawMessage.climb_rate,
+							altitudeMslFeet: rawMessage.altitudeMslFeet,
+							altitudeAglFeet: rawMessage.altitudeAglFeet,
+							trackDegrees: rawMessage.track,
+							groundSpeedKnots: rawMessage.ground_speed,
+							climbFpm: rawMessage.climb_rate,
 							registration: rawMessage.registration,
 							model: rawMessage.model,
-							flight_id: rawMessage.flight_id,
+							flightId: rawMessage.flightId,
 							active: rawMessage.active
 						};
 
