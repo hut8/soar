@@ -1,0 +1,312 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import maplibregl from 'maplibre-gl';
+	import 'maplibre-gl/dist/maplibre-gl.css';
+	import { serverCall } from '$lib/api/server';
+	import { Loader, Calendar, Layers } from '@lucide/svelte';
+
+	interface CoverageHexProperties {
+		h3_index: string;
+		resolution: number;
+		receiver_id: string;
+		fix_count: number;
+		first_seen_at: string;
+		last_seen_at: string;
+		min_altitude_msl_feet: number | null;
+		max_altitude_msl_feet: number | null;
+		avg_altitude_msl_feet: number | null;
+		coverage_hours: number;
+	}
+
+	interface CoverageHexFeature {
+		type: 'Feature';
+		geometry: {
+			type: 'Polygon';
+			coordinates: number[][][];
+		};
+		properties: CoverageHexProperties;
+	}
+
+	interface CoverageGeoJsonResponse {
+		type: 'FeatureCollection';
+		features: CoverageHexFeature[];
+	}
+
+	let mapContainer: HTMLDivElement;
+	let map: maplibregl.Map | null = null;
+	let loading = false;
+	let error = '';
+	let resolution = 7;
+	let hexCount = 0;
+
+	// Default to last 30 days
+	function getDefaultDates() {
+		const now = Date.now();
+		const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+		const todayStr = new Date(now).toISOString().split('T')[0];
+		const thirtyDaysAgoStr = new Date(now - thirtyDaysMs).toISOString().split('T')[0];
+		return { start: thirtyDaysAgoStr, end: todayStr };
+	}
+
+	const defaultDates = getDefaultDates();
+	let startDate = defaultDates.start;
+	let endDate = defaultDates.end;
+
+	onMount(() => {
+		// Initialize MapLibre map centered on US
+		map = new maplibregl.Map({
+			container: mapContainer,
+			style: {
+				version: 8,
+				sources: {
+					osm: {
+						type: 'raster',
+						tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+						tileSize: 256,
+						attribution:
+							'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+					}
+				},
+				layers: [
+					{
+						id: 'osm',
+						type: 'raster',
+						source: 'osm',
+						minzoom: 0,
+						maxzoom: 19
+					}
+				]
+			},
+			center: [-98.5, 39.8], // Center of US
+			zoom: 4
+		});
+
+		map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+		// Load coverage data when map is ready
+		map.on('load', () => {
+			loadCoverage();
+		});
+
+		// Reload coverage when user stops moving the map
+		map.on('moveend', () => {
+			loadCoverage();
+		});
+
+		return () => {
+			map?.remove();
+		};
+	});
+
+	async function loadCoverage() {
+		if (!map) return;
+
+		loading = true;
+		error = '';
+
+		try {
+			const bounds = map.getBounds();
+			const west = bounds.getWest();
+			const east = bounds.getEast();
+			const south = bounds.getSouth();
+			const north = bounds.getNorth();
+
+			const response = await serverCall<CoverageGeoJsonResponse>(
+				`/data/coverage/hexes?resolution=${resolution}&west=${west}&east=${east}&south=${south}&north=${north}&start_date=${startDate}&end_date=${endDate}&limit=5000`
+			);
+
+			hexCount = response.features?.length || 0;
+
+			// Remove existing coverage layer if it exists
+			if (map.getLayer('coverage-hexes')) {
+				map.removeLayer('coverage-hexes');
+			}
+			if (map.getSource('coverage')) {
+				map.removeSource('coverage');
+			}
+
+			// Add coverage source and layer
+			map.addSource('coverage', {
+				type: 'geojson',
+				data: response
+			});
+
+			// Calculate max fix count for color scaling
+			const maxFixCount = Math.max(...response.features.map((f) => f.properties.fix_count), 1);
+
+			map.addLayer({
+				id: 'coverage-hexes',
+				type: 'fill',
+				source: 'coverage',
+				paint: {
+					'fill-color': [
+						'interpolate',
+						['linear'],
+						['get', 'fix_count'],
+						0,
+						'#440154', // Dark purple (no coverage)
+						maxFixCount * 0.25,
+						'#31688e', // Blue
+						maxFixCount * 0.5,
+						'#35b779', // Green
+						maxFixCount * 0.75,
+						'#fde724', // Yellow
+						maxFixCount,
+						'#ff0000' // Red (high coverage)
+					],
+					'fill-opacity': 0.6,
+					'fill-outline-color': '#ffffff'
+				}
+			});
+
+			// Add popup on hover
+			map.on('mousemove', 'coverage-hexes', (e) => {
+				if (!e.features || !e.features[0]) return;
+
+				map!.getCanvas().style.cursor = 'pointer';
+
+				const feature = e.features[0] as maplibregl.MapGeoJSONFeature & {
+					properties: CoverageHexProperties;
+				};
+				const props = feature.properties;
+
+				const popup = new maplibregl.Popup({
+					closeButton: false,
+					closeOnClick: false
+				})
+					.setLngLat(e.lngLat)
+					.setHTML(
+						`
+						<div class="p-2">
+							<p class="font-semibold">Coverage Hex</p>
+							<p class="text-sm">Fixes: ${props.fix_count.toLocaleString()}</p>
+							<p class="text-sm">Coverage: ${props.coverage_hours.toFixed(1)} hours</p>
+							${props.avg_altitude_msl_feet ? `<p class="text-sm">Avg Altitude: ${props.avg_altitude_msl_feet.toLocaleString()} ft</p>` : ''}
+							${props.min_altitude_msl_feet !== null && props.max_altitude_msl_feet !== null ? `<p class="text-sm">Altitude Range: ${props.min_altitude_msl_feet.toLocaleString()}-${props.max_altitude_msl_feet.toLocaleString()} ft</p>` : ''}
+							<p class="text-sm text-gray-500">Resolution: ${props.resolution}</p>
+						</div>
+					`
+					)
+					.addTo(map!);
+
+				// Remove popup when mouse leaves
+				map!.once('mouseleave', 'coverage-hexes', () => {
+					popup.remove();
+					map!.getCanvas().style.cursor = '';
+				});
+			});
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to load coverage: ${errorMessage}`;
+			console.error('Coverage load error:', err);
+		} finally {
+			loading = false;
+		}
+	}
+
+	function handleResolutionChange() {
+		loadCoverage();
+	}
+
+	function handleDateChange() {
+		loadCoverage();
+	}
+</script>
+
+<div class="flex h-screen flex-col">
+	<!-- Header -->
+	<div class="bg-surface-800 p-4 shadow-md">
+		<h1 class="text-2xl font-bold text-white">Receiver Coverage Map</h1>
+		<p class="text-sm text-gray-300">Visualizing aircraft reception coverage using H3 hexagons</p>
+	</div>
+
+	<!-- Controls -->
+	<div class="bg-surface-700 p-4 shadow-sm">
+		<div class="flex flex-wrap gap-4">
+			<!-- Resolution selector -->
+			<div class="flex items-center gap-2">
+				<Layers class="h-5 w-5 text-gray-300" />
+				<label for="resolution" class="text-sm font-medium text-gray-300">Resolution:</label>
+				<select
+					id="resolution"
+					bind:value={resolution}
+					onchange={handleResolutionChange}
+					class="variant-filled-surface select w-24"
+				>
+					<option value={6}>6 (~36 km²)</option>
+					<option value={7}>7 (~5 km²)</option>
+					<option value={8}>8 (~0.7 km²)</option>
+				</select>
+			</div>
+
+			<!-- Date range -->
+			<div class="flex items-center gap-2">
+				<Calendar class="h-5 w-5 text-gray-300" />
+				<label for="start-date" class="text-sm font-medium text-gray-300">From:</label>
+				<input
+					id="start-date"
+					type="date"
+					bind:value={startDate}
+					onchange={handleDateChange}
+					class="variant-filled-surface input w-40"
+				/>
+				<label for="end-date" class="text-sm font-medium text-gray-300">To:</label>
+				<input
+					id="end-date"
+					type="date"
+					bind:value={endDate}
+					onchange={handleDateChange}
+					class="variant-filled-surface input w-40"
+				/>
+			</div>
+
+			<!-- Stats -->
+			<div class="ml-auto flex items-center gap-2 text-sm text-gray-300">
+				{#if loading}
+					<Loader class="h-4 w-4 animate-spin" />
+					<span>Loading...</span>
+				{:else}
+					<span class="font-semibold">{hexCount.toLocaleString()}</span>
+					<span>hexagons</span>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Error message -->
+		{#if error}
+			<div class="mt-2 rounded bg-error-500 p-2 text-sm text-white">
+				{error}
+			</div>
+		{/if}
+	</div>
+
+	<!-- Map container -->
+	<div bind:this={mapContainer} class="flex-1"></div>
+
+	<!-- Legend -->
+	<div class="bg-surface-700 p-4">
+		<div class="flex items-center gap-4">
+			<span class="text-sm font-medium text-gray-300">Fix Count:</span>
+			<div class="flex items-center gap-2">
+				<div class="h-4 w-8 rounded" style="background-color: #440154;"></div>
+				<span class="text-xs text-gray-400">Low</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="h-4 w-8 rounded" style="background-color: #31688e;"></div>
+				<span class="text-xs text-gray-400">Medium</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="h-4 w-8 rounded" style="background-color: #35b779;"></div>
+				<span class="text-xs text-gray-400">High</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="h-4 w-8 rounded" style="background-color: #fde724;"></div>
+				<span class="text-xs text-gray-400">Very High</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="h-4 w-8 rounded" style="background-color: #ff0000;"></div>
+				<span class="text-xs text-gray-400">Maximum</span>
+			</div>
+		</div>
+	</div>
+</div>
