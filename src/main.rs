@@ -1181,8 +1181,8 @@ async fn main() -> Result<()> {
             end_date,
             resolutions,
         } => {
-            use soar::actions::aggregate_coverage::aggregate_coverage;
-            aggregate_coverage(diesel_pool, start_date, end_date, resolutions.clone()).await
+            commands::aggregate_coverage(diesel_pool, start_date, end_date, resolutions.clone())
+                .await
         }
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
         Commands::DumpUnifiedDdb { .. } => {

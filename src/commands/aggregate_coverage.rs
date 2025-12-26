@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::coverage::NewReceiverCoverageH3;
-use crate::coverage_repo::CoverageRepository;
-use crate::web::PgPool;
+use soar::coverage::NewReceiverCoverageH3;
+use soar::coverage_repo::CoverageRepository;
+use soar::web::PgPool;
 
 /// Aggregate fixes into H3 coverage hexes for a specific date range
 ///
@@ -274,7 +274,7 @@ struct CoverageAggregate {
 
 /// Find the most recent date in the receiver_coverage_h3 table
 async fn find_last_coverage_date(pool: PgPool) -> Result<Option<NaiveDate>> {
-    use crate::schema::receiver_coverage_h3;
+    use soar::schema::receiver_coverage_h3;
 
     let pool_clone = pool.clone();
     let result = tokio::task::spawn_blocking(move || {

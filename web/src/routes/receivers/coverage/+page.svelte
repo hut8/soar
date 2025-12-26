@@ -4,33 +4,7 @@
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { serverCall } from '$lib/api/server';
 	import { Loader, Calendar, Layers } from '@lucide/svelte';
-
-	interface CoverageHexProperties {
-		h3_index: string;
-		resolution: number;
-		receiver_id: string;
-		fix_count: number;
-		first_seen_at: string;
-		last_seen_at: string;
-		min_altitude_msl_feet: number | null;
-		max_altitude_msl_feet: number | null;
-		avg_altitude_msl_feet: number | null;
-		coverage_hours: number;
-	}
-
-	interface CoverageHexFeature {
-		type: 'Feature';
-		geometry: {
-			type: 'Polygon';
-			coordinates: number[][][];
-		};
-		properties: CoverageHexProperties;
-	}
-
-	interface CoverageGeoJsonResponse {
-		type: 'FeatureCollection';
-		features: CoverageHexFeature[];
-	}
+	import type { CoverageHexProperties, CoverageGeoJsonResponse } from '$lib/types';
 
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = null;

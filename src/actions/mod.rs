@@ -1,4 +1,3 @@
-pub mod aggregate_coverage;
 pub mod aircraft;
 pub mod airports;
 pub mod airspaces;
