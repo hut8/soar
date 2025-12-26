@@ -130,7 +130,7 @@
 			}
 
 			const response = await serverCall<CoverageGeoJsonResponse>(
-				`/data/coverage/hexes?${params.toString()}`
+				`/coverage/hexes?${params.toString()}`
 			);
 
 			hexCount = response.features?.length || 0;
