@@ -383,9 +383,9 @@
 						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-surface-600 dark:text-surface-400">
 							{selectedAircraft.registration ||
-								formatAircraftAddress(selectedAircraft.address_type, selectedAircraft.address)}
-							{#if selectedAircraft.aircraft_model}
-								• {selectedAircraft.aircraft_model}
+								formatAircraftAddress(selectedAircraft.addressType, selectedAircraft.address)}
+							{#if selectedAircraft.aircraftModel}
+								• {selectedAircraft.aircraftModel}
 							{/if}
 						</p>
 					</div>
@@ -458,7 +458,7 @@
 										</dt>
 										<dd class="font-mono text-sm">
 											{formatAircraftAddress(
-												selectedAircraft.address_type,
+												selectedAircraft.addressType,
 												selectedAircraft.address
 											)}
 										</dd>
@@ -471,7 +471,7 @@
 											Aircraft Model
 										</dt>
 										<dd class="text-sm">
-											{selectedAircraft.aircraft_model || 'Unknown'}
+											{selectedAircraft.aircraftModel || 'Unknown'}
 										</dd>
 									</div>
 									<div>
@@ -479,7 +479,7 @@
 											Competition Number
 										</dt>
 										<dd class="text-sm">
-											{selectedAircraft.competition_number || 'None'}
+											{selectedAircraft.competitionNumber || 'None'}
 										</dd>
 									</div>
 								</div>
@@ -510,17 +510,17 @@
 									<div>
 										<dd class="text-sm">
 											<span
-												class="badge {selectedAircraft.from_ddb
+												class="badge {selectedAircraft.fromOgnDdb
 													? 'preset-filled-success-500'
 													: 'preset-filled-secondary-500'}"
 											>
-												{selectedAircraft.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+												{selectedAircraft.fromOgnDdb ? 'From OGN DB' : 'Not in OGN DB'}
 											</span>
 										</dd>
 									</div>
 								</div>
 
-								{#if selectedAircraft.aircraft_type_ogn}
+								{#if selectedAircraft.aircraftTypeOgn}
 									<div class="grid grid-cols-1 gap-4">
 										<div>
 											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
@@ -529,10 +529,10 @@
 											<dd class="text-sm">
 												<span
 													class="badge {getAircraftTypeColor(
-														selectedAircraft.aircraft_type_ogn
+														selectedAircraft.aircraftTypeOgn
 													)} text-xs"
 												>
-													{getAircraftTypeOgnDescription(selectedAircraft.aircraft_type_ogn)}
+													{getAircraftTypeOgnDescription(selectedAircraft.aircraftTypeOgn)}
 												</span>
 											</dd>
 										</div>
