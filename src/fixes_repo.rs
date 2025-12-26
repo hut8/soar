@@ -541,40 +541,75 @@ impl FixesRepository {
     }
 
     /// Get fixes by receiver ID with pagination (last 24 hours only)
+    /// Returns fixes with full aircraft information
     pub async fn get_fixes_by_receiver_id_paginated(
         &self,
         receiver_uuid: Uuid,
         page: i64,
         per_page: i64,
-    ) -> Result<(Vec<Fix>, i64)> {
+    ) -> Result<(Vec<crate::fixes::FixWithAircraftInfo>, i64)> {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
+            use crate::actions::views::AircraftView;
+            use crate::aircraft::AircraftModel;
+            use crate::schema::{aircraft, fixes, raw_messages};
             let mut conn = pool.get()?;
 
             // Only get fixes from the last 24 hours
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
             // Get total count
-            let total_count = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
+            let total_count = fixes::table
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
-            // Get paginated results (most recent first)
+            // Get paginated results (most recent first) with raw packet info
             let offset = (page - 1) * per_page;
-            let results = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
-                .order(received_at.desc())
+            let fix_results = fixes::table
+                .inner_join(
+                    raw_messages::table.on(fixes::raw_message_id
+                        .eq(raw_messages::id)
+                        .and(fixes::received_at.eq(raw_messages::received_at))),
+                )
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
+                .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .select((Fix::as_select(), raw_messages::raw_message))
+                .load::<(Fix, Vec<u8>)>(&mut conn)?;
 
-            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+            // Get aircraft for these fixes
+            let aircraft_ids: Vec<Uuid> =
+                fix_results.iter().map(|(fix, _)| fix.aircraft_id).collect();
+            let aircraft_models: Vec<AircraftModel> = aircraft::table
+                .filter(aircraft::id.eq_any(&aircraft_ids))
+                .select(AircraftModel::as_select())
+                .load::<AircraftModel>(&mut conn)?;
+
+            // Create a map of aircraft ID to AircraftView
+            let aircraft_map: std::collections::HashMap<Uuid, AircraftView> = aircraft_models
+                .into_iter()
+                .map(|model| (model.id, AircraftView::from_device_model(model)))
+                .collect();
+
+            // Combine fixes with their aircraft
+            let results = fix_results
+                .into_iter()
+                .map(|(fix, raw_packet_bytes)| {
+                    let raw_packet = Some(String::from_utf8_lossy(&raw_packet_bytes).to_string());
+                    let aircraft = aircraft_map.get(&fix.aircraft_id).cloned();
+                    crate::fixes::FixWithAircraftInfo::new(fix, raw_packet, aircraft)
+                })
+                .collect();
+
+            Ok::<(Vec<crate::fixes::FixWithAircraftInfo>, i64), anyhow::Error>((
+                results,
+                total_count,
+            ))
         })
         .await??;
 

@@ -360,7 +360,7 @@ pub struct ReceiverFixesQuery {
 
 #[derive(Debug, Serialize)]
 pub struct ReceiverFixesResponse {
-    pub fixes: Vec<crate::fixes::Fix>,
+    pub fixes: Vec<crate::fixes::FixWithAircraftInfo>,
     pub page: i64,
     pub total_pages: i64,
 }
