@@ -63,10 +63,10 @@ pub struct AircraftSearchQuery {
     #[serde(rename = "address-type")]
     pub address_type: Option<String>,
     /// Bounding box search parameters
-    pub latitude_min: Option<f64>,
-    pub latitude_max: Option<f64>,
-    pub longitude_min: Option<f64>,
-    pub longitude_max: Option<f64>,
+    pub south: Option<f64>,
+    pub north: Option<f64>,
+    pub west: Option<f64>,
+    pub east: Option<f64>,
     /// Optional cutoff time for fixes (ISO 8601 format)
     pub after: Option<DateTime<Utc>>,
     /// Optional aircraft types filter (comma-separated list, e.g., "glider,tow_tug")
@@ -221,15 +221,15 @@ pub async fn get_aircraft_fixes(
 
 /// Search devices by bounding box with enriched aircraft data
 async fn search_devices_by_bbox(
-    lat_max: f64,
-    lat_min: f64,
-    lon_max: f64,
-    lon_min: f64,
+    north: f64,
+    south: f64,
+    east: f64,
+    west: f64,
     after: Option<DateTime<Utc>>,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
     // Validate coordinates
-    if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
+    if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
         return json_error(
             StatusCode::BAD_REQUEST,
             "Latitude must be between -90 and 90 degrees",
@@ -237,7 +237,7 @@ async fn search_devices_by_bbox(
         .into_response();
     }
 
-    if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
+    if !(-180.0..=180.0).contains(&east) || !(-180.0..=180.0).contains(&west) {
         return json_error(
             StatusCode::BAD_REQUEST,
             "Longitude must be between -180 and 180 degrees",
@@ -245,20 +245,13 @@ async fn search_devices_by_bbox(
         .into_response();
     }
 
-    if lat_min >= lat_max {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "latitude_min must be less than latitude_max",
-        )
-        .into_response();
+    if south >= north {
+        return json_error(StatusCode::BAD_REQUEST, "south must be less than north")
+            .into_response();
     }
 
-    if lon_min >= lon_max {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "longitude_min must be less than longitude_max",
-        )
-        .into_response();
+    if west >= east {
+        return json_error(StatusCode::BAD_REQUEST, "west must be less than east").into_response();
     }
 
     // Set default cutoff time to 1 hour ago if not provided
@@ -274,14 +267,7 @@ async fn search_devices_by_bbox(
     // Perform bounding box search - don't fetch fixes, only aircraft with latest position
     // Fixes will come from WebSocket after page load
     match fixes_repo
-        .get_aircraft_with_fixes_in_bounding_box(
-            lat_max,
-            lon_min,
-            lat_min,
-            lon_max,
-            cutoff_time,
-            None,
-        )
+        .get_aircraft_with_fixes_in_bounding_box(north, west, south, east, cutoff_time, None)
         .await
     {
         Ok(aircraft_with_fixes) => {
@@ -382,7 +368,7 @@ async fn search_devices_by_address(
 
 /// Search devices by registration, address+type, or bounding box
 #[instrument(skip(state), fields(
-    has_bbox = query.latitude_max.is_some(),
+    has_bbox = query.north.is_some(),
     has_registration = query.registration.is_some(),
     has_address = query.address.is_some()
 ))]
@@ -391,26 +377,26 @@ pub async fn search_aircraft(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     // Check if bounding box parameters are provided
-    let has_bounding_box = query.latitude_max.is_some()
-        || query.latitude_min.is_some()
-        || query.longitude_max.is_some()
-        || query.longitude_min.is_some();
+    let has_bounding_box = query.north.is_some()
+        || query.south.is_some()
+        || query.east.is_some()
+        || query.west.is_some();
 
     // Route to appropriate handler
     if has_bounding_box {
         // Validate all four bounding box parameters are provided
         match (
-            query.latitude_max,
-            query.latitude_min,
-            query.longitude_max,
-            query.longitude_min,
+            query.north,
+            query.south,
+            query.east,
+            query.west,
         ) {
-            (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
-                search_devices_by_bbox(lat_max, lat_min, lon_max, lon_min, query.after, state.pool).await.into_response()
+            (Some(north), Some(south), Some(east), Some(west)) => {
+                search_devices_by_bbox(north, south, east, west, query.after, state.pool).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
-                "When using bounding box search, all four parameters must be provided: latitude_max, latitude_min, longitude_max, longitude_min",
+                "When using bounding box search, all four parameters must be provided: north, south, east, west",
             )
             .into_response(),
         }
