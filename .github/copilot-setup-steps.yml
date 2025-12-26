@@ -1,0 +1,332 @@
+# GitHub Copilot Setup Steps for SOAR Project
+#
+# This file provides step-by-step instructions for setting up a development environment
+# optimized for GitHub Copilot to work effectively with the SOAR codebase.
+
+name: Copilot Setup Guide
+description: Complete development environment setup for GitHub Copilot integration
+
+prerequisites:
+  - name: Rust Toolchain
+    version: "latest stable"
+    install: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    verify: rustc --version
+    notes: Required for backend development
+
+  - name: Node.js
+    version: ">=24.0.0"
+    install: https://nodejs.org/
+    verify: node --version && npm --version
+    notes: Required for frontend development (SvelteKit)
+
+  - name: PostgreSQL with PostGIS
+    version: ">=17.0"
+    install: https://www.postgresql.org/download/
+    verify: psql --version
+    notes: |
+      Database with spatial extensions required.
+      Must install PostGIS extension after PostgreSQL installation.
+
+  - name: Diesel CLI
+    version: "2.2.0"
+    install: cargo install diesel_cli --no-default-features --features postgres
+    verify: diesel --version
+    notes: Database migration tool
+
+  - name: NATS Server
+    version: ">=2.11.8"
+    install: https://github.com/nats-io/nats-server/releases/
+    verify: nats-server --version
+    notes: Message bus for real-time data processing
+
+setup_steps:
+  - step: 1
+    name: Clone Repository
+    commands:
+      - git clone https://github.com/hut8/soar.git
+      - cd soar
+
+  - step: 2
+    name: Install Development Tools
+    commands:
+      - ./scripts/install-dev-tools.sh
+    description: |
+      Installs all required development tools including:
+      - Diesel CLI for database migrations
+      - cargo-audit for security audits
+      - cargo-nextest for faster testing
+      - pre-commit hooks framework
+
+  - step: 3
+    name: Setup Pre-commit Hooks
+    commands:
+      - ./scripts/setup-precommit.sh
+    description: |
+      Configures pre-commit hooks that match CI pipeline exactly.
+      These hooks automatically run:
+      - cargo fmt (Rust formatting)
+      - cargo clippy (Rust linting)
+      - cargo test (Rust tests)
+      - npm lint (Frontend linting)
+      - npm check (TypeScript validation)
+      - npm test (Playwright E2E tests)
+
+  - step: 4
+    name: Configure Environment
+    commands:
+      - cp .env.example .env
+      - nano .env  # or vim/code
+    description: |
+      Edit .env file with your configuration:
+      - DATABASE_URL: postgres://user:password@localhost:5432/soar_dev
+      - NATS_URL: nats://localhost:4222
+      - APRS_SERVER: aprs.glidernet.org
+      - APRS_PORT: 14580
+      - APRS_CALLSIGN: your-callsign
+      - APRS_PASSCODE: your-passcode
+      - JWT_SECRET: generate-random-secret
+      - SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD
+      - FROM_EMAIL, FROM_NAME
+      - BASE_URL: http://localhost:4173
+
+  - step: 5
+    name: Setup Development Database
+    commands:
+      - createdb soar_dev
+      - psql -d soar_dev -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+      - psql -d soar_dev -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - export DATABASE_URL="postgres://user:password@localhost:5432/soar_dev"
+      - diesel migration run
+    description: |
+      Creates development database with required extensions and runs all migrations.
+      The database schema includes tables for:
+      - Aircraft tracking (devices, fixes, flights)
+      - APRS messages and receivers
+      - Airports and airspaces
+      - User accounts and authentication
+      - Analytics and flight statistics
+
+  - step: 6
+    name: Setup Test Database
+    commands:
+      - createdb soar_test
+      - psql -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+      - psql -d soar_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - export TEST_DATABASE_URL="postgres://user:password@localhost:5432/soar_test"
+      - diesel migration run --database-url "$TEST_DATABASE_URL"
+    description: Test database used by Rust tests and E2E tests
+
+  - step: 7
+    name: Install Frontend Dependencies
+    commands:
+      - cd web
+      - npm ci
+      - cd ..
+    description: Installs all Node.js dependencies for SvelteKit frontend
+
+  - step: 8
+    name: Verify Rust Build
+    commands:
+      - cargo build
+    description: |
+      Builds the Rust backend in debug mode.
+      This will take several minutes on first run.
+      The build process includes:
+      - Compiling Rust code
+      - Building and embedding the SvelteKit frontend
+      - Generating version info from git tags
+
+  - step: 9
+    name: Verify Frontend Build
+    commands:
+      - cd web
+      - npm run build
+      - cd ..
+    description: Builds the SvelteKit frontend as a static site
+
+  - step: 10
+    name: Run Full Quality Checks
+    commands:
+      - pre-commit run --all-files
+    description: |
+      Runs all quality checks on entire codebase to verify setup.
+      This matches what CI will run on your commits.
+
+optional_setup:
+  - name: Install NATS Server Locally
+    commands:
+      - wget https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-amd64.deb
+      - sudo dpkg -i nats-server-*.deb
+      - rm nats-server-*.deb
+      - sudo systemctl start nats-server
+    description: For local testing of real-time message processing
+
+  - name: Setup PostgreSQL MCP Server (for Claude Code)
+    commands:
+      - cd /tmp
+      - git clone https://github.com/pgEdge/pgedge-postgres-mcp.git
+      - cd pgedge-postgres-mcp
+      - go build -v -o bin/pgedge-postgres-mcp ./cmd/pgedge-pg-mcp-svr
+      - cp bin/pgedge-postgres-mcp ~/.local/bin/
+      - cp .mcp.json.example ~/.soar/.mcp.json
+    description: |
+      Enables natural language database queries in Claude Code.
+      Edit ~/.soar/.mcp.json with your database credentials.
+
+  - name: Seed Test Data
+    commands:
+      - export DATABASE_URL="postgres://user:password@localhost:5432/soar_dev"
+      - export SEED_COUNT=50
+      - cargo build --release
+      - ./target/release/soar seed-test-data
+    description: |
+      Generates synthetic test data for development.
+      Creates realistic flights, aircraft, and receivers.
+
+common_commands:
+  development:
+    - command: cargo build
+      description: Build Rust backend in debug mode
+    - command: cargo test
+      description: Run all Rust tests
+    - command: cargo clippy
+      description: Run Rust linter
+    - command: cargo fmt
+      description: Format Rust code
+    - command: cd web && npm run dev
+      description: Start SvelteKit dev server (port 5173)
+    - command: cargo run -- web --port 61225
+      description: Start backend web server
+    - command: cargo run -- ingest-ogn
+      description: Start OGN/APRS ingestion
+    - command: cargo run -- run
+      description: Start message processing service
+
+  testing:
+    - command: cargo test
+      description: Run Rust unit tests
+    - command: cargo nextest run
+      description: Run tests with nextest (faster)
+    - command: cd web && npm test
+      description: Run Playwright E2E tests
+    - command: cd web && npm run check
+      description: Run TypeScript type checking
+    - command: cargo audit
+      description: Run security audit
+
+  database:
+    - command: diesel migration run
+      description: Run pending migrations
+    - command: diesel migration generate <name>
+      description: Create new migration
+    - command: psql -d soar_dev
+      description: Connect to development database
+
+  quality:
+    - command: pre-commit run --all-files
+      description: Run all quality checks
+    - command: cargo fmt
+      description: Format Rust code
+    - command: cd web && npm run format
+      description: Format frontend code
+
+branch_workflow:
+  notes: |
+    The main branch is protected. Always use feature branches.
+  steps:
+    - git checkout -b feature/my-feature
+    - "# Make changes"
+    - git add .
+    - git commit -m "Description"
+    - git push -u origin feature/my-feature
+    - "# Create PR via GitHub UI"
+
+ci_pipeline:
+  triggers:
+    - Push to main or develop
+    - Pull requests to main
+    - Release publication
+  jobs:
+    - test-sveltekit: Frontend linting, type checking, and build
+    - test-e2e: Playwright E2E tests with full stack
+    - test-rust: Rust formatting, clippy, and tests
+    - build-release: Static musl builds for x64 and ARM64
+    - security-audit: Cargo audit and dependency checks
+    - deploy-staging: Auto-deploy to staging on main branch
+    - deploy-production: Auto-deploy on release publication
+
+troubleshooting:
+  - issue: "Pre-commit hooks failing on web tests"
+    solution: |
+      E2E tests require full stack running. Use:
+      SKIP_HOOKS=1 git commit
+      Or run manually: pre-commit run --hook-stage manual web-test
+
+  - issue: "Diesel migration fails"
+    solution: |
+      Ensure PostgreSQL is running and DATABASE_URL is correct.
+      Check extensions: SELECT * FROM pg_extension;
+
+  - issue: "Frontend build fails with version error"
+    solution: |
+      Ensure you're in a git repository with tags.
+      Run: git fetch --tags
+
+  - issue: "Rust build fails with linking errors"
+    solution: |
+      Install PostgreSQL client libraries:
+      Ubuntu/Debian: sudo apt install libpq-dev
+      macOS: brew install postgresql
+
+  - issue: "Tests fail with database errors"
+    solution: |
+      Reset test database:
+      dropdb soar_test && createdb soar_test
+      psql -d soar_test -c "CREATE EXTENSION postgis;"
+      diesel migration run --database-url "$TEST_DATABASE_URL"
+
+documentation_files:
+  essential:
+    - CLAUDE.md: AI assistant guide with critical rules and patterns
+    - README.md: Project overview and setup instructions
+    - CONTRIBUTING.md: Contribution guidelines
+    - CI.md: CI/CD pipeline documentation
+
+  technical:
+    - docs/FLIGHT-DETECTION-TESTING.md: Flight tracking testing guide
+    - docs/OPENAIP_SETUP.md: Airspace data setup
+    - docs/BEAST-Integration.md: ADS-B integration
+    - docs/DB-BACKUPS.md: Database backup procedures
+    - web/e2e/README.md: E2E testing guide
+
+key_directories:
+  src:
+    description: Rust backend source code
+    subdirs:
+      - actions: HTTP API handlers
+      - models: Database models (Diesel)
+      - ingest: Data ingestion (OGN, ADS-B)
+      - flight_tracker: Flight detection logic
+
+  web:
+    description: SvelteKit frontend
+    subdirs:
+      - src/routes: Page routes and components
+      - src/lib: Shared components and utilities
+      - e2e: Playwright E2E tests
+
+  migrations:
+    description: Diesel database migrations
+
+  infrastructure:
+    description: Deployment configs and systemd services
+
+  scripts:
+    description: Utility scripts
+
+  tests:
+    description: Integration tests
+
+  docs:
+    description: Technical documentation
