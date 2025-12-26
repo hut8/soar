@@ -9,12 +9,13 @@ use std::collections::HashMap;
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::json_error;
 use crate::actions::views::{Aircraft, AircraftView, AirportInfo, FlightView};
+use crate::actions::{
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+};
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::auth::AdminUser;
-use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
@@ -39,20 +40,6 @@ pub struct FlightsQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PaginatedFixesResponse {
-    pub fixes: Vec<crate::fixes::FixWithRawPacket>,
-    pub page: i64,
-    pub total_pages: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginatedFlightsResponse {
-    pub flights: Vec<FlightView>,
-    pub page: i64,
-    pub total_pages: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct AircraftSearchQuery {
     /// Aircraft registration number (e.g., N8437D)
@@ -74,26 +61,10 @@ pub struct AircraftSearchQuery {
     pub aircraft_types: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct AircraftSearchResponse {
-    pub aircraft: Vec<AircraftView>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AircraftFixesResponse {
-    pub fixes: Vec<Fix>,
-    pub count: usize,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct BulkAircraftQuery {
     /// Comma-separated list of aircraft UUIDs (max 10)
     pub ids: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct BulkAircraftResponse {
-    pub aircraft: HashMap<String, AircraftView>,
 }
 
 /// Get multiple aircraft by their UUIDs (max 10)
@@ -140,10 +111,7 @@ pub async fn get_aircraft_bulk(
         }
     }
 
-    Json(BulkAircraftResponse {
-        aircraft: aircraft_map,
-    })
-    .into_response()
+    Json(DataResponse { data: aircraft_map }).into_response()
 }
 
 /// Get an aircraft by its UUID
@@ -157,7 +125,10 @@ pub async fn get_aircraft_by_id(
     match aircraft_repo.get_aircraft_by_id(id).await {
         Ok(Some(aircraft)) => {
             let aircraft_view: AircraftView = aircraft.into();
-            Json(aircraft_view).into_response()
+            Json(DataResponse {
+                data: aircraft_view,
+            })
+            .into_response()
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
@@ -190,10 +161,13 @@ pub async fn get_aircraft_fixes(
             {
                 Ok((fixes, total_count)) => {
                     let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-                    Json(PaginatedFixesResponse {
-                        fixes,
-                        page,
-                        total_pages,
+                    Json(PaginatedDataResponse {
+                        data: fixes,
+                        metadata: PaginationMetadata {
+                            page,
+                            total_pages,
+                            total_count,
+                        },
                     })
                     .into_response()
                 }
@@ -295,7 +269,7 @@ async fn search_devices_by_bbox(
                 enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
 
             info!("Enriched {} aircraft, returning response", enriched.len());
-            Json(enriched).into_response()
+            Json(DataListResponse { data: enriched }).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
@@ -318,10 +292,7 @@ async fn search_devices_by_registration(
     match device_repo.search_by_registration(&registration).await {
         Ok(devices) => {
             let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
-            Json(AircraftSearchResponse {
-                aircraft: device_views,
-            })
-            .into_response()
+            Json(DataListResponse { data: device_views }).into_response()
         }
         Err(e) => {
             tracing::error!(
@@ -363,12 +334,12 @@ async fn search_devices_by_address(
     match device_repo.search_by_address(address).await {
         Ok(Some(device)) => {
             let device_view: AircraftView = device.into();
-            Json(AircraftSearchResponse {
-                aircraft: vec![device_view],
+            Json(DataListResponse {
+                data: vec![device_view],
             })
             .into_response()
         }
-        Ok(None) => Json(AircraftSearchResponse { aircraft: vec![] }).into_response(),
+        Ok(None) => Json(DataListResponse::<AircraftView> { data: vec![] }).into_response(),
         Err(e) => {
             tracing::error!("Failed to search devices by address {}: {}", address, e);
             json_error(
@@ -469,8 +440,8 @@ async fn get_recent_aircraft_response(
                     },
                 )
                 .collect();
-            Json(AircraftSearchResponse {
-                aircraft: aircraft_views,
+            Json(DataListResponse {
+                data: aircraft_views,
             })
             .into_response()
         }
@@ -605,10 +576,7 @@ pub async fn get_aircraft_by_club(
     match device_repo.search_by_club_id(club_id).await {
         Ok(devices) => {
             let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
-            Json(AircraftSearchResponse {
-                aircraft: device_views,
-            })
-            .into_response()
+            Json(DataListResponse { data: device_views }).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get devices for club {}: {}", club_id, e);
@@ -676,10 +644,13 @@ pub async fn get_aircraft_flights(
             }
 
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(PaginatedFlightsResponse {
-                flights: flight_views,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: flight_views,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -700,6 +671,7 @@ pub struct UpdateDeviceClubRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateDeviceClubResponse {
     pub success: bool,
     pub message: String,
@@ -715,9 +687,11 @@ pub async fn update_aircraft_club(
     let device_repo = AircraftRepository::new(state.pool);
 
     match device_repo.update_club_id(id, payload.club_id).await {
-        Ok(true) => Json(UpdateDeviceClubResponse {
-            success: true,
-            message: "Aircraft club assignment updated successfully".to_string(),
+        Ok(true) => Json(DataResponse {
+            data: UpdateDeviceClubResponse {
+                success: true,
+                message: "Aircraft club assignment updated successfully".to_string(),
+            },
         })
         .into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
