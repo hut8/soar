@@ -198,10 +198,12 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
 
     // Set up elevation service for AGL calculation (required for flight creation)
-    // Use local test data directory instead of S3 for CI compatibility
-    use std::path::PathBuf;
-    let test_elevation_path = PathBuf::from("tests/data/elevation");
-    let elevation_service = soar::elevation::ElevationService::with_path(test_elevation_path)
+    // Point to test data directory (S3 will be disabled since ELEVATION_S3_BUCKET is not set)
+    unsafe {
+        std::env::set_var("ELEVATION_DATA_PATH", "tests/data/elevation");
+    }
+    let elevation_service = soar::elevation::ElevationService::new_with_s3()
+        .await
         .expect("Failed to create elevation service");
 
     // Enable tracing for debugging
@@ -420,10 +422,12 @@ async fn test_no_active_fixes_should_not_create_flight() {
     let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
 
     // Set up elevation service for AGL calculation (required for activity detection)
-    // Use local test data directory instead of S3 for CI compatibility
-    use std::path::PathBuf;
-    let test_elevation_path = PathBuf::from("tests/data/elevation");
-    let elevation_service = soar::elevation::ElevationService::with_path(test_elevation_path)
+    // Point to test data directory (S3 will be disabled since ELEVATION_S3_BUCKET is not set)
+    unsafe {
+        std::env::set_var("ELEVATION_DATA_PATH", "tests/data/elevation");
+    }
+    let elevation_service = soar::elevation::ElevationService::new_with_s3()
+        .await
         .expect("Failed to create elevation service");
 
     // Enable tracing for debugging
