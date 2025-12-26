@@ -545,7 +545,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by(le) (rate(flight_tracker_coalesce_resumed_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
+          "expr": "flight_tracker_coalesce_resumed_distance_km{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Resumed Distance (km)",
           "range": true,
           "refId": "A"
@@ -556,7 +556,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by(le) (rate(flight_tracker_coalesce_rejected_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval])))",
+          "expr": "flight_tracker_coalesce_resumed_distance_km{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Rejected Distance (km)",
           "range": true,
           "refId": "B"

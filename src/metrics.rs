@@ -253,33 +253,20 @@ pub fn initialize_aprs_ingest_metrics() {
     // APRS keepalive metrics
     metrics::counter!("aprs.keepalive.sent").absolute(0);
 
-    // APRS raw message metrics
-    metrics::counter!("aprs.raw_message.processed").absolute(0);
-    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
-    metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
-
     // Message type tracking (received from APRS-IS)
     metrics::counter!("aprs.raw_message.received.server").absolute(0);
     metrics::counter!("aprs.raw_message.received.aprs").absolute(0);
     metrics::counter!("aprs.raw_message.queued.server").absolute(0);
     metrics::counter!("aprs.raw_message.queued.aprs").absolute(0);
 
-    // NATS publishing metrics (ingest-ogn publishes to NATS)
+    // NATS publishing metrics (ingest-ogn publishes to NATS with fire-and-forget)
     metrics::counter!("aprs.nats.published").absolute(0);
     metrics::counter!("aprs.nats.publish_error").absolute(0);
     metrics::counter!("aprs.nats.slow_publish").absolute(0);
-    metrics::counter!("aprs.nats.publish_timeout").absolute(0);
-    metrics::gauge!("aprs.nats.queue_depth").set(0.0);
-    metrics::gauge!("aprs.nats.in_flight").set(0.0);
     metrics::histogram!("aprs.nats.publish_duration_ms").record(0.0);
 
     // Connection timeout metric
     metrics::counter!("aprs.connection.timeout").absolute(0);
-
-    // Shutdown metrics
-    metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").absolute(0);
-    metrics::counter!("aprs.shutdown.messages_flushed").absolute(0);
-    metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(0.0);
 }
 
 /// Initialize Beast ingest metrics to zero/default values
@@ -524,6 +511,17 @@ pub fn initialize_airspace_metrics() {
     metrics::counter!("api.airspaces.errors").absolute(0);
     metrics::histogram!("api.airspaces.duration_ms").record(0.0);
     metrics::gauge!("api.airspaces.results_count").set(0.0);
+}
+
+pub fn initialize_coverage_metrics() {
+    // Coverage API metrics
+    metrics::counter!("coverage.api.hexes.requests").absolute(0);
+    metrics::counter!("coverage.api.hexes.success").absolute(0);
+    metrics::counter!("coverage.api.errors").absolute(0);
+    metrics::histogram!("coverage.api.hexes.count").record(0.0);
+    metrics::histogram!("coverage.query.hexes_ms").record(0.0);
+    metrics::counter!("coverage.cache.hit").absolute(0);
+    metrics::counter!("coverage.cache.miss").absolute(0);
 }
 
 /// Health check handler for APRS ingestion service

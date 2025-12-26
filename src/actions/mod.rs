@@ -5,6 +5,7 @@ pub mod analytics;
 pub mod aprs_messages;
 pub mod auth;
 pub mod clubs;
+pub mod coverage;
 pub mod devices;
 pub mod fixes;
 pub mod flights;

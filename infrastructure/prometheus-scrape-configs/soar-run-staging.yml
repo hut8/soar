@@ -1,0 +1,12 @@
+# SOAR Run (APRS Processing) scrape targets - STAGING
+# File-based service discovery configuration for Prometheus
+#
+# This file defines the target endpoints for the SOAR APRS processing service in staging.
+# Prometheus will automatically reload this file every 30 seconds.
+
+- targets:
+    - 'localhost:9092'
+  labels:
+    instance: 'soar-staging'
+    component: 'run'
+    environment: 'staging'

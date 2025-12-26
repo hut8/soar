@@ -166,3 +166,9 @@ To add more metrics to the dashboard:
 2. Export it via the Prometheus exporter (already configured in `src/metrics.rs`)
 3. Add a new panel to `soar-dashboard.json` with the appropriate Prometheus query
 4. Re-import the dashboard
+
+## See Also
+
+- [Grafana Alerting Configuration](GRAFANA-ALERTING.md)
+- [Grafana Datasource Troubleshooting](GRAFANA-DATASOURCE-TROUBLESHOOTING.md)
+- [SOAR Deployment Guide](DEPLOYMENT.md)

@@ -576,6 +576,9 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     // Initialize airspace metrics
     crate::metrics::initialize_airspace_metrics();
 
+    // Initialize coverage metrics
+    crate::metrics::initialize_coverage_metrics();
+
     // Start process metrics background task
     tokio::spawn(crate::metrics::process_metrics_task());
 
@@ -626,6 +629,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs", get(actions::search_clubs))
         .route("/clubs/{id}", get(actions::get_club_by_id))
         .route("/clubs/{id}/flights", get(actions::get_club_flights))
+        .route(
+            "/coverage/hexes",
+            get(actions::coverage::get_coverage_hexes),
+        )
         .route("/fixes", get(actions::search_fixes))
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))

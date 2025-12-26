@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, MapPin, Radio, Navigation } from '@lucide/svelte';
+	import { Search, MapPin, Radio, Navigation, Map } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -247,6 +247,12 @@
 			<Radio class="h-8 w-8" />
 			Receiver Search
 		</h1>
+		<div class="flex justify-center">
+			<a href={resolve('/receivers/coverage')} class="btn gap-2 preset-outlined">
+				<Map class="h-4 w-4" />
+				View Coverage Map
+			</a>
+		</div>
 	</header>
 
 	<!-- Search Section -->

@@ -114,6 +114,20 @@ pub struct FixWithRawPacket {
     pub raw_packet: Option<String>,
 }
 
+/// Extended Fix struct that includes both raw packet and aircraft information
+/// Used for receiver fixes API where aircraft details need to be displayed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixWithAircraftInfo {
+    #[serde(flatten)]
+    pub fix: Fix,
+
+    /// Raw APRS packet data (joined from aprs_messages table)
+    pub raw_packet: Option<String>,
+
+    /// Full aircraft information (joined from aircraft table)
+    pub aircraft: Option<crate::actions::views::AircraftView>,
+}
+
 /// Extended Fix struct that includes flight metadata for WebSocket streaming
 /// Used when streaming fixes to include current flight information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +147,21 @@ impl FixWithRawPacket {
     }
 }
 
+impl FixWithAircraftInfo {
+    /// Create a FixWithAircraftInfo from a Fix, raw packet, and aircraft information
+    pub fn new(
+        fix: Fix,
+        raw_packet: Option<String>,
+        aircraft: Option<crate::actions::views::AircraftView>,
+    ) -> Self {
+        Self {
+            fix,
+            raw_packet,
+            aircraft,
+        }
+    }
+}
+
 impl std::ops::Deref for FixWithRawPacket {
     type Target = Fix;
 
@@ -142,6 +171,20 @@ impl std::ops::Deref for FixWithRawPacket {
 }
 
 impl std::ops::DerefMut for FixWithRawPacket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fix
+    }
+}
+
+impl std::ops::Deref for FixWithAircraftInfo {
+    type Target = Fix;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fix
+    }
+}
+
+impl std::ops::DerefMut for FixWithAircraftInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }

@@ -88,8 +88,14 @@
 		fix_counts_by_aircraft: AircraftFixCount[];
 	}
 
+	// Extends Fix with aircraft and raw packet data
+	interface FixWithAircraft extends Fix {
+		aircraft?: Aircraft;
+		raw_packet?: string;
+	}
+
 	let receiver = $state<Receiver | null>(null);
-	let fixes = $state<Fix[] | null>(null);
+	let fixes = $state<FixWithAircraft[] | null>(null);
 	let statuses = $state<ReceiverStatus[]>([]);
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
@@ -116,7 +122,8 @@
 	let rawMessagesTotalPages = $state(1);
 
 	// Display options
-	let showRawData = $state(false);
+	let showRawData = $state(false); // For status reports
+	let showRawFixes = $state(false); // For received fixes
 	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', 'received-fixes', or 'aggregate-stats'
 
 	let receiverId = $derived($page.params.id || '');
@@ -892,10 +899,10 @@
 									</div>
 								{/if}
 
-								<!-- Fixes by Device -->
+								<!-- Fixes by Aircraft -->
 								{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 									<div class="mt-6 space-y-4">
-										<h3 class="h3">Fixes Received by Device</h3>
+										<h3 class="h3">Fixes Received by Aircraft</h3>
 
 										<!-- Desktop: Table -->
 										<div class="hidden md:block">
@@ -903,7 +910,7 @@
 												<table class="table-hover table">
 													<thead>
 														<tr>
-															<th>Device</th>
+															<th>Aircraft</th>
 															<th class="text-right">Count</th>
 														</tr>
 													</thead>
@@ -1099,6 +1106,15 @@
 					<!-- Received Fixes Tab Content -->
 					<Tabs.Content value="received-fixes">
 						<div class="mt-4">
+							{#if fixes !== null && fixes.length > 0}
+								<div class="mb-4 flex items-center justify-end">
+									<label class="flex cursor-pointer items-center gap-2">
+										<input type="checkbox" class="checkbox" bind:checked={showRawFixes} />
+										<span class="text-sm">Show raw</span>
+									</label>
+								</div>
+							{/if}
+
 							{#if loadingFixes}
 								<div class="flex items-center justify-center space-x-4 p-8">
 									<Progress class="h-6 w-6" />
@@ -1120,8 +1136,7 @@
 											<thead>
 												<tr>
 													<th>Timestamp</th>
-													<th>Device</th>
-													<th>Registration</th>
+													<th>Aircraft</th>
 													<th>Position</th>
 													<th>Altitude</th>
 													<th>Speed</th>
@@ -1129,18 +1144,27 @@
 												</tr>
 											</thead>
 											<tbody>
-												{#each fixes as fix (fix.id)}
-													<tr>
+												{#each fixes as fix, index (fix.id)}
+													<tr
+														class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+															2 ===
+														0
+															? 'bg-gray-50 dark:bg-gray-900'
+															: ''}"
+													>
 														<td class="text-xs">
 															<div>{formatDateTime(fix.timestamp)}</div>
 															<div class="text-surface-500-400-token">
 																{formatRelativeTime(fix.timestamp)}
 															</div>
 														</td>
-														<td class="font-mono text-xs">
-															{fix.device_address_hex || '—'}
+														<td>
+															{#if fix.aircraft}
+																<AircraftLink aircraft={fix.aircraft} size="sm" />
+															{:else}
+																<span class="text-surface-500-400-token">—</span>
+															{/if}
 														</td>
-														<td class="font-mono text-sm">{fix.registration || '—'}</td>
 														<td class="font-mono text-xs">
 															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 														</td>
@@ -1162,6 +1186,17 @@
 																: '—'}</td
 														>
 													</tr>
+													{#if showRawFixes && fix.raw_packet}
+														<tr
+															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+																? 'bg-gray-100 dark:bg-gray-800'
+																: ''}"
+														>
+															<td colspan="6" class="px-3 py-2 font-mono text-sm">
+																{fix.raw_packet}
+															</td>
+														</tr>
+													{/if}
 												{/each}
 											</tbody>
 										</table>
@@ -1179,17 +1214,17 @@
 														{formatRelativeTime(fix.timestamp)}
 													</div>
 												</div>
-												{#if fix.registration}
-													<span class="chip preset-tonal font-mono text-xs">{fix.registration}</span
-													>
-												{/if}
 											</div>
 
 											<dl class="space-y-2 text-sm">
 												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Device</dt>
-													<dd class="font-mono text-xs">
-														{fix.device_address_hex || '—'}
+													<dt class="text-surface-600-300-token">Aircraft</dt>
+													<dd>
+														{#if fix.aircraft}
+															<AircraftLink aircraft={fix.aircraft} size="sm" />
+														{:else}
+															<span class="text-surface-500-400-token">—</span>
+														{/if}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
@@ -1223,6 +1258,13 @@
 													</dd>
 												</div>
 											</dl>
+
+											{#if showRawFixes && fix.raw_packet}
+												<div class="mt-3 border-t border-surface-300 pt-3 dark:border-surface-600">
+													<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
+													<div class="overflow-x-auto font-mono text-xs">{fix.raw_packet}</div>
+												</div>
+											{/if}
 										</div>
 									{/each}
 								</div>
@@ -1324,10 +1366,10 @@
 												</div>
 											{/if}
 
-											<!-- Fixes by Device -->
+											<!-- Fixes by Aircraft -->
 											{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 												<div class="space-y-4">
-													<h3 class="h3">Fixes Received by Device</h3>
+													<h3 class="h3">Fixes Received by Aircraft</h3>
 
 													<!-- Desktop: Table -->
 													<div class="hidden md:block">
@@ -1335,7 +1377,7 @@
 															<table class="table-hover table">
 																<thead>
 																	<tr>
-																		<th>Device</th>
+																		<th>Aircraft</th>
 																		<th class="text-right">Count</th>
 																	</tr>
 																</thead>

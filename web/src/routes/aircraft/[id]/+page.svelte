@@ -742,6 +742,7 @@
 					emptyMessage="No position fixes found in the last 24 hours"
 					hideInactiveValue={hideInactiveFixes}
 					onHideInactiveChange={handleHideInactiveChange}
+					fixesInChronologicalOrder={false}
 				/>
 
 				<!-- Pagination for fixes -->

@@ -18,6 +18,7 @@
 		hideInactiveValue?: boolean; // Controlled value for hide inactive
 		showRawValue?: boolean; // Controlled value for show raw
 		onHideInactiveChange?: (value: boolean) => void; // Callback when hide inactive changes
+		fixesInChronologicalOrder?: boolean; // True if fixes are in chronological order (earliest first), false if reverse chronological (newest first)
 	}
 
 	let {
@@ -31,7 +32,8 @@
 		emptyMessage = 'No position fixes found',
 		hideInactiveValue = false,
 		showRawValue = false,
-		onHideInactiveChange
+		onHideInactiveChange,
+		fixesInChronologicalOrder = true
 	}: Props = $props();
 
 	let showRawData = $state(showRawValue);
@@ -94,9 +96,25 @@
 
 	function calculateInterval(currentFix: Fix, previousFix: Fix | undefined): string {
 		if (!previousFix) return 'N/A';
+
+		// If fixes are in chronological order (earliest first), previousFix is the earlier timestamp
+		// If fixes are in reverse chronological order (newest first), previousFix is the later timestamp
+		// We always want to calculate: later timestamp - earlier timestamp for positive intervals
+
 		const current = dayjs(currentFix.timestamp);
 		const previous = dayjs(previousFix.timestamp);
-		const diffSeconds = current.diff(previous, 'second');
+
+		let diffSeconds: number;
+		if (fixesInChronologicalOrder) {
+			// Chronological order: current is later than previous
+			diffSeconds = current.diff(previous, 'second');
+		} else {
+			// Reverse chronological: current is earlier than previous
+			diffSeconds = previous.diff(current, 'second');
+		}
+
+		// Handle negative values (shouldn't happen, but just in case)
+		diffSeconds = Math.abs(diffSeconds);
 
 		const hours = Math.floor(diffSeconds / 3600);
 		const minutes = Math.floor((diffSeconds % 3600) / 60);
@@ -114,7 +132,15 @@
 		if (!previousFix) return false;
 		const current = dayjs(currentFix.timestamp);
 		const previous = dayjs(previousFix.timestamp);
-		const diffSeconds = current.diff(previous, 'second');
+
+		let diffSeconds: number;
+		if (fixesInChronologicalOrder) {
+			diffSeconds = current.diff(previous, 'second');
+		} else {
+			diffSeconds = previous.diff(current, 'second');
+		}
+
+		diffSeconds = Math.abs(diffSeconds);
 		return diffSeconds >= 3600;
 	}
 </script>
