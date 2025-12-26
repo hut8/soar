@@ -119,7 +119,7 @@ jobs:
         run: npm ci
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -417,7 +417,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -504,7 +504,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -604,7 +604,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
@@ -757,7 +757,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
