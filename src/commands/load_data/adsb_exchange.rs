@@ -120,15 +120,32 @@ pub async fn load_adsb_exchange_data(
     // Read and parse the NDJSON file (newline-delimited JSON)
     // Each line is a separate JSON object, not a single array
     let file_content = fs::read_to_string(adsb_path)?;
-    let records: Vec<AdsbExchangeRecord> = file_content
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(serde_json::from_str)
-        .collect::<Result<Vec<_>, _>>()
-        .context("Failed to parse NDJSON from ADS-B Exchange")?;
+    let mut records = Vec::new();
+    let mut parse_errors = 0;
+
+    for (line_num, line) in file_content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        match serde_json::from_str::<AdsbExchangeRecord>(line) {
+            Ok(record) => records.push(record),
+            Err(e) => {
+                debug!(
+                    "Failed to parse line {} from ADS-B Exchange: {}",
+                    line_num + 1,
+                    e
+                );
+                parse_errors += 1;
+            }
+        }
+    }
+
     info!(
-        "Successfully parsed {} records from ADS-B Exchange",
-        records.len()
+        "Successfully parsed {} records from ADS-B Exchange ({} parse errors)",
+        records.len(),
+        parse_errors
     );
 
     let mut inserted_count = 0;
@@ -283,8 +300,8 @@ pub async fn load_adsb_exchange_data(
         inserted_count
     );
     info!(
-        "Skipped: {} invalid ICAO addresses, {} records with no data",
-        skipped_invalid_icao, skipped_no_data
+        "Skipped: {} parse errors, {} invalid ICAO addresses, {} records with no data",
+        parse_errors, skipped_invalid_icao, skipped_no_data
     );
 
     Ok((inserted_count, 0))
