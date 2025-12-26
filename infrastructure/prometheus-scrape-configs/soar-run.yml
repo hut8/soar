@@ -1,0 +1,12 @@
+# SOAR Run (APRS Processing) scrape targets
+# File-based service discovery configuration for Prometheus
+#
+# This file defines the target endpoints for the SOAR APRS processing service.
+# Prometheus will automatically reload this file every 30 seconds.
+
+- targets:
+    - 'localhost:9091'
+  labels:
+    instance: 'soar'
+    component: 'run'
+    environment: 'production'

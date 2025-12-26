@@ -415,6 +415,41 @@ else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
 fi
 
+# Install Prometheus scrape-configs files (backward compatibility for old prometheus.yml)
+if [ -d "$DEPLOY_DIR/prometheus-scrape-configs" ]; then
+    log_info "Installing Prometheus scrape-configs files (legacy file_sd_configs)..."
+    mkdir -p /etc/prometheus/scrape-configs
+
+    # Remove old SOAR scrape-config files that aren't in the deployment
+    if [ -d "/etc/prometheus/scrape-configs" ]; then
+        log_info "Cleaning up old scrape-config files..."
+        for old_config in /etc/prometheus/scrape-configs/soar-*.yml; do
+            if [ -f "$old_config" ]; then
+                config_basename=$(basename "$old_config")
+                if [ ! -f "$DEPLOY_DIR/prometheus-scrape-configs/$config_basename" ]; then
+                    log_info "Removing obsolete scrape-config: $config_basename"
+                    rm -f "$old_config"
+                fi
+            fi
+        done
+    fi
+
+    cp "$DEPLOY_DIR/prometheus-scrape-configs"/*.yml /etc/prometheus/scrape-configs/
+    chmod 644 /etc/prometheus/scrape-configs/*.yml
+
+    # Set ownership to prometheus user if it exists
+    if id "prometheus" &>/dev/null; then
+        chown -R prometheus:prometheus /etc/prometheus/scrape-configs
+        log_info "Prometheus scrape-config files installed and ownership set"
+        PROMETHEUS_NEEDS_RELOAD=true
+    else
+        log_warn "prometheus user not found, skipping ownership change"
+        log_info "Prometheus scrape-config files installed"
+    fi
+else
+    log_warn "prometheus-scrape-configs directory not found in deployment, skipping legacy Prometheus configuration"
+fi
+
 # Reload Prometheus if job configurations were updated
 if [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
     if systemctl is-active --quiet prometheus; then
