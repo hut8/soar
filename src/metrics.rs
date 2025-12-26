@@ -513,6 +513,17 @@ pub fn initialize_airspace_metrics() {
     metrics::gauge!("api.airspaces.results_count").set(0.0);
 }
 
+pub fn initialize_coverage_metrics() {
+    // Coverage API metrics
+    metrics::counter!("coverage.api.hexes.requests").absolute(0);
+    metrics::counter!("coverage.api.hexes.success").absolute(0);
+    metrics::counter!("coverage.api.errors").absolute(0);
+    metrics::histogram!("coverage.api.hexes.count").record(0.0);
+    metrics::histogram!("coverage.query.hexes_ms").record(0.0);
+    metrics::counter!("coverage.cache.hit").absolute(0);
+    metrics::counter!("coverage.cache.miss").absolute(0);
+}
+
 /// Health check handler for APRS ingestion service
 /// Returns 200 OK if service is healthy and ready to receive traffic
 /// Returns 503 Service Unavailable if not ready

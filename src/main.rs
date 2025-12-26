@@ -287,6 +287,33 @@ enum Commands {
     /// - TEST_USER_FIRST_NAME (default: Test)
     /// - TEST_USER_LAST_NAME (default: User)
     SeedTestData {},
+    /// Aggregate position fixes into H3 coverage hexes
+    ///
+    /// Processes position fixes from the specified date range and aggregates them into H3
+    /// hexagonal coverage zones. Updates coverage statistics including fix counts, timestamps,
+    /// and altitude information for visualization and analysis.
+    ///
+    /// If start/end dates are omitted, automatically determines what needs aggregation by:
+    /// - Finding the most recent coverage date in the database
+    /// - Aggregating from (last coverage date + 1) to yesterday
+    /// - If no coverage exists, starts from the oldest fix date
+    ///
+    /// Example: soar aggregate-coverage --start-date 2025-12-25 --end-date 2025-12-26 --resolutions 6,7,8
+    /// Example: soar aggregate-coverage --resolutions 6,7,8  (auto-detect date range)
+    AggregateCoverage {
+        /// Start date for aggregation (YYYY-MM-DD). If omitted, auto-detects from database.
+        #[arg(long)]
+        start_date: Option<chrono::NaiveDate>,
+
+        /// End date for aggregation (YYYY-MM-DD). If omitted, defaults to yesterday.
+        #[arg(long)]
+        end_date: Option<chrono::NaiveDate>,
+
+        /// H3 resolutions to aggregate (comma-separated, e.g., "6,7,8")
+        /// Resolution 6: ~36km² per hex, Resolution 7: ~5km² per hex, Resolution 8: ~0.7km² per hex
+        #[arg(long, default_value = "6,7,8", value_delimiter = ',')]
+        resolutions: Vec<i16>,
+    },
     /// Dump unified FlarmNet device database to JSONL file
     ///
     /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
@@ -1012,6 +1039,7 @@ async fn main() -> Result<()> {
         Commands::Sitemap { .. } => "soar-sitemap",
         Commands::Migrate {} => "soar-migrate",
         Commands::SeedTestData {} => "soar-seed-test-data",
+        Commands::AggregateCoverage { .. } => "soar-aggregate-coverage",
         // These should not reach here due to early returns
         Commands::IngestOgn { .. } => unreachable!(),
         Commands::IngestAdsb { .. } => unreachable!(),
@@ -1147,6 +1175,14 @@ async fn main() -> Result<()> {
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
             Ok(())
+        }
+        Commands::AggregateCoverage {
+            start_date,
+            end_date,
+            resolutions,
+        } => {
+            commands::aggregate_coverage(diesel_pool, start_date, end_date, resolutions.clone())
+                .await
         }
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
         Commands::DumpUnifiedDdb { .. } => {

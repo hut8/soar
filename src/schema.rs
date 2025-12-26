@@ -1030,6 +1030,22 @@ diesel::table! {
 }
 
 diesel::table! {
+    receiver_coverage_h3 (h3_index, resolution, receiver_id, date) {
+        h3_index -> Int8,
+        resolution -> Int2,
+        receiver_id -> Uuid,
+        date -> Date,
+        fix_count -> Int4,
+        first_seen_at -> Timestamptz,
+        last_seen_at -> Timestamptz,
+        min_altitude_msl_feet -> Nullable<Int4>,
+        max_altitude_msl_feet -> Nullable<Int4>,
+        avg_altitude_msl_feet -> Nullable<Int4>,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     receiver_statuses (id) {
         id -> Uuid,
         received_at -> Timestamptz,
@@ -1330,6 +1346,7 @@ diesel::joinable!(raw_messages_p20251214 -> receivers (receiver_id));
 diesel::joinable!(raw_messages_p20251215 -> receivers (receiver_id));
 diesel::joinable!(raw_messages_p20251216 -> receivers (receiver_id));
 diesel::joinable!(raw_messages_p20251217 -> receivers (receiver_id));
+diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
@@ -1378,6 +1395,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     raw_messages_p20251215,
     raw_messages_p20251216,
     raw_messages_p20251217,
+    receiver_coverage_h3,
     receiver_statuses,
     receivers,
     receivers_links,
