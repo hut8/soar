@@ -278,11 +278,13 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
 
     let mut conn = pool.get().expect("Failed to get database connection");
 
+    // Filter queries by timestamp range to isolate this test from other data
     let fix_count: i64 = fixes::table
+        .filter(fixes::received_at.between(first_ts, last_ts))
         .select(count_star())
         .first(&mut conn)
         .expect("Failed to count fixes");
-    println!("📊 Found {} fixes in database", fix_count);
+    println!("📊 Found {} fixes in time range", fix_count);
 
     let aircraft_count: i64 = aircraft::table
         .select(count_star())
@@ -494,22 +496,26 @@ async fn test_no_active_fixes_should_not_create_flight() {
 
     let mut conn = pool.get().expect("Failed to get database connection");
 
+    // Filter queries by timestamp range to isolate this test from other data
     let fix_count: i64 = fixes::table
+        .filter(fixes::received_at.between(first_ts, last_ts))
         .select(count_star())
         .first(&mut conn)
         .expect("Failed to count fixes");
-    println!("📊 Found {} fixes in database", fix_count);
+    println!("📊 Found {} fixes in time range", fix_count);
 
     // Verify active fix count
     // The first fix has AGL=387ft which is >= 250ft, so it should be marked active
     // The remaining 5 fixes have AGL=6-10ft, so they should be inactive
+    // Filter by timestamp range to only count fixes from this test run
     let active_fix_count: i64 = fixes::table
         .filter(fixes::is_active.eq(true))
+        .filter(fixes::received_at.between(first_ts, last_ts))
         .select(count_star())
         .first(&mut conn)
         .expect("Failed to count active fixes");
     println!(
-        "📊 Found {} active fixes (expected 1 - first fix at 387ft AGL)",
+        "📊 Found {} active fixes in time range (expected 1 - first fix at 387ft AGL)",
         active_fix_count
     );
 
