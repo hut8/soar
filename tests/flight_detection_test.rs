@@ -286,40 +286,6 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
         .expect("Failed to count fixes");
     println!("📊 Found {} fixes in time range", fix_count);
 
-    // Debug: Check first few fixes to understand AGL calculation
-    #[allow(clippy::type_complexity)]
-    let sample_fixes: Vec<(Option<i32>, Option<i32>, bool)> = fixes::table
-        .filter(fixes::received_at.between(first_ts, last_ts))
-        .select((
-            fixes::altitude_msl_feet,
-            fixes::altitude_agl_feet,
-            fixes::is_active,
-        ))
-        .order_by(fixes::received_at.asc())
-        .limit(5)
-        .load(&mut conn)
-        .expect("Failed to query fix details");
-
-    println!("📊 Sample fixes (first 5):");
-    for (i, (msl, agl, is_active)) in sample_fixes.iter().enumerate() {
-        println!(
-            "   Fix {}: MSL={:?}ft, AGL={:?}ft, is_active={}",
-            i + 1,
-            msl,
-            agl,
-            is_active
-        );
-    }
-
-    // Check if AGL calculation worked - if no fixes have AGL data, skip the test
-    let has_agl_data = sample_fixes.iter().any(|(_, agl, _)| agl.is_some());
-    if !has_agl_data {
-        eprintln!("⚠️  Skipping test: No AGL data available for test location");
-        eprintln!("   This test requires elevation data for accurate flight detection");
-        eprintln!("   In CI, elevation tiles may not be available without AWS S3 access");
-        return;
-    }
-
     let aircraft_count: i64 = aircraft::table
         .select(count_star())
         .first(&mut conn)
@@ -537,39 +503,6 @@ async fn test_no_active_fixes_should_not_create_flight() {
         .first(&mut conn)
         .expect("Failed to count fixes");
     println!("📊 Found {} fixes in time range", fix_count);
-
-    // Debug: Check AGL values to understand why is_active isn't set correctly
-    #[allow(clippy::type_complexity)]
-    let fix_details: Vec<(Option<i32>, Option<i32>, bool)> = fixes::table
-        .filter(fixes::received_at.between(first_ts, last_ts))
-        .select((
-            fixes::altitude_msl_feet,
-            fixes::altitude_agl_feet,
-            fixes::is_active,
-        ))
-        .order_by(fixes::received_at.asc())
-        .load(&mut conn)
-        .expect("Failed to query fix details");
-
-    for (i, (msl, agl, is_active)) in fix_details.iter().enumerate() {
-        println!(
-            "   Fix {}: MSL={:?}ft, AGL={:?}ft, is_active={}",
-            i + 1,
-            msl,
-            agl,
-            is_active
-        );
-    }
-
-    // Check if AGL calculation worked - if no fixes have AGL data, skip the test
-    // This can happen in CI when elevation tiles aren't available for this location
-    let has_agl_data = fix_details.iter().any(|(_, agl, _)| agl.is_some());
-    if !has_agl_data {
-        eprintln!("⚠️  Skipping test: No AGL data available for test location");
-        eprintln!("   This test requires elevation tile for 38°42'N, 094°27'W");
-        eprintln!("   In CI, this may not be available without AWS S3 access");
-        return;
-    }
 
     // Verify active fix count
     // The first fix has AGL=387ft which is >= 250ft, so it should be marked active
