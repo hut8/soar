@@ -88,8 +88,14 @@
 		fix_counts_by_aircraft: AircraftFixCount[];
 	}
 
+	// Extends Fix with aircraft and raw packet data
+	interface FixWithAircraft extends Fix {
+		aircraft?: Aircraft;
+		raw_packet?: string;
+	}
+
 	let receiver = $state<Receiver | null>(null);
-	let fixes = $state<Fix[] | null>(null);
+	let fixes = $state<FixWithAircraft[] | null>(null);
 	let statuses = $state<ReceiverStatus[]>([]);
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
@@ -893,10 +899,10 @@
 									</div>
 								{/if}
 
-								<!-- Fixes by Device -->
+								<!-- Fixes by Aircraft -->
 								{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 									<div class="mt-6 space-y-4">
-										<h3 class="h3">Fixes Received by Device</h3>
+										<h3 class="h3">Fixes Received by Aircraft</h3>
 
 										<!-- Desktop: Table -->
 										<div class="hidden md:block">
@@ -904,7 +910,7 @@
 												<table class="table-hover table">
 													<thead>
 														<tr>
-															<th>Device</th>
+															<th>Aircraft</th>
 															<th class="text-right">Count</th>
 														</tr>
 													</thead>
@@ -1130,8 +1136,7 @@
 											<thead>
 												<tr>
 													<th>Timestamp</th>
-													<th>Device</th>
-													<th>Registration</th>
+													<th>Aircraft</th>
 													<th>Position</th>
 													<th>Altitude</th>
 													<th>Speed</th>
@@ -1153,10 +1158,13 @@
 																{formatRelativeTime(fix.timestamp)}
 															</div>
 														</td>
-														<td class="font-mono text-xs">
-															{fix.device_address_hex || '—'}
+														<td>
+															{#if fix.aircraft}
+																<AircraftLink aircraft={fix.aircraft} size="sm" />
+															{:else}
+																<span class="text-surface-500-400-token">—</span>
+															{/if}
 														</td>
-														<td class="font-mono text-sm">{fix.registration || '—'}</td>
 														<td class="font-mono text-xs">
 															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 														</td>
@@ -1184,7 +1192,7 @@
 																? 'bg-gray-100 dark:bg-gray-800'
 																: ''}"
 														>
-															<td colspan="7" class="px-3 py-2 font-mono text-sm">
+															<td colspan="6" class="px-3 py-2 font-mono text-sm">
 																{fix.raw_packet}
 															</td>
 														</tr>
@@ -1206,17 +1214,17 @@
 														{formatRelativeTime(fix.timestamp)}
 													</div>
 												</div>
-												{#if fix.registration}
-													<span class="chip preset-tonal font-mono text-xs">{fix.registration}</span
-													>
-												{/if}
 											</div>
 
 											<dl class="space-y-2 text-sm">
 												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Device</dt>
-													<dd class="font-mono text-xs">
-														{fix.device_address_hex || '—'}
+													<dt class="text-surface-600-300-token">Aircraft</dt>
+													<dd>
+														{#if fix.aircraft}
+															<AircraftLink aircraft={fix.aircraft} size="sm" />
+														{:else}
+															<span class="text-surface-500-400-token">—</span>
+														{/if}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
@@ -1358,10 +1366,10 @@
 												</div>
 											{/if}
 
-											<!-- Fixes by Device -->
+											<!-- Fixes by Aircraft -->
 											{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 												<div class="space-y-4">
-													<h3 class="h3">Fixes Received by Device</h3>
+													<h3 class="h3">Fixes Received by Aircraft</h3>
 
 													<!-- Desktop: Table -->
 													<div class="hidden md:block">
@@ -1369,7 +1377,7 @@
 															<table class="table-hover table">
 																<thead>
 																	<tr>
-																		<th>Device</th>
+																		<th>Aircraft</th>
 																		<th class="text-right">Count</th>
 																	</tr>
 																</thead>

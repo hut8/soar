@@ -114,21 +114,18 @@ pub struct FixWithRawPacket {
     pub raw_packet: Option<String>,
 }
 
-/// Extended Fix struct that includes both raw packet and device information
-/// Used for receiver fixes API where device address needs to be displayed
+/// Extended Fix struct that includes both raw packet and aircraft information
+/// Used for receiver fixes API where aircraft details need to be displayed
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FixWithDeviceInfo {
+pub struct FixWithAircraftInfo {
     #[serde(flatten)]
     pub fix: Fix,
 
     /// Raw APRS packet data (joined from aprs_messages table)
     pub raw_packet: Option<String>,
 
-    /// Device address in hex format (e.g., "ABCDEF")
-    pub device_address_hex: Option<String>,
-
-    /// Aircraft registration (if available)
-    pub registration: Option<String>,
+    /// Full aircraft information (joined from aircraft table)
+    pub aircraft: Option<crate::actions::views::AircraftView>,
 }
 
 /// Extended Fix struct that includes flight metadata for WebSocket streaming
@@ -150,19 +147,17 @@ impl FixWithRawPacket {
     }
 }
 
-impl FixWithDeviceInfo {
-    /// Create a FixWithDeviceInfo from a Fix, raw packet, and device information
+impl FixWithAircraftInfo {
+    /// Create a FixWithAircraftInfo from a Fix, raw packet, and aircraft information
     pub fn new(
         fix: Fix,
         raw_packet: Option<String>,
-        device_address_hex: Option<String>,
-        registration: Option<String>,
+        aircraft: Option<crate::actions::views::AircraftView>,
     ) -> Self {
         Self {
             fix,
             raw_packet,
-            device_address_hex,
-            registration,
+            aircraft,
         }
     }
 }
@@ -181,7 +176,7 @@ impl std::ops::DerefMut for FixWithRawPacket {
     }
 }
 
-impl std::ops::Deref for FixWithDeviceInfo {
+impl std::ops::Deref for FixWithAircraftInfo {
     type Target = Fix;
 
     fn deref(&self) -> &Self::Target {
@@ -189,7 +184,7 @@ impl std::ops::Deref for FixWithDeviceInfo {
     }
 }
 
-impl std::ops::DerefMut for FixWithDeviceInfo {
+impl std::ops::DerefMut for FixWithAircraftInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }
