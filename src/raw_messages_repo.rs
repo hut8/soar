@@ -432,9 +432,12 @@ mod tests {
     fn cleanup_test_data(pool: &PgPool) {
         let mut conn = pool.get().expect("Failed to get connection");
 
-        // Clean up test data (migrations have already created the schema)
+        // Clean up test data in correct order (child tables first due to FK constraints)
+        // fixes and receiver_statuses reference raw_messages, so delete them first
         conn.batch_execute(
             r#"
+            DELETE FROM fixes;
+            DELETE FROM receiver_statuses;
             DELETE FROM raw_messages;
             DELETE FROM receivers;
             "#,

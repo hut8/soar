@@ -100,9 +100,11 @@ impl ElevationService {
     ///
     /// Environment variables:
     /// - ELEVATION_DATA_PATH: Local storage path (default: /var/soar/elevation)
-    /// - ELEVATION_S3_BUCKET: S3 bucket name (e.g., "elevation-tiles-prod")
+    /// - ELEVATION_S3_BUCKET: S3 bucket name (default: "elevation-tiles-prod")
     /// - ELEVATION_S3_PREFIX: S3 key prefix (default: "skadi")
     /// - ELEVATION_S3_REGION: AWS region (default: "us-east-1")
+    ///
+    /// S3 is always enabled with a default bucket for automatic tile downloads
     pub async fn new_with_s3() -> Result<Self> {
         let storage_path =
             env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
@@ -116,38 +118,33 @@ impl ElevationService {
             })?;
         }
 
-        // Get S3 configuration from environment
-        let s3_bucket = env::var("ELEVATION_S3_BUCKET").ok();
+        // Get S3 configuration from environment with defaults
+        let s3_bucket =
+            env::var("ELEVATION_S3_BUCKET").unwrap_or_else(|_| "elevation-tiles-prod".to_string());
         let s3_prefix = env::var("ELEVATION_S3_PREFIX").unwrap_or_else(|_| "skadi".to_string());
 
-        let (s3_client, s3_bucket_name) = if let Some(bucket) = s3_bucket {
-            info!(
-                "Initializing S3 client for elevation tile downloads from bucket: {}/{}",
-                bucket, s3_prefix
-            );
+        info!(
+            "Initializing S3 client for elevation tile downloads from bucket: {}/{}",
+            s3_bucket, s3_prefix
+        );
 
-            // Load AWS config from environment
-            let config = aws_config::load_from_env().await;
-            let client = aws_sdk_s3::Client::new(&config);
-
-            (Some(Arc::new(client)), Some(bucket))
-        } else {
-            info!("S3 download disabled (ELEVATION_S3_BUCKET not set)");
-            (None, None)
-        };
+        // Load AWS config from environment
+        let config = aws_config::load_from_env().await;
+        let client = aws_sdk_s3::Client::new(&config);
 
         Ok(Self {
             storage_path,
             elevation_cache: Cache::builder().max_capacity(250_000).build(),
             tile_cache: Cache::builder().max_capacity(500).build(),
-            s3_client,
-            s3_bucket: s3_bucket_name,
+            s3_client: Some(Arc::new(client)),
+            s3_bucket: Some(s3_bucket),
             s3_prefix: Some(s3_prefix),
         })
     }
 
     /// Create a new ElevationService with an explicit storage path
-    pub fn with_path(storage_path: PathBuf) -> Result<Self> {
+    /// S3 downloads are enabled with default bucket for missing tiles
+    pub async fn with_path(storage_path: PathBuf) -> Result<Self> {
         if !storage_path.exists() {
             bail!(
                 "Elevation data directory does not exist: {:?}",
@@ -155,13 +152,27 @@ impl ElevationService {
             );
         }
 
+        // Get S3 configuration from environment with defaults
+        let s3_bucket =
+            env::var("ELEVATION_S3_BUCKET").unwrap_or_else(|_| "elevation-tiles-prod".to_string());
+        let s3_prefix = env::var("ELEVATION_S3_PREFIX").unwrap_or_else(|_| "skadi".to_string());
+
+        info!(
+            "Initializing S3 client for elevation tile downloads from bucket: {}/{}",
+            s3_bucket, s3_prefix
+        );
+
+        // Load AWS config from environment
+        let config = aws_config::load_from_env().await;
+        let client = aws_sdk_s3::Client::new(&config);
+
         Ok(Self {
             storage_path,
             elevation_cache: Cache::builder().max_capacity(250_000).build(),
             tile_cache: Cache::builder().max_capacity(500).build(),
-            s3_client: None,
-            s3_bucket: None,
-            s3_prefix: None,
+            s3_client: Some(Arc::new(client)),
+            s3_bucket: Some(s3_bucket),
+            s3_prefix: Some(s3_prefix),
         })
     }
 

@@ -359,6 +359,11 @@ impl FixProcessor {
             fix.altitude_agl_feet = agl;
             fix.altitude_agl_valid = true; // Mark as valid even if agl is None (no elevation data available)
 
+            // IMPORTANT: Recalculate is_active now that we have AGL data
+            // This must match the logic in should_be_active() to ensure database field matches
+            // the logic used for flight state transitions
+            fix.is_active = crate::flight_tracker::should_be_active(&fix);
+
             metrics::histogram!("aprs.elevation.sync_duration_ms")
                 .record(elevation_start.elapsed().as_micros() as f64 / 1000.0);
             metrics::counter!("aprs.elevation.sync_processed").increment(1);
