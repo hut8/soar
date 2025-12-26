@@ -17,6 +17,13 @@ SOAR is an application under active development that will automate many duty-man
   - Interactive polygons with detailed information
   - Incremental sync support for efficient updates
   - See [OpenAIP Setup Guide](docs/OPENAIP_SETUP.md) for configuration
+- **Receiver Coverage Map**: Interactive H3 hexagonal coverage visualization
+  - MapLibre-based map at `/receivers/coverage` showing receiver coverage areas
+  - Multi-resolution H3 spatial indexing (resolutions 6, 7, 8 for different zoom levels)
+  - Pre-aggregated coverage statistics including fix counts, coverage hours, and altitude ranges
+  - Filterable by time range, altitude, and receiver
+  - Daily batch aggregation via `soar aggregate-coverage` command
+  - Persistent historical coverage data independent of fix retention policies
 
 ## Data Processing Flow
 

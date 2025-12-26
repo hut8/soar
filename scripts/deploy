@@ -216,6 +216,12 @@ if [ -d "infrastructure/prometheus-jobs" ]; then
     log_info "Prometheus job files included"
 fi
 
+# Copy Prometheus scrape-configs files (backward compatibility)
+if [ -d "infrastructure/prometheus-scrape-configs" ]; then
+    cp -r infrastructure/prometheus-scrape-configs "$DEPLOY_PKG/"
+    log_info "Prometheus scrape-configs files included (legacy support)"
+fi
+
 # Copy Grafana provisioning configuration
 if [ -d "infrastructure/grafana-provisioning" ]; then
     cp -r infrastructure/grafana-provisioning "$DEPLOY_PKG/"

@@ -350,3 +350,4 @@ sudo systemctl show grafana-server | grep GF_SMTP
 - [Prometheus Query Language](https://prometheus.io/docs/prometheus/latest/querying/basics/)
 - [SOAR Metrics Documentation](grafana-README.md)
 - [SOAR Deployment Guide](DEPLOYMENT.md)
+- [Grafana Datasource Troubleshooting](GRAFANA-DATASOURCE-TROUBLESHOOTING.md)

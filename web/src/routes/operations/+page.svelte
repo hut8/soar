@@ -32,6 +32,9 @@
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
 
+	// Area tracker configuration
+	const AREA_TRACKER_LIMIT_ENABLED = false;
+
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
 	let userLocationButton: HTMLButtonElement;
@@ -298,6 +301,12 @@
 	// Load area tracker state from localStorage
 	function loadAreaTrackerState(): boolean {
 		if (!browser) return true;
+
+		// When limit is disabled, area tracker is always on
+		if (!AREA_TRACKER_LIMIT_ENABLED) {
+			console.log('[AREA TRACKER] Limit disabled, area tracker always on');
+			return true;
+		}
 
 		try {
 			const saved = localStorage.getItem(AREA_TRACKER_KEY);
@@ -1721,6 +1730,12 @@
 	function updateAreaTrackerAvailability(): void {
 		if (!map) return;
 
+		// When limit is disabled, area tracker is always available
+		if (!AREA_TRACKER_LIMIT_ENABLED) {
+			areaTrackerAvailable = true;
+			return;
+		}
+
 		const area = calculateViewportArea();
 		const wasAvailable = areaTrackerAvailable;
 		areaTrackerAvailable = area <= 4000000; // 4,000,000 square miles limit (fits continental US)
@@ -1858,10 +1873,10 @@
 			// Fetch aircraft with their latest position only (no fix history)
 			// Fixes will accumulate from WebSocket after this
 			const aircraft = await fixFeed.fetchAircraftInBoundingBox(
-				sw.lat(), // latMin
-				ne.lat(), // latMax
-				sw.lng(), // lonMin
-				ne.lng() // lonMax
+				sw.lat(), // south
+				ne.lat(), // north
+				sw.lng(), // west
+				ne.lng() // east
 				// No 'after' parameter - backend doesn't fetch fixes anymore
 			);
 
@@ -1914,24 +1929,26 @@
 			<ListChecks size={20} />
 		</button>
 
-		<!-- Area Tracker Button -->
-		<button
-			class="location-btn"
-			class:area-tracker-active={areaTrackerActive}
-			class:area-tracker-unavailable={!areaTrackerAvailable}
-			onclick={toggleAreaTracker}
-			title={areaTrackerAvailable
-				? areaTrackerActive
-					? 'Disable Area Tracker'
-					: 'Enable Area Tracker'
-				: 'Area Tracker unavailable (map too zoomed out)'}
-		>
-			{#if areaTrackerActive}
-				<MapPlus size={20} />
-			{:else}
-				<MapMinus size={20} />
-			{/if}
-		</button>
+		<!-- Area Tracker Button (only show when limit is enabled) -->
+		{#if AREA_TRACKER_LIMIT_ENABLED}
+			<button
+				class="location-btn"
+				class:area-tracker-active={areaTrackerActive}
+				class:area-tracker-unavailable={!areaTrackerAvailable}
+				onclick={toggleAreaTracker}
+				title={areaTrackerAvailable
+					? areaTrackerActive
+						? 'Disable Area Tracker'
+						: 'Enable Area Tracker'
+					: 'Area Tracker unavailable (map too zoomed out)'}
+			>
+				{#if areaTrackerActive}
+					<MapPlus size={20} />
+				{:else}
+					<MapMinus size={20} />
+				{/if}
+			</button>
+		{/if}
 
 		<!-- Settings Button -->
 		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
