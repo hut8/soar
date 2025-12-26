@@ -360,16 +360,16 @@ export interface AirspaceFeatureCollection {
 
 // Coverage map - H3 hexagonal coverage visualization
 export interface CoverageHexProperties {
-	h3_index: string;
+	h3Index: string;
 	resolution: number;
-	receiver_id: string;
-	fix_count: number;
-	first_seen_at: string;
-	last_seen_at: string;
-	min_altitude_msl_feet: number | null;
-	max_altitude_msl_feet: number | null;
-	avg_altitude_msl_feet: number | null;
-	coverage_hours: number;
+	receiverId: string;
+	fixCount: number;
+	firstSeenAt: string;
+	lastSeenAt: string;
+	minAltitudeMslFeet: number | null;
+	maxAltitudeMslFeet: number | null;
+	avgAltitudeMslFeet: number | null;
+	coverageHours: number;
 }
 
 export interface CoverageHexFeature {
