@@ -116,7 +116,8 @@
 	let rawMessagesTotalPages = $state(1);
 
 	// Display options
-	let showRawData = $state(false);
+	let showRawData = $state(false); // For status reports
+	let showRawFixes = $state(false); // For received fixes
 	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', 'received-fixes', or 'aggregate-stats'
 
 	let receiverId = $derived($page.params.id || '');
@@ -1099,6 +1100,15 @@
 					<!-- Received Fixes Tab Content -->
 					<Tabs.Content value="received-fixes">
 						<div class="mt-4">
+							{#if fixes !== null && fixes.length > 0}
+								<div class="mb-4 flex items-center justify-end">
+									<label class="flex cursor-pointer items-center gap-2">
+										<input type="checkbox" class="checkbox" bind:checked={showRawFixes} />
+										<span class="text-sm">Show raw</span>
+									</label>
+								</div>
+							{/if}
+
 							{#if loadingFixes}
 								<div class="flex items-center justify-center space-x-4 p-8">
 									<Progress class="h-6 w-6" />
@@ -1129,8 +1139,14 @@
 												</tr>
 											</thead>
 											<tbody>
-												{#each fixes as fix (fix.id)}
-													<tr>
+												{#each fixes as fix, index (fix.id)}
+													<tr
+														class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+															2 ===
+														0
+															? 'bg-gray-50 dark:bg-gray-900'
+															: ''}"
+													>
 														<td class="text-xs">
 															<div>{formatDateTime(fix.timestamp)}</div>
 															<div class="text-surface-500-400-token">
@@ -1162,6 +1178,17 @@
 																: '—'}</td
 														>
 													</tr>
+													{#if showRawFixes && fix.raw_packet}
+														<tr
+															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+																? 'bg-gray-100 dark:bg-gray-800'
+																: ''}"
+														>
+															<td colspan="7" class="px-3 py-2 font-mono text-sm">
+																{fix.raw_packet}
+															</td>
+														</tr>
+													{/if}
 												{/each}
 											</tbody>
 										</table>
@@ -1223,6 +1250,13 @@
 													</dd>
 												</div>
 											</dl>
+
+											{#if showRawFixes && fix.raw_packet}
+												<div class="mt-3 border-t border-surface-300 pt-3 dark:border-surface-600">
+													<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
+													<div class="overflow-x-auto font-mono text-xs">{fix.raw_packet}</div>
+												</div>
+											{/if}
 										</div>
 									{/each}
 								</div>

@@ -541,40 +541,64 @@ impl FixesRepository {
     }
 
     /// Get fixes by receiver ID with pagination (last 24 hours only)
+    /// Returns fixes with device information (address and registration)
     pub async fn get_fixes_by_receiver_id_paginated(
         &self,
         receiver_uuid: Uuid,
         page: i64,
         per_page: i64,
-    ) -> Result<(Vec<Fix>, i64)> {
+    ) -> Result<(Vec<crate::fixes::FixWithDeviceInfo>, i64)> {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
+            use crate::schema::{aircraft, fixes, raw_messages};
             let mut conn = pool.get()?;
 
             // Only get fixes from the last 24 hours
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
             // Get total count
-            let total_count = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
+            let total_count = fixes::table
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
-            // Get paginated results (most recent first)
+            // Get paginated results (most recent first) with raw packet and aircraft info
             let offset = (page - 1) * per_page;
-            let results = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
-                .order(received_at.desc())
+            let results = fixes::table
+                .inner_join(
+                    raw_messages::table.on(fixes::raw_message_id
+                        .eq(raw_messages::id)
+                        .and(fixes::received_at.eq(raw_messages::received_at))),
+                )
+                .left_join(aircraft::table.on(fixes::aircraft_id.eq(aircraft::id)))
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
+                .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .select((
+                    Fix::as_select(),
+                    raw_messages::raw_message,
+                    aircraft::address.nullable(),
+                    aircraft::registration.nullable(),
+                ))
+                .load::<(Fix, Vec<u8>, Option<i32>, Option<String>)>(&mut conn)?
+                .into_iter()
+                .map(|(fix, raw_packet_bytes, address, registration)| {
+                    let raw_packet = Some(String::from_utf8_lossy(&raw_packet_bytes).to_string());
+                    let device_address_hex = address.map(|addr| format!("{:06X}", addr));
+                    crate::fixes::FixWithDeviceInfo::new(
+                        fix,
+                        raw_packet,
+                        device_address_hex,
+                        registration,
+                    )
+                })
+                .collect();
 
-            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+            Ok::<(Vec<crate::fixes::FixWithDeviceInfo>, i64), anyhow::Error>((results, total_count))
         })
         .await??;
 

@@ -114,6 +114,23 @@ pub struct FixWithRawPacket {
     pub raw_packet: Option<String>,
 }
 
+/// Extended Fix struct that includes both raw packet and device information
+/// Used for receiver fixes API where device address needs to be displayed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixWithDeviceInfo {
+    #[serde(flatten)]
+    pub fix: Fix,
+
+    /// Raw APRS packet data (joined from aprs_messages table)
+    pub raw_packet: Option<String>,
+
+    /// Device address in hex format (e.g., "ABCDEF")
+    pub device_address_hex: Option<String>,
+
+    /// Aircraft registration (if available)
+    pub registration: Option<String>,
+}
+
 /// Extended Fix struct that includes flight metadata for WebSocket streaming
 /// Used when streaming fixes to include current flight information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +150,23 @@ impl FixWithRawPacket {
     }
 }
 
+impl FixWithDeviceInfo {
+    /// Create a FixWithDeviceInfo from a Fix, raw packet, and device information
+    pub fn new(
+        fix: Fix,
+        raw_packet: Option<String>,
+        device_address_hex: Option<String>,
+        registration: Option<String>,
+    ) -> Self {
+        Self {
+            fix,
+            raw_packet,
+            device_address_hex,
+            registration,
+        }
+    }
+}
+
 impl std::ops::Deref for FixWithRawPacket {
     type Target = Fix;
 
@@ -142,6 +176,20 @@ impl std::ops::Deref for FixWithRawPacket {
 }
 
 impl std::ops::DerefMut for FixWithRawPacket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fix
+    }
+}
+
+impl std::ops::Deref for FixWithDeviceInfo {
+    type Target = Fix;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fix
+    }
+}
+
+impl std::ops::DerefMut for FixWithDeviceInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }
