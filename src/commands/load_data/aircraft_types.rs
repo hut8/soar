@@ -40,15 +40,29 @@ async fn upsert_aircraft_types(
     pool: Pool<ConnectionManager<PgConnection>>,
     types: Vec<AircraftTypeRecord>,
 ) -> Result<usize> {
-    let new_types: Vec<NewAircraftType> = types
-        .into_iter()
-        .map(|record| NewAircraftType {
-            icao_code: record.icao_code,
-            iata_code: record.iata_code,
-            description: record.description,
-        })
-        .collect();
+    use std::collections::HashMap;
 
+    // Deduplicate by icao_code, merging descriptions with " / " separator
+    let mut dedup_map: HashMap<String, NewAircraftType> = HashMap::new();
+
+    for record in types {
+        dedup_map
+            .entry(record.icao_code.clone())
+            .and_modify(|existing| {
+                // Merge descriptions if different
+                if !existing.description.contains(&record.description) {
+                    existing.description =
+                        format!("{} / {}", existing.description, record.description);
+                }
+            })
+            .or_insert_with(|| NewAircraftType {
+                icao_code: record.icao_code,
+                iata_code: record.iata_code,
+                description: record.description,
+            });
+    }
+
+    let new_types: Vec<NewAircraftType> = dedup_map.into_values().collect();
     let count = new_types.len();
 
     tokio::task::spawn_blocking(move || {

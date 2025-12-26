@@ -117,9 +117,15 @@ pub async fn load_adsb_exchange_data(
 ) -> Result<(usize, usize)> {
     info!("Loading ADS-B Exchange data from: {}", adsb_path);
 
-    // Read and parse the JSON file
+    // Read and parse the NDJSON file (newline-delimited JSON)
+    // Each line is a separate JSON object, not a single array
     let file_content = fs::read_to_string(adsb_path)?;
-    let records: Vec<AdsbExchangeRecord> = serde_json::from_str(&file_content)?;
+    let records: Vec<AdsbExchangeRecord> = file_content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(serde_json::from_str)
+        .collect::<Result<Vec<_>, _>>()
+        .context("Failed to parse NDJSON from ADS-B Exchange")?;
     info!(
         "Successfully parsed {} records from ADS-B Exchange",
         records.len()
