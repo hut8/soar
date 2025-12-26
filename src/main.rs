@@ -287,6 +287,27 @@ enum Commands {
     /// - TEST_USER_FIRST_NAME (default: Test)
     /// - TEST_USER_LAST_NAME (default: User)
     SeedTestData {},
+    /// Aggregate position fixes into H3 coverage hexes
+    ///
+    /// Processes position fixes from the specified date range and aggregates them into H3
+    /// hexagonal coverage zones. Updates coverage statistics including fix counts, timestamps,
+    /// and altitude information for visualization and analysis.
+    ///
+    /// Example: soar aggregate-coverage --start-date 2025-12-25 --end-date 2025-12-26 --resolutions 6,7,8
+    AggregateCoverage {
+        /// Start date for aggregation (YYYY-MM-DD)
+        #[arg(long)]
+        start_date: chrono::NaiveDate,
+
+        /// End date for aggregation (YYYY-MM-DD)
+        #[arg(long)]
+        end_date: chrono::NaiveDate,
+
+        /// H3 resolutions to aggregate (comma-separated, e.g., "6,7,8")
+        /// Resolution 6: ~36km² per hex, Resolution 7: ~5km² per hex, Resolution 8: ~0.7km² per hex
+        #[arg(long, default_value = "6,7,8", value_delimiter = ',')]
+        resolutions: Vec<i16>,
+    },
     /// Dump unified FlarmNet device database to JSONL file
     ///
     /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
@@ -1012,6 +1033,7 @@ async fn main() -> Result<()> {
         Commands::Sitemap { .. } => "soar-sitemap",
         Commands::Migrate {} => "soar-migrate",
         Commands::SeedTestData {} => "soar-seed-test-data",
+        Commands::AggregateCoverage { .. } => "soar-aggregate-coverage",
         // These should not reach here due to early returns
         Commands::IngestOgn { .. } => unreachable!(),
         Commands::IngestAdsb { .. } => unreachable!(),
@@ -1147,6 +1169,14 @@ async fn main() -> Result<()> {
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
             Ok(())
+        }
+        Commands::AggregateCoverage {
+            start_date,
+            end_date,
+            resolutions,
+        } => {
+            use soar::actions::aggregate_coverage::aggregate_coverage;
+            aggregate_coverage(diesel_pool, start_date, end_date, resolutions.clone()).await
         }
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
         Commands::DumpUnifiedDdb { .. } => {

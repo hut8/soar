@@ -33,6 +33,7 @@ google_maps = { version = "3.9.1", features = [
     "elevation",
     "reqwest-rustls-tls",
 ], default-features = false }
+h3o = "0.6"
 include_dir = "0.7"
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 lettre = { version = "0.11", features = [
