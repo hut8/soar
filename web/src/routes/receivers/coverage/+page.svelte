@@ -3,7 +3,8 @@
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { serverCall } from '$lib/api/server';
-	import { Loader, Calendar, Layers } from '@lucide/svelte';
+	import { Loader, Calendar, Layers, Radio } from '@lucide/svelte';
+	import { resolve } from '$app/paths';
 	import type { CoverageHexProperties, CoverageGeoJsonResponse } from '$lib/types';
 
 	let mapContainer: HTMLDivElement;
@@ -190,8 +191,18 @@
 <div class="flex h-screen flex-col">
 	<!-- Header -->
 	<div class="bg-surface-800 p-4 shadow-md">
-		<h1 class="text-2xl font-bold text-white">Receiver Coverage Map</h1>
-		<p class="text-sm text-gray-300">Visualizing aircraft reception coverage using H3 hexagons</p>
+		<div class="flex items-center justify-between">
+			<div>
+				<h1 class="text-2xl font-bold text-white">Receiver Coverage Map</h1>
+				<p class="text-sm text-gray-300">
+					Visualizing aircraft reception coverage using H3 hexagons
+				</p>
+			</div>
+			<a href={resolve('/receivers')} class="btn gap-2 preset-outlined">
+				<Radio class="h-4 w-4" />
+				View Receivers
+			</a>
+		</div>
 	</div>
 
 	<!-- Controls -->
