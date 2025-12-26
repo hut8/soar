@@ -168,7 +168,7 @@ pub async fn get_device_aircraft_registration(
                     .await
                 {
                     Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-                    Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+                    Ok(None) => (StatusCode::NO_CONTENT).into_response(),
                     Err(e) => {
                         tracing::error!(
                             "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
@@ -185,7 +185,7 @@ pub async fn get_device_aircraft_registration(
                 }
             } else {
                 // No registration available
-                (StatusCode::NOT_FOUND).into_response()
+                (StatusCode::NO_CONTENT).into_response()
             }
         }
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
@@ -228,7 +228,7 @@ pub async fn get_device_aircraft_model(
                         {
                             Ok(Some(aircraft_model)) => aircraft_model,
                             Ok(None) => {
-                                return (StatusCode::NOT_FOUND).into_response();
+                                return (StatusCode::NO_CONTENT).into_response();
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -246,7 +246,7 @@ pub async fn get_device_aircraft_model(
                         }
                     } else {
                         // No registration available
-                        return (StatusCode::NOT_FOUND).into_response();
+                        return (StatusCode::NO_CONTENT).into_response();
                     }
                 }
                 Ok(None) => {
@@ -283,7 +283,7 @@ pub async fn get_device_aircraft_model(
         .await
     {
         Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+        Ok(None) => (StatusCode::NO_CONTENT).into_response(),
         Err(e) => {
             tracing::error!(
                 "Failed to get aircraft model for aircraft {} with codes {}-{}-{}: {}",

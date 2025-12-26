@@ -36,6 +36,7 @@ fn calculate_endpoint(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunwayEnd {
     pub ident: Option<String>,
     pub latitude_deg: Option<f64>,
@@ -46,6 +47,7 @@ pub struct RunwayEnd {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunwayView {
     pub id: i32,
     pub length_ft: Option<i32>,
@@ -165,6 +167,7 @@ impl From<Runway> for RunwayView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AirportView {
     pub id: i32,
     pub ident: String,

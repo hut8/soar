@@ -9,6 +9,7 @@ use crate::aircraft_registrations::{
 use crate::ogn_aprs_aircraft::AircraftType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftRegistrationView {
     pub registration_number: String,
     pub serial_number: String,
@@ -76,6 +77,7 @@ impl From<AircraftDomain> for AircraftRegistrationView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftWithDeviceView {
     #[serde(flatten)]
     pub aircraft: AircraftRegistrationView,
@@ -233,6 +235,7 @@ impl From<crate::aircraft::AircraftModel> for AircraftView {
 /// Complete aircraft information with device, registration, model, and recent fixes
 /// This is the enriched view used when returning devices with full aircraft data
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Aircraft {
     #[serde(flatten)]
     pub device: AircraftView,
