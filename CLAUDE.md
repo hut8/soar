@@ -34,8 +34,13 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - Always prefer Diesel's query builder and type-safe methods over raw SQL
 - **NEVER use CREATE INDEX CONCURRENTLY in Diesel migrations** - Diesel migrations run in transactions, which don't support CONCURRENTLY. Use regular CREATE INDEX instead
 
+### SERVER ACCESS
+- You are running on the staging server. The staging server is named "supervillain". You can always run commands that do not modify anything. Ask before running commands that modify something.
+- You have access to the production server by running "ssh glider.flights". The user you are running as already has "sudo" access. Ask before connecting or using sudo unless I give you permission in advance.
+
 ### DATABASE SAFETY RULES (CRITICAL)
 - **Development Database**: `soar_dev` - This is where you work
+- **Staging Database**: `soar_staging` - This should be queried before the production database; its schema will be more up-to-date and it should contain approximately the same data. It is read-only for development purposes.
 - **Production Database**: `soar` - This is read-only for development purposes
 - **NEVER run UPDATE, INSERT, or DELETE on production database (`soar`)** - Only run these via Diesel migrations
 - **ONLY DDL queries (CREATE, ALTER, DROP) via migrations** - Never run DDL queries manually on production
@@ -73,10 +78,6 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **Template Files** - Use `.template` suffix for files with credential placeholders (e.g., `contact-points.yml.template`)
 - **Deployment** - `soar-deploy` script automatically processes templates and installs configs
 - **Documentation** - See `infrastructure/GRAFANA-ALERTING.md` for complete guide
-- **Active Alerts:**
-  - OGN Message Ingestion Rate Too Low (critical: < 1 msg/min for 2 minutes)
-  - OGN Ingest Service Disconnected (critical: connection gauge = 0)
-  - OGN NATS Publishing Errors (warning: error rate > 0.1/min for 3 minutes)
 - **NEVER commit credentials** - Template files use placeholders, actual values extracted during deployment
 
 ### Frontend Development Standards
@@ -398,17 +399,6 @@ All changes must pass these checks locally:
    - No trailing whitespace
    - Proper file endings
    - Valid YAML/JSON/TOML syntax
-
-### Development Workflow
-```bash
-#  Proper development cycle
-git checkout -b feature/new-feature
-# Make changes
-pre-commit run --all-files  # Verify quality
-git add .
-git commit -m "feat: add new feature"  # Pre-commit runs automatically
-git push origin feature/new-feature
-```
 
 ### MCP Server Setup (Optional - For Claude Code Database Access)
 
