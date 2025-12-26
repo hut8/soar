@@ -418,10 +418,10 @@ export class FixFeed {
 
 	// Fetch aircraft in bounding box via REST API
 	public async fetchAircraftInBoundingBox(
-		latMin: number,
-		latMax: number,
-		lonMin: number,
-		lonMax: number,
+		south: number,
+		north: number,
+		west: number,
+		east: number,
 		afterTimestamp?: string // Expected in ISO 8601 format
 	): Promise<Aircraft[]> {
 		if (!browser) return [];
@@ -430,10 +430,10 @@ export class FixFeed {
 			const { serverCall } = await import('$lib/api/server');
 			const response = await serverCall('/aircraft', {
 				params: {
-					latitude_min: latMin,
-					latitude_max: latMax,
-					longitude_min: lonMin,
-					longitude_max: lonMax,
+					south,
+					north,
+					west,
+					east,
 					...(afterTimestamp && { after: afterTimestamp })
 				}
 			});
