@@ -53,7 +53,10 @@ export default defineConfig({
 						'--disable-dev-shm-usage',
 						'--disable-web-security',
 						'--disable-features=IsolateOrigins,site-per-process',
-						'--disable-blink-features=AutomationControlled'
+						'--disable-blink-features=AutomationControlled',
+						'--disable-gpu',
+						'--disable-software-rasterizer',
+						'--disable-accelerated-2d-canvas'
 					]
 				}
 			}
