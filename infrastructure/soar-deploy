@@ -133,6 +133,7 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
         "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
@@ -140,6 +141,7 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
         "partman-maintenance${SERVICE_SUFFIX}.timer"
     )
 else
@@ -147,6 +149,7 @@ else
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
@@ -156,6 +159,7 @@ else
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
         "soar-backup-base${SERVICE_SUFFIX}.timer"
         "soar-backup-verify${SERVICE_SUFFIX}.timer"
         "partman-maintenance${SERVICE_SUFFIX}.timer"
@@ -651,13 +655,13 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
         # Check for prometheus datasource (required for alerts and dashboards)
         # First check by exact UID match (provisioned as uid='prometheus')
         PROM_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='prometheus';" 2>/dev/null || true)
-        
+
         if [ -n "$PROM_UID_EXISTS" ]; then
             log_info "Datasource 'prometheus': ${GREEN}FOUND (by UID)${NC}"
         else
             # Check if datasource exists with different UID but matching name (case-insensitive)
             PROM_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid, name FROM data_source WHERE LOWER(name)='prometheus';" 2>/dev/null || true)
-            
+
             if [ -n "$PROM_NAME_EXISTS" ]; then
                 log_warn "Prometheus datasource found by name but with different UID: $PROM_NAME_EXISTS"
                 log_warn "Expected uid='prometheus' per provisioning config at infrastructure/grafana-provisioning/datasources/prometheus.yaml"

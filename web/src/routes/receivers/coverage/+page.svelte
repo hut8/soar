@@ -3,7 +3,7 @@
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { serverCall } from '$lib/api/server';
-	import { Loader, Calendar, Layers, Radio } from '@lucide/svelte';
+	import { Loader, Calendar, Layers, Radio, Filter, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import type { CoverageHexProperties, CoverageGeoJsonResponse } from '$lib/types';
 
@@ -13,6 +13,11 @@
 	let error = '';
 	let resolution = 7;
 	let hexCount = 0;
+	let receivers: { id: string; callsign: string }[] = [];
+	let selectedReceiverId = '';
+	let minAltitude = 0;
+	let maxAltitude = 50000;
+	let showAdvancedFilters = false;
 
 	// Default to last 30 days
 	function getDefaultDates() {
@@ -27,7 +32,21 @@
 	let startDate = defaultDates.start;
 	let endDate = defaultDates.end;
 
+	async function loadReceivers() {
+		try {
+			const response = await serverCall<{ receivers: { id: string; callsign: string }[] }>(
+				'/receivers'
+			);
+			receivers = response.receivers || [];
+		} catch (err) {
+			console.error('Failed to load receivers:', err);
+		}
+	}
+
 	onMount(() => {
+		// Load receivers list
+		loadReceivers();
+
 		// Initialize MapLibre map centered on US
 		map = new maplibregl.Map({
 			container: mapContainer,
@@ -86,8 +105,32 @@
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
+			// Build query parameters
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- URLSearchParams created fresh on each call, no persistent state
+			const params = new URLSearchParams({
+				resolution: resolution.toString(),
+				west: west.toString(),
+				east: east.toString(),
+				south: south.toString(),
+				north: north.toString(),
+				start_date: startDate,
+				end_date: endDate,
+				limit: '5000'
+			});
+
+			// Add optional filters if they're set
+			if (selectedReceiverId) {
+				params.append('receiver_id', selectedReceiverId);
+			}
+			if (minAltitude > 0) {
+				params.append('min_altitude', minAltitude.toString());
+			}
+			if (maxAltitude < 50000) {
+				params.append('max_altitude', maxAltitude.toString());
+			}
+
 			const response = await serverCall<CoverageGeoJsonResponse>(
-				`/data/coverage/hexes?resolution=${resolution}&west=${west}&east=${east}&south=${south}&north=${north}&start_date=${startDate}&end_date=${endDate}&limit=5000`
+				`/data/coverage/hexes?${params.toString()}`
 			);
 
 			hexCount = response.features?.length || 0;
@@ -186,6 +229,18 @@
 	function handleDateChange() {
 		loadCoverage();
 	}
+
+	function handleReceiverChange() {
+		loadCoverage();
+	}
+
+	function handleAltitudeChange() {
+		loadCoverage();
+	}
+
+	function toggleAdvancedFilters() {
+		showAdvancedFilters = !showAdvancedFilters;
+	}
 </script>
 
 <div class="flex h-screen flex-col">
@@ -245,6 +300,21 @@
 				/>
 			</div>
 
+			<!-- Advanced Filters Toggle -->
+			<button
+				onclick={toggleAdvancedFilters}
+				class="btn gap-2 preset-outlined"
+				title="Toggle advanced filters"
+			>
+				<Filter class="h-4 w-4" />
+				Advanced
+				{#if showAdvancedFilters}
+					<ChevronUp class="h-4 w-4" />
+				{:else}
+					<ChevronDown class="h-4 w-4" />
+				{/if}
+			</button>
+
 			<!-- Stats -->
 			<div class="ml-auto flex items-center gap-2 text-sm text-gray-300">
 				{#if loading}
@@ -256,6 +326,69 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Advanced Filters Panel -->
+		{#if showAdvancedFilters}
+			<div class="mt-4 space-y-4 rounded border border-surface-500 p-4">
+				<h3 class="flex items-center gap-2 text-sm font-semibold text-gray-300">
+					<Filter class="h-4 w-4" />
+					Advanced Filters
+				</h3>
+
+				<div class="grid gap-4 md:grid-cols-2">
+					<!-- Receiver Filter -->
+					<div class="space-y-2">
+						<label for="receiver" class="text-sm font-medium text-gray-300">Receiver:</label>
+						<select
+							id="receiver"
+							bind:value={selectedReceiverId}
+							onchange={handleReceiverChange}
+							class="variant-filled-surface select w-full"
+						>
+							<option value="">All Receivers</option>
+							{#each receivers as receiver (receiver.id)}
+								<option value={receiver.id}>{receiver.callsign}</option>
+							{/each}
+						</select>
+					</div>
+
+					<!-- Altitude Filter -->
+					<div class="space-y-2">
+						<label class="text-sm font-medium text-gray-300">
+							Altitude: {minAltitude.toLocaleString()} - {maxAltitude.toLocaleString()} ft
+						</label>
+						<div class="flex gap-2">
+							<div class="flex-1 space-y-1">
+								<label for="min-altitude" class="text-xs text-gray-400">Min:</label>
+								<input
+									id="min-altitude"
+									type="range"
+									min="0"
+									max="50000"
+									step="1000"
+									bind:value={minAltitude}
+									onchange={handleAltitudeChange}
+									class="w-full"
+								/>
+							</div>
+							<div class="flex-1 space-y-1">
+								<label for="max-altitude" class="text-xs text-gray-400">Max:</label>
+								<input
+									id="max-altitude"
+									type="range"
+									min="0"
+									max="50000"
+									step="1000"
+									bind:value={maxAltitude}
+									onchange={handleAltitudeChange}
+									class="w-full"
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
 
 		<!-- Error message -->
 		{#if error}
