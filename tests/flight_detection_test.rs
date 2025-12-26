@@ -5,6 +5,7 @@
 //!
 //! Test data files are located in tests/data/flights/ and can be generated
 //! using the dump-flight-messages.sh script.
+use serial_test::serial;
 use soar::message_sources::{RawMessageSource, TestMessageSource};
 
 /// Example test showing how to read messages from a test file
@@ -157,6 +158,7 @@ async fn test_message_parsing_from_source() {
 /// Distance during gap: 32.29 km
 /// Generated: 2025-12-24 08:00:53 UTC
 #[tokio::test]
+#[serial]
 async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     use diesel::PgConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
@@ -169,8 +171,9 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     // ========== ARRANGE ==========
 
     // Set up test database
-    let database_url =
-        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
         .build(manager)
@@ -373,6 +376,7 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
 /// Time span: 2025-12-26T01:43:46Z to 2025-12-26T01:44:40Z (~54 seconds)
 /// Location: 38°42.32'N 094°27.59'W (same location for all fixes)
 #[tokio::test]
+#[serial]
 async fn test_no_active_fixes_should_not_create_flight() {
     use diesel::PgConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
@@ -385,8 +389,9 @@ async fn test_no_active_fixes_should_not_create_flight() {
     // ========== ARRANGE ==========
 
     // Set up test database
-    let database_url =
-        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
+    dotenvy::dotenv().ok();
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
         .build(manager)
