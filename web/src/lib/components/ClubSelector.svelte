@@ -2,7 +2,7 @@
 	import { Combobox } from '@skeletonlabs/skeleton-svelte';
 	import { onMount } from 'svelte';
 	import { serverCall } from '$lib/api/server';
-	import type { ClubWithSoaring, ComboboxData } from '$lib/types';
+	import type { ClubWithSoaring, ComboboxData, DataListResponse } from '$lib/types';
 
 	// Props
 	export let value: string[] = [];
@@ -39,7 +39,8 @@
 				endpoint += `&q=${encodeURIComponent(query.trim())}`;
 			}
 
-			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
+			const response = await serverCall<DataListResponse<ClubWithSoaring>>(endpoint);
+			clubs = response.data;
 			comboboxData = transformClubsToComboboxData(clubs);
 		} catch (err) {
 			console.error('Failed to load clubs:', err);
