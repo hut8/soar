@@ -39,9 +39,10 @@ impl NatsPublisher {
                     metrics::histogram!("aprs.nats.publish_duration_ms").record(duration_ms);
                     metrics::counter!("aprs.nats.published").increment(1);
 
-                    // Log slow publishes
+                    // Track slow publishes (>100ms is considered slow for fire-and-forget)
                     if duration_ms > 100.0 {
                         warn!("Slow NATS publish: {:.1}ms", duration_ms);
+                        metrics::counter!("aprs.nats.slow_publish").increment(1);
                     }
                 }
                 Err(e) => {
