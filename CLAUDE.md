@@ -2,6 +2,15 @@
 
 This document provides essential guidance for AI assistants working on the SOAR (Soaring Observation And Records) project.
 
+## GitHub Copilot Resources
+
+For GitHub Copilot users, see these additional resources:
+- **`.github/copilot-instructions.md`** - Project-specific coding patterns and conventions optimized for Copilot
+- **`.github/copilot-setup-steps.yml`** - Complete development environment setup guide
+- **`.github/COPILOT-RECOMMENDATIONS.md`** - Advanced tips for maximizing Copilot effectiveness
+
+These files complement this document and provide Copilot-optimized guidance.
+
 ## Project Overview
 
 SOAR is a comprehensive aircraft tracking and club management system built with:
