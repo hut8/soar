@@ -12,12 +12,72 @@ use crate::coverage_repo::CoverageRepository;
 use crate::web::PgPool;
 
 /// Aggregate fixes into H3 coverage hexes for a specific date range
+///
+/// If start_date or end_date are None, automatically determines the date range:
+/// - end_date defaults to yesterday
+/// - start_date defaults to (last coverage date + 1), or oldest fix date if no coverage exists
 pub async fn aggregate_coverage(
     pool: PgPool,
-    start_date: NaiveDate,
-    end_date: NaiveDate,
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
     resolutions: Vec<i16>,
 ) -> Result<()> {
+    // Determine end date (default to yesterday)
+    let end_date = end_date.unwrap_or_else(|| {
+        let yesterday = Utc::now().date_naive() - chrono::Duration::days(1);
+        info!(
+            "No end date specified, defaulting to yesterday: {}",
+            yesterday
+        );
+        yesterday
+    });
+
+    // Determine start date (auto-detect if not specified)
+    let start_date = match start_date {
+        Some(date) => {
+            info!("Using specified start date: {}", date);
+            date
+        }
+        None => {
+            info!("No start date specified, auto-detecting from database...");
+            let last_coverage_date = find_last_coverage_date(pool.clone()).await?;
+
+            match last_coverage_date {
+                Some(last_date) => {
+                    let next_date = last_date + chrono::Duration::days(1);
+                    info!(
+                        "Last coverage date: {}, starting from: {}",
+                        last_date, next_date
+                    );
+                    next_date
+                }
+                None => {
+                    info!("No existing coverage found, checking for oldest fix...");
+                    let oldest_fix_date = find_oldest_fix_date(pool.clone()).await?;
+                    match oldest_fix_date {
+                        Some(oldest) => {
+                            info!("Oldest fix date: {}, starting from: {}", oldest, oldest);
+                            oldest
+                        }
+                        None => {
+                            warn!("No fixes found in database, nothing to aggregate");
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // Validate date range
+    if start_date > end_date {
+        warn!(
+            "Start date {} is after end date {}, nothing to aggregate",
+            start_date, end_date
+        );
+        return Ok(());
+    }
+
     info!(
         "Aggregating coverage from {} to {} for resolutions {:?}",
         start_date, end_date, resolutions
@@ -25,19 +85,34 @@ pub async fn aggregate_coverage(
 
     let repo = CoverageRepository::new(pool.clone());
 
-    // Process each resolution separately
-    for resolution in resolutions {
-        info!("Processing resolution {}", resolution);
+    // Iterate over each day in the range
+    let mut current_date = start_date;
+    while current_date <= end_date {
+        info!("Processing date: {}", current_date);
 
-        let coverage_data =
-            fetch_and_aggregate_fixes(pool.clone(), start_date, end_date, resolution).await?;
+        // Process each resolution for this day
+        for resolution in &resolutions {
+            let coverage_data =
+                fetch_and_aggregate_fixes(pool.clone(), current_date, current_date, *resolution)
+                    .await?;
 
-        info!(
-            "Upserting {} coverage records for resolution {}",
-            coverage_data.len(),
-            resolution
-        );
-        repo.upsert_coverage_batch(coverage_data).await?;
+            if !coverage_data.is_empty() {
+                info!(
+                    "Upserting {} coverage records for date {} resolution {}",
+                    coverage_data.len(),
+                    current_date,
+                    resolution
+                );
+                repo.upsert_coverage_batch(coverage_data).await?;
+            } else {
+                info!(
+                    "No fixes found for date {} resolution {}",
+                    current_date, resolution
+                );
+            }
+        }
+
+        current_date += chrono::Duration::days(1);
     }
 
     info!("Coverage aggregation complete");
@@ -195,4 +270,58 @@ struct CoverageAggregate {
     max_altitude: Option<i32>,
     altitude_sum: i64,
     altitude_count: i32,
+}
+
+/// Find the most recent date in the receiver_coverage_h3 table
+async fn find_last_coverage_date(pool: PgPool) -> Result<Option<NaiveDate>> {
+    use crate::schema::receiver_coverage_h3;
+
+    let pool_clone = pool.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        use diesel::dsl::max;
+
+        let mut conn = pool_clone
+            .get()
+            .context("Failed to get database connection")?;
+
+        let max_date = receiver_coverage_h3::table
+            .select(max(receiver_coverage_h3::date))
+            .first::<Option<NaiveDate>>(&mut conn)
+            .context("Failed to query max coverage date")?;
+
+        Ok::<Option<NaiveDate>, anyhow::Error>(max_date)
+    })
+    .await??;
+
+    Ok(result)
+}
+
+/// Find the oldest date in the fixes table
+async fn find_oldest_fix_date(pool: PgPool) -> Result<Option<NaiveDate>> {
+    let pool_clone = pool.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut conn = pool_clone
+            .get()
+            .context("Failed to get database connection")?;
+
+        // Query for the minimum timestamp from fixes table
+        #[derive(QueryableByName)]
+        struct MinTimestamp {
+            #[diesel(sql_type = sql_types::Nullable<sql_types::Timestamptz>)]
+            min_timestamp: Option<DateTime<Utc>>,
+        }
+
+        let query = diesel::sql_query(
+            "SELECT MIN(timestamp) as min_timestamp FROM fixes WHERE timestamp IS NOT NULL",
+        );
+
+        let result: MinTimestamp = query
+            .get_result(&mut conn)
+            .context("Failed to query min fix timestamp")?;
+
+        Ok::<Option<NaiveDate>, anyhow::Error>(result.min_timestamp.map(|ts| ts.date_naive()))
+    })
+    .await??;
+
+    Ok(result)
 }

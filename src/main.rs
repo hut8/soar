@@ -293,15 +293,21 @@ enum Commands {
     /// hexagonal coverage zones. Updates coverage statistics including fix counts, timestamps,
     /// and altitude information for visualization and analysis.
     ///
+    /// If start/end dates are omitted, automatically determines what needs aggregation by:
+    /// - Finding the most recent coverage date in the database
+    /// - Aggregating from (last coverage date + 1) to yesterday
+    /// - If no coverage exists, starts from the oldest fix date
+    ///
     /// Example: soar aggregate-coverage --start-date 2025-12-25 --end-date 2025-12-26 --resolutions 6,7,8
+    /// Example: soar aggregate-coverage --resolutions 6,7,8  (auto-detect date range)
     AggregateCoverage {
-        /// Start date for aggregation (YYYY-MM-DD)
+        /// Start date for aggregation (YYYY-MM-DD). If omitted, auto-detects from database.
         #[arg(long)]
-        start_date: chrono::NaiveDate,
+        start_date: Option<chrono::NaiveDate>,
 
-        /// End date for aggregation (YYYY-MM-DD)
+        /// End date for aggregation (YYYY-MM-DD). If omitted, defaults to yesterday.
         #[arg(long)]
-        end_date: chrono::NaiveDate,
+        end_date: Option<chrono::NaiveDate>,
 
         /// H3 resolutions to aggregate (comma-separated, e.g., "6,7,8")
         /// Resolution 6: ~36km² per hex, Resolution 7: ~5km² per hex, Resolution 8: ~0.7km² per hex
