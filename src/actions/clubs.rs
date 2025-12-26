@@ -13,7 +13,7 @@ use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
 
 use super::{
-    json_error,
+    DataListResponse, DataResponse, json_error,
     views::{AircraftInfo, ClubView, FlightView},
 };
 
@@ -33,7 +33,10 @@ pub async fn get_club_by_id(
     let clubs_repo = ClubsRepository::new(state.pool);
 
     match clubs_repo.get_by_id(id).await {
-        Ok(Some(club)) => Json(ClubView::from(club)).into_response(),
+        Ok(Some(club)) => Json(DataResponse {
+            data: ClubView::from(club),
+        })
+        .into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
         Err(e) => {
             error!("Failed to get club by ID: {}", e);
@@ -89,7 +92,7 @@ pub async fn search_clubs(
         {
             Ok(clubs) => {
                 let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
-                Json(club_views).into_response()
+                Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
                 error!("Failed to search nearby clubs: {}", e);
@@ -113,7 +116,7 @@ pub async fn search_clubs(
         match clubs_repo.fuzzy_search_soaring(&query, params.limit).await {
             Ok(clubs) => {
                 let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
-                Json(club_views).into_response()
+                Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
                 error!("Failed to search clubs: {}", e);
@@ -133,7 +136,7 @@ pub async fn search_clubs(
         match clubs_repo.get_all().await {
             Ok(clubs) => {
                 let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
-                Json(club_views).into_response()
+                Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
                 error!("Failed to get clubs: {}", e);
@@ -202,7 +205,7 @@ pub async fn get_club_flights(
                 flight_views.push(flight_view);
             }
 
-            Json(flight_views).into_response()
+            Json(DataListResponse { data: flight_views }).into_response()
         }
         Err(e) => {
             error!("Failed to get flights for club {}: {}", club_id, e);
