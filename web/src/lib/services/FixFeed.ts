@@ -181,6 +181,14 @@ export class FixFeed {
 						const aircraftFixes = aircraft.fixes || [];
 						if (aircraftFixes.length > 0) {
 							for (const fix of aircraftFixes) {
+								// Ensure fix has aircraftId set (should come from backend, but validate)
+								if (!fix.aircraftId && aircraft.id) {
+									console.warn(
+										'[FIXFEED] Fix missing aircraftId, setting from parent aircraft:',
+										aircraft.id
+									);
+									fix.aircraftId = aircraft.id;
+								}
 								this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
 									console.warn('Failed to add aircraft fix to registry:', error);
 								});

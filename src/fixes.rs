@@ -41,6 +41,7 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::fixes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[serde(rename_all = "camelCase")]
 pub struct Fix {
     /// Unique identifier for this fix
     pub id: Uuid,
@@ -58,9 +59,7 @@ pub struct Fix {
     pub latitude: f64,
     pub longitude: f64,
     // Note: location and geom fields are skipped as they're computed from lat/lng
-    #[serde(rename = "altitude_msl_feet")]
     pub altitude_msl_feet: Option<i32>,
-    #[serde(rename = "altitude_agl_feet")]
     pub altitude_agl_feet: Option<i32>,
 
     /// Flight information
@@ -131,6 +130,7 @@ pub struct FixWithAircraftInfo {
 /// Extended Fix struct that includes flight metadata for WebSocket streaming
 /// Used when streaming fixes to include current flight information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FixWithFlightInfo {
     #[serde(flatten)]
     pub fix: Fix,
