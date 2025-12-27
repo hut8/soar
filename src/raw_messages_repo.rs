@@ -446,6 +446,35 @@ mod tests {
         .expect("Failed to clean up test data");
     }
 
+    /// Helper to insert a test receiver and ensure it's committed and visible
+    /// Returns the receiver_id that was inserted
+    fn insert_test_receiver(pool: &PgPool) -> Uuid {
+        use diesel::Connection;
+
+        let receiver_id = Uuid::new_v4();
+        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+
+        let mut conn = pool.get().expect("Failed to get connection");
+
+        // Use explicit transaction and commit to ensure visibility
+        conn.transaction::<_, anyhow::Error, _>(|conn| {
+            diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .bind::<diesel::sql_types::Text, _>(&callsign)
+                .execute(conn)?;
+            Ok(())
+        })
+        .expect("Failed to insert test receiver");
+
+        // Drop the connection to ensure it's returned to pool and committed
+        drop(conn);
+
+        // Small delay to ensure transaction is fully committed and visible
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        receiver_id
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_insert_and_get_by_id() {
@@ -454,22 +483,8 @@ mod tests {
 
         let repo = AprsMessagesRepository::new(pool.clone());
 
-        // Create a test receiver with unique callsign
-        let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
-        {
-            use diesel::Connection;
-            let mut conn = pool.get().expect("Failed to get connection");
-            // Use transaction to ensure receiver is committed before raw_messages inserts
-            conn.transaction::<_, diesel::result::Error, _>(|conn| {
-                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                    .bind::<diesel::sql_types::Text, _>(&callsign)
-                    .execute(conn)?;
-                Ok(())
-            })
-            .expect("Failed to insert test receiver");
-        }
+        // Create a test receiver
+        let receiver_id = insert_test_receiver(&pool);
 
         // Insert a test message
         let new_message = NewAprsMessage::new(
@@ -523,22 +538,8 @@ mod tests {
 
         let repo = AprsMessagesRepository::new(pool.clone());
 
-        // Create a test receiver with unique callsign
-        let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
-        {
-            use diesel::Connection;
-            let mut conn = pool.get().expect("Failed to get connection");
-            // Use transaction to ensure receiver is committed before raw_messages inserts
-            conn.transaction::<_, diesel::result::Error, _>(|conn| {
-                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                    .bind::<diesel::sql_types::Text, _>(&callsign)
-                    .execute(conn)?;
-                Ok(())
-            })
-            .expect("Failed to insert test receiver");
-        }
+        // Create a test receiver
+        let receiver_id = insert_test_receiver(&pool);
 
         // Insert multiple test messages
         let mut message_ids: Vec<Uuid> = Vec::new();
@@ -578,22 +579,8 @@ mod tests {
 
         let repo = AprsMessagesRepository::new(pool.clone());
 
-        // Create a test receiver with unique callsign
-        let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
-        {
-            use diesel::Connection;
-            let mut conn = pool.get().expect("Failed to get connection");
-            // Use transaction to ensure receiver is committed before raw_messages inserts
-            conn.transaction::<_, diesel::result::Error, _>(|conn| {
-                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                    .bind::<diesel::sql_types::Text, _>(&callsign)
-                    .execute(conn)?;
-                Ok(())
-            })
-            .expect("Failed to insert test receiver");
-        }
+        // Create a test receiver
+        let receiver_id = insert_test_receiver(&pool);
 
         // Insert one message
         let new_message = NewAprsMessage::new(
