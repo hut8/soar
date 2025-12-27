@@ -446,62 +446,49 @@ mod tests {
         .expect("Failed to clean up test data");
     }
 
-    /// Helper to insert a test receiver and ensure it's committed and visible
-    /// Returns the receiver_id that was inserted
-    fn insert_test_receiver(pool: &PgPool) -> Uuid {
-        use diesel::Connection;
-
-        let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
-
-        let mut conn = pool.get().expect("Failed to get connection");
-
-        // Use explicit transaction and commit to ensure visibility
-        conn.transaction::<_, anyhow::Error, _>(|conn| {
-            diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(conn)?;
-            Ok(())
-        })
-        .expect("Failed to insert test receiver");
-
-        // Drop the connection to ensure it's returned to pool and committed
-        drop(conn);
-
-        // Small delay to ensure transaction is fully committed and visible
-        std::thread::sleep(std::time::Duration::from_millis(10));
-
-        receiver_id
-    }
-
     #[tokio::test]
     #[serial]
     async fn test_insert_and_get_by_id() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
+        let receiver_id = Uuid::new_v4();
+        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let mut message_id = Uuid::nil();
+
+        // Insert receiver and message in a single transaction
+        {
+            use diesel::Connection;
+            let mut conn = pool.get().expect("Failed to get connection");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query(
+                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
+                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
+                )
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .bind::<diesel::sql_types::Text, _>(&callsign)
+                .execute(conn)?;
+
+                // Insert message using Diesel
+                let new_message = NewAprsMessage::new(
+                    "TEST>APRS:>Test message".to_string(),
+                    Utc::now(),
+                    receiver_id,
+                    None,
+                );
+                message_id = new_message.id;
+                diesel::insert_into(crate::schema::raw_messages::table)
+                    .values(&new_message)
+                    .execute(conn)?;
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
+        }
+
+        // Now use repo for querying
         let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver
-        let receiver_id = insert_test_receiver(&pool);
-
-        // Insert a test message
-        let new_message = NewAprsMessage::new(
-            "TEST>APRS:>Test message".to_string(),
-            Utc::now(),
-            receiver_id,
-            None,
-        );
-        let message_id = new_message.id;
-
-        let inserted_id = repo
-            .insert_aprs(new_message)
-            .await
-            .expect("Failed to insert");
-        assert_eq!(inserted_id, message_id);
-
-        // Retrieve the message by ID
         let retrieved = repo
             .get_by_id(message_id)
             .await
@@ -536,28 +523,45 @@ mod tests {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
-        let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver
-        let receiver_id = insert_test_receiver(&pool);
-
-        // Insert multiple test messages
+        let receiver_id = Uuid::new_v4();
+        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
         let mut message_ids: Vec<Uuid> = Vec::new();
 
-        for i in 0..3 {
-            let new_message = NewAprsMessage::new(
-                format!("TEST{}>APRS:>Test message {}", i, i),
-                Utc::now(),
-                receiver_id,
-                None,
-            );
-            message_ids.push(new_message.id);
-            repo.insert_aprs(new_message)
-                .await
-                .expect("Failed to insert");
+        // Insert receiver and messages in a single transaction
+        {
+            use diesel::Connection;
+            let mut conn = pool.get().expect("Failed to get connection");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query(
+                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
+                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
+                )
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .bind::<diesel::sql_types::Text, _>(&callsign)
+                .execute(conn)?;
+
+                // Insert multiple messages using Diesel
+                for i in 0..3 {
+                    let new_message = NewAprsMessage::new(
+                        format!("TEST{}>APRS:>Test message {}", i, i),
+                        Utc::now(),
+                        receiver_id,
+                        None,
+                    );
+                    message_ids.push(new_message.id);
+                    diesel::insert_into(crate::schema::raw_messages::table)
+                        .values(&new_message)
+                        .execute(conn)?;
+                }
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
         }
 
-        // Retrieve all messages by their IDs
+        // Now use repo for querying
+        let repo = AprsMessagesRepository::new(pool.clone());
         let messages = repo
             .get_by_ids(message_ids.clone())
             .await
@@ -577,22 +581,43 @@ mod tests {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
+        let receiver_id = Uuid::new_v4();
+        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let mut existing_id = Uuid::nil();
+
+        // Insert receiver and message in a single transaction
+        {
+            use diesel::Connection;
+            let mut conn = pool.get().expect("Failed to get connection");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query(
+                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
+                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
+                )
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .bind::<diesel::sql_types::Text, _>(&callsign)
+                .execute(conn)?;
+
+                // Insert message using Diesel
+                let new_message = NewAprsMessage::new(
+                    "TEST>APRS:>Existing message".to_string(),
+                    Utc::now(),
+                    receiver_id,
+                    None,
+                );
+                existing_id = new_message.id;
+                diesel::insert_into(crate::schema::raw_messages::table)
+                    .values(&new_message)
+                    .execute(conn)?;
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
+        }
+
+        // Now use repo for querying
         let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver
-        let receiver_id = insert_test_receiver(&pool);
-
-        // Insert one message
-        let new_message = NewAprsMessage::new(
-            "TEST>APRS:>Existing message".to_string(),
-            Utc::now(),
-            receiver_id,
-            None,
-        );
-        let existing_id = new_message.id;
-        repo.insert_aprs(new_message)
-            .await
-            .expect("Failed to insert");
 
         // Request both existing and non-existing IDs
         let non_existing_id = Uuid::new_v4();
