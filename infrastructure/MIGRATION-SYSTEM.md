@@ -50,7 +50,11 @@ Shell script that:
 - Sends Sentry events
 - Logs everything to systemd journal and files
 
-**Environment variables** (from `/etc/soar/env` or `/etc/soar/env-staging`):
+**Environment variables** (from environment files):
+- Staging: `/etc/soar/env-staging`
+- Production: `/etc/soar/env-production` (symlink to `/etc/soar/env`)
+
+Variables:
 - `DATABASE_URL`: PostgreSQL connection string
 - `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration
 - `FROM_EMAIL`, `FROM_NAME`: Email sender info

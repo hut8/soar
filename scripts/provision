@@ -404,6 +404,19 @@ sudo mkdir -p /var/soar/migration-status
 sudo chown -R soar:soar /var/soar/logs/migrations
 sudo chown -R soar:soar /var/soar/migration-status
 
+# Create symlink for production environment file
+# The systemd service expects /etc/soar/env-production for consistency
+# For production, this is a symlink to /etc/soar/env
+if [ "$ENVIRONMENT" = "production" ]; then
+    echo -e "${BLUE}Creating environment file symlink for production...${NC}"
+    if [ ! -e /etc/soar/env-production ]; then
+        sudo ln -s /etc/soar/env /etc/soar/env-production
+        echo -e "${GREEN}/etc/soar/env-production -> /etc/soar/env${NC}"
+    else
+        echo -e "${YELLOW}/etc/soar/env-production already exists${NC}"
+    fi
+fi
+
 # Reload systemd daemon
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
