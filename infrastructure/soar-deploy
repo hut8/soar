@@ -641,6 +641,44 @@ fi
 # Restart Grafana if dashboards or provisioning was updated
 if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
     if systemctl is-active --quiet grafana-server; then
+        # Clean up datasources that will be provisioned to prevent UID conflicts
+        log_info "Cleaning up datasources that will be re-provisioned..."
+        if [ -f /var/lib/grafana/grafana.db ]; then
+            # Extract UIDs from provisioning files
+            DATASOURCE_UIDS_TO_REMOVE=()
+            if [ -d /etc/grafana/provisioning/datasources ]; then
+                for datasource_file in /etc/grafana/provisioning/datasources/*.yml /etc/grafana/provisioning/datasources/*.yaml; do
+                    if [ -f "$datasource_file" ]; then
+                        # Extract UIDs using grep and awk (handles both 'uid: value' and 'uid:value' formats)
+                        while IFS= read -r uid_value; do
+                            if [ -n "$uid_value" ]; then
+                                DATASOURCE_UIDS_TO_REMOVE+=("$uid_value")
+                                log_info "  Found provisioned datasource UID: $uid_value"
+                            fi
+                        done < <(grep -E '^\s*uid:\s*\S+' "$datasource_file" | awk '{print $2}' | tr -d '"' | tr -d "'")
+                    fi
+                done
+            fi
+
+            # Remove datasources with matching UIDs from database
+            if [ ${#DATASOURCE_UIDS_TO_REMOVE[@]} -gt 0 ]; then
+                for uid in "${DATASOURCE_UIDS_TO_REMOVE[@]}"; do
+                    # Check if datasource exists before trying to delete
+                    EXISTING_DS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT name FROM data_source WHERE uid='$uid';" 2>/dev/null || true)
+                    if [ -n "$EXISTING_DS" ]; then
+                        log_info "  Removing existing datasource with uid='$uid' (name='$EXISTING_DS') to prevent provisioning conflict..."
+                        sudo sqlite3 /var/lib/grafana/grafana.db "DELETE FROM data_source WHERE uid='$uid';" 2>/dev/null || log_warn "Failed to delete datasource uid='$uid'"
+                    else
+                        log_info "  No existing datasource with uid='$uid' found (will be created on startup)"
+                    fi
+                done
+            else
+                log_info "  No datasource UIDs found in provisioning files"
+            fi
+        else
+            log_warn "Grafana database not found at /var/lib/grafana/grafana.db, skipping datasource cleanup"
+        fi
+
         log_info "Restarting Grafana to load new dashboards..."
         systemctl restart grafana-server || log_warn "Failed to restart Grafana"
         log_info "Grafana restarted successfully"
