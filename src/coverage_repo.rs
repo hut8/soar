@@ -36,24 +36,57 @@ impl CoverageRepository {
         max_altitude: Option<i32>,
         limit: i64,
     ) -> Result<Vec<ReceiverCoverageH3>> {
-        use h3o::{CellIndex, LatLng};
+        use h3o::Resolution;
+        use h3o::geom::{PolyfillConfig, ToCells};
 
         let pool = self.pool.clone();
         let limit = limit.min(10000); // Cap at 10k hexes
+
+        // Convert bounding box to H3 cells at the requested resolution
+        // This uses H3's polyfill algorithm to find all cells covering the bbox
+        let h3_resolution = Resolution::try_from(resolution as u8)?;
+        let config = PolyfillConfig::new(h3_resolution);
+
+        // Create geo::Rect first, then wrap in h3o::geom::Rect
+        let geo_rect = geo::Rect::new(
+            geo::coord! { x: west, y: south },
+            geo::coord! { x: east, y: north },
+        );
+        let bbox = h3o::geom::Rect::from_degrees(geo_rect)?;
+
+        // Get all H3 cells that cover the bounding box
+        let h3_cells: Vec<i64> = bbox
+            .to_cells(config)
+            .map(|cell| u64::from(cell) as i64)
+            .collect();
+
+        info!(
+            "Bounding box covers {} H3 cells at resolution {}",
+            h3_cells.len(),
+            resolution
+        );
+
+        // If too many cells, warn and apply a limit to avoid overwhelming the DB
+        let h3_cells = if h3_cells.len() > 50000 {
+            tracing::warn!(
+                "Bounding box covers {} cells (>50k limit), truncating query",
+                h3_cells.len()
+            );
+            h3_cells.into_iter().take(50000).collect()
+        } else {
+            h3_cells
+        };
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             // Build query with filters
-            // Note: We don't filter by H3 index range here because H3 indexes are not
-            // linearly distributed across geographic space. For large bounding boxes,
-            // using min/max of corner H3 indexes would incorrectly exclude valid hexagons.
-            // Instead, we fetch all hexes for the resolution/date range and filter by
-            // actual lat/lng bounds below.
+            // We filter by the specific H3 cells that cover the bounding box
             let mut query = receiver_coverage_h3::table
                 .filter(receiver_coverage_h3::resolution.eq(resolution))
                 .filter(receiver_coverage_h3::date.ge(start_date))
                 .filter(receiver_coverage_h3::date.le(end_date))
+                .filter(receiver_coverage_h3::h3_index.eq_any(h3_cells))
                 .into_boxed();
 
             if let Some(rid) = receiver_id {
@@ -70,25 +103,9 @@ impl CoverageRepository {
 
             let results = query.limit(limit).load::<ReceiverCoverageH3>(&mut conn)?;
 
-            // Filter results to only include hexes actually within bounding box
-            let filtered: Vec<ReceiverCoverageH3> = results
-                .into_iter()
-                .filter(|coverage| {
-                    if let Ok(cell) = CellIndex::try_from(coverage.h3_index as u64) {
-                        let center = LatLng::from(cell);
-                        center.lat() >= south
-                            && center.lat() <= north
-                            && center.lng() >= west
-                            && center.lng() <= east
-                    } else {
-                        false
-                    }
-                })
-                .collect();
-
             info!(
                 "Found {} coverage hexes (resolution {}) in bbox [{}, {}] to [{}, {}]",
-                filtered.len(),
+                results.len(),
                 resolution,
                 south,
                 west,
@@ -96,7 +113,7 @@ impl CoverageRepository {
                 east
             );
 
-            Ok(filtered)
+            Ok(results)
         })
         .await?
     }
