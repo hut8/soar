@@ -221,6 +221,29 @@ run_migration() {
         # Send success notification to Sentry (info level)
         send_sentry_notification "Database migration completed successfully for $ENVIRONMENT" "info" ""
 
+        # Send success email notification
+        local email_subject="[SOAR ${ENVIRONMENT^^}] Database Migration COMPLETED"
+        local email_body="Database migration completed successfully on $ENVIRONMENT environment.
+
+Environment: $ENVIRONMENT
+Hostname: $(hostname)
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Log File: $LOG_FILE
+
+Migration output:
+----------------------------------------
+$migration_output
+----------------------------------------
+
+To view full logs:
+  journalctl -u soar-migrate@$ENVIRONMENT -n 200
+
+To view log file:
+  cat $LOG_FILE
+"
+
+        send_email_notification "$email_subject" "$email_body"
+
         return 0
     else
         migration_exit_code=$?

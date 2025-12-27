@@ -196,11 +196,26 @@ SMTP_PASSWORD=secret
 FROM_EMAIL=alerts@example.com
 FROM_NAME="SOAR Migrations"
 
-# Override recipient (optional, defaults to FROM_EMAIL)
-MIGRATION_ALERT_EMAIL=ops-team@example.com
+# Alert recipient (optional, defaults to FROM_EMAIL)
+# For SOAR project: configured to liam@supervillains.io
+MIGRATION_ALERT_EMAIL=liam@supervillains.io
 ```
 
 ### Email Content
+
+**On Success:**
+
+**Subject**: `[SOAR STAGING] Database Migration COMPLETED`
+
+**Body** includes:
+- Environment (staging/production)
+- Hostname
+- Timestamp
+- Full migration output
+- Log file location
+- Instructions for viewing full logs
+
+**On Failure:**
 
 **Subject**: `[SOAR STAGING] Database Migration FAILED`
 
@@ -211,12 +226,12 @@ MIGRATION_ALERT_EMAIL=ops-team@example.com
 - Exit code
 - Last 50 lines of migration output
 - Instructions for viewing logs
-- Links to check status
+- Commands to investigate and fix
 
 ### When Emails Are Sent
 
-- **On failure only**: Emails are only sent when migrations fail
-- **Not on success**: Success notifications only go to Sentry (info level)
+- **On success**: Confirmation email with migration output
+- **On failure**: Alert email with error details and troubleshooting steps
 
 ## Sentry Integration
 
