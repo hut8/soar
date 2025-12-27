@@ -422,9 +422,10 @@ export class FixFeed {
 		north: number,
 		west: number,
 		east: number,
-		afterTimestamp?: string // Expected in ISO 8601 format
-	): Promise<Aircraft[]> {
-		if (!browser) return [];
+		afterTimestamp?: string, // Expected in ISO 8601 format
+		limit?: number
+	): Promise<{ data: Aircraft[]; total: number }> {
+		if (!browser) return { data: [], total: 0 };
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
@@ -434,13 +435,14 @@ export class FixFeed {
 					north,
 					west,
 					east,
-					...(afterTimestamp && { after: afterTimestamp })
+					...(afterTimestamp && { after: afterTimestamp }),
+					...(limit && { limit })
 				}
 			});
-			return response as Aircraft[];
+			return response as { data: Aircraft[]; total: number };
 		} catch (error) {
 			console.error('Failed to fetch aircraft in bounding box:', error);
-			return [];
+			return { data: [], total: 0 };
 		}
 	}
 }

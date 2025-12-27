@@ -658,6 +658,76 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Count aircraft in bounding box with cached location
+    pub async fn count_aircraft_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        cutoff_time: DateTime<Utc>,
+    ) -> Result<i64> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Count aircraft with cached location in the bounding box
+            let count_sql = r#"
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        cutoff_time
+                    FROM params
+                )
+                SELECT COUNT(*)
+                FROM aircraft d, parts
+                WHERE d.last_fix_at >= parts.cutoff_time
+                  AND d.location_geom IS NOT NULL
+                  AND (
+                      d.location_geom && parts.boxes[1]
+                      OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                  )
+            "#;
+
+            #[derive(QueryableByName)]
+            struct CountRow {
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                count: i64,
+            }
+
+            let count_result: CountRow = diesel::sql_query(count_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
+                .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
+                .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
+                .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .get_result(&mut conn)?;
+
+            Ok::<i64, anyhow::Error>(count_result.count)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get aircraft with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
     #[instrument(skip(self), fields(fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5)))]
