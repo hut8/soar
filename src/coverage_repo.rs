@@ -1,13 +1,57 @@
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use diesel::sql_types;
 use tracing::info;
 use uuid::Uuid;
 
 use crate::coverage::{CoverageHexFeature, NewReceiverCoverageH3, ReceiverCoverageH3};
-use crate::schema::receiver_coverage_h3;
 use crate::web::PgPool;
+
+/// Queryable result for raw SQL coverage queries
+#[derive(QueryableByName, Debug)]
+struct CoverageQueryResult {
+    #[diesel(sql_type = sql_types::BigInt)]
+    h3_index: i64,
+    #[diesel(sql_type = sql_types::SmallInt)]
+    resolution: i16,
+    #[diesel(sql_type = sql_types::Uuid)]
+    receiver_id: Uuid,
+    #[diesel(sql_type = sql_types::Date)]
+    date: NaiveDate,
+    #[diesel(sql_type = sql_types::Integer)]
+    fix_count: i32,
+    #[diesel(sql_type = sql_types::Timestamptz)]
+    first_seen_at: DateTime<Utc>,
+    #[diesel(sql_type = sql_types::Timestamptz)]
+    last_seen_at: DateTime<Utc>,
+    #[diesel(sql_type = sql_types::Nullable<sql_types::Integer>)]
+    min_altitude_msl_feet: Option<i32>,
+    #[diesel(sql_type = sql_types::Nullable<sql_types::Integer>)]
+    max_altitude_msl_feet: Option<i32>,
+    #[diesel(sql_type = sql_types::Nullable<sql_types::Integer>)]
+    avg_altitude_msl_feet: Option<i32>,
+    #[diesel(sql_type = sql_types::Timestamptz)]
+    updated_at: DateTime<Utc>,
+}
+
+impl From<CoverageQueryResult> for ReceiverCoverageH3 {
+    fn from(result: CoverageQueryResult) -> Self {
+        Self {
+            h3_index: result.h3_index,
+            resolution: result.resolution,
+            receiver_id: result.receiver_id,
+            date: result.date,
+            fix_count: result.fix_count,
+            first_seen_at: result.first_seen_at,
+            last_seen_at: result.last_seen_at,
+            min_altitude_msl_feet: result.min_altitude_msl_feet,
+            max_altitude_msl_feet: result.max_altitude_msl_feet,
+            avg_altitude_msl_feet: result.avg_altitude_msl_feet,
+            updated_at: result.updated_at,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct CoverageRepository {
@@ -21,6 +65,7 @@ impl CoverageRepository {
 
     /// Get coverage hexes within bounding box for a given resolution and time range
     /// Filters by date range, optional receiver, and optional altitude range
+    /// Uses h3_postgis extension for efficient spatial filtering
     #[allow(clippy::too_many_arguments)]
     pub async fn get_coverage_in_bbox(
         &self,
@@ -36,59 +81,71 @@ impl CoverageRepository {
         max_altitude: Option<i32>,
         limit: i64,
     ) -> Result<Vec<ReceiverCoverageH3>> {
-        use h3o::{CellIndex, LatLng};
-
         let pool = self.pool.clone();
         let limit = limit.min(10000); // Cap at 10k hexes
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build query with filters
-            // Note: We don't filter by H3 index range here because H3 indexes are not
-            // linearly distributed across geographic space. For large bounding boxes,
-            // using min/max of corner H3 indexes would incorrectly exclude valid hexagons.
-            // Instead, we fetch all hexes for the resolution/date range and filter by
-            // actual lat/lng bounds below.
-            let mut query = receiver_coverage_h3::table
-                .filter(receiver_coverage_h3::resolution.eq(resolution))
-                .filter(receiver_coverage_h3::date.ge(start_date))
-                .filter(receiver_coverage_h3::date.le(end_date))
-                .into_boxed();
+            // Use h3_postgis to efficiently filter coverage data within bounding box
+            // 1. Create bounding box as PostGIS geography
+            // 2. Use h3_polygon_to_cells to get all H3 cells within the bbox
+            // 3. Join with receiver_coverage_h3 to get coverage data for those cells
+
+            // Build SQL - using format! is safe here as all parameters are validated API inputs
+            let base_sql = format!(
+                r#"
+                WITH bbox AS (
+                    SELECT ST_MakeEnvelope({}, {}, {}, {}, 4326)::geography AS geog
+                ),
+                cells AS (
+                    SELECT h3_polygon_to_cells(bbox.geog, {}) AS h3_idx
+                    FROM bbox
+                )
+                SELECT rch.h3_index, rch.resolution, rch.receiver_id, rch.date,
+                       rch.fix_count, rch.first_seen_at, rch.last_seen_at,
+                       rch.min_altitude_msl_feet, rch.max_altitude_msl_feet,
+                       rch.avg_altitude_msl_feet, rch.updated_at
+                FROM receiver_coverage_h3 rch
+                INNER JOIN cells c ON rch.h3_index = c.h3_idx::bigint
+                WHERE rch.resolution = {}
+                  AND rch.date >= '{}'
+                  AND rch.date <= '{}'
+                "#,
+                west, south, east, north, resolution, resolution, start_date, end_date
+            );
+
+            let mut conditions = Vec::new();
 
             if let Some(rid) = receiver_id {
-                query = query.filter(receiver_coverage_h3::receiver_id.eq(rid));
+                conditions.push(format!("rch.receiver_id = '{}'", rid));
             }
 
             if let Some(min_alt) = min_altitude {
-                query = query.filter(receiver_coverage_h3::max_altitude_msl_feet.ge(min_alt));
+                conditions.push(format!("rch.max_altitude_msl_feet >= {}", min_alt));
             }
 
             if let Some(max_alt) = max_altitude {
-                query = query.filter(receiver_coverage_h3::min_altitude_msl_feet.le(max_alt));
+                conditions.push(format!("rch.min_altitude_msl_feet <= {}", max_alt));
             }
 
-            let results = query.limit(limit).load::<ReceiverCoverageH3>(&mut conn)?;
+            let mut sql = base_sql;
+            if !conditions.is_empty() {
+                sql.push_str(" AND ");
+                sql.push_str(&conditions.join(" AND "));
+            }
 
-            // Filter results to only include hexes actually within bounding box
-            let filtered: Vec<ReceiverCoverageH3> = results
-                .into_iter()
-                .filter(|coverage| {
-                    if let Ok(cell) = CellIndex::try_from(coverage.h3_index as u64) {
-                        let center = LatLng::from(cell);
-                        center.lat() >= south
-                            && center.lat() <= north
-                            && center.lng() >= west
-                            && center.lng() <= east
-                    } else {
-                        false
-                    }
-                })
-                .collect();
+            sql.push_str(&format!(" ORDER BY rch.fix_count DESC LIMIT {}", limit));
+
+            // Execute raw SQL query
+            let query_results: Vec<CoverageQueryResult> = diesel::sql_query(sql).load(&mut conn)?;
+
+            let results: Vec<ReceiverCoverageH3> =
+                query_results.into_iter().map(|r| r.into()).collect();
 
             info!(
                 "Found {} coverage hexes (resolution {}) in bbox [{}, {}] to [{}, {}]",
-                filtered.len(),
+                results.len(),
                 resolution,
                 south,
                 west,
@@ -96,7 +153,7 @@ impl CoverageRepository {
                 east
             );
 
-            Ok(filtered)
+            Ok(results)
         })
         .await?
     }
