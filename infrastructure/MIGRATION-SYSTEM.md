@@ -52,7 +52,7 @@ Shell script that:
 
 **Environment variables** (from environment files):
 - Staging: `/etc/soar/env-staging`
-- Production: `/etc/soar/env-production` (symlink to `/etc/soar/env`)
+- Production: `/etc/soar/env-production`
 
 Variables:
 - `DATABASE_URL`: PostgreSQL connection string

@@ -10,8 +10,8 @@ WorkingDirectory=/home/soar/soar
 
 # Environment file with SMTP and Sentry config
 # %i is the instance name (staging or production)
-# For production, we expect /etc/soar/env-production (symlink to /etc/soar/env)
-# For staging, we expect /etc/soar/env-staging
+# - staging: /etc/soar/env-staging
+# - production: /etc/soar/env-production
 EnvironmentFile=/etc/soar/env-%i
 
 # Migration-specific environment

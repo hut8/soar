@@ -101,7 +101,7 @@ if [ "$ENVIRONMENT" = "staging" ]; then
     BACKUP_DIR="/home/soar/backups/staging"
 else
     SERVICE_SUFFIX=""
-    ENV_FILE="/etc/soar/env"
+    ENV_FILE="/etc/soar/env-production"
     BINARY_PATH="/usr/local/bin/soar"
     BACKUP_DIR="/home/soar/backups/production"
 fi

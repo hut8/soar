@@ -404,16 +404,17 @@ sudo mkdir -p /var/soar/migration-status
 sudo chown -R soar:soar /var/soar/logs/migrations
 sudo chown -R soar:soar /var/soar/migration-status
 
-# Create symlink for production environment file
-# The systemd service expects /etc/soar/env-production for consistency
-# For production, this is a symlink to /etc/soar/env
+# Move environment file for production to match naming convention
+# For consistency, production uses /etc/soar/env-production (like staging uses env-staging)
 if [ "$ENVIRONMENT" = "production" ]; then
-    echo -e "${BLUE}Creating environment file symlink for production...${NC}"
-    if [ ! -e /etc/soar/env-production ]; then
-        sudo ln -s /etc/soar/env /etc/soar/env-production
-        echo -e "${GREEN}/etc/soar/env-production -> /etc/soar/env${NC}"
-    else
+    if [ -f /etc/soar/env ] && [ ! -f /etc/soar/env-production ]; then
+        echo -e "${BLUE}Moving /etc/soar/env to /etc/soar/env-production...${NC}"
+        sudo mv /etc/soar/env /etc/soar/env-production
+        echo -e "${GREEN}Environment file renamed to /etc/soar/env-production${NC}"
+    elif [ -f /etc/soar/env-production ]; then
         echo -e "${YELLOW}/etc/soar/env-production already exists${NC}"
+    else
+        echo -e "${YELLOW}No environment file found to move${NC}"
     fi
 fi
 
