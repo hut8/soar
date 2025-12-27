@@ -189,21 +189,29 @@ run_migration() {
     # Update status to running
     update_status "running" "Migration in progress"
 
-    # Determine database URL based on environment
+    # Determine binary path based on environment
     if [ "$ENVIRONMENT" = "production" ]; then
-        export DATABASE_URL="${DATABASE_URL:-postgres://soar@localhost/soar}"
+        SOAR_BINARY="/usr/local/bin/soar"
     else
-        export DATABASE_URL="${DATABASE_URL:-postgres://soar@localhost/soar_staging}"
+        SOAR_BINARY="/usr/local/bin/soar-staging"
     fi
 
-    log "Database: $DATABASE_URL"
-    log "Running diesel migration run..."
+    # Verify binary exists
+    if [ ! -f "$SOAR_BINARY" ]; then
+        log_error "SOAR binary not found: $SOAR_BINARY"
+        update_status "failed" "SOAR binary not found: $SOAR_BINARY" 1
+        return 1
+    fi
+
+    log "SOAR binary: $SOAR_BINARY"
+    log "Running migration via: $SOAR_BINARY migrate"
 
     # Run migration and capture output
     local migration_output
     local migration_exit_code=0
 
-    if migration_output=$(diesel migration run 2>&1); then
+    # Run as soar user with environment from env file
+    if migration_output=$($SOAR_BINARY migrate 2>&1); then
         log_success "Migration completed successfully"
         echo "$migration_output" >> "$LOG_FILE"
 

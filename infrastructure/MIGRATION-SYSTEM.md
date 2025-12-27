@@ -43,7 +43,7 @@ journalctl -u soar-migrate@staging -f
 **File**: `/usr/local/bin/soar-migration-runner`
 
 Shell script that:
-- Runs `diesel migration run`
+- Runs `soar migrate` (or `soar-staging migrate` for staging)
 - Captures all output
 - Updates JSON status file
 - Sends email notifications on failure
@@ -102,7 +102,7 @@ The deployment script automatically uses the migration system when deploying:
    ↓
 2. soar-migration-runner executes
    ↓
-3. diesel migration run completes
+3. soar migrate completes
    ↓
 4. Status file updated (completed)
    ↓
@@ -120,7 +120,7 @@ The deployment script automatically uses the migration system when deploying:
    ↓
 2. soar-migration-runner executes
    ↓
-3. diesel migration run FAILS
+3. soar migrate FAILS
    ↓
 4. Status file updated (failed)
    ↓
