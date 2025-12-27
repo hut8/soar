@@ -38,10 +38,6 @@
 		try {
 			const response = await serverCall<{ receivers: Receiver[] }>('/receivers');
 			receivers = response.receivers || [];
-			// Display receivers on the map once we have the data
-			if (map) {
-				displayReceiversOnMap();
-			}
 		} catch (err) {
 			console.error('Failed to load receivers:', err);
 		}
@@ -100,9 +96,6 @@
 	}
 
 	onMount(() => {
-		// Load receivers list
-		loadReceivers();
-
 		// Initialize MapLibre map centered on US
 		map = new maplibregl.Map({
 			container: mapContainer,
@@ -133,9 +126,11 @@
 
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-		// Load coverage data when map is ready
-		map.on('load', () => {
+		// Load coverage data and receivers when map is ready
+		map.on('load', async () => {
 			loadCoverage();
+			await loadReceivers();
+			displayReceiversOnMap();
 		});
 
 		// Reload coverage when user stops moving the map
