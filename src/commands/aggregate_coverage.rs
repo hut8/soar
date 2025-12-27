@@ -3,6 +3,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use diesel::sql_types;
 use h3o::{LatLng, Resolution};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -90,11 +91,22 @@ pub async fn aggregate_coverage(
     while current_date <= end_date {
         info!("Processing date: {}", current_date);
 
-        // Process each resolution for this day
+        // Process all resolutions for this day in parallel
+        let mut tasks = Vec::new();
         for resolution in &resolutions {
-            let coverage_data =
-                fetch_and_aggregate_fixes(pool.clone(), current_date, current_date, *resolution)
-                    .await?;
+            let pool_clone = pool.clone();
+            let date = current_date;
+            let res = *resolution;
+
+            let task = tokio::spawn(async move {
+                fetch_and_aggregate_fixes(pool_clone, date, date, res).await
+            });
+            tasks.push((res, task));
+        }
+
+        // Wait for all resolutions to complete and upsert results
+        for (resolution, task) in tasks {
+            let coverage_data = task.await??;
 
             if !coverage_data.is_empty() {
                 info!(
@@ -158,6 +170,7 @@ async fn fetch_and_aggregate_fixes(
         }
 
         info!("Fetching fixes from {} to {}", start_datetime, end_datetime);
+        let fetch_start = std::time::Instant::now();
 
         let fixes: Vec<FixRow> = diesel::sql_query(
             r#"
@@ -178,59 +191,104 @@ async fn fetch_and_aggregate_fixes(
         .load(&mut conn)
         .context("Failed to fetch fixes for coverage aggregation")?;
 
-        info!("Fetched {} fixes, converting to H3...", fixes.len());
+        let fetch_duration = fetch_start.elapsed();
+        info!(
+            "Fetched {} fixes in {:.2}s, converting to H3...",
+            fixes.len(),
+            fetch_duration.as_secs_f64()
+        );
 
         if fixes.is_empty() {
             warn!("No fixes found in the specified date range");
             return Ok(Vec::new());
         }
 
-        // Group by (h3_index, receiver_id, date) and aggregate
+        // Group by (h3_index, receiver_id, date) and aggregate using rayon for parallelization
         let res = Resolution::try_from(resolution as u8)
             .context(format!("Invalid H3 resolution: {}", resolution))?;
-        let mut coverage_map: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate> = HashMap::new();
 
-        for fix in fixes {
-            // Convert lat/lng to H3
-            let latlng = LatLng::new(fix.latitude, fix.longitude).context(format!(
-                "Invalid lat/lng: {}, {}",
-                fix.latitude, fix.longitude
-            ))?;
-            let h3_index: u64 = latlng.to_cell(res).into();
-            let h3_i64 = h3_index as i64;
+        let h3_start = std::time::Instant::now();
 
-            let key = (h3_i64, fix.receiver_id, fix.date);
+        // Use rayon to parallelize H3 conversion and aggregation
+        let coverage_map: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate> = fixes
+            .par_iter()
+            .fold(HashMap::new, |mut map, fix| {
+                // Convert lat/lng to H3 (skip invalid coordinates)
+                if let Ok(latlng) = LatLng::new(fix.latitude, fix.longitude) {
+                    let h3_index: u64 = latlng.to_cell(res).into();
+                    let h3_i64 = h3_index as i64;
+                    let key = (h3_i64, fix.receiver_id, fix.date);
 
-            coverage_map
-                .entry(key)
-                .and_modify(|agg| {
-                    agg.fix_count += 1;
-                    agg.first_seen_at = agg.first_seen_at.min(fix.timestamp);
-                    agg.last_seen_at = agg.last_seen_at.max(fix.timestamp);
+                    map.entry(key)
+                        .and_modify(|agg: &mut CoverageAggregate| {
+                            agg.fix_count += 1;
+                            agg.first_seen_at = agg.first_seen_at.min(fix.timestamp);
+                            agg.last_seen_at = agg.last_seen_at.max(fix.timestamp);
 
-                    if let Some(alt) = fix.altitude_msl_feet {
-                        agg.min_altitude = Some(agg.min_altitude.map_or(alt, |min| min.min(alt)));
-                        agg.max_altitude = Some(agg.max_altitude.map_or(alt, |max| max.max(alt)));
-                        agg.altitude_sum += alt as i64;
-                        agg.altitude_count += 1;
+                            if let Some(alt) = fix.altitude_msl_feet {
+                                agg.min_altitude =
+                                    Some(agg.min_altitude.map_or(alt, |min: i32| min.min(alt)));
+                                agg.max_altitude =
+                                    Some(agg.max_altitude.map_or(alt, |max: i32| max.max(alt)));
+                                agg.altitude_sum += alt as i64;
+                                agg.altitude_count += 1;
+                            }
+                        })
+                        .or_insert_with(|| CoverageAggregate {
+                            fix_count: 1,
+                            first_seen_at: fix.timestamp,
+                            last_seen_at: fix.timestamp,
+                            min_altitude: fix.altitude_msl_feet,
+                            max_altitude: fix.altitude_msl_feet,
+                            altitude_sum: fix.altitude_msl_feet.unwrap_or(0) as i64,
+                            altitude_count: if fix.altitude_msl_feet.is_some() {
+                                1
+                            } else {
+                                0
+                            },
+                        });
+                }
+                map
+            })
+            .reduce(
+                HashMap::new,
+                |mut map1: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate>,
+                 map2: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate>| {
+                    // Merge two hashmaps by combining aggregates for matching keys
+                    for (key, agg2) in map2 {
+                        map1.entry(key)
+                            .and_modify(|agg1: &mut CoverageAggregate| {
+                                agg1.fix_count += agg2.fix_count;
+                                agg1.first_seen_at = agg1.first_seen_at.min(agg2.first_seen_at);
+                                agg1.last_seen_at = agg1.last_seen_at.max(agg2.last_seen_at);
+                                agg1.min_altitude = match (agg1.min_altitude, agg2.min_altitude) {
+                                    (Some(a), Some(b)) => Some(a.min(b)),
+                                    (Some(a), None) => Some(a),
+                                    (None, Some(b)) => Some(b),
+                                    (None, None) => None,
+                                };
+                                agg1.max_altitude = match (agg1.max_altitude, agg2.max_altitude) {
+                                    (Some(a), Some(b)) => Some(a.max(b)),
+                                    (Some(a), None) => Some(a),
+                                    (None, Some(b)) => Some(b),
+                                    (None, None) => None,
+                                };
+                                agg1.altitude_sum += agg2.altitude_sum;
+                                agg1.altitude_count += agg2.altitude_count;
+                            })
+                            .or_insert(agg2);
                     }
-                })
-                .or_insert_with(|| CoverageAggregate {
-                    fix_count: 1,
-                    first_seen_at: fix.timestamp,
-                    last_seen_at: fix.timestamp,
-                    min_altitude: fix.altitude_msl_feet,
-                    max_altitude: fix.altitude_msl_feet,
-                    altitude_sum: fix.altitude_msl_feet.unwrap_or(0) as i64,
-                    altitude_count: if fix.altitude_msl_feet.is_some() {
-                        1
-                    } else {
-                        0
-                    },
-                });
-        }
+                    map1
+                },
+            );
 
-        info!("Converted {} unique hexes", coverage_map.len());
+        let h3_duration = h3_start.elapsed();
+        info!(
+            "Converted {} unique hexes in {:.2}s ({:.0} fixes/sec)",
+            coverage_map.len(),
+            h3_duration.as_secs_f64(),
+            fixes.len() as f64 / h3_duration.as_secs_f64()
+        );
 
         // Convert to NewReceiverCoverageH3
         let coverage_data: Vec<NewReceiverCoverageH3> = coverage_map
