@@ -21,12 +21,14 @@ Environment="RUST_BACKTRACE=1"
 # Run the migration runner script
 ExecStart=/usr/local/bin/soar-migration-runner %i
 
-# Timeout after 2 hours (7200 seconds)
-TimeoutStartSec=7200
+# No timeout - complex migrations (like TimescaleDB conversion) can take hours
+# The deployment script has its own polling timeout
+TimeoutStartSec=infinity
 
-# Always restart on failure to ensure cleanup/notification
+# Don't restart - migrations should only run once per invocation
+# Email and Sentry notifications are sent within the script
 Restart=no
-RemainAfterExit=yes
+RemainAfterExit=no
 
 # Logging
 StandardOutput=journal

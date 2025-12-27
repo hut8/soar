@@ -12,7 +12,7 @@ The SOAR database migration system provides resilient, async database migrations
 - **Sentry integration**: Automatic Sentry events for migration failures and successes
 - **Detailed logging**: Comprehensive logs in both systemd journal and log files
 - **Status tracking**: JSON status files for programmatic monitoring
-- **Timeout protection**: 2-hour timeout prevents runaway migrations
+- **Flexible timeout**: No systemd timeout (deployment script has 2-hour polling timeout)
 - **Environment-specific**: Separate migration services for staging and production
 
 ## Components

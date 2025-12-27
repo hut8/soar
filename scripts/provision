@@ -935,10 +935,10 @@ echo
 echo -e "${YELLOW}Migration Features:${NC}"
 echo "  • Runs migrations asynchronously via systemd"
 echo "  • Survives SSH disconnects"
-echo "  • Email notifications on failure"
-echo "  • Sentry alerts on failure"
+echo "  • Email notifications on success and failure"
+echo "  • Sentry alerts on success and failure"
 echo "  • Detailed logging to systemd journal and files"
-echo "  • 2-hour timeout for long-running migrations"
+echo "  • No timeout limit (deployment has 2-hour polling timeout)"
 echo
 echo -e "${YELLOW}Migration Usage:${NC}"
 echo "  Manual migration run:"
