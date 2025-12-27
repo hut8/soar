@@ -115,10 +115,72 @@ sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis
 
 echo -e "${GREEN}PostgreSQL 18 installed successfully${NC}"
 
-# Ensure PostgreSQL is running
+# Install TimescaleDB
+echo -e "${BLUE}Installing TimescaleDB...${NC}"
+
+# Add TimescaleDB GPG key
+sudo mkdir -p /usr/share/keyrings
+if [ ! -f /usr/share/keyrings/timescaledb.gpg ]; then
+    curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | \
+        sudo gpg --dearmor -o /usr/share/keyrings/timescaledb.gpg
+fi
+
+# Add TimescaleDB repository
+echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
+    sudo tee /etc/apt/sources.list.d/timescaledb.list
+
+# Install TimescaleDB packages
+sudo apt-get update
+sudo apt-get install -y timescaledb-toolkit-postgresql-18 timescaledb-tools timescaledb-2-postgresql-18
+
+echo -e "${GREEN}TimescaleDB installed successfully${NC}"
+
+# Configure PostgreSQL to load TimescaleDB
+echo -e "${BLUE}Configuring PostgreSQL to load TimescaleDB...${NC}"
+
+POSTGRESQL_CONF="/etc/postgresql/18/main/postgresql.conf"
+TIMESCALEDB_CONFIG_CHANGED=false
+
+# Backup postgresql.conf
+sudo cp "$POSTGRESQL_CONF" "$POSTGRESQL_CONF.backup.$(date +%Y%m%d_%H%M%S)"
+
+# Check if shared_preload_libraries already includes timescaledb
+if grep -q "^shared_preload_libraries.*timescaledb" "$POSTGRESQL_CONF"; then
+    echo -e "${BLUE}TimescaleDB already configured in shared_preload_libraries${NC}"
+elif grep -q "^#shared_preload_libraries" "$POSTGRESQL_CONF"; then
+    # Uncomment and set to timescaledb
+    sudo sed -i "s/^#shared_preload_libraries.*/shared_preload_libraries = 'timescaledb'/" "$POSTGRESQL_CONF"
+    echo -e "${GREEN}Enabled and set shared_preload_libraries = 'timescaledb'${NC}"
+    TIMESCALEDB_CONFIG_CHANGED=true
+elif grep -q "^shared_preload_libraries" "$POSTGRESQL_CONF"; then
+    # Append timescaledb to existing value
+    sudo sed -i "s/^shared_preload_libraries = '\(.*\)'/shared_preload_libraries = '\1,timescaledb'/" "$POSTGRESQL_CONF"
+    echo -e "${GREEN}Added timescaledb to existing shared_preload_libraries${NC}"
+    TIMESCALEDB_CONFIG_CHANGED=true
+else
+    # Add new line
+    echo "shared_preload_libraries = 'timescaledb'" | sudo tee -a "$POSTGRESQL_CONF" > /dev/null
+    echo -e "${GREEN}Added shared_preload_libraries = 'timescaledb' to postgresql.conf${NC}"
+    TIMESCALEDB_CONFIG_CHANGED=true
+fi
+
+# Ensure PostgreSQL is enabled
 sudo systemctl enable postgresql
-sudo systemctl start postgresql
-echo -e "${GREEN}PostgreSQL service started${NC}"
+
+# Only restart if we changed the configuration
+if [ "$TIMESCALEDB_CONFIG_CHANGED" = true ]; then
+    echo -e "${BLUE}Restarting PostgreSQL to load TimescaleDB...${NC}"
+    sudo systemctl restart postgresql
+    echo -e "${GREEN}PostgreSQL service restarted with TimescaleDB enabled${NC}"
+else
+    # Just ensure it's running
+    if ! systemctl is-active --quiet postgresql; then
+        sudo systemctl start postgresql
+        echo -e "${GREEN}PostgreSQL service started${NC}"
+    else
+        echo -e "${BLUE}PostgreSQL is already running${NC}"
+    fi
+fi
 
 # Create soar user if it doesn't exist
 if ! id "soar" &>/dev/null; then
