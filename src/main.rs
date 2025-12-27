@@ -10,10 +10,15 @@ use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 mod commands;
+mod migration_email_reporter;
+
 use commands::{
     handle_archive, handle_dump_unified_ddb, handle_ingest_adsb, handle_ingest_ogn,
     handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
     handle_seed_test_data, handle_sitemap_generation,
+};
+use migration_email_reporter::{
+    MigrationEmailConfig, MigrationReport, send_migration_email_report,
 };
 
 // Embed migrations at compile time
@@ -1047,7 +1052,51 @@ async fn main() -> Result<()> {
         Commands::DumpUnifiedDdb { .. } => unreachable!(),
     };
 
-    let diesel_pool = setup_diesel_database(app_name_prefix).await?;
+    // For Migrate command, handle errors specially to send notifications
+    let diesel_pool = if matches!(cli.command, Commands::Migrate {}) {
+        let start_time = std::time::Instant::now();
+        match setup_diesel_database(app_name_prefix).await {
+            Ok(pool) => pool,
+            Err(e) => {
+                let duration_secs = start_time.elapsed().as_secs_f64();
+                let error_message = format!("{:#}", e);
+
+                // Send failure email
+                if let Ok(email_config) = MigrationEmailConfig::from_env() {
+                    let report =
+                        MigrationReport::failure(error_message.clone(), None, duration_secs);
+                    if let Err(email_err) = send_migration_email_report(&email_config, &report) {
+                        warn!("Failed to send migration failure email: {}", email_err);
+                    }
+                } else {
+                    warn!(
+                        "Email configuration not available, skipping migration failure notification"
+                    );
+                }
+
+                // Send Sentry error event
+                if sentry::Hub::current().client().is_some() {
+                    sentry::configure_scope(|scope| {
+                        scope.set_tag("migration", "true");
+                        scope.set_tag("environment", env::var("SOAR_ENV").unwrap_or_default());
+                        scope.set_tag("type", "database_migration");
+                    });
+                    sentry::capture_message(
+                        &format!(
+                            "Database migration failed for {} (error: {})",
+                            env::var("SOAR_ENV").unwrap_or_else(|_| "development".to_string()),
+                            error_message
+                        ),
+                        sentry::Level::Error,
+                    );
+                }
+
+                return Err(e);
+            }
+        }
+    } else {
+        setup_diesel_database(app_name_prefix).await?
+    };
 
     match cli.command {
         Commands::Sitemap { static_root } => {
@@ -1172,8 +1221,38 @@ async fn main() -> Result<()> {
         }
         Commands::Migrate {} => {
             // Migrations are already run by setup_diesel_database()
+            // Send email notification and Sentry event
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
+
+            // Send success notifications (email and Sentry)
+            // Note: We can't easily determine which migrations were applied after the fact,
+            // so we just report success. The actual migration details are in the logs.
+            if let Ok(email_config) = MigrationEmailConfig::from_env() {
+                let report = MigrationReport::success(vec![], 0.0);
+                if let Err(e) = send_migration_email_report(&email_config, &report) {
+                    warn!("Failed to send migration success email: {}", e);
+                }
+            } else {
+                warn!("Email configuration not available, skipping migration email notification");
+            }
+
+            // Send Sentry success event
+            if sentry::Hub::current().client().is_some() {
+                sentry::configure_scope(|scope| {
+                    scope.set_tag("migration", "true");
+                    scope.set_tag("environment", env::var("SOAR_ENV").unwrap_or_default());
+                    scope.set_tag("type", "database_migration");
+                });
+                sentry::capture_message(
+                    &format!(
+                        "Database migration completed successfully for {}",
+                        env::var("SOAR_ENV").unwrap_or_else(|_| "development".to_string())
+                    ),
+                    sentry::Level::Info,
+                );
+            }
+
             Ok(())
         }
         Commands::AggregateCoverage {

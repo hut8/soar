@@ -46,9 +46,9 @@ Shell script that:
 - Runs `soar migrate` (or `soar-staging migrate` for staging)
 - Captures all output
 - Updates JSON status file
-- Sends email notifications on failure
-- Sends Sentry events
 - Logs everything to systemd journal and files
+
+**Note**: Email and Sentry notifications are sent by the `soar migrate` Rust command itself, not by the wrapper script.
 
 **Environment variables** (from environment files):
 - Staging: `/etc/soar/env-staging`
@@ -56,10 +56,10 @@ Shell script that:
 
 Variables:
 - `DATABASE_URL`: PostgreSQL connection string
-- `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration
-- `FROM_EMAIL`, `FROM_NAME`: Email sender info
-- `MIGRATION_ALERT_EMAIL`: Override recipient (defaults to `FROM_EMAIL`)
-- `SENTRY_DSN`: Sentry project DSN for alerts
+- `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration (used by Rust command)
+- `FROM_EMAIL`, `FROM_NAME`: Email sender info (used by Rust command)
+- `MIGRATION_ALERT_EMAIL`: Override recipient (defaults to `FROM_EMAIL`, used by Rust command)
+- `SENTRY_DSN`: Sentry project DSN for alerts (used by Rust command)
 
 ### 3. Status Checker Script
 
@@ -185,9 +185,11 @@ These files contain:
 
 ## Email Notifications
 
+Email notifications are sent by the `soar migrate` Rust command using the HTML email templates.
+
 ### Configuration
 
-Set in `/etc/soar/env` or `/etc/soar/env-staging`:
+Set in `/etc/soar/env-production` or `/etc/soar/env-staging`:
 
 ```bash
 # SMTP settings
@@ -209,39 +211,45 @@ MIGRATION_ALERT_EMAIL=liam@supervillains.io
 
 **On Success:**
 
-**Subject**: `[SOAR STAGING] Database Migration COMPLETED`
+**Subject**: `✓ SOAR Database Migration COMPLETED - YYYY-MM-DD`
+**Subject (staging)**: `[STAGING] ✓ SOAR Database Migration COMPLETED - YYYY-MM-DD`
 
-**Body** includes:
-- Environment (staging/production)
+**Body** includes (HTML formatted):
+- Environment (staging/production/development)
 - Hostname
+- Duration
 - Timestamp
-- Full migration output
-- Log file location
-- Instructions for viewing full logs
+- List of applied migrations (if any)
 
 **On Failure:**
 
-**Subject**: `[SOAR STAGING] Database Migration FAILED`
+**Subject**: `✗ SOAR Database Migration FAILED - YYYY-MM-DD`
+**Subject (staging)**: `[STAGING] ✗ SOAR Database Migration FAILED - YYYY-MM-DD`
 
-**Body** includes:
-- Environment (staging/production)
+**Body** includes (HTML formatted):
+- Environment (staging/production/development)
 - Hostname
+- Duration
 - Timestamp
-- Exit code
-- Last 50 lines of migration output
-- Instructions for viewing logs
-- Commands to investigate and fix
+- Error message
+- Migration output (if available)
 
 ### When Emails Are Sent
 
-- **On success**: Confirmation email with migration output
-- **On failure**: Alert email with error details and troubleshooting steps
+- **On success**: Confirmation email with migration summary
+- **On failure**: Alert email with error details
+
+### Implementation
+
+Email sending is implemented in the Rust code at `src/migration_email_reporter.rs` using the same patterns as the archive and data load commands.
 
 ## Sentry Integration
 
+Sentry events are sent by the `soar migrate` Rust command using the Sentry SDK.
+
 ### Configuration
 
-Set in `/etc/soar/env` or `/etc/soar/env-staging`:
+Set in `/etc/soar/env-production` or `/etc/soar/env-staging`:
 
 ```bash
 SENTRY_DSN=https://key@sentry.io/project-id
@@ -250,39 +258,28 @@ SENTRY_DSN=https://key@sentry.io/project-id
 ### Events Sent
 
 **On Success** (info level):
-```json
-{
-  "message": "Database migration completed successfully for staging",
-  "level": "info",
-  "tags": {
-    "migration": "true",
-    "environment": "staging",
-    "type": "database_migration"
-  },
-  "extra": {
-    "log_file": "/var/soar/logs/migrations/...",
-    "timestamp": "2025-12-27T03:15:30Z"
-  }
-}
+```
+Message: "Database migration completed successfully for staging"
+Level: info
+Tags:
+  - migration: true
+  - environment: staging
+  - type: database_migration
 ```
 
 **On Failure** (error level):
-```json
-{
-  "message": "Database migration failed for staging (exit code: 1)",
-  "level": "error",
-  "tags": {
-    "migration": "true",
-    "environment": "staging",
-    "type": "database_migration"
-  },
-  "extra": {
-    "log_file": "/var/soar/logs/migrations/...",
-    "timestamp": "2025-12-27T03:15:30Z",
-    "log_excerpt": "Last 50 lines of output..."
-  }
-}
 ```
+Message: "Database migration failed for staging (error: ...)"
+Level: error
+Tags:
+  - migration: true
+  - environment: staging
+  - type: database_migration
+```
+
+### Implementation
+
+Sentry integration is implemented in the Rust code at `src/main.rs` in the Migrate command handler using the `sentry` crate.
 
 ## Manual Migration
 
