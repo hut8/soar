@@ -38,53 +38,20 @@ systemctl status soar-migrate@staging
 journalctl -u soar-migrate@staging -f
 ```
 
-### 2. Migration Runner Script
+### 2. Environment Configuration
 
-**File**: `/usr/local/bin/soar-migration-runner`
-
-Shell script that:
-- Runs `soar migrate` (or `soar-staging migrate` for staging)
-- Captures all output
-- Updates JSON status file
-- Logs everything to systemd journal and files
-
-**Note**: Email and Sentry notifications are sent by the `soar migrate` Rust command itself, not by the wrapper script.
-
-**Environment variables** (from environment files):
+**Environment files**:
 - Staging: `/etc/soar/env-staging`
 - Production: `/etc/soar/env-production`
 
-Variables:
+**Variables** (used by the `soar migrate` Rust command):
 - `DATABASE_URL`: PostgreSQL connection string
-- `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration (used by Rust command)
-- `FROM_EMAIL`, `FROM_NAME`: Email sender info (used by Rust command)
-- `MIGRATION_ALERT_EMAIL`: Override recipient (defaults to `FROM_EMAIL`, used by Rust command)
-- `SENTRY_DSN`: Sentry project DSN for alerts (used by Rust command)
+- `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: Email configuration
+- `FROM_EMAIL`, `FROM_NAME`: Email sender info
+- `MIGRATION_ALERT_EMAIL`: Override recipient (defaults to `FROM_EMAIL`)
+- `SENTRY_DSN`: Sentry project DSN for alerts
 
-### 3. Status Checker Script
-
-**File**: `/usr/local/bin/soar-migration-status`
-
-Helper script to check migration status.
-
-**Usage**:
-```bash
-# Check staging migration status
-soar-migration-status staging
-
-# Check production migration status
-soar-migration-status production
-```
-
-**Output**:
-- Current migration status (running/completed/failed)
-- Timestamp
-- Error message (if failed)
-- Exit code (if failed)
-- Log file location
-- Recent systemd journal entries
-
-### 4. Deployment Integration
+### 3. Deployment Integration
 
 **File**: `infrastructure/soar-deploy`
 
@@ -137,20 +104,19 @@ The deployment script automatically uses the migration system when deploying:
 8. soar-deploy aborts
 ```
 
-## Status File Format
+## Status Checking
 
-**Location**: `/var/soar/migration-status/{environment}.json`
+Use systemd commands to check migration status:
 
-**Format**:
-```json
-{
-  "status": "completed|running|failed",
-  "environment": "staging|production",
-  "timestamp": "2025-12-27T03:15:30Z",
-  "log_file": "/var/soar/logs/migrations/migration-staging-20251227_031530.log",
-  "message": "Migration completed successfully",
-  "exit_code": 0
-}
+```bash
+# Check if migration is running
+systemctl is-active soar-migrate@staging
+
+# Check if migration failed
+systemctl is-failed soar-migrate@staging
+
+# Get detailed status
+systemctl status soar-migrate@staging
 ```
 
 ## Log Files
@@ -172,16 +138,7 @@ journalctl -u soar-migrate@staging -n 100
 journalctl -u soar-migrate@staging --since "2025-12-27 00:00:00"
 ```
 
-### Log Files
-
-**Location**: `/var/soar/logs/migrations/migration-{environment}-{timestamp}.log`
-
-**Example**: `/var/soar/logs/migrations/migration-staging-20251227_031530.log`
-
-These files contain:
-- Full migration output from diesel
-- All log messages from the runner script
-- Timestamps for all operations
+All migration output is logged to systemd journal only. No separate log files are created.
 
 ## Email Notifications
 
@@ -308,7 +265,8 @@ sudo systemctl start soar-migrate@production
 journalctl -u soar-migrate@staging -f
 
 # Or check status
-soar-migration-status staging
+systemctl status soar-migrate@staging
+systemctl is-active soar-migrate@staging
 ```
 
 ### 4. Wait for Completion
@@ -321,7 +279,7 @@ while systemctl is-active --quiet soar-migrate@staging; do
 done
 
 # Check final status
-soar-migration-status staging
+systemctl status soar-migrate@staging
 ```
 
 ### 5. Restart Services
@@ -357,16 +315,9 @@ If migration appears stuck:
 
 ### Migration Failed
 
-1. **Check status file**:
-   ```bash
-   cat /var/soar/migration-status/staging.json
-   ```
-
-2. **View full logs**:
+1. **View full logs**:
    ```bash
    journalctl -u soar-migrate@staging -n 200
-   # Or view log file directly
-   cat /var/soar/logs/migrations/migration-staging-*.log | tail -100
    ```
 
 3. **Check database state**:
@@ -461,11 +412,8 @@ sudo ./scripts/provision production
 ```
 
 This creates:
-- `/etc/systemd/system/soar-migrate@.service`
-- `/usr/local/bin/soar-migration-runner`
-- `/usr/local/bin/soar-migration-status`
-- `/var/soar/logs/migrations/`
-- `/var/soar/migration-status/`
+- `/etc/systemd/system/soar-migrate@.service` - Systemd template service
+- `/var/soar/logs/migrations/` - Migration log directory (for future use)
 
 ## See Also
 

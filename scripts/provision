@@ -392,17 +392,10 @@ sudo cp infrastructure/photon.service /etc/systemd/system/
 echo -e "${BLUE}Installing migration service...${NC}"
 sudo cp infrastructure/systemd/soar-migrate@.service /etc/systemd/system/
 
-# Install migration helper scripts
-echo -e "${BLUE}Installing migration helper scripts...${NC}"
-sudo install -m 755 infrastructure/soar-migration-runner /usr/local/bin/
-sudo install -m 755 infrastructure/soar-migration-status /usr/local/bin/
-
-# Create migration log and status directories
-echo -e "${BLUE}Creating migration directories...${NC}"
+# Create migration log directory
+echo -e "${BLUE}Creating migration log directory...${NC}"
 sudo mkdir -p /var/soar/logs/migrations
-sudo mkdir -p /var/soar/migration-status
 sudo chown -R soar:soar /var/soar/logs/migrations
-sudo chown -R soar:soar /var/soar/migration-status
 
 # Move environment file for production to match naming convention
 # For consistency, production uses /etc/soar/env-production (like staging uses env-staging)
@@ -929,15 +922,14 @@ echo -e "${BLUE}Database Migration System${NC}"
 echo -e "${BLUE}=========================================${NC}"
 echo
 echo -e "${GREEN}✓ Migration service installed: soar-migrate@${ENVIRONMENT}.service${NC}"
-echo -e "${GREEN}✓ Migration runner installed: /usr/local/bin/soar-migration-runner${NC}"
-echo -e "${GREEN}✓ Migration status checker: /usr/local/bin/soar-migration-status${NC}"
 echo
 echo -e "${YELLOW}Migration Features:${NC}"
-echo "  • Runs migrations asynchronously via systemd"
+echo "  • Runs soar migrate command directly (no wrapper script)"
+echo "  • Asynchronous execution via systemd"
 echo "  • Survives SSH disconnects"
-echo "  • Email notifications on success and failure"
-echo "  • Sentry alerts on success and failure"
-echo "  • Detailed logging to systemd journal and files"
+echo "  • Email notifications on success and failure (sent by Rust)"
+echo "  • Sentry alerts on success and failure (sent by Rust)"
+echo "  • All output logged to systemd journal"
 echo "  • No timeout limit (deployment has 2-hour polling timeout)"
 echo
 echo -e "${YELLOW}Migration Usage:${NC}"
@@ -945,13 +937,13 @@ echo "  Manual migration run:"
 echo "    sudo systemctl start soar-migrate@${ENVIRONMENT}"
 echo
 echo "  Check migration status:"
-echo "    soar-migration-status ${ENVIRONMENT}"
+echo "    systemctl status soar-migrate@${ENVIRONMENT}"
+echo "    systemctl is-active soar-migrate@${ENVIRONMENT}"
+echo "    systemctl is-failed soar-migrate@${ENVIRONMENT}"
 echo
 echo "  View migration logs:"
 echo "    journalctl -u soar-migrate@${ENVIRONMENT} -f"
-echo
-echo "  Migration log files:"
-echo "    /var/soar/logs/migrations/"
+echo "    journalctl -u soar-migrate@${ENVIRONMENT} -n 100"
 echo
 echo -e "${YELLOW}Note:${NC} soar-deploy automatically uses this migration system"
 echo

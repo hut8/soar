@@ -248,27 +248,21 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
         log_error "Last 50 lines of migration logs:"
         journalctl -u "soar-migrate@${ENVIRONMENT}.service" -n 50 --no-pager
         echo ""
-        log_info "Migration status file:"
-        cat "/var/soar/migration-status/${ENVIRONMENT}.json" 2>/dev/null || log_warn "No status file found"
-        echo ""
         log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
         rm -f "$TEMP_BIN_PATH"
         log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
         log_info "To investigate:"
         log_info "  1. Check migration logs: journalctl -u soar-migrate@${ENVIRONMENT} -n 200"
-        log_info "  2. Check migration log file in /var/soar/logs/migrations/"
+        log_info "  2. Check systemctl status: systemctl status soar-migrate@${ENVIRONMENT}"
         log_info "  3. Verify database state manually"
         log_info "  4. Fix any issues before attempting to restart services"
-        log_error "NOTE: Email and Sentry notifications should have been sent automatically"
+        log_error "NOTE: Email and Sentry notifications were sent automatically by soar migrate"
         exit 1
     else
         # Migration completed successfully
         echo ""
         log_info "Database migrations completed successfully (${ELAPSED}s)"
-
-        # Show final status
-        log_info "Migration status:"
-        cat "/var/soar/migration-status/${ENVIRONMENT}.json" 2>/dev/null || log_warn "No status file found"
+        log_info "Email notification sent by soar migrate command"
 
         break
     fi
