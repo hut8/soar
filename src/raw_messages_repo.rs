@@ -412,6 +412,7 @@ mod tests {
     use chrono::Utc;
     use diesel::connection::SimpleConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
+    use serial_test::serial;
 
     /// Helper to create a test database pool
     /// Uses TEST_DATABASE_URL environment variable or defaults to local test database
@@ -446,6 +447,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_insert_and_get_by_id() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
@@ -509,6 +511,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_ids_multiple() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
@@ -558,6 +561,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_ids_partial_match() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
