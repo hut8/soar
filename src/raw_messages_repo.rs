@@ -436,10 +436,19 @@ mod tests {
     fn cleanup_test_data(pool: &PgPool) {
         let mut conn = pool.get().expect("Failed to get connection");
 
-        // Use TRUNCATE CASCADE for faster cleanup and to avoid deadlocks with TimescaleDB
-        // TRUNCATE releases locks immediately, unlike DELETE
-        // Ignore errors if tables don't exist (migrations not run locally)
-        let _ = conn.batch_execute("TRUNCATE TABLE receivers CASCADE");
+        // CRITICAL: TRUNCATE in dependency order (children first) to avoid deadlocks
+        // NEVER use CASCADE - it creates complex lock hierarchies on TimescaleDB hypertables
+        // that deadlock with concurrent INSERT operations
+        //
+        // Dependency order:
+        // 1. fixes (references raw_messages)
+        // 2. receiver_statuses (references raw_messages)
+        // 3. raw_messages (hypertable, references receivers)
+        // 4. receivers (parent table)
+        let _ = conn.batch_execute("TRUNCATE TABLE fixes");
+        let _ = conn.batch_execute("TRUNCATE TABLE receiver_statuses");
+        let _ = conn.batch_execute("TRUNCATE TABLE raw_messages");
+        let _ = conn.batch_execute("TRUNCATE TABLE receivers");
     }
 
     #[tokio::test]
