@@ -212,7 +212,7 @@ export class AircraftRegistry {
 			this.setAircraft(apiAircraft);
 			return this.getAircraft(aircraftId);
 		} catch (error) {
-			console.warn(`Failed to fetch aircraft ${aircraftId} from API:`, error);
+			console.warn('Failed to fetch aircraft from API:', aircraftId, error);
 			return null;
 		}
 	}
