@@ -240,8 +240,8 @@ async fn search_aircraft_by_bbox(
         return json_error(StatusCode::BAD_REQUEST, "west must be less than east").into_response();
     }
 
-    // Set default cutoff time to 1 hour ago if not provided
-    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(1));
+    // Set default cutoff time to 15 minutes ago if not provided
+    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::minutes(15));
 
     info!(
         "Performing bounding box search with cutoff_time: {}",
