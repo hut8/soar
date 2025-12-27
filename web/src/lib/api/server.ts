@@ -13,7 +13,7 @@ export function getApiBase(): string {
 
 	// In development, check the backend mode setting
 	const mode = get(backendMode);
-	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://glider.flights/data';
+	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://staging.glider.flights/data';
 }
 
 // Legacy export for compatibility - but prefer using getApiBase()

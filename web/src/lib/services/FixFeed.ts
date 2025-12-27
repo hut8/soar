@@ -97,8 +97,8 @@ export class FixFeed {
 				// Dev mode with local backend
 				this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
 			} else {
-				// Dev mode using production backend
-				this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+				// Dev mode using staging backend
+				this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
 			}
 		}
 	}

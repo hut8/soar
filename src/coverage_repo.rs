@@ -36,7 +36,7 @@ impl CoverageRepository {
         max_altitude: Option<i32>,
         limit: i64,
     ) -> Result<Vec<ReceiverCoverageH3>> {
-        use h3o::{CellIndex, LatLng, Resolution};
+        use h3o::{CellIndex, LatLng};
 
         let pool = self.pool.clone();
         let limit = limit.min(10000); // Cap at 10k hexes
@@ -44,27 +44,16 @@ impl CoverageRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Convert bounding box to H3 index range
-            // Get H3 indexes for bbox corners to determine query range
-            let res = Resolution::try_from(resolution as u8)?;
-            let sw = LatLng::new(south, west)?;
-            let ne = LatLng::new(north, east)?;
-            let sw_h3: u64 = sw.to_cell(res).into();
-            let ne_h3: u64 = ne.to_cell(res).into();
-
-            // Get min/max H3 index range for the bounding box
-            // Note: H3 indexes are spatially ordered but not perfectly,
-            // so we need to over-fetch and filter by actual geometry later
-            let min_h3 = sw_h3.min(ne_h3) as i64;
-            let max_h3 = sw_h3.max(ne_h3) as i64;
-
             // Build query with filters
+            // Note: We don't filter by H3 index range here because H3 indexes are not
+            // linearly distributed across geographic space. For large bounding boxes,
+            // using min/max of corner H3 indexes would incorrectly exclude valid hexagons.
+            // Instead, we fetch all hexes for the resolution/date range and filter by
+            // actual lat/lng bounds below.
             let mut query = receiver_coverage_h3::table
                 .filter(receiver_coverage_h3::resolution.eq(resolution))
                 .filter(receiver_coverage_h3::date.ge(start_date))
                 .filter(receiver_coverage_h3::date.le(end_date))
-                .filter(receiver_coverage_h3::h3_index.ge(min_h3))
-                .filter(receiver_coverage_h3::h3_index.le(max_h3))
                 .into_boxed();
 
             if let Some(rid) = receiver_id {
@@ -82,7 +71,6 @@ impl CoverageRepository {
             let results = query.limit(limit).load::<ReceiverCoverageH3>(&mut conn)?;
 
             // Filter results to only include hexes actually within bounding box
-            // (H3 range query over-fetches)
             let filtered: Vec<ReceiverCoverageH3> = results
                 .into_iter()
                 .filter(|coverage| {
