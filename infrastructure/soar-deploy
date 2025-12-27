@@ -188,6 +188,22 @@ log_info "Deploying new binary to temporary location: $TEMP_BIN_PATH"
 install -m 755 -o soar -g soar "$DEPLOY_DIR/soar" "$TEMP_BIN_PATH"
 log_info "Binary deployed to temporary location"
 
+# Install migration service template early (needed before running migrations)
+log_info "Installing migration service template..."
+for service in "${TEMPLATE_SERVICES[@]}"; do
+    if [ -f "$DEPLOY_DIR/$service" ]; then
+        log_info "Installing $service..."
+        cp "$DEPLOY_DIR/$service" /etc/systemd/system/
+        chmod 644 "/etc/systemd/system/$service"
+    else
+        log_warn "$service not found in deployment directory, skipping"
+    fi
+done
+
+# Reload systemd daemon to pick up new migration service
+log_info "Reloading systemd daemon..."
+systemctl daemon-reload
+
 # Stop soar-run service only (for migrations, keep others running)
 log_info "Stopping soar-run${SERVICE_SUFFIX} service for migrations..."
 if systemctl is-active --quiet "soar-run${SERVICE_SUFFIX}.service"; then
@@ -396,9 +412,23 @@ else
     log_info "No obsolete systemd files found"
 fi
 
-# Install service files
+# Install service files (skip template services, they were installed earlier)
 log_info "Installing service files..."
 for service in "${ALL_SERVICES[@]}"; do
+    # Skip template services (already installed before migrations)
+    skip=false
+    for template_service in "${TEMPLATE_SERVICES[@]}"; do
+        if [ "$service" = "$template_service" ]; then
+            skip=true
+            break
+        fi
+    done
+
+    if [ "$skip" = true ]; then
+        log_info "$service already installed (template service)"
+        continue
+    fi
+
     if [ -f "$DEPLOY_DIR/$service" ]; then
         log_info "Installing $service..."
         cp "$DEPLOY_DIR/$service" /etc/systemd/system/
