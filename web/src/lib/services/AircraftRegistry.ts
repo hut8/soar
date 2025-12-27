@@ -149,6 +149,12 @@ export class AircraftRegistry {
 
 	// Add or update an aircraft
 	public setAircraft(aircraft: Aircraft): void {
+		// Validate that aircraft has a valid ID
+		if (!aircraft.id) {
+			console.warn('Attempted to set aircraft with undefined ID, skipping:', aircraft);
+			return;
+		}
+
 		// Get existing fixes if any, or use the ones from the aircraft, or empty array
 		const existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
 		const cached_at = Date.now();
@@ -381,6 +387,12 @@ export class AircraftRegistry {
 	private saveAircraftToStorage(cached: AircraftWithFixesCache): void {
 		if (!browser) return;
 
+		// Validate that aircraft has a valid ID before saving
+		if (!cached.aircraft.id) {
+			console.warn('Attempted to save aircraft with undefined ID, skipping:', cached.aircraft);
+			return;
+		}
+
 		try {
 			const key = this.storageKeyPrefix + cached.aircraft.id;
 			// Strip fixes entirely before saving to localStorage - they should never be cached
@@ -482,9 +494,37 @@ export class AircraftRegistry {
 		}
 	}
 
+	// Clean up malformed localStorage keys (e.g., 'aircraft.undefined')
+	private cleanupMalformedStorageKeys(): void {
+		if (!browser) return;
+
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith(this.storageKeyPrefix)) {
+				const aircraftId = key.substring(this.storageKeyPrefix.length);
+				// Remove keys with invalid aircraft IDs (undefined, null, empty string)
+				if (!aircraftId || aircraftId === 'undefined' || aircraftId === 'null') {
+					keysToRemove.push(key);
+				}
+			}
+		}
+
+		if (keysToRemove.length > 0) {
+			console.log(`[REGISTRY] Removing ${keysToRemove.length} malformed localStorage keys`);
+			keysToRemove.forEach((key) => {
+				console.log(`[REGISTRY] Removing malformed key: ${key}`);
+				localStorage.removeItem(key);
+			});
+		}
+	}
+
 	// Load all aircraft from localStorage into memory
 	private loadAllAircraftFromStorage(): void {
 		if (!browser) return;
+
+		// Clean up any malformed keys first
+		this.cleanupMalformedStorageKeys();
 
 		console.log('[REGISTRY] Loading aircraft from localStorage');
 		let count = 0;
