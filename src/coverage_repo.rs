@@ -154,27 +154,49 @@ impl CoverageRepository {
         features
     }
 
-    /// Upsert coverage data (used by aggregation command)
+    /// Upsert coverage data in batches (used by aggregation command)
     pub async fn upsert_coverage_batch(
         &self,
         coverages: Vec<NewReceiverCoverageH3>,
     ) -> Result<usize> {
         let pool = self.pool.clone();
-        let count = coverages.len();
+        let total_count = coverages.len();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Use raw SQL for efficient UPSERT
-            // Diesel doesn't handle ON CONFLICT well for composite keys
-            for coverage in coverages {
+            // Process in chunks of 5000 to avoid parameter limits and improve performance
+            const CHUNK_SIZE: usize = 5000;
+
+            for chunk in coverages.chunks(CHUNK_SIZE) {
+                // Build arrays for bulk insert using UNNEST
+                let h3_indexes: Vec<i64> = chunk.iter().map(|c| c.h3_index).collect();
+                let resolutions: Vec<i16> = chunk.iter().map(|c| c.resolution).collect();
+                let receiver_ids: Vec<Uuid> = chunk.iter().map(|c| c.receiver_id).collect();
+                let dates: Vec<NaiveDate> = chunk.iter().map(|c| c.date).collect();
+                let fix_counts: Vec<i32> = chunk.iter().map(|c| c.fix_count).collect();
+                let first_seen_ats: Vec<_> = chunk.iter().map(|c| c.first_seen_at).collect();
+                let last_seen_ats: Vec<_> = chunk.iter().map(|c| c.last_seen_at).collect();
+                let min_altitudes: Vec<Option<i32>> =
+                    chunk.iter().map(|c| c.min_altitude_msl_feet).collect();
+                let max_altitudes: Vec<Option<i32>> =
+                    chunk.iter().map(|c| c.max_altitude_msl_feet).collect();
+                let avg_altitudes: Vec<Option<i32>> =
+                    chunk.iter().map(|c| c.avg_altitude_msl_feet).collect();
+
+                // Use UNNEST for bulk insert - much faster than individual inserts
                 diesel::sql_query(
                     r#"
                     INSERT INTO receiver_coverage_h3 (
                         h3_index, resolution, receiver_id, date,
                         fix_count, first_seen_at, last_seen_at,
                         min_altitude_msl_feet, max_altitude_msl_feet, avg_altitude_msl_feet
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    )
+                    SELECT * FROM UNNEST(
+                        $1::bigint[], $2::smallint[], $3::uuid[], $4::date[],
+                        $5::integer[], $6::timestamptz[], $7::timestamptz[],
+                        $8::integer[], $9::integer[], $10::integer[]
+                    )
                     ON CONFLICT (h3_index, resolution, receiver_id, date) DO UPDATE SET
                         fix_count = receiver_coverage_h3.fix_count + EXCLUDED.fix_count,
                         first_seen_at = LEAST(receiver_coverage_h3.first_seen_at, EXCLUDED.first_seen_at),
@@ -189,26 +211,33 @@ impl CoverageRepository {
                         updated_at = NOW()
                     "#,
                 )
-                .bind::<sql_types::BigInt, _>(coverage.h3_index)
-                .bind::<sql_types::SmallInt, _>(coverage.resolution)
-                .bind::<sql_types::Uuid, _>(coverage.receiver_id)
-                .bind::<sql_types::Date, _>(coverage.date)
-                .bind::<sql_types::Integer, _>(coverage.fix_count)
-                .bind::<sql_types::Timestamptz, _>(coverage.first_seen_at)
-                .bind::<sql_types::Timestamptz, _>(coverage.last_seen_at)
-                .bind::<sql_types::Nullable<sql_types::Integer>, _>(
-                    coverage.min_altitude_msl_feet,
+                .bind::<sql_types::Array<sql_types::BigInt>, _>(h3_indexes)
+                .bind::<sql_types::Array<sql_types::SmallInt>, _>(resolutions)
+                .bind::<sql_types::Array<sql_types::Uuid>, _>(receiver_ids)
+                .bind::<sql_types::Array<sql_types::Date>, _>(dates)
+                .bind::<sql_types::Array<sql_types::Integer>, _>(fix_counts)
+                .bind::<sql_types::Array<sql_types::Timestamptz>, _>(first_seen_ats)
+                .bind::<sql_types::Array<sql_types::Timestamptz>, _>(last_seen_ats)
+                .bind::<sql_types::Array<sql_types::Nullable<sql_types::Integer>>, _>(
+                    min_altitudes,
                 )
-                .bind::<sql_types::Nullable<sql_types::Integer>, _>(
-                    coverage.max_altitude_msl_feet,
+                .bind::<sql_types::Array<sql_types::Nullable<sql_types::Integer>>, _>(
+                    max_altitudes,
                 )
-                .bind::<sql_types::Nullable<sql_types::Integer>, _>(
-                    coverage.avg_altitude_msl_feet,
+                .bind::<sql_types::Array<sql_types::Nullable<sql_types::Integer>>, _>(
+                    avg_altitudes,
                 )
                 .execute(&mut conn)?;
             }
 
-            Ok(count)
+            info!(
+                "Upserted {} coverage records ({} chunks of max {})",
+                total_count,
+                total_count.div_ceil(CHUNK_SIZE),
+                CHUNK_SIZE
+            );
+
+            Ok(total_count)
         })
         .await?
     }
