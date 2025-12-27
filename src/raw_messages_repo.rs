@@ -436,13 +436,10 @@ mod tests {
     fn cleanup_test_data(pool: &PgPool) {
         let mut conn = pool.get().expect("Failed to get connection");
 
-        // Clean up test data in correct order (child tables first due to FK constraints)
-        // fixes and receiver_statuses reference raw_messages, so delete them first
+        // Use TRUNCATE CASCADE for faster cleanup and to avoid deadlocks with TimescaleDB
+        // TRUNCATE releases locks immediately, unlike DELETE
         // Ignore errors if tables don't exist (migrations not run locally)
-        let _ = conn.batch_execute("DELETE FROM fixes");
-        let _ = conn.batch_execute("DELETE FROM receiver_statuses");
-        let _ = conn.batch_execute("DELETE FROM raw_messages");
-        let _ = conn.batch_execute("DELETE FROM receivers");
+        let _ = conn.batch_execute("TRUNCATE TABLE receivers CASCADE");
     }
 
     #[tokio::test]
