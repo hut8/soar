@@ -24,8 +24,8 @@ NoNewPrivileges=yes
 # Process limits
 LimitNOFILE=65536
 
-# Timeout (allow up to 30 minutes for coverage aggregation of large datasets)
-TimeoutStartSec=1800
+# No timeout - allow aggregation to run as long as needed (especially for backlog processing)
+TimeoutStartSec=infinity
 
 [Install]
 WantedBy=multi-user.target soar.target
