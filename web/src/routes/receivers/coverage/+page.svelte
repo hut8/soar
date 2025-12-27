@@ -134,6 +134,7 @@
 			);
 
 			hexCount = response.features?.length || 0;
+			console.log(`Loaded ${hexCount} coverage hexagons`);
 
 			// Remove existing coverage layer if it exists
 			if (map.getLayer('coverage-hexes')) {
@@ -141,6 +142,11 @@
 			}
 			if (map.getSource('coverage')) {
 				map.removeSource('coverage');
+			}
+
+			// Only add layer if we have features
+			if (hexCount === 0) {
+				return; // No data to display
 			}
 
 			// Add coverage source and layer
@@ -172,8 +178,8 @@
 						maxFixCount,
 						'#ff0000' // Red (high coverage)
 					],
-					'fill-opacity': 0.6,
-					'fill-outline-color': '#ffffff'
+					'fill-opacity': 0.7,
+					'fill-outline-color': '#000000'
 				}
 			});
 
@@ -403,7 +409,7 @@
 
 	<!-- Legend -->
 	<div class="bg-surface-700 p-4">
-		<div class="flex items-center gap-4">
+		<div class="flex flex-wrap items-center gap-3">
 			<span class="text-sm font-medium text-gray-300">Fix Count:</span>
 			<div class="flex items-center gap-2">
 				<div class="h-4 w-8 rounded" style="background-color: #440154;"></div>
