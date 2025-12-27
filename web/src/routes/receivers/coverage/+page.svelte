@@ -5,7 +5,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { Loader, Calendar, Layers, Radio, Filter, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
-	import type { CoverageHexProperties, CoverageGeoJsonResponse } from '$lib/types';
+	import type { CoverageHexProperties, CoverageGeoJsonResponse, Receiver } from '$lib/types';
 
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = null;
@@ -13,7 +13,8 @@
 	let error = '';
 	let resolution = 7;
 	let hexCount = 0;
-	let receivers: { id: string; callsign: string }[] = [];
+	let receivers: Receiver[] = [];
+	let receiverMarkers: maplibregl.Marker[] = [];
 	let selectedReceiverId = '';
 	let minAltitude = 0;
 	let maxAltitude = 50000;
@@ -35,13 +36,67 @@
 
 	async function loadReceivers() {
 		try {
-			const response = await serverCall<{ receivers: { id: string; callsign: string }[] }>(
-				'/receivers'
-			);
+			const response = await serverCall<{ receivers: Receiver[] }>('/receivers');
 			receivers = response.receivers || [];
+			// Display receivers on the map once we have the data
+			if (map) {
+				displayReceiversOnMap();
+			}
 		} catch (err) {
 			console.error('Failed to load receivers:', err);
 		}
+	}
+
+	function displayReceiversOnMap() {
+		if (!map) return;
+
+		// Store map reference to avoid null check issues
+		const currentMap = map;
+
+		// Clear existing receiver markers
+		receiverMarkers.forEach((marker) => marker.remove());
+		receiverMarkers = [];
+
+		receivers.forEach((receiver) => {
+			if (!receiver.latitude || !receiver.longitude) return;
+
+			// Create marker content with Radio icon
+			const markerDiv = document.createElement('div');
+			markerDiv.className = 'receiver-marker';
+
+			// Create icon container
+			const iconDiv = document.createElement('div');
+			iconDiv.className = 'receiver-icon';
+			iconDiv.innerHTML = `
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+					<path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+					<circle cx="12" cy="12" r="2"/>
+					<path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+					<path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
+				</svg>
+			`;
+
+			// Create label
+			const labelDiv = document.createElement('div');
+			labelDiv.className = 'receiver-label';
+			labelDiv.textContent = receiver.callsign;
+
+			markerDiv.appendChild(iconDiv);
+			markerDiv.appendChild(labelDiv);
+
+			// Add click handler to navigate to receiver page
+			markerDiv.onclick = () => {
+				window.location.href = resolve(`/receivers/${receiver.id}`);
+			};
+
+			// Create MapLibre marker
+			const marker = new maplibregl.Marker({ element: markerDiv })
+				.setLngLat([receiver.longitude, receiver.latitude])
+				.addTo(currentMap);
+
+			receiverMarkers.push(marker);
+		});
 	}
 
 	onMount(() => {
@@ -443,3 +498,82 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Receiver marker styling - matches operations page */
+	:global(.receiver-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+		transition: transform 0.2s ease-in-out;
+	}
+
+	:global(.receiver-marker:hover) {
+		transform: scale(1.1);
+	}
+
+	:global(.receiver-icon) {
+		background: transparent;
+		border: 2px solid #374151;
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #374151;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+		transition: all 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-icon) {
+			background: transparent;
+			border-color: #6b7280;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-icon) {
+		background: white;
+		border-color: #fb923c;
+		box-shadow: 0 3px 8px rgba(251, 146, 60, 0.4);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-marker:hover .receiver-icon) {
+			background: #1f2937;
+		}
+	}
+
+	:global(.receiver-label) {
+		background: rgba(255, 255, 255, 0.95);
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-size: 11px;
+		font-weight: 500;
+		color: #374151;
+		margin-top: 4px;
+		white-space: nowrap;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		opacity: 0;
+		visibility: hidden;
+		transition: all 0.2s ease-in-out;
+		pointer-events: none;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-label) {
+			background: rgba(31, 41, 55, 0.95);
+			border-color: #4b5563;
+			color: #e5e7eb;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-label) {
+		opacity: 1;
+		visibility: visible;
+	}
+</style>
