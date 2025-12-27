@@ -75,7 +75,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - D
+                      - C
                   reducer:
                     params: []
                     type: last
@@ -150,7 +150,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - C
+                      - B
                   reducer:
                     params: []
                     type: last
@@ -225,7 +225,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - C
+                      - B
                   reducer:
                     params: []
                     type: last
