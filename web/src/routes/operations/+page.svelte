@@ -35,6 +35,9 @@
 	// Area tracker configuration
 	const AREA_TRACKER_LIMIT_ENABLED = false;
 
+	// Aircraft rendering limit to prevent browser crashes
+	const MAX_AIRCRAFT_DISPLAY = 50;
+
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
 	let userLocationButton: HTMLButtonElement;
@@ -413,6 +416,10 @@
 
 	// Map type state
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
+
+	// Aircraft limit state
+	let aircraftLimitExceeded = $state(false);
+	let totalAircraftInViewport = $state(0);
 
 	$effect(() => {
 		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
@@ -1882,6 +1889,23 @@
 
 			console.log(`[REST] Received ${aircraft.length} aircraft with latest positions`);
 
+			// Store total aircraft count
+			totalAircraftInViewport = aircraft.length;
+
+			// Check if we've exceeded the display limit
+			if (aircraft.length > MAX_AIRCRAFT_DISPLAY) {
+				console.warn(
+					`[REST] Aircraft count (${aircraft.length}) exceeds display limit (${MAX_AIRCRAFT_DISPLAY}). Not rendering aircraft.`
+				);
+				aircraftLimitExceeded = true;
+				// Clear any existing aircraft markers
+				clearAircraftMarkers();
+				return;
+			}
+
+			// Within limits - render aircraft normally
+			aircraftLimitExceeded = false;
+
 			// Process each aircraft and add to registry
 			// They will have latestLatitude/latestLongitude but no fixes array
 			for (const a of aircraft) {
@@ -2081,6 +2105,21 @@
 				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
 			>
 				{displayHeading}°
+			</div>
+		</div>
+	{/if}
+
+	<!-- Aircraft Limit Exceeded Overlay -->
+	{#if aircraftLimitExceeded}
+		<div class="aircraft-limit-overlay">
+			<div class="aircraft-limit-warning">
+				<div class="warning-icon">⚠️</div>
+				<h2 class="warning-title">Too Many Aircraft</h2>
+				<p class="warning-message">
+					The current view contains <strong>{totalAircraftInViewport}</strong> aircraft, which
+					exceeds the display limit of <strong>{MAX_AIRCRAFT_DISPLAY}</strong>.
+				</p>
+				<p class="warning-suggestion">Please zoom in to a smaller area to view aircraft.</p>
 			</div>
 		</div>
 	{/if}
@@ -2368,5 +2407,83 @@
 	:global(.receiver-marker:hover .receiver-label) {
 		opacity: 1;
 		visibility: visible;
+	}
+
+	/* Aircraft limit exceeded overlay */
+	.aircraft-limit-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.75);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 9999;
+		backdrop-filter: blur(4px);
+	}
+
+	.aircraft-limit-warning {
+		background: white;
+		border-radius: 12px;
+		padding: 2rem;
+		max-width: 500px;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		text-align: center;
+		animation: slideIn 0.3s ease-out;
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateY(-20px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
+	.warning-icon {
+		font-size: 4rem;
+		margin-bottom: 1rem;
+		animation: pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.1);
+		}
+	}
+
+	.warning-title {
+		font-size: 1.75rem;
+		font-weight: 700;
+		color: #dc2626;
+		margin-bottom: 1rem;
+	}
+
+	.warning-message {
+		font-size: 1.125rem;
+		color: #374151;
+		margin-bottom: 0.75rem;
+		line-height: 1.6;
+	}
+
+	.warning-message strong {
+		color: #dc2626;
+		font-weight: 700;
+	}
+
+	.warning-suggestion {
+		font-size: 1rem;
+		color: #6b7280;
+		font-weight: 500;
+		margin-top: 1rem;
 	}
 </style>
