@@ -16,80 +16,10 @@
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
-
-	interface RunwayEnd {
-		ident: string | null;
-		latitude_deg: number | null;
-		longitude_deg: number | null;
-		elevation_ft: number | null;
-		heading_degt: number | null;
-		displaced_threshold_ft: number | null;
-	}
-
-	interface Runway {
-		id: number;
-		length_ft: number | null;
-		width_ft: number | null;
-		surface: string | null;
-		lighted: boolean;
-		closed: boolean;
-		low: RunwayEnd;
-		high: RunwayEnd;
-	}
-
-	interface Airport {
-		id: number;
-		ident: string;
-		airport_type: string;
-		name: string;
-		latitude_deg: string | null;
-		longitude_deg: string | null;
-		elevation_ft: number | null;
-		continent: string | null;
-		iso_country: string | null;
-		iso_region: string | null;
-		municipality: string | null;
-		scheduled_service: boolean;
-		icao_code: string | null;
-		iata_code: string | null;
-		gps_code: string | null;
-		local_code: string | null;
-		home_link: string | null;
-		wikipedia_link: string | null;
-		keywords: string | null;
-		runways: Runway[];
-	}
-
-	interface FlightView {
-		id: string;
-		device_address: string;
-		takeoff_time: string | null;
-		landing_time: string | null;
-		departure_airport: string | null;
-		arrival_airport: string | null;
-		created_at: string;
-		updated_at: string;
-	}
-
-	interface Device {
-		id: string;
-		registration: string;
-		competition_number: string;
-	}
-
-	interface FlightResponse {
-		flight: FlightView;
-		device: Device | null;
-	}
-
-	interface Club {
-		id: string;
-		name: string;
-		home_base_airport_id: number | null;
-	}
+	import type { Airport, Flight, Club, DataResponse, DataListResponse } from '$lib/types';
 
 	let airport: Airport | null = null;
-	let flights: FlightResponse[] = [];
+	let flights: Flight[] = [];
 	let clubs: Club[] = [];
 	let loading = true;
 	let flightsLoading = false;
@@ -128,7 +58,8 @@
 		error = '';
 
 		try {
-			airport = await serverCall<Airport>(`/airports/${airportId}`);
+			const response = await serverCall<DataResponse<Airport>>(`/airports/${airportId}`);
+			airport = response.data;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load airport: ${errorMessage}`;
@@ -143,7 +74,8 @@
 		flightsError = '';
 
 		try {
-			flights = await serverCall<FlightResponse[]>(`/airports/${airportId}/flights`);
+			const response = await serverCall<DataListResponse<Flight>>(`/airports/${airportId}/flights`);
+			flights = response.data;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
@@ -158,7 +90,8 @@
 		clubsError = '';
 
 		try {
-			clubs = await serverCall<Club[]>(`/airports/${airportId}/clubs`);
+			const response = await serverCall<DataListResponse<Club>>(`/airports/${airportId}/clubs`);
+			clubs = response.data;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			clubsError = `Failed to load clubs: ${errorMessage}`;
@@ -174,8 +107,8 @@
 	}
 
 	function generateGoogleMapsUrl(airport: Airport): string {
-		if (airport.latitude_deg && airport.longitude_deg) {
-			return `https://www.google.com/maps/search/?api=1&query=${airport.latitude_deg},${airport.longitude_deg}`;
+		if (airport.latitudeDeg && airport.longitudeDeg) {
+			return `https://www.google.com/maps/search/?api=1&query=${airport.latitudeDeg},${airport.longitudeDeg}`;
 		}
 		return '';
 	}
@@ -186,11 +119,7 @@
 
 	function getAirportCode(airport: Airport): string {
 		return (
-			airport.icao_code ||
-			airport.iata_code ||
-			airport.gps_code ||
-			airport.local_code ||
-			airport.ident
+			airport.icaoCode || airport.iataCode || airport.gpsCode || airport.localCode || airport.ident
 		);
 	}
 
@@ -201,7 +130,7 @@
 			.join(' ');
 	}
 
-	function formatDateTime(dateStr: string | null): string {
+	function formatDateTime(dateStr: string | null | undefined): string {
 		if (!dateStr) return '—';
 		const date = new Date(dateStr);
 		return date.toLocaleString('en-US', {
@@ -212,14 +141,14 @@
 		});
 	}
 
-	function getFlightStatus(flight: FlightView): string {
-		if (!flight.landing_time) return 'In Progress';
+	function getFlightStatus(flight: Flight): string {
+		if (!flight.landingTime) return 'In Progress';
 		return 'Completed';
 	}
 
-	function getFlightType(flight: FlightView, currentAirportId: string): string {
-		const isDeparture = flight.departure_airport === currentAirportId;
-		const isArrival = flight.arrival_airport === currentAirportId;
+	function getFlightType(flight: Flight, currentAirportId: string): string {
+		const isDeparture = flight.departureAirport === currentAirportId;
+		const isArrival = flight.arrivalAirport === currentAirportId;
 
 		if (isDeparture && isArrival) return 'Local';
 		if (isDeparture) return 'Departure';
@@ -280,9 +209,9 @@
 								{getAirportCode(airport)}
 							</span>
 							<span class="badge preset-tonal">
-								{formatAirportType(airport.airport_type)}
+								{formatAirportType(airport.airportType)}
 							</span>
-							{#if airport.scheduled_service}
+							{#if airport.scheduledService}
 								<span class="badge preset-filled-success-500"> Scheduled Service </span>
 							{/if}
 						</div>
@@ -300,48 +229,48 @@
 					</h2>
 
 					<div class="space-y-3">
-						{#if airport.municipality || airport.iso_region}
+						{#if airport.municipality || airport.isoRegion}
 							<div class="flex items-start gap-3">
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Municipality</p>
 									<p>
 										{airport.municipality || '—'}
-										{#if airport.iso_region}
-											<span class="text-surface-500">, {airport.iso_region}</span>
+										{#if airport.isoRegion}
+											<span class="text-surface-500">, {airport.isoRegion}</span>
 										{/if}
 									</p>
-									{#if airport.iso_country}
-										<p class="text-sm text-surface-500">{airport.iso_country}</p>
+									{#if airport.isoCountry}
+										<p class="text-sm text-surface-500">{airport.isoCountry}</p>
 									{/if}
 								</div>
 							</div>
 						{/if}
 
-						{#if airport.latitude_deg && airport.longitude_deg}
+						{#if airport.latitudeDeg && airport.longitudeDeg}
 							<div class="flex items-start gap-3">
 								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">
-										{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+										{formatCoordinates(airport.latitudeDeg, airport.longitudeDeg)}
 									</p>
 								</div>
 							</div>
 						{/if}
 
-						{#if airport.elevation_ft !== null}
+						{#if airport.elevationFt !== null}
 							<div class="flex items-start gap-3">
 								<Compass class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Elevation</p>
-									<p>{airport.elevation_ft} ft MSL</p>
+									<p>{airport.elevationFt} ft MSL</p>
 								</div>
 							</div>
 						{/if}
 
 						<!-- External Links -->
-						{#if airport.latitude_deg && airport.longitude_deg}
+						{#if airport.latitudeDeg && airport.longitudeDeg}
 							<div class="border-surface-200-700-token border-t pt-3">
 								<div class="flex flex-wrap gap-2">
 									<a
@@ -354,7 +283,7 @@
 										Open in Google Maps
 									</a>
 									<a
-										href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
+										href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitudeDeg},${airport.longitudeDeg}`}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="preset-tonal-secondary-500 btn btn-sm"
@@ -376,38 +305,38 @@
 					</h2>
 
 					<div class="space-y-2">
-						{#if airport.icao_code}
+						{#if airport.icaoCode}
 							<div class="flex justify-between">
 								<span class="text-surface-600-300-token">ICAO Code:</span>
-								<span class="font-mono font-semibold">{airport.icao_code}</span>
+								<span class="font-mono font-semibold">{airport.icaoCode}</span>
 							</div>
 						{/if}
-						{#if airport.iata_code}
+						{#if airport.iataCode}
 							<div class="flex justify-between">
 								<span class="text-surface-600-300-token">IATA Code:</span>
-								<span class="font-mono font-semibold">{airport.iata_code}</span>
+								<span class="font-mono font-semibold">{airport.iataCode}</span>
 							</div>
 						{/if}
-						{#if airport.gps_code}
+						{#if airport.gpsCode}
 							<div class="flex justify-between">
 								<span class="text-surface-600-300-token">GPS Code:</span>
-								<span class="font-mono font-semibold">{airport.gps_code}</span>
+								<span class="font-mono font-semibold">{airport.gpsCode}</span>
 							</div>
 						{/if}
-						{#if airport.local_code}
+						{#if airport.localCode}
 							<div class="flex justify-between">
 								<span class="text-surface-600-300-token">Local Code:</span>
-								<span class="font-mono font-semibold">{airport.local_code}</span>
+								<span class="font-mono font-semibold">{airport.localCode}</span>
 							</div>
 						{/if}
 					</div>
 
-					{#if airport.home_link || airport.wikipedia_link}
+					{#if airport.homeLink || airport.wikipediaLink}
 						<div class="border-surface-200-700-token border-t pt-3">
 							<div class="flex flex-wrap gap-2">
-								{#if airport.home_link}
+								{#if airport.homeLink}
 									<a
-										href={airport.home_link}
+										href={airport.homeLink}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="preset-tonal-primary-500 btn btn-sm"
@@ -416,9 +345,9 @@
 										Website
 									</a>
 								{/if}
-								{#if airport.wikipedia_link}
+								{#if airport.wikipediaLink}
 									<a
-										href={airport.wikipedia_link}
+										href={airport.wikipediaLink}
 										target="_blank"
 										rel="noopener noreferrer"
 										class="preset-tonal-secondary-500 btn btn-sm"
@@ -480,16 +409,16 @@
 									<div class="table-container">
 										<table class="table-compact table-hover table">
 											<tbody>
-												{#if runway.length_ft}
+												{#if runway.lengthFt}
 													<tr>
 														<td class="w-1/3 font-medium">Length</td>
-														<td>{runway.length_ft.toLocaleString()} ft</td>
+														<td>{runway.lengthFt.toLocaleString()} ft</td>
 													</tr>
 												{/if}
-												{#if runway.width_ft}
+												{#if runway.widthFt}
 													<tr>
 														<td class="w-1/3 font-medium">Width</td>
-														<td>{runway.width_ft} ft</td>
+														<td>{runway.widthFt} ft</td>
 													</tr>
 												{/if}
 												{#if runway.surface}
@@ -505,16 +434,16 @@
 
 								<!-- Mobile: Definition List -->
 								<dl class="mb-4 space-y-2 md:hidden">
-									{#if runway.length_ft}
+									{#if runway.lengthFt}
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token font-medium">Length</dt>
-											<dd class="font-semibold">{runway.length_ft.toLocaleString()} ft</dd>
+											<dd class="font-semibold">{runway.lengthFt.toLocaleString()} ft</dd>
 										</div>
 									{/if}
-									{#if runway.width_ft}
+									{#if runway.widthFt}
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token font-medium">Width</dt>
-											<dd class="font-semibold">{runway.width_ft} ft</dd>
+											<dd class="font-semibold">{runway.widthFt} ft</dd>
 										</div>
 									{/if}
 									{#if runway.surface}
@@ -538,23 +467,23 @@
 											<div class="table-container">
 												<table class="table-compact table-hover table">
 													<tbody>
-														{#if runway.low.heading_degt !== null}
+														{#if runway.low.headingDegt !== null}
 															<tr>
 																<td class="w-2/3 text-sm">True Heading</td>
-																<td class="text-sm font-medium">{runway.low.heading_degt}°</td>
+																<td class="text-sm font-medium">{runway.low.headingDegt}°</td>
 															</tr>
 														{/if}
-														{#if runway.low.elevation_ft !== null}
+														{#if runway.low.elevationFt !== null}
 															<tr>
 																<td class="w-2/3 text-sm">Elevation</td>
-																<td class="text-sm font-medium">{runway.low.elevation_ft} ft</td>
+																<td class="text-sm font-medium">{runway.low.elevationFt} ft</td>
 															</tr>
 														{/if}
-														{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+														{#if runway.low.displacedThresholdFt !== null && runway.low.displacedThresholdFt > 0}
 															<tr>
 																<td class="w-2/3 text-sm">Displaced Threshold</td>
 																<td class="text-sm font-medium"
-																	>{runway.low.displaced_threshold_ft} ft</td
+																	>{runway.low.displacedThresholdFt} ft</td
 																>
 															</tr>
 														{/if}
@@ -565,22 +494,22 @@
 
 										<!-- Mobile: Definition List -->
 										<dl class="space-y-2 text-sm md:hidden">
-											{#if runway.low.heading_degt !== null}
+											{#if runway.low.headingDegt !== null}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">True Heading</dt>
-													<dd class="font-medium">{runway.low.heading_degt}°</dd>
+													<dd class="font-medium">{runway.low.headingDegt}°</dd>
 												</div>
 											{/if}
-											{#if runway.low.elevation_ft !== null}
+											{#if runway.low.elevationFt !== null}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Elevation</dt>
-													<dd class="font-medium">{runway.low.elevation_ft} ft</dd>
+													<dd class="font-medium">{runway.low.elevationFt} ft</dd>
 												</div>
 											{/if}
-											{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+											{#if runway.low.displacedThresholdFt !== null && runway.low.displacedThresholdFt > 0}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
-													<dd class="font-medium">{runway.low.displaced_threshold_ft} ft</dd>
+													<dd class="font-medium">{runway.low.displacedThresholdFt} ft</dd>
 												</div>
 											{/if}
 										</dl>
@@ -597,23 +526,23 @@
 											<div class="table-container">
 												<table class="table-compact table-hover table">
 													<tbody>
-														{#if runway.high.heading_degt !== null}
+														{#if runway.high.headingDegt !== null}
 															<tr>
 																<td class="w-2/3 text-sm">True Heading</td>
-																<td class="text-sm font-medium">{runway.high.heading_degt}°</td>
+																<td class="text-sm font-medium">{runway.high.headingDegt}°</td>
 															</tr>
 														{/if}
-														{#if runway.high.elevation_ft !== null}
+														{#if runway.high.elevationFt !== null}
 															<tr>
 																<td class="w-2/3 text-sm">Elevation</td>
-																<td class="text-sm font-medium">{runway.high.elevation_ft} ft</td>
+																<td class="text-sm font-medium">{runway.high.elevationFt} ft</td>
 															</tr>
 														{/if}
-														{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+														{#if runway.high.displacedThresholdFt !== null && runway.high.displacedThresholdFt > 0}
 															<tr>
 																<td class="w-2/3 text-sm">Displaced Threshold</td>
 																<td class="text-sm font-medium"
-																	>{runway.high.displaced_threshold_ft} ft</td
+																	>{runway.high.displacedThresholdFt} ft</td
 																>
 															</tr>
 														{/if}
@@ -624,22 +553,22 @@
 
 										<!-- Mobile: Definition List -->
 										<dl class="space-y-2 text-sm md:hidden">
-											{#if runway.high.heading_degt !== null}
+											{#if runway.high.headingDegt !== null}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">True Heading</dt>
-													<dd class="font-medium">{runway.high.heading_degt}°</dd>
+													<dd class="font-medium">{runway.high.headingDegt}°</dd>
 												</div>
 											{/if}
-											{#if runway.high.elevation_ft !== null}
+											{#if runway.high.elevationFt !== null}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Elevation</dt>
-													<dd class="font-medium">{runway.high.elevation_ft} ft</dd>
+													<dd class="font-medium">{runway.high.elevationFt} ft</dd>
 												</div>
 											{/if}
-											{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+											{#if runway.high.displacedThresholdFt !== null && runway.high.displacedThresholdFt > 0}
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
-													<dd class="font-medium">{runway.high.displaced_threshold_ft} ft</dd>
+													<dd class="font-medium">{runway.high.displacedThresholdFt} ft</dd>
 												</div>
 											{/if}
 										</dl>
@@ -745,57 +674,50 @@
 										</tr>
 									</thead>
 									<tbody>
-										{#each flights as flightData (flightData.flight.id)}
+										{#each flights as flight (flight.id)}
 											<tr>
 												<td>
-													{#if flightData.device}
+													{#if flight.registration}
 														<div class="flex flex-col">
-															<span class="font-mono font-semibold"
-																>{flightData.device.registration || 'Unknown'}</span
-															>
-															{#if flightData.device.competition_number}
-																<span class="text-sm text-surface-500"
-																	>{flightData.device.competition_number}</span
-																>
-															{/if}
+															<span class="font-mono font-semibold">{flight.registration}</span>
 														</div>
 													{:else}
-														<span class="font-mono">{flightData.flight.device_address}</span>
+														<span class="font-mono">{flight.deviceAddress}</span>
 													{/if}
 												</td>
 												<td>
 													<span
 														class="badge preset-tonal"
 														class:preset-tonal-primary-500={getFlightType(
-															flightData.flight,
+															flight,
 															airport?.ident || ''
 														) === 'Departure'}
 														class:preset-tonal-success-500={getFlightType(
-															flightData.flight,
+															flight,
 															airport?.ident || ''
 														) === 'Arrival'}
 														class:preset-tonal-secondary-500={getFlightType(
-															flightData.flight,
+															flight,
 															airport?.ident || ''
 														) === 'Local'}
 													>
-														{getFlightType(flightData.flight, airport?.ident || '')}
+														{getFlightType(flight, airport?.ident || '')}
 													</span>
 												</td>
 												<td>
 													<span class="font-mono text-sm">
-														{flightData.flight.departure_airport || '—'}
+														{flight.departureAirport || '—'}
 													</span>
 												</td>
 												<td>
 													<span class="font-mono text-sm">
-														{flightData.flight.arrival_airport || '—'}
+														{flight.arrivalAirport || '—'}
 													</span>
 												</td>
-												<td>{formatDateTime(flightData.flight.takeoff_time)}</td>
-												<td>{formatDateTime(flightData.flight.landing_time)}</td>
+												<td>{formatDateTime(flight.takeoffTime)}</td>
+												<td>{formatDateTime(flight.landingTime)}</td>
 												<td>
-													{#if getFlightStatus(flightData.flight) === 'In Progress'}
+													{#if getFlightStatus(flight) === 'In Progress'}
 														<span class="badge preset-filled-warning-500">In Progress</span>
 													{:else}
 														<span class="badge preset-filled-success-500">Completed</span>
@@ -803,7 +725,7 @@
 												</td>
 												<td>
 													<a
-														href={resolve(`/flights/${flightData.flight.id}`)}
+														href={resolve(`/flights/${flight.id}`)}
 														class="preset-tonal-primary-500 btn btn-sm"
 													>
 														View
@@ -818,42 +740,37 @@
 
 						<!-- Mobile: Cards -->
 						<div class="space-y-4 md:hidden">
-							{#each flights as flightData (flightData.flight.id)}
+							{#each flights as flight (flight.id)}
 								<div class="card p-4">
 									<div class="mb-3 flex items-start justify-between gap-2">
 										<div>
-											{#if flightData.device}
+											{#if flight.registration}
 												<div class="font-mono font-semibold">
-													{flightData.device.registration || 'Unknown'}
+													{flight.registration}
 												</div>
-												{#if flightData.device.competition_number}
-													<div class="text-sm text-surface-500">
-														{flightData.device.competition_number}
-													</div>
-												{/if}
 											{:else}
-												<div class="font-mono">{flightData.flight.device_address}</div>
+												<div class="font-mono">{flight.deviceAddress}</div>
 											{/if}
 										</div>
 										<div class="flex flex-col items-end gap-2">
 											<span
 												class="badge preset-tonal text-xs"
 												class:preset-tonal-primary-500={getFlightType(
-													flightData.flight,
+													flight,
 													airport?.ident || ''
 												) === 'Departure'}
 												class:preset-tonal-success-500={getFlightType(
-													flightData.flight,
+													flight,
 													airport?.ident || ''
 												) === 'Arrival'}
 												class:preset-tonal-secondary-500={getFlightType(
-													flightData.flight,
+													flight,
 													airport?.ident || ''
 												) === 'Local'}
 											>
-												{getFlightType(flightData.flight, airport?.ident || '')}
+												{getFlightType(flight, airport?.ident || '')}
 											</span>
-											{#if getFlightStatus(flightData.flight) === 'In Progress'}
+											{#if getFlightStatus(flight) === 'In Progress'}
 												<span class="badge preset-filled-warning-500 text-xs">In Progress</span>
 											{:else}
 												<span class="badge preset-filled-success-500 text-xs">Completed</span>
@@ -865,27 +782,27 @@
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token">Departure</dt>
 											<dd class="font-mono font-medium">
-												{flightData.flight.departure_airport || '—'}
+												{flight.departureAirport || '—'}
 											</dd>
 										</div>
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token">Arrival</dt>
 											<dd class="font-mono font-medium">
-												{flightData.flight.arrival_airport || '—'}
+												{flight.arrivalAirport || '—'}
 											</dd>
 										</div>
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token">Takeoff</dt>
-											<dd class="font-medium">{formatDateTime(flightData.flight.takeoff_time)}</dd>
+											<dd class="font-medium">{formatDateTime(flight.takeoffTime)}</dd>
 										</div>
 										<div class="flex justify-between gap-4">
 											<dt class="text-surface-600-300-token">Landing</dt>
-											<dd class="font-medium">{formatDateTime(flightData.flight.landing_time)}</dd>
+											<dd class="font-medium">{formatDateTime(flight.landingTime)}</dd>
 										</div>
 									</dl>
 
 									<a
-										href={resolve(`/flights/${flightData.flight.id}`)}
+										href={resolve(`/flights/${flight.id}`)}
 										class="preset-tonal-primary-500 btn w-full btn-sm"
 									>
 										View Flight Details
@@ -898,7 +815,7 @@
 			</div>
 
 			<!-- Map Section -->
-			{#if airport.latitude_deg && airport.longitude_deg}
+			{#if airport.latitudeDeg && airport.longitudeDeg}
 				<div class="card p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
@@ -907,7 +824,7 @@
 					<div class="border-surface-300-600-token overflow-hidden rounded-lg border">
 						<!-- Embedded Google Map -->
 						<iframe
-							src={`https://maps.google.com/maps?q=${airport.latitude_deg},${airport.longitude_deg}&output=embed`}
+							src={`https://maps.google.com/maps?q=${airport.latitudeDeg},${airport.longitudeDeg}&output=embed`}
 							width="100%"
 							height="500"
 							style="border:0;"
@@ -928,7 +845,7 @@
 							View Larger Map
 						</a>
 						<a
-							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
+							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitudeDeg},${airport.longitudeDeg}`}
 							target="_blank"
 							rel="noopener noreferrer"
 							class="preset-tonal-secondary-500 btn btn-sm"

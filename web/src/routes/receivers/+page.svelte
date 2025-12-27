@@ -19,8 +19,8 @@
 		country: string | null;
 		latitude: number | null;
 		longitude: number | null;
-		created_at: string;
-		updated_at: string;
+		createdAt: string;
+		updatedAt: string;
 	}
 
 	interface ReceiverSearchResponse {
@@ -437,7 +437,7 @@
 								{/if}
 
 								<div class="text-xs text-surface-500 dark:text-surface-400">
-									Last heard: <span class="font-medium">{getLastHeard(receiver.updated_at)}</span>
+									Last heard: <span class="font-medium">{getLastHeard(receiver.updatedAt)}</span>
 								</div>
 							</div>
 						</div>
@@ -473,7 +473,7 @@
 										{formatCoordinates(receiver.latitude, receiver.longitude)}
 									</td>
 									<td class="text-surface-500-400-token text-sm">
-										{getLastHeard(receiver.updated_at)}
+										{getLastHeard(receiver.updatedAt)}
 									</td>
 								</tr>
 							{/each}

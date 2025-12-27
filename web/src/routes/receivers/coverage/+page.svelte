@@ -150,7 +150,7 @@
 			});
 
 			// Calculate max fix count for color scaling
-			const maxFixCount = Math.max(...response.features.map((f) => f.properties.fix_count), 1);
+			const maxFixCount = Math.max(...response.features.map((f) => f.properties.fixCount), 1);
 
 			map.addLayer({
 				id: 'coverage-hexes',
@@ -160,7 +160,7 @@
 					'fill-color': [
 						'interpolate',
 						['linear'],
-						['get', 'fix_count'],
+						['get', 'fixCount'],
 						0,
 						'#440154', // Dark purple (no coverage)
 						maxFixCount * 0.25,
@@ -178,7 +178,7 @@
 			});
 
 			// Add popup on hover
-			map.on('mousemove', 'coverage-hexes', (e) => {
+			map.on('mousemove', 'coverage-hexes', (e: maplibregl.MapLayerMouseEvent) => {
 				if (!e.features || !e.features[0]) return;
 
 				map!.getCanvas().style.cursor = 'pointer';
@@ -197,10 +197,10 @@
 						`
 						<div class="p-2">
 							<p class="font-semibold">Coverage Hex</p>
-							<p class="text-sm">Fixes: ${props.fix_count.toLocaleString()}</p>
-							<p class="text-sm">Coverage: ${props.coverage_hours.toFixed(1)} hours</p>
-							${props.avg_altitude_msl_feet ? `<p class="text-sm">Avg Altitude: ${props.avg_altitude_msl_feet.toLocaleString()} ft</p>` : ''}
-							${props.min_altitude_msl_feet !== null && props.max_altitude_msl_feet !== null ? `<p class="text-sm">Altitude Range: ${props.min_altitude_msl_feet.toLocaleString()}-${props.max_altitude_msl_feet.toLocaleString()} ft</p>` : ''}
+							<p class="text-sm">Fixes: ${props.fixCount.toLocaleString()}</p>
+							<p class="text-sm">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
+							${props.avgAltitudeMslFeet ? `<p class="text-sm">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p class="text-sm">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
 							<p class="text-sm text-gray-500">Resolution: ${props.resolution}</p>
 						</div>
 					`

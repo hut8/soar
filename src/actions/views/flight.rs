@@ -24,6 +24,7 @@ pub struct AircraftInfo {
 
 /// Flight view for API responses with computed fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightView {
     pub id: Uuid,
     pub aircraft_id: Option<Uuid>,

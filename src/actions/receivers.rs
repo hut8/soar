@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::json_error;
+use crate::actions::{
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+};
 use crate::receiver_repo::ReceiverRepository;
 use crate::receivers::ReceiverModel;
 use crate::web::AppState;
@@ -30,11 +32,6 @@ pub struct ReceiverSearchQuery {
     pub longitude_max: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ReceiverSearchResponse {
-    pub receivers: Vec<ReceiverModel>,
-}
-
 /// Get a receiver by its ID
 pub async fn get_receiver_by_id(
     Path(id): Path<Uuid>,
@@ -43,7 +40,7 @@ pub async fn get_receiver_by_id(
     let receiver_repo = ReceiverRepository::new(state.pool);
 
     match receiver_repo.get_receiver_view_by_id(id).await {
-        Ok(Some(receiver)) => Json(receiver).into_response(),
+        Ok(Some(receiver)) => Json(DataResponse { data: receiver }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get receiver by ID {}: {}", id, e);
@@ -71,7 +68,7 @@ pub async fn search_receivers(
         match receiver_repo.search_by_query(&search_query).await {
             Ok(receivers) => {
                 info!("Found {} receivers matching query", receivers.len());
-                return Json(ReceiverSearchResponse { receivers }).into_response();
+                return Json(DataListResponse { data: receivers }).into_response();
             }
             Err(e) => {
                 tracing::error!(
@@ -120,7 +117,7 @@ pub async fn search_receivers(
         {
             Ok(receivers) => {
                 info!("Found {} receivers within radius", receivers.len());
-                return Json(ReceiverSearchResponse { receivers }).into_response();
+                return Json(DataListResponse { data: receivers }).into_response();
             }
             Err(e) => {
                 tracing::error!("Failed to search receivers by location: {}", e);
@@ -192,7 +189,7 @@ pub async fn search_receivers(
                 {
                     Ok(receivers) => {
                         info!("Found {} receivers in bounding box", receivers.len());
-                        Json(ReceiverSearchResponse { receivers }).into_response()
+                        Json(DataListResponse { data: receivers }).into_response()
                     }
                     Err(e) => {
                         tracing::error!("Failed to get receivers in bounding box: {}", e);
@@ -216,8 +213,8 @@ pub async fn search_receivers(
             Ok(receivers) => {
                 let receiver_models: Vec<ReceiverModel> =
                     receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
+                Json(DataListResponse {
+                    data: receiver_models,
                 })
                 .into_response()
             }
@@ -238,8 +235,8 @@ pub async fn search_receivers(
                 info!("Returning {} recently updated receivers", receivers.len());
                 let receiver_models: Vec<ReceiverModel> =
                     receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
+                Json(DataListResponse {
+                    data: receiver_models,
                 })
                 .into_response()
             }
@@ -284,10 +281,13 @@ pub async fn get_receiver_fixes(
     {
         Ok((fixes, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverFixesResponse {
-                fixes,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: fixes,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -334,10 +334,13 @@ pub async fn get_receiver_statuses(
     {
         Ok((statuses, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverStatusesResponse {
-                statuses,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: statuses,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -358,24 +361,10 @@ pub struct ReceiverFixesQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ReceiverFixesResponse {
-    pub fixes: Vec<crate::fixes::FixWithAircraftInfo>,
-    pub page: i64,
-    pub total_pages: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ReceiverStatusesQuery {
     pub page: Option<i64>,
     pub per_page: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReceiverStatusesResponse {
-    pub statuses: Vec<crate::receiver_statuses::ReceiverStatusWithRaw>,
-    pub page: i64,
-    pub total_pages: i64,
 }
 
 /// Get raw messages for a specific receiver (last 24 hours only)
@@ -410,10 +399,13 @@ pub async fn get_receiver_raw_messages(
     {
         Ok((messages, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverRawMessagesResponse {
-                messages,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: messages,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -445,13 +437,6 @@ pub struct ReceiverStatisticsResponse {
 pub struct ReceiverRawMessagesQuery {
     pub page: Option<i64>,
     pub per_page: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReceiverRawMessagesResponse {
-    pub messages: Vec<crate::raw_messages_repo::AprsMessage>,
-    pub page: i64,
-    pub total_pages: i64,
 }
 
 #[derive(Debug, Serialize)]

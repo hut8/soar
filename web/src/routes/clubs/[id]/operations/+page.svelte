@@ -49,7 +49,7 @@
 	let clubId = $derived($page.params.id || '');
 
 	// Check if user belongs to this club
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.club_id === clubId);
+	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
 
 	// Check if selected date is today
 	let isToday = $derived(selectedDate === dayjs().format('YYYY-MM-DD'));
@@ -322,25 +322,25 @@
 										<tr>
 											<td>
 												<div class="flex flex-col gap-1">
-													{#if flight.aircraft_id}
+													{#if flight.aircraftId}
 														<AircraftLink aircraft={flight} size="md" />
 													{:else}
 														<span class="font-medium"
 															>{flight.registration ||
 																formatAircraftAddress(
-																	flight.device_address,
-																	flight.device_address_type
+																	flight.deviceAddress,
+																	flight.deviceAddressType
 																)}</span
 														>
 													{/if}
 												</div>
 											</td>
 											<td>
-												{#if flight.aircraft_type_ogn}
+												{#if flight.aircraftTypeOgn}
 													<span
-														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
+														class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs"
 													>
-														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+														{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 													</span>
 												{:else}
 													<span class="text-surface-500">—</span>
@@ -350,17 +350,17 @@
 												<div class="flex flex-col gap-1">
 													<div class="flex items-center gap-1 text-sm">
 														<Clock class="h-3 w-3" />
-														{formatRelativeTime(flight.takeoff_time)}
+														{formatRelativeTime(flight.takeoffTime)}
 													</div>
-													{#if flight.takeoff_time}
+													{#if flight.takeoffTime}
 														<div class="text-surface-500-400-token text-xs">
-															{formatLocalTime(flight.takeoff_time)}
+															{formatLocalTime(flight.takeoffTime)}
 														</div>
 													{/if}
 												</div>
 											</td>
 											<td class="font-semibold">
-												{calculateFlightDuration(flight.takeoff_time, dayjs().toISOString())}
+												{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
 											</td>
 											<td>
 												<div class="flex items-center gap-2">
@@ -398,18 +398,18 @@
 							<div class="card p-4">
 								<div class="mb-3 flex items-start justify-between gap-2">
 									<div class="flex-1">
-										{#if flight.aircraft_id}
+										{#if flight.aircraftId}
 											<AircraftLink aircraft={flight} size="md" />
 										{:else}
 											<div class="font-medium">
 												{flight.registration ||
-													formatAircraftAddress(flight.device_address, flight.device_address_type)}
+													formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}
 											</div>
 										{/if}
 									</div>
-									{#if flight.aircraft_type_ogn}
-										<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-											{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+									{#if flight.aircraftTypeOgn}
+										<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
+											{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 										</span>
 									{/if}
 								</div>
@@ -420,11 +420,11 @@
 										<dd class="text-right">
 											<div class="flex items-center gap-1">
 												<Clock class="h-3 w-3" />
-												{formatRelativeTime(flight.takeoff_time)}
+												{formatRelativeTime(flight.takeoffTime)}
 											</div>
-											{#if flight.takeoff_time}
+											{#if flight.takeoffTime}
 												<div class="text-surface-500-400-token text-xs">
-													{formatLocalTime(flight.takeoff_time)}
+													{formatLocalTime(flight.takeoffTime)}
 												</div>
 											{/if}
 										</dd>
@@ -432,7 +432,7 @@
 									<div class="flex justify-between gap-4">
 										<dt class="text-surface-600-300-token">Duration</dt>
 										<dd class="font-semibold">
-											{calculateFlightDuration(flight.takeoff_time, dayjs().toISOString())}
+											{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
 										</dd>
 									</div>
 								</dl>
@@ -507,18 +507,18 @@
 										<td>
 											<div class="flex flex-col gap-1">
 												<div class="flex items-center gap-2">
-													{#if flight.aircraft_id}
+													{#if flight.aircraftId}
 														<AircraftLink aircraft={flight} size="md" />
 													{:else}
 														<span class="font-medium"
 															>{flight.registration ||
 																formatAircraftAddress(
-																	flight.device_address,
-																	flight.device_address_type
+																	flight.deviceAddress,
+																	flight.deviceAddressType
 																)}</span
 														>
 													{/if}
-													{#if flight.towed_by_aircraft_id}
+													{#if flight.towedByAircraftId}
 														<span
 															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 															title="This aircraft was towed"
@@ -531,11 +531,9 @@
 											</div>
 										</td>
 										<td>
-											{#if flight.aircraft_type_ogn}
-												<span
-													class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
-												>
-													{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+											{#if flight.aircraftTypeOgn}
+												<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
+													{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 												</span>
 											{:else}
 												<span class="text-surface-500">—</span>
@@ -545,17 +543,17 @@
 											<div class="flex flex-col gap-1">
 												<div class="flex items-center gap-1 text-sm">
 													<Clock class="h-3 w-3" />
-													{formatRelativeTime(flight.takeoff_time)}
+													{formatRelativeTime(flight.takeoffTime)}
 												</div>
-												{#if flight.takeoff_time}
+												{#if flight.takeoffTime}
 													<div class="text-surface-500-400-token text-xs">
-														{formatLocalTime(flight.takeoff_time)}
+														{formatLocalTime(flight.takeoffTime)}
 													</div>
 												{/if}
-												{#if flight.departure_airport}
+												{#if flight.departureAirport}
 													<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 														<MapPin class="h-3 w-3" />
-														{flight.departure_airport}
+														{flight.departureAirport}
 													</div>
 												{/if}
 											</div>
@@ -564,30 +562,30 @@
 											<div class="flex flex-col gap-1">
 												<div class="flex items-center gap-1 text-sm">
 													<Clock class="h-3 w-3" />
-													{formatRelativeTime(flight.landing_time)}
+													{formatRelativeTime(flight.landingTime)}
 												</div>
-												{#if flight.landing_time}
+												{#if flight.landingTime}
 													<div class="text-surface-500-400-token text-xs">
-														{formatLocalTime(flight.landing_time)}
+														{formatLocalTime(flight.landingTime)}
 													</div>
 												{/if}
-												{#if flight.arrival_airport}
+												{#if flight.arrivalAirport}
 													<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 														<MapPin class="h-3 w-3" />
-														{flight.arrival_airport}
+														{flight.arrivalAirport}
 													</div>
 												{/if}
 											</div>
 										</td>
 										<td class="font-semibold">
-											{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+											{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
 										</td>
 										<td class="font-semibold">
-											{formatDistance(flight.total_distance_meters)}
+											{formatDistance(flight.totalDistanceMeters)}
 										</td>
 										<td>
-											{#if flight.towed_by_aircraft_id}
-												<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
+											{#if flight.towedByAircraftId}
+												<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
 											{:else}
 												<span class="text-surface-500">—</span>
 											{/if}
@@ -628,15 +626,15 @@
 						<div class="card p-4">
 							<div class="mb-3 flex items-start justify-between gap-2">
 								<div class="flex-1">
-									{#if flight.aircraft_id}
+									{#if flight.aircraftId}
 										<AircraftLink aircraft={flight} size="md" />
 									{:else}
 										<div class="font-medium">
 											{flight.registration ||
-												formatAircraftAddress(flight.device_address, flight.device_address_type)}
+												formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}
 										</div>
 									{/if}
-									{#if flight.towed_by_aircraft_id}
+									{#if flight.towedByAircraftId}
 										<span
 											class="mt-1 badge flex inline-flex items-center gap-1 preset-filled-primary-500 text-xs"
 											title="This aircraft was towed"
@@ -647,9 +645,9 @@
 									{/if}
 								</div>
 								<div>
-									{#if flight.aircraft_type_ogn}
-										<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-											{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+									{#if flight.aircraftTypeOgn}
+										<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
+											{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 										</span>
 									{/if}
 								</div>
@@ -661,17 +659,17 @@
 									<dd class="text-right">
 										<div class="flex items-center gap-1">
 											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.takeoff_time)}
+											{formatRelativeTime(flight.takeoffTime)}
 										</div>
-										{#if flight.takeoff_time}
+										{#if flight.takeoffTime}
 											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.takeoff_time)}
+												{formatLocalTime(flight.takeoffTime)}
 											</div>
 										{/if}
-										{#if flight.departure_airport}
+										{#if flight.departureAirport}
 											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 												<MapPin class="h-3 w-3" />
-												{flight.departure_airport}
+												{flight.departureAirport}
 											</div>
 										{/if}
 									</dd>
@@ -681,17 +679,17 @@
 									<dd class="text-right">
 										<div class="flex items-center gap-1">
 											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.landing_time)}
+											{formatRelativeTime(flight.landingTime)}
 										</div>
-										{#if flight.landing_time}
+										{#if flight.landingTime}
 											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.landing_time)}
+												{formatLocalTime(flight.landingTime)}
 											</div>
 										{/if}
-										{#if flight.arrival_airport}
+										{#if flight.arrivalAirport}
 											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 												<MapPin class="h-3 w-3" />
-												{flight.arrival_airport}
+												{flight.arrivalAirport}
 											</div>
 										{/if}
 									</dd>
@@ -699,18 +697,18 @@
 								<div class="flex justify-between gap-4">
 									<dt class="text-surface-600-300-token">Duration</dt>
 									<dd class="font-semibold">
-										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+										{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
 									</dd>
 								</div>
 								<div class="flex justify-between gap-4">
 									<dt class="text-surface-600-300-token">Distance</dt>
-									<dd class="font-semibold">{formatDistance(flight.total_distance_meters)}</dd>
+									<dd class="font-semibold">{formatDistance(flight.totalDistanceMeters)}</dd>
 								</div>
-								{#if flight.towed_by_aircraft_id}
+								{#if flight.towedByAircraftId}
 									<div class="flex justify-between gap-4">
 										<dt class="text-surface-600-300-token">Tow Aircraft</dt>
 										<dd>
-											<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
+											<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
 										</dd>
 									</div>
 								{/if}

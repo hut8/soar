@@ -13,13 +13,19 @@
 	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Aircraft, Receiver, Airspace, AirspaceFeatureCollection } from '$lib/types';
+	import type {
+		Aircraft,
+		Receiver,
+		Airspace,
+		AirspaceFeatureCollection,
+		Fix,
+		Airport
+	} from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
 	import { browser } from '$app/environment';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Fix } from '$lib/types';
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 
@@ -28,50 +34,6 @@
 
 	// Area tracker configuration
 	const AREA_TRACKER_LIMIT_ENABLED = false;
-
-	// TypeScript interfaces for airport data
-	interface RunwayEndView {
-		ident: string | null;
-		latitude_deg: number | null;
-		longitude_deg: number | null;
-		elevation_ft: number | null;
-		heading_degt: number | null;
-		displaced_threshold_ft: number | null;
-	}
-
-	interface RunwayView {
-		id: number;
-		length_ft: number | null;
-		width_ft: number | null;
-		surface: string | null;
-		lighted: boolean;
-		closed: boolean;
-		low: RunwayEndView;
-		high: RunwayEndView;
-	}
-
-	interface AirportView {
-		id: number;
-		ident: string;
-		airport_type: string;
-		name: string;
-		latitude_deg: string | null; // BigDecimal comes as string from API
-		longitude_deg: string | null; // BigDecimal comes as string from API
-		elevation_ft: number | null;
-		continent: string | null;
-		iso_country: string | null;
-		iso_region: string | null;
-		municipality: string | null;
-		scheduled_service: boolean;
-		icao_code: string | null;
-		iata_code: string | null;
-		gps_code: string | null;
-		local_code: string | null;
-		home_link: string | null;
-		wikipedia_link: string | null;
-		keywords: string | null;
-		runways: RunwayView[];
-	}
 
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
@@ -87,7 +49,7 @@
 	let displayHeading: number = $state(0);
 
 	// Airport display variables
-	let airports: AirportView[] = [];
+	let airports: Airport[] = [];
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
 	let airportUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,7 +86,7 @@
 
 	// Airport modal state
 	let showAirportModal = $state(false);
-	let selectedAirport: AirportView | null = $state(null);
+	let selectedAirport: Airport | null = $state(null);
 
 	// Airspace modal state
 	let showAirspaceModal = $state(false);
@@ -198,8 +160,8 @@
 	}
 
 	// Helper function to calculate color based on altitude (red at 500 ft, blue at 18000+ ft)
-	function getAltitudeColor(altitude_msl_feet: number | null | undefined): string {
-		const altitude = altitude_msl_feet || 0;
+	function getAltitudeColor(altitudeMslFeet: number | null | undefined): string {
+		const altitude = altitudeMslFeet || 0;
 
 		// Clamp altitude to 500-18000 range for color calculation
 		const clampedAltitude = Math.max(500, Math.min(18000, altitude));
@@ -224,18 +186,18 @@
 			return 'rgb(156, 163, 175)'; // Gray-400
 		}
 		// Use altitude-based color for active fixes
-		return getAltitudeColor(fix.altitude_msl_feet);
+		return getAltitudeColor(fix.altitudeMslFeet);
 	}
 
 	// Helper function to format altitude with relative time and check if fix is old
 	function formatAltitudeWithTime(
-		altitude_msl_feet: number | null | undefined,
+		altitudeMslFeet: number | null | undefined,
 		timestamp: string
 	): {
 		altitudeText: string;
 		isOld: boolean;
 	} {
-		const altitudeFt = altitude_msl_feet ? `${altitude_msl_feet}ft` : '---ft';
+		const altitudeFt = altitudeMslFeet ? `${altitudeMslFeet}ft` : '---ft';
 
 		// Calculate relative time, handling edge cases
 		const fixTime = dayjs(timestamp);
@@ -834,7 +796,7 @@
 				throw new Error('Invalid response format: expected array');
 			}
 
-			airports = data.filter((airport: unknown): airport is AirportView => {
+			airports = data.filter((airport: unknown): airport is Airport => {
 				return (
 					typeof airport === 'object' &&
 					airport !== null &&
@@ -857,11 +819,11 @@
 		clearAirportMarkers();
 
 		airports.forEach((airport) => {
-			if (!airport.latitude_deg || !airport.longitude_deg) return;
+			if (!airport.latitudeDeg || !airport.longitudeDeg) return;
 
 			// Convert BigDecimal strings to numbers with validation
-			const lat = parseFloat(airport.latitude_deg);
-			const lng = parseFloat(airport.longitude_deg);
+			const lat = parseFloat(airport.latitudeDeg);
+			const lng = parseFloat(airport.longitudeDeg);
 
 			// Validate coordinates are valid numbers and within expected ranges
 			if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
@@ -1175,7 +1137,7 @@
 		clearAirspacePolygons();
 
 		airspaces.forEach((airspace) => {
-			const color = getAirspaceColor(airspace.properties.airspace_class);
+			const color = getAirspaceColor(airspace.properties.airspaceClass);
 
 			// Convert GeoJSON coordinates to Google Maps LatLng format
 			const paths: google.maps.LatLngLiteral[][] = [];
@@ -1343,7 +1305,7 @@
 	function updateAircraftMarkerFromAircraft(aircraft: Aircraft): void {
 		if (!map) return;
 
-		// Try to use latest_latitude/latest_longitude from aircraft object
+		// Try to use latestLatitude/latestLongitude from aircraft object
 		if (aircraft.latestLatitude != null && aircraft.latestLongitude != null) {
 			console.log('[MARKER] Using latest position from aircraft:', {
 				id: aircraft.id,
@@ -1354,19 +1316,19 @@
 			// Create a pseudo-fix from latest position
 			const pseudoFix: Fix = {
 				id: '', // Not needed for marker display
-				aircraft_id: aircraft.id,
-				device_address_hex: aircraft.address,
+				aircraftId: aircraft.id,
+				deviceAddressHex: aircraft.address,
 				latitude: aircraft.latestLatitude,
 				longitude: aircraft.latestLongitude,
 				timestamp: aircraft.lastFixAt || new Date().toISOString(),
-				altitude_msl_feet: undefined,
-				altitude_agl_feet: undefined,
-				track_degrees: undefined,
-				ground_speed_knots: undefined,
-				climb_fpm: undefined,
+				altitudeMslFeet: undefined,
+				altitudeAglFeet: undefined,
+				trackDegrees: undefined,
+				groundSpeedKnots: undefined,
+				climbFpm: undefined,
 				registration: aircraft.registration ?? undefined,
 				model: aircraft.aircraftModel,
-				flight_id: aircraft.activeFlightId || undefined,
+				flightId: aircraft.activeFlightId || undefined,
 				active: aircraft.activeFlightId != null
 			};
 
@@ -1390,7 +1352,7 @@
 			latestFix: {
 				lat: latestFix.latitude,
 				lng: latestFix.longitude,
-				alt: latestFix.altitude_msl_feet,
+				alt: latestFix.altitudeMslFeet,
 				timestamp: latestFix.timestamp
 			},
 			mapExists: !!map
@@ -1439,7 +1401,7 @@
 			registration: aircraft.registration,
 			address: aircraft.address,
 			position: { lat: fix.latitude, lng: fix.longitude },
-			track: fix.track_degrees
+			track: fix.trackDegrees
 		});
 
 		// Create aircraft icon with rotation based on track
@@ -1462,7 +1424,7 @@
 		`;
 
 		// Rotate icon based on track degrees (default to 0 if not available)
-		const track = fix.track_degrees || 0;
+		const track = fix.trackDegrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
 		console.log('[MARKER] Set icon rotation to:', track, 'degrees');
 
@@ -1474,8 +1436,8 @@
 
 		// Use proper device registration, fallback to address
 		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
-		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
-		// Use aircraft_model string from device, or detailed model name if available
+		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
+		// Use aircraftModel string from device, or detailed model name if available
 		const aircraftModel = aircraft.aircraftModel || null;
 
 		console.log('[MARKER] Aircraft info:', {
@@ -1575,7 +1537,7 @@
 			const markerColor = getMarkerColor(fix);
 
 			if (aircraftIcon) {
-				const track = fix.track_degrees || 0;
+				const track = fix.trackDegrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
 				aircraftIcon.style.background = markerColor;
 				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
@@ -1589,11 +1551,8 @@
 			if (tailDiv && altDiv) {
 				// Use proper device registration, fallback to address
 				const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
-				const { altitudeText, isOld } = formatAltitudeWithTime(
-					fix.altitude_msl_feet,
-					fix.timestamp
-				);
-				// Use aircraft_model string from device
+				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
+				// Use aircraftModel string from device
 				const aircraftModel = aircraft.aircraftModel || null;
 
 				// Include aircraft model after tail number if available
@@ -1628,7 +1587,7 @@
 		updateMarkerScale(markerContent, currentZoom);
 
 		// Update the marker title with full timestamp
-		const { altitudeText } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
+		const { altitudeText } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = aircraft.aircraftModel
 			? `${aircraft.registration || aircraft.address} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
@@ -1924,7 +1883,7 @@
 			console.log(`[REST] Received ${aircraft.length} aircraft with latest positions`);
 
 			// Process each aircraft and add to registry
-			// They will have latest_latitude/latest_longitude but no fixes array
+			// They will have latestLatitude/latestLongitude but no fixes array
 			for (const a of aircraft) {
 				// Register the aircraft - markers will be created from latest position
 				await aircraftRegistry.updateAircraftFromAircraftData(a);

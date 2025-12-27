@@ -150,7 +150,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/passwords do not match/i);
 
@@ -163,7 +163,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/fill in all required fields/i);
 
@@ -183,7 +183,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/at least 8 characters/i);
 
@@ -203,7 +203,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message about existing account
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/account.*already exists/i);
 

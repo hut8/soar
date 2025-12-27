@@ -51,6 +51,7 @@ fn create_location_from_fields(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftModelView {
     pub manufacturer_code: String,
     pub model_code: String,
@@ -96,6 +97,7 @@ impl From<AircraftModelRecord> for AircraftModelView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClubView {
     pub id: Uuid,
     pub name: String,
@@ -203,6 +205,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClubWithRecentFlightsView {
     #[serde(flatten)]
     pub club: ClubView,

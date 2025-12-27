@@ -4,11 +4,10 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use chrono::NaiveDate;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::actions::json_error;
-use crate::analytics::*;
+use crate::actions::{DataListResponse, DataResponse, json_error};
 use crate::analytics_cache::AnalyticsCache;
 use crate::analytics_repo::AnalyticsRepository;
 use crate::web::AppState;
@@ -54,50 +53,6 @@ pub struct AirportActivityParams {
 }
 
 // ============================================================================
-// Response Types
-// ============================================================================
-
-#[derive(Debug, Serialize)]
-pub struct FlightAnalyticsDailyResponse {
-    pub data: Vec<FlightAnalyticsDaily>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightDurationBucketResponse {
-    pub data: Vec<FlightDurationBucket>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightAnalyticsHourlyResponse {
-    pub data: Vec<FlightAnalyticsHourly>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DeviceOutliersResponse {
-    pub data: Vec<AircraftOutlier>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TopAircraftResponse {
-    pub data: Vec<TopAircraft>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ClubAnalyticsDailyResponse {
-    pub data: Vec<ClubAnalyticsDaily>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AirportActivityResponse {
-    pub data: Vec<AirportActivity>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AnalyticsSummaryResponse {
-    pub data: AnalyticsSummary,
-}
-
-// ============================================================================
 // Handler Functions
 // ============================================================================
 
@@ -119,7 +74,7 @@ pub async fn get_daily_flights(
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_daily_flights(start_date, end_date).await {
-        Ok(data) => (StatusCode::OK, Json(FlightAnalyticsDailyResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -144,7 +99,7 @@ pub async fn get_hourly_flights(
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_hourly_flights(hours).await {
-        Ok(data) => (StatusCode::OK, Json(FlightAnalyticsHourlyResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -164,7 +119,7 @@ pub async fn get_duration_distribution(State(state): State<AppState>) -> impl In
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_duration_distribution().await {
-        Ok(data) => (StatusCode::OK, Json(FlightDurationBucketResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -189,7 +144,7 @@ pub async fn get_aircraft_outliers(
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_device_outliers(threshold).await {
-        Ok(data) => (StatusCode::OK, Json(DeviceOutliersResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -219,7 +174,7 @@ pub async fn get_top_aircraft(
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_top_aircraft(limit, period_days).await {
-        Ok(data) => (StatusCode::OK, Json(TopAircraftResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -252,7 +207,7 @@ pub async fn get_club_analytics(
         .get_club_analytics(start_date, end_date, params.club_id)
         .await
     {
-        Ok(data) => (StatusCode::OK, Json(ClubAnalyticsDailyResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -286,7 +241,7 @@ pub async fn get_airport_activity(
         .get_airport_activity(start_date, end_date, limit)
         .await
     {
-        Ok(data) => (StatusCode::OK, Json(AirportActivityResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataListResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
@@ -306,7 +261,7 @@ pub async fn get_summary(State(state): State<AppState>) -> impl IntoResponse {
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
     match cache.get_summary().await {
-        Ok(data) => (StatusCode::OK, Json(AnalyticsSummaryResponse { data })).into_response(),
+        Ok(data) => (StatusCode::OK, Json(DataResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(

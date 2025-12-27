@@ -23,7 +23,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		]);
 
 		// Then fetch aircraft separately if the flight has one
-		const aircraft = flightResponse.flight.aircraft_id
+		const aircraft = flightResponse.flight.aircraftId
 			? await serverCall<Aircraft>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
 			: undefined;
 

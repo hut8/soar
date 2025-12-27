@@ -9,6 +9,7 @@ pub struct LoginResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateUserRequest {
     pub first_name: String,
     pub last_name: String,
@@ -29,6 +30,7 @@ pub struct PasswordResetRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PasswordResetConfirm {
     pub token: String,
     pub new_password: String,

@@ -233,15 +233,15 @@ export class AircraftRegistry {
 		allowApiFallback: boolean = true
 	): Promise<Aircraft | null> {
 		console.log('[REGISTRY] Adding fix to aircraft:', {
-			aircraftId: fix.aircraft_id,
-			deviceAddressHex: fix.device_address_hex,
+			aircraftId: fix.aircraftId,
+			deviceAddressHex: fix.deviceAddressHex,
 			timestamp: fix.timestamp,
 			position: { lat: fix.latitude, lng: fix.longitude }
 		});
 
-		const aircraftId = fix.aircraft_id;
+		const aircraftId = fix.aircraftId;
 		if (!aircraftId) {
-			console.warn('[REGISTRY] No aircraft_id in fix, cannot add');
+			console.warn('[REGISTRY] No aircraftId in fix, cannot add');
 			return null;
 		}
 
@@ -276,7 +276,7 @@ export class AircraftRegistry {
 				aircraft = {
 					id: aircraftId,
 					addressType: '',
-					address: fix.device_address_hex || '',
+					address: fix.deviceAddressHex || '',
 					aircraftModel: fix.model || '',
 					registration: fix.registration || null,
 					competitionNumber: '',

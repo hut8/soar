@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::users::User;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserView {
     pub id: Uuid,
     pub first_name: String,

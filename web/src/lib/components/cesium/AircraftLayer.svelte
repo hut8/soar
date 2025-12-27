@@ -208,7 +208,7 @@
 		if (event.type === 'fix_received') {
 			// Update aircraft position from real-time fix
 			const fix = event.fix;
-			const aircraftId = fix.aircraft_id;
+			const aircraftId = fix.aircraftId;
 
 			if (!aircraftId) return;
 
@@ -219,7 +219,7 @@
 				aircraft = {
 					id: aircraftId,
 					addressType: '',
-					address: fix.device_address_hex || '',
+					address: fix.deviceAddressHex || '',
 					aircraftModel: fix.model || '',
 					registration: fix.registration || null,
 					competitionNumber: '',

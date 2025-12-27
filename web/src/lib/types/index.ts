@@ -1,5 +1,25 @@
 // Core data types for the application
 
+// API Response Wrapper Types
+export interface DataResponse<T> {
+	data: T;
+}
+
+export interface DataListResponse<T> {
+	data: T[];
+}
+
+export interface PaginationMetadata {
+	page: number;
+	totalPages: number;
+	totalCount: number;
+}
+
+export interface PaginatedDataResponse<T> {
+	data: T[];
+	metadata: PaginationMetadata;
+}
+
 export interface Point {
 	latitude: number;
 	longitude: number;
@@ -11,28 +31,28 @@ export interface Location {
 	street2?: string;
 	city?: string;
 	state?: string;
-	zip_code?: string;
-	country_code?: string;
+	zipCode?: string;
+	countryCode?: string;
 	geolocation?: Point;
-	created_at: string;
-	updated_at: string;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface Club {
 	id: string;
 	name: string;
-	home_base_airport_id?: number;
-	home_base_airport_ident?: string;
+	homeBaseAirportId?: number;
+	homeBaseAirportIdent?: string;
 	location?: Location;
-	created_at: string;
-	updated_at: string;
-	similarity_score?: number;
-	distance_meters?: number;
+	createdAt: string;
+	updatedAt: string;
+	similarityScore?: number;
+	distanceMeters?: number;
 }
 
-// For backward compatibility, extend Club with is_soaring for club selector
+// For backward compatibility, extend Club with isSoaring for club selector
 export interface ClubWithSoaring extends Club {
-	is_soaring?: boolean;
+	isSoaring?: boolean;
 }
 
 export interface ComboboxData {
@@ -43,17 +63,17 @@ export interface ComboboxData {
 
 export interface RunwayEnd {
 	ident: string | null;
-	latitude_deg: number | null;
-	longitude_deg: number | null;
-	elevation_ft: number | null;
-	heading_degt: number | null;
-	displaced_threshold_ft: number | null;
+	latitudeDeg: number | null;
+	longitudeDeg: number | null;
+	elevationFt: number | null;
+	headingDegt: number | null;
+	displacedThresholdFt: number | null;
 }
 
 export interface Runway {
 	id: number;
-	length_ft: number | null;
-	width_ft: number | null;
+	lengthFt: number | null;
+	widthFt: number | null;
 	surface: string | null;
 	lighted: boolean;
 	closed: boolean;
@@ -64,85 +84,85 @@ export interface Runway {
 export interface Airport {
 	id: number;
 	ident: string;
-	airport_type: string;
+	airportType: string;
 	name: string;
-	latitude_deg: string | null; // BigDecimal serialized as string
-	longitude_deg: string | null; // BigDecimal serialized as string
-	elevation_ft: number | null;
+	latitudeDeg: string | null; // BigDecimal serialized as string
+	longitudeDeg: string | null; // BigDecimal serialized as string
+	elevationFt: number | null;
 	continent: string | null;
-	iso_country: string | null;
-	iso_region: string | null;
+	isoCountry: string | null;
+	isoRegion: string | null;
 	municipality: string | null;
-	scheduled_service: boolean;
-	icao_code: string | null;
-	iata_code: string | null;
-	gps_code: string | null;
-	local_code: string | null;
-	home_link: string | null;
-	wikipedia_link: string | null;
+	scheduledService: boolean;
+	icaoCode: string | null;
+	iataCode: string | null;
+	gpsCode: string | null;
+	localCode: string | null;
+	homeLink: string | null;
+	wikipediaLink: string | null;
 	keywords: string | null;
 	runways: Runway[];
 }
 
 // Aircraft registration information
 export interface AircraftRegistration {
-	n_number: string;
-	serial_number: string;
-	mfr_mdl_code: string;
-	eng_mfr_mdl: string;
-	year_mfr: number;
-	type_registrant: number;
+	nNumber: string;
+	serialNumber: string;
+	mfrMdlCode: string;
+	engMfrMdl: string;
+	yearMfr: number;
+	typeRegistrant: number;
 	name: string;
-	registrant_name: string;
+	registrantName: string;
 	street: string;
 	street2: string;
 	city: string;
 	state: string;
-	zip_code: string;
+	zipCode: string;
 	region: string;
 	county: string;
 	country: string;
-	last_action_date: string;
-	cert_issue_date: string;
+	lastActionDate: string;
+	certIssueDate: string;
 	certification: string;
-	type_aircraft: number;
-	type_engine: number;
-	status_code: string;
-	mode_s_code: string;
-	fract_owner: string;
-	air_worth_date: string;
-	other_names_1: string;
-	other_names_2: string;
-	other_names_3: string;
-	other_names_4: string;
-	other_names_5: string;
-	expiration_date: string;
-	unique_id: string;
-	kit_mfr: string;
-	kit_model: string;
-	mode_s_code_hex: string;
-	transponder_code: number | null; // Mode S code as decimal number
-	created_at: string;
-	updated_at: string;
+	typeAircraft: number;
+	typeEngine: number;
+	statusCode: string;
+	modeSCode: string;
+	fractOwner: string;
+	airWorthDate: string;
+	otherNames1: string;
+	otherNames2: string;
+	otherNames3: string;
+	otherNames4: string;
+	otherNames5: string;
+	expirationDate: string;
+	uniqueId: string;
+	kitMfr: string;
+	kitModel: string;
+	modeSCodeHex: string;
+	transponderCode: number | null; // Mode S code as decimal number
+	createdAt: string;
+	updatedAt: string;
 }
 
 // Aircraft model information
 export interface AircraftModel {
-	manufacturer_code: string;
-	model_code: string;
-	series_code: string;
-	manufacturer_name: string;
-	model_name: string;
-	aircraft_type: string | null;
-	engine_type: string | null;
-	aircraft_category: string | null;
-	builder_certification: string | null;
-	number_of_engines: number | null;
-	number_of_seats: number | null;
-	weight_class: string | null;
-	cruising_speed: number | null;
-	type_certificate_data_sheet: string | null;
-	type_certificate_data_holder: string | null;
+	manufacturerCode: string;
+	modelCode: string;
+	seriesCode: string;
+	manufacturerName: string;
+	modelName: string;
+	aircraftType: string | null;
+	engineType: string | null;
+	aircraftCategory: string | null;
+	builderCertification: string | null;
+	numberOfEngines: number | null;
+	numberOfSeats: number | null;
+	weightClass: string | null;
+	cruisingSpeed: number | null;
+	typeCertificateDataSheet: string | null;
+	typeCertificateDataHolder: string | null;
 }
 
 // Aircraft interface matching backend AircraftView exactly
@@ -178,112 +198,112 @@ export interface Aircraft {
 
 // AircraftWithRegistration extends Aircraft with optional aircraft registration and detailed model information
 export interface AircraftWithRegistration extends Aircraft {
-	aircraft_registration?: AircraftRegistration;
+	aircraftRegistration?: AircraftRegistration;
 	// Detailed aircraft model information from FAA database
-	aircraft_model_details?: AircraftModel;
+	aircraftModelDetails?: AircraftModel;
 }
 
 export interface Fix {
 	id: string;
-	aircraft_id?: string;
-	device_address_hex?: string;
+	aircraftId?: string;
+	deviceAddressHex?: string;
 	timestamp: string;
 	latitude: number;
 	longitude: number;
-	altitude_msl_feet?: number;
-	altitude_agl_feet?: number;
-	track_degrees?: number;
-	ground_speed_knots?: number;
-	climb_fpm?: number;
-	turn_rate_rot?: number;
-	snr_db?: number;
+	altitudeMslFeet?: number;
+	altitudeAglFeet?: number;
+	trackDegrees?: number;
+	groundSpeedKnots?: number;
+	climbFpm?: number;
+	turnRateRot?: number;
+	snrDb?: number;
 	registration?: string;
 	model?: string;
-	flight_id?: string;
+	flightId?: string;
 	active: boolean;
-	raw_packet?: string; // Raw APRS packet data (joined from aprs_messages table)
+	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 }
 
 export interface FixesResponse {
 	fixes: Fix[];
 	page: number;
-	total_pages: number;
+	totalPages: number;
 }
 
 // User authentication and profile (now includes pilot fields)
 export interface User {
 	id: string;
-	first_name: string;
-	last_name: string;
+	firstName: string;
+	lastName: string;
 	email?: string | null; // Nullable - pilots without login don't have email
-	is_admin: boolean;
-	club_id?: string;
-	email_verified: boolean;
-	created_at: string;
-	updated_at: string;
+	isAdmin: boolean;
+	clubId?: string;
+	emailVerified: boolean;
+	createdAt: string;
+	updatedAt: string;
 	settings: Record<string, unknown>;
 	// Pilot qualification fields
-	is_licensed: boolean;
-	is_instructor: boolean;
-	is_tow_pilot: boolean;
-	is_examiner: boolean;
+	isLicensed: boolean;
+	isInstructor: boolean;
+	isTowPilot: boolean;
+	isExaminer: boolean;
 	// Derived fields
-	can_login: boolean; // True if user has email and password
-	is_pilot: boolean; // True if any pilot qualification is true
+	canLogin: boolean; // True if user has email and password
+	isPilot: boolean; // True if any pilot qualification is true
 }
 
 // Flight interface matching backend FlightView
 export interface Flight {
 	id: string;
-	aircraft_id?: string; // UUID foreign key to aircraft table
-	device_address: string; // Hex format like "39D304" - kept for compatibility
-	device_address_type: string; // F, O, I, or empty string - kept for compatibility
-	takeoff_time?: string; // ISO datetime string - null for flights first seen airborne
-	landing_time?: string; // ISO datetime string - null for flights in progress
-	timed_out_at?: string; // ISO datetime string when flight timed out
+	aircraftId?: string; // UUID foreign key to aircraft table
+	deviceAddress: string; // Hex format like "39D304"
+	deviceAddressType: string; // F, O, I, or empty string
+	takeoffTime?: string; // ISO datetime string - null for flights first seen airborne
+	landingTime?: string; // ISO datetime string - null for flights in progress
+	timedOutAt?: string; // ISO datetime string when flight timed out
 	state: 'active' | 'complete' | 'timed_out'; // Flight state
-	duration_seconds?: number; // Duration in seconds (null if takeoff_time or landing_time is null)
-	departure_airport?: string; // Airport identifier
-	departure_airport_id?: number; // Airport ID in database
-	departure_airport_country?: string; // Country code
-	arrival_airport?: string; // Airport identifier
-	arrival_airport_id?: number; // Airport ID in database
-	arrival_airport_country?: string; // Country code
-	towed_by_aircraft_id?: string; // UUID of towplane aircraft that towed this glider
-	towed_by_flight_id?: string; // UUID of towplane flight that towed this glider
-	club_id?: string; // UUID of club that owns the aircraft
-	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
-	landing_altitude_offset_ft?: number; // Altitude offset at landing
-	takeoff_runway_ident?: string; // Takeoff runway identifier
-	landing_runway_ident?: string; // Landing runway identifier
-	total_distance_meters?: number; // Total distance flown in meters
-	maximum_displacement_meters?: number; // Maximum displacement from takeoff point
-	runways_inferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
-	created_at: string; // ISO datetime string
-	updated_at: string; // ISO datetime string
+	durationSeconds?: number; // Duration in seconds (null if takeoffTime or landingTime is null)
+	departureAirport?: string; // Airport identifier
+	departureAirportId?: number; // Airport ID in database
+	departureAirportCountry?: string; // Country code
+	arrivalAirport?: string; // Airport identifier
+	arrivalAirportId?: number; // Airport ID in database
+	arrivalAirportCountry?: string; // Country code
+	towedByAircraftId?: string; // UUID of towplane aircraft that towed this glider
+	towedByFlightId?: string; // UUID of towplane flight that towed this glider
+	clubId?: string; // UUID of club that owns the aircraft
+	takeoffAltitudeOffsetFt?: number; // Altitude offset at takeoff
+	landingAltitudeOffsetFt?: number; // Altitude offset at landing
+	takeoffRunwayIdent?: string; // Takeoff runway identifier
+	landingRunwayIdent?: string; // Landing runway identifier
+	totalDistanceMeters?: number; // Total distance flown in meters
+	maximumDisplacementMeters?: number; // Maximum displacement from takeoff point
+	runwaysInferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
+	createdAt: string; // ISO datetime string
+	updatedAt: string; // ISO datetime string
 	// Aircraft information (merged into FlightView from AircraftInfo)
-	aircraft_model?: string;
+	aircraftModel?: string;
 	registration?: string;
-	aircraft_type_ogn?: string;
-	aircraft_country_code?: string;
+	aircraftTypeOgn?: string;
+	aircraftCountryCode?: string;
 	// Latest fix information (for active flights)
-	latest_altitude_msl_feet: number | null;
-	latest_altitude_agl_feet: number | null;
-	latest_fix_timestamp: string | null;
+	latestAltitudeMslFeet: number | null;
+	latestAltitudeAglFeet: number | null;
+	latestFixTimestamp: string | null;
 	// Navigation to previous/next flights for the same aircraft (chronologically by takeoff time)
-	previous_flight_id?: string;
-	next_flight_id?: string;
+	previousFlightId?: string;
+	nextFlightId?: string;
 	// Flight callsign (from APRS packets)
 	callsign?: string;
 }
 
 export interface WatchlistEntry {
-	user_id: string;
-	aircraft_id: string;
-	send_email: boolean;
-	created_at: string;
-	updated_at: string;
+	userId: string;
+	aircraftId: string;
+	sendEmail: boolean;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface WatchlistEntryWithAircraft extends WatchlistEntry {
@@ -297,18 +317,18 @@ export interface Receiver {
 	description: string | null;
 	contact: string | null;
 	email: string | null;
-	ogn_db_country: string | null;
+	ognDbCountry: string | null;
 	latitude: number | null;
 	longitude: number | null;
-	street_address: string | null;
+	streetAddress: string | null;
 	city: string | null;
 	region: string | null;
 	country: string | null;
-	postal_code: string | null;
-	created_at: string;
-	updated_at: string;
-	latest_packet_at: string | null;
-	from_ogn_db: boolean;
+	postalCode: string | null;
+	createdAt: string;
+	updatedAt: string;
+	latestPacketAt: string | null;
+	fromOgnDb: boolean;
 }
 
 // Airspace interface - GeoJSON Feature format
@@ -320,15 +340,15 @@ export interface Airspace {
 	};
 	properties: {
 		id: string;
-		openaip_id: string;
+		openaipId: string;
 		name: string;
-		airspace_class: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
-		airspace_type: string;
-		lower_limit: string;
-		upper_limit: string;
+		airspaceClass: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
+		airspaceType: string;
+		lowerLimit: string;
+		upperLimit: string;
 		remarks: string | null;
-		country_code: string | null;
-		activity_type: string | null;
+		countryCode: string | null;
+		activityType: string | null;
 	};
 }
 
@@ -340,16 +360,16 @@ export interface AirspaceFeatureCollection {
 
 // Coverage map - H3 hexagonal coverage visualization
 export interface CoverageHexProperties {
-	h3_index: string;
+	h3Index: string;
 	resolution: number;
-	receiver_id: string;
-	fix_count: number;
-	first_seen_at: string;
-	last_seen_at: string;
-	min_altitude_msl_feet: number | null;
-	max_altitude_msl_feet: number | null;
-	avg_altitude_msl_feet: number | null;
-	coverage_hours: number;
+	receiverId: string;
+	fixCount: number;
+	firstSeenAt: string;
+	lastSeenAt: string;
+	minAltitudeMslFeet: number | null;
+	maxAltitudeMslFeet: number | null;
+	avgAltitudeMslFeet: number | null;
+	coverageHours: number;
 }
 
 export interface CoverageHexFeature {

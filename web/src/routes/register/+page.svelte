@@ -46,11 +46,11 @@
 
 		try {
 			await authApi.register({
-				first_name: firstName,
-				last_name: lastName,
+				firstName: firstName,
+				lastName: lastName,
 				email,
 				password,
-				club_id: clubId || undefined
+				clubId: clubId || undefined
 			});
 
 			const message = 'Registration successful. Please check your email to verify your account.';

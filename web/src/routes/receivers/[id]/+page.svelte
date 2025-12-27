@@ -23,7 +23,7 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Aircraft, Receiver, Fix, FixesResponse } from '$lib/types';
+	import type { Aircraft, Receiver, Fix, PaginatedDataResponse, DataResponse } from '$lib/types';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
@@ -46,24 +46,12 @@
 		raw_data: string;
 	}
 
-	interface StatusesResponse {
-		statuses: ReceiverStatus[];
-		page: number;
-		total_pages: number;
-	}
-
 	interface RawMessage {
 		id: string;
-		raw_message: string;
-		received_at: string;
-		receiver_id: string;
+		rawMessage: string;
+		receivedAt: string;
+		receiverId: string;
 		unparsed: string | null;
-	}
-
-	interface RawMessagesResponse {
-		messages: RawMessage[];
-		page: number;
-		total_pages: number;
 	}
 
 	interface AprsTypeCount {
@@ -168,7 +156,8 @@
 		error = '';
 
 		try {
-			receiver = await serverCall<Receiver>(`/receivers/${receiverId}`);
+			const response = await serverCall<DataResponse<Receiver>>(`/receivers/${receiverId}`);
+			receiver = response.data;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receiver: ${errorMessage}`;
@@ -183,11 +172,11 @@
 		fixesError = '';
 
 		try {
-			const response = await serverCall<FixesResponse>(
+			const response = await serverCall<PaginatedDataResponse<Fix>>(
 				`/receivers/${receiverId}/fixes?page=${fixesPage}&per_page=100`
 			);
-			fixes = response.fixes || [];
-			fixesTotalPages = response.total_pages || 1;
+			fixes = response.data || [];
+			fixesTotalPages = response.metadata.totalPages || 1;
 
 			// Fetch aircraft information for the fixes
 			await loadAircraftForFixes(fixes);
@@ -203,7 +192,7 @@
 
 	async function loadAircraftForFixes(fixesList: Fix[]) {
 		// Extract unique aircraft IDs from fixes
-		const aircraftIds = [...new Set(fixesList.map((fix) => fix.aircraft_id).filter(Boolean))];
+		const aircraftIds = [...new Set(fixesList.map((fix) => fix.aircraftId).filter(Boolean))];
 
 		if (aircraftIds.length === 0) return;
 
@@ -234,11 +223,11 @@
 		statusesError = '';
 
 		try {
-			const response = await serverCall<StatusesResponse>(
+			const response = await serverCall<PaginatedDataResponse<ReceiverStatus>>(
 				`/receivers/${receiverId}/statuses?page=${statusesPage}&per_page=100`
 			);
-			statuses = response.statuses || [];
-			statusesTotalPages = response.total_pages || 1;
+			statuses = response.data || [];
+			statusesTotalPages = response.metadata.totalPages || 1;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			statusesError = `Failed to load statuses: ${errorMessage}`;
@@ -309,11 +298,11 @@
 		rawMessagesError = '';
 
 		try {
-			const response = await serverCall<RawMessagesResponse>(
+			const response = await serverCall<PaginatedDataResponse<RawMessage>>(
 				`/receivers/${receiverId}/raw-messages?page=${rawMessagesPage}&per_page=100`
 			);
-			rawMessages = response.messages || [];
-			rawMessagesTotalPages = response.total_pages || 1;
+			rawMessages = response.data || [];
+			rawMessagesTotalPages = response.metadata.totalPages || 1;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			rawMessagesError = `Failed to load raw messages: ${errorMessage}`;
@@ -472,7 +461,7 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
-							{#if receiver.from_ogn_db}
+							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
 						</div>
@@ -481,8 +470,8 @@
 						{/if}
 					</div>
 					<div class="text-surface-500-400-token text-sm">
-						<div>Last heard: {formatRelativeTime(receiver.updated_at)}</div>
-						<div class="text-xs">Added: {formatDateTime(receiver.created_at)}</div>
+						<div>Last heard: {formatRelativeTime(receiver.updatedAt)}</div>
+						<div class="text-xs">Added: {formatDateTime(receiver.createdAt)}</div>
 					</div>
 				</div>
 			</div>
@@ -587,9 +576,9 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Updated</p>
-									<p class="text-sm">{formatDateTime(receiver.updated_at)}</p>
+									<p class="text-sm">{formatDateTime(receiver.updatedAt)}</p>
 									<p class="text-surface-500-400-token text-xs">
-										{formatRelativeTime(receiver.updated_at)}
+										{formatRelativeTime(receiver.updatedAt)}
 									</p>
 								</div>
 							</div>
@@ -1020,16 +1009,16 @@
 												{#each rawMessages as message (message.id)}
 													<tr>
 														<td class="text-xs" style="min-width: 150px;">
-															<div>{formatDateTime(message.received_at)}</div>
+															<div>{formatDateTime(message.receivedAt)}</div>
 															<div class="text-surface-500-400-token">
-																{formatRelativeTime(message.received_at)}
+																{formatRelativeTime(message.receivedAt)}
 															</div>
 														</td>
 														<td
 															class="font-mono text-xs"
 															style="max-width: 600px; word-break: break-all;"
 														>
-															{message.raw_message}
+															{message.rawMessage}
 														</td>
 														<td class="font-mono text-xs">
 															{message.unparsed || '—'}
@@ -1047,10 +1036,10 @@
 										<div class="card p-4">
 											<div class="mb-3">
 												<div class="text-xs font-semibold">
-													{formatDateTime(message.received_at)}
+													{formatDateTime(message.receivedAt)}
 												</div>
 												<div class="text-surface-500-400-token text-xs">
-													{formatRelativeTime(message.received_at)}
+													{formatRelativeTime(message.receivedAt)}
 												</div>
 											</div>
 
@@ -1058,7 +1047,7 @@
 												<div>
 													<div class="text-surface-600-300-token mb-1 text-xs">Raw Message</div>
 													<div class="overflow-x-auto font-mono text-xs break-all">
-														{message.raw_message}
+														{message.rawMessage}
 													</div>
 												</div>
 
@@ -1169,20 +1158,18 @@
 															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 														</td>
 														<td
-															>{fix.altitude_msl_feet !== null &&
-															fix.altitude_msl_feet !== undefined
-																? `${fix.altitude_msl_feet} ft`
+															>{fix.altitudeMslFeet !== null && fix.altitudeMslFeet !== undefined
+																? `${fix.altitudeMslFeet} ft`
 																: '—'}</td
 														>
 														<td
-															>{fix.ground_speed_knots !== null &&
-															fix.ground_speed_knots !== undefined
-																? `${fix.ground_speed_knots.toFixed(0)} kt`
+															>{fix.groundSpeedKnots !== null && fix.groundSpeedKnots !== undefined
+																? `${fix.groundSpeedKnots.toFixed(0)} kt`
 																: '—'}</td
 														>
 														<td
-															>{fix.snr_db !== null && fix.snr_db !== undefined
-																? `${fix.snr_db.toFixed(1)} dB`
+															>{fix.snrDb !== null && fix.snrDb !== undefined
+																? `${fix.snrDb.toFixed(1)} dB`
 																: '—'}</td
 														>
 													</tr>
@@ -1236,24 +1223,24 @@
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Altitude</dt>
 													<dd class="font-medium">
-														{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
-															? `${fix.altitude_msl_feet} ft`
+														{fix.altitudeMslFeet !== null && fix.altitudeMslFeet !== undefined
+															? `${fix.altitudeMslFeet} ft`
 															: '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Speed</dt>
 													<dd class="font-medium">
-														{fix.ground_speed_knots !== null && fix.ground_speed_knots !== undefined
-															? `${fix.ground_speed_knots.toFixed(0)} kt`
+														{fix.groundSpeedKnots !== null && fix.groundSpeedKnots !== undefined
+															? `${fix.groundSpeedKnots.toFixed(0)} kt`
 															: '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">SNR</dt>
 													<dd class="font-medium">
-														{fix.snr_db !== null && fix.snr_db !== undefined
-															? `${fix.snr_db.toFixed(1)} dB`
+														{fix.snrDb !== null && fix.snrDb !== undefined
+															? `${fix.snrDb.toFixed(1)} dB`
 															: '—'}
 													</dd>
 												</div>

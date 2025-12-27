@@ -39,6 +39,7 @@ pub struct NewReceiverCoverageH3 {
 
 /// GeoJSON Feature for H3 hex (API response)
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CoverageHexFeature {
     #[serde(rename = "type")]
     pub feature_type: String, // Always "Feature"
@@ -48,6 +49,7 @@ pub struct CoverageHexFeature {
 
 /// Properties for coverage hex feature
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CoverageHexProperties {
     pub h3_index: String, // H3 index as hex string for frontend
     pub resolution: i16,

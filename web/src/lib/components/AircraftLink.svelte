@@ -41,23 +41,23 @@
 	// Get aircraft ID and title
 	const id = $derived(
 		aircraftId ||
-			('aircraft_id' in (aircraft || {}) ? (aircraft as Flight)?.aircraft_id : aircraft!.id) ||
+			('aircraftId' in (aircraft || {}) ? (aircraft as Flight)?.aircraftId : aircraft!.id) ||
 			''
 	);
 
 	const title = $derived(() => {
 		if (!aircraft) return '';
 
-		// Check if this is a Flight object (has aircraft_id instead of id)
-		if ('aircraft_id' in aircraft) {
+		// Check if this is a Flight object (has aircraftId instead of id)
+		if ('aircraftId' in aircraft) {
 			const flight = aircraft as Flight;
 			// Map Flight (snake_case) fields to getAircraftTitle's expected format (camelCase)
 			return getAircraftTitle({
 				registration: flight.registration,
-				aircraftModel: flight.aircraft_model,
+				aircraftModel: flight.aircraftModel,
 				competitionNumber: null,
-				addressType: flight.device_address_type || '',
-				address: flight.device_address || ''
+				addressType: flight.deviceAddressType || '',
+				address: flight.deviceAddress || ''
 			});
 		}
 

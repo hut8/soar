@@ -11,7 +11,7 @@ use crate::clubs_repo::ClubsRepository;
 use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::AirportView, views::ClubView};
+use super::{DataListResponse, DataResponse, json_error, views::AirportView, views::ClubView};
 
 #[derive(Debug, Deserialize)]
 pub struct AirportSearchParams {
@@ -47,7 +47,7 @@ pub async fn get_airport_by_id(
             };
 
             let airport_view = AirportView::with_runways(airport, runways);
-            Json(airport_view).into_response()
+            Json(DataResponse { data: airport_view }).into_response()
         }
         Ok(None) => json_error(
             StatusCode::NOT_FOUND,
@@ -116,7 +116,10 @@ pub async fn search_airports(
                     airport_views.push(AirportView::with_runways(airport, runways));
                 }
 
-                Json(airport_views).into_response()
+                Json(DataListResponse {
+                    data: airport_views,
+                })
+                .into_response()
             }
             Err(e) => {
                 error!("Failed to get airports in bounding box: {}", e);
@@ -220,7 +223,7 @@ pub async fn get_clubs_by_airport(
     match clubs_repo.get_clubs_by_airport(airport_id).await {
         Ok(clubs) => {
             let club_views: Vec<ClubView> = clubs.into_iter().map(|club| club.into()).collect();
-            Json(club_views).into_response()
+            Json(DataListResponse { data: club_views }).into_response()
         }
         Err(e) => {
             error!("Failed to get clubs for airport {}: {}", airport_id, e);

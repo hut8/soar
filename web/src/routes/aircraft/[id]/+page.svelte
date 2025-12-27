@@ -26,7 +26,10 @@
 		AircraftModel,
 		Fix,
 		Flight,
-		Club
+		Club,
+		DataResponse,
+		DataListResponse,
+		PaginatedDataResponse
 	} from '$lib/types';
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
@@ -49,21 +52,10 @@
 	dayjs.extend(utc);
 	dayjs.extend(relativeTime);
 
-	interface FixesResponse {
-		fixes: Fix[];
-		total: number;
-		page: number;
-		per_page: number;
-		total_pages: number;
-	}
-
-	interface FlightsResponse {
-		flights: Flight[];
-		total: number;
-		page: number;
-		per_page: number;
-		total_pages: number;
-	}
+	// Local interfaces match backend paginated responses
+	// Backend returns: { data: Fix[], metadata: { page, totalPages, totalCount } }
+	type FixesResponse = PaginatedDataResponse<Fix>;
+	type FlightsResponse = PaginatedDataResponse<Flight>;
 
 	let aircraft: Aircraft | null = null;
 	let aircraftRegistration: AircraftRegistration | null = null;
@@ -85,8 +77,8 @@
 	let savingClub = false;
 
 	$: aircraftId = $page.params.id || '';
-	$: isAdmin = $auth.user?.is_admin === true;
-	$: userClubId = $auth.user?.club_id;
+	$: isAdmin = $auth.user?.isAdmin === true;
+	$: userClubId = $auth.user?.clubId;
 	$: isInWatchlist = watchlist.has(aircraftId);
 
 	function extractErrorMessage(err: unknown): string {
@@ -122,8 +114,8 @@
 
 		try {
 			// Load aircraft data
-			const aircraftData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			aircraft = aircraftData;
+			const aircraftResponse = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
+			aircraft = aircraftResponse.data;
 
 			// Initialize selected club ID if aircraft has one
 			if (aircraft.clubId) {
@@ -131,15 +123,17 @@
 			}
 
 			// Load aircraft registration and model data in parallel
-			const [registration, model] = await Promise.all([
-				serverCall<AircraftRegistration>(`/aircraft/${aircraftId}/aircraft/registration`).catch(
+			const [registrationResponse, modelResponse] = await Promise.all([
+				serverCall<DataResponse<AircraftRegistration>>(
+					`/aircraft/${aircraftId}/aircraft/registration`
+				).catch(() => null),
+				serverCall<DataResponse<AircraftModel>>(`/aircraft/${aircraftId}/aircraft/model`).catch(
 					() => null
-				),
-				serverCall<AircraftModel>(`/aircraft/${aircraftId}/aircraft/model`).catch(() => null)
+				)
 			]);
 
-			aircraftRegistration = registration;
-			aircraftModel = model;
+			aircraftRegistration = registrationResponse?.data || null;
+			aircraftModel = modelResponse?.data || null;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load aircraft: ${errorMessage}`;
@@ -159,14 +153,14 @@
 			const response = await serverCall<FixesResponse>(`/aircraft/${aircraftId}/fixes`, {
 				params: {
 					page,
-					per_page: 50,
+					perPage: 50,
 					after,
 					...(hideInactiveFixes && { active: true })
 				}
 			});
-			fixes = response.fixes;
-			fixesPage = response.page;
-			fixesTotalPages = response.total_pages;
+			fixes = response.data;
+			fixesPage = response.metadata.page;
+			fixesTotalPages = response.metadata.totalPages;
 		} catch (err) {
 			console.error('Failed to load fixes:', err);
 		} finally {
@@ -183,17 +177,17 @@
 		loadingFlights = true;
 		try {
 			const response = await serverCall<FlightsResponse>(
-				`/aircraft/${aircraftId}/flights?page=${page}&per_page=100`
+				`/aircraft/${aircraftId}/flights?page=${page}&perPage=100`
 			);
-			flights = response.flights || [];
-			// Sort by takeoff_time descending (most recent first)
+			flights = response.data || [];
+			// Sort by takeoffTime descending (most recent first)
 			flights.sort((a, b) => {
-				const timeA = a.takeoff_time ? new Date(a.takeoff_time).getTime() : 0;
-				const timeB = b.takeoff_time ? new Date(b.takeoff_time).getTime() : 0;
+				const timeA = a.takeoffTime ? new Date(a.takeoffTime).getTime() : 0;
+				const timeB = b.takeoffTime ? new Date(b.takeoffTime).getTime() : 0;
 				return timeB - timeA;
 			});
-			flightsPage = response.page || 1;
-			flightsTotalPages = response.total_pages || 1;
+			flightsPage = response.metadata.page || 1;
+			flightsTotalPages = response.metadata.totalPages || 1;
 		} catch (err) {
 			console.error('Failed to load flights:', err);
 			flights = [];
@@ -208,8 +202,8 @@
 
 	async function loadClubs() {
 		try {
-			const response = await serverCall<{ clubs: Club[] }>('/clubs');
-			clubs = response.clubs || [];
+			const response = await serverCall<DataListResponse<Club>>('/clubs');
+			clubs = response.data || [];
 		} catch (err) {
 			console.error('Failed to load clubs:', err);
 		}
@@ -228,7 +222,7 @@
 		try {
 			await serverCall(`/aircraft/${aircraftId}/club`, {
 				method: 'PUT',
-				body: JSON.stringify({ club_id: selectedClubId || null })
+				body: JSON.stringify({ clubId: selectedClubId || null })
 			});
 
 			toaster.success({ title: 'Aircraft club assignment updated successfully' });
@@ -471,7 +465,7 @@
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
 									<p class="font-mono font-semibold">
-										{aircraft.registration || aircraftRegistration.n_number || 'Unknown'}
+										{aircraft.registration || aircraftRegistration.nNumber || 'Unknown'}
 									</p>
 								</div>
 							</div>
@@ -481,7 +475,7 @@
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
 									<p class="font-mono">
-										{formatTransponderCode(aircraftRegistration.transponder_code)}
+										{formatTransponderCode(aircraftRegistration.transponderCode)}
 									</p>
 								</div>
 							</div>
@@ -490,7 +484,7 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
-									<p>{aircraftRegistration.year_mfr}</p>
+									<p>{aircraftRegistration.yearMfr}</p>
 								</div>
 							</div>
 
@@ -498,7 +492,7 @@
 								<User class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
-									<p>{aircraftRegistration.registrant_name}</p>
+									<p>{aircraftRegistration.registrantName}</p>
 								</div>
 							</div>
 
@@ -506,7 +500,7 @@
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
-									<p class="font-mono">{aircraftRegistration.serial_number}</p>
+									<p class="font-mono">{aircraftRegistration.serialNumber}</p>
 								</div>
 							</div>
 
@@ -515,9 +509,9 @@
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
 									<p>
-										{getStatusCodeDescription(aircraftRegistration.status_code)}
+										{getStatusCodeDescription(aircraftRegistration.statusCode)}
 										<span class="ml-1 text-xs text-surface-500"
-											>({aircraftRegistration.status_code})</span
+											>({aircraftRegistration.statusCode})</span
 										>
 									</p>
 								</div>
@@ -527,7 +521,7 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
-									<p>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</p>
+									<p>{dayjs(aircraftRegistration.certIssueDate).format('YYYY-MM-DD')}</p>
 								</div>
 							</div>
 
@@ -535,7 +529,7 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
-									<p>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</p>
+									<p>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</p>
 								</div>
 							</div>
 
@@ -543,7 +537,7 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
-									<p>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</p>
+									<p>{dayjs(aircraftRegistration.airWorthDate).format('YYYY-MM-DD')}</p>
 								</div>
 							</div>
 
@@ -551,7 +545,7 @@
 								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Last Action Date</p>
-									<p>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</p>
+									<p>{dayjs(aircraftRegistration.lastActionDate).format('YYYY-MM-DD')}</p>
 								</div>
 							</div>
 						</div>
@@ -588,29 +582,29 @@
 								<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
 									<div>
 										<dt class="text-surface-600-300-token mb-1 font-medium">Manufacturer</dt>
-										<dd class="font-semibold">{aircraftModel.manufacturer_name}</dd>
+										<dd class="font-semibold">{aircraftModel.manufacturerName}</dd>
 									</div>
 									<div>
 										<dt class="text-surface-600-300-token mb-1 font-medium">Model</dt>
-										<dd class="font-semibold">{aircraftModel.model_name}</dd>
+										<dd class="font-semibold">{aircraftModel.modelName}</dd>
 									</div>
-									{#if aircraftModel.aircraft_type}
+									{#if aircraftModel.aircraftType}
 										<div>
 											<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
-											<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
+											<dd>{formatTitleCase(aircraftModel.aircraftType)}</dd>
 										</div>
 									{/if}
-									{#if aircraftModel.aircraft_category}
+									{#if aircraftModel.aircraftCategory}
 										<div>
 											<dt class="text-surface-600-300-token mb-1 font-medium">Category</dt>
-											<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
+											<dd>{formatTitleCase(aircraftModel.aircraftCategory)}</dd>
 										</div>
 									{/if}
 								</dl>
 							</div>
 
 							<!-- Technical Specifications -->
-							{#if aircraftModel.engine_type || (aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined) || aircraftModel.builder_certification || aircraftModel.weight_class}
+							{#if aircraftModel.engineType || (aircraftModel.numberOfEngines !== null && aircraftModel.numberOfEngines !== undefined) || aircraftModel.builderCertification || aircraftModel.weightClass}
 								<div
 									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
 								>
@@ -620,30 +614,30 @@
 										Technical Specifications
 									</h3>
 									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-										{#if aircraftModel.engine_type}
+										{#if aircraftModel.engineType}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
-												<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
+												<dd>{formatTitleCase(aircraftModel.engineType)}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
+										{#if aircraftModel.numberOfEngines !== null && aircraftModel.numberOfEngines !== undefined}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Engines</dt>
-												<dd>{aircraftModel.number_of_engines}</dd>
+												<dd>{aircraftModel.numberOfEngines}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.builder_certification}
+										{#if aircraftModel.builderCertification}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">
 													Builder Certification
 												</dt>
-												<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
+												<dd>{formatTitleCase(aircraftModel.builderCertification)}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.weight_class}
+										{#if aircraftModel.weightClass}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Weight Class</dt>
-												<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
+												<dd>{formatTitleCase(aircraftModel.weightClass)}</dd>
 											</div>
 										{/if}
 									</dl>
@@ -651,7 +645,7 @@
 							{/if}
 
 							<!-- Capacity & Performance -->
-							{#if aircraftModel.number_of_seats || (aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0)}
+							{#if aircraftModel.numberOfSeats || (aircraftModel.cruisingSpeed && aircraftModel.cruisingSpeed > 0)}
 								<div
 									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
 								>
@@ -661,16 +655,16 @@
 										Capacity & Performance
 									</h3>
 									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-										{#if aircraftModel.number_of_seats}
+										{#if aircraftModel.numberOfSeats}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Seats</dt>
-												<dd>{aircraftModel.number_of_seats}</dd>
+												<dd>{aircraftModel.numberOfSeats}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
+										{#if aircraftModel.cruisingSpeed && aircraftModel.cruisingSpeed > 0}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Cruising Speed</dt>
-												<dd>{aircraftModel.cruising_speed} kts</dd>
+												<dd>{aircraftModel.cruisingSpeed} kts</dd>
 											</div>
 										{/if}
 									</dl>

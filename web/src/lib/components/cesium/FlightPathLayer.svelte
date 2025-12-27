@@ -91,19 +91,19 @@
 			const takeoffMarker = createTakeoffMarker(
 				firstFix.latitude,
 				firstFix.longitude,
-				firstFix.altitude_msl_feet || 0
+				firstFix.altitudeMslFeet || 0
 			);
 			viewer.entities.add(takeoffMarker);
 			entities.push(takeoffMarker);
 		}
 
 		// Create landing marker (last fix, if flight is complete)
-		if (flight.landing_time && fixes.length > 0) {
+		if (flight.landingTime && fixes.length > 0) {
 			const lastFix = fixes[fixes.length - 1];
 			const landingMarker = createLandingMarker(
 				lastFix.latitude,
 				lastFix.longitude,
-				lastFix.altitude_msl_feet || 0
+				lastFix.altitudeMslFeet || 0
 			);
 			viewer.entities.add(landingMarker);
 			entities.push(landingMarker);

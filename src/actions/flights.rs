@@ -6,8 +6,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::actions::json_error;
 use crate::actions::views::{AircraftInfo, AirportInfo, FlightView};
+use crate::actions::{
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+};
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::fixes::FixWithRawPacket;
@@ -26,17 +28,7 @@ pub struct FlightsQueryParams {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FlightResponse {
-    pub flight: FlightView,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightFixesResponse {
-    pub fixes: Vec<FixWithRawPacket>,
-    pub count: usize,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SplinePoint {
     pub latitude: f64,
     pub longitude: f64,
@@ -44,18 +36,7 @@ pub struct SplinePoint {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FlightSplinePathResponse {
-    pub points: Vec<SplinePoint>,
-    pub count: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightsListResponse {
-    pub flights: Vec<FlightView>,
-    pub total_count: i64,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightGap {
     /// Start time of the gap (timestamp of last fix before gap)
     pub gap_start: String,
@@ -81,12 +62,6 @@ pub struct FlightGap {
     pub avg_climb_rate_10_before: Option<i32>,
     /// Average climb rate (fpm) for 10 fixes after the gap
     pub avg_climb_rate_10_after: Option<i32>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightGapsResponse {
-    pub gaps: Vec<FlightGap>,
-    pub count: usize,
 }
 
 /// Get a flight by its UUID
@@ -170,10 +145,7 @@ pub async fn get_flight_by_id(
                 previous_flight_id,
                 next_flight_id,
             );
-            Json(FlightResponse {
-                flight: flight_view,
-            })
-            .into_response()
+            Json(DataResponse { data: flight_view }).into_response()
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
@@ -197,7 +169,7 @@ pub async fn get_flight_device(
             if let Some(aircraft_id) = flight.aircraft_id {
                 // Look up aircraft information
                 match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
-                    Ok(Some(aircraft)) => Json(aircraft).into_response(),
+                    Ok(Some(aircraft)) => Json(DataResponse { data: aircraft }).into_response(),
                     Ok(None) => {
                         json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
@@ -323,10 +295,7 @@ pub async fn get_flight_fixes(
         )
         .await
     {
-        Ok(fixes) => {
-            let count = fixes.len();
-            Json(FlightFixesResponse { fixes, count }).into_response()
-        }
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             tracing::error!("Failed to get fixes for flight {}: {}", id, e);
             json_error(
@@ -384,11 +353,7 @@ pub async fn get_flight_spline_path(
 
     if fixes.len() < 2 {
         // Not enough points for spline interpolation, return empty
-        return Json(FlightSplinePathResponse {
-            points: vec![],
-            count: 0,
-        })
-        .into_response();
+        return Json(DataListResponse::<SplinePoint> { data: vec![] }).into_response();
     }
 
     // Convert fixes to GeoPoints with altitude
@@ -417,8 +382,7 @@ pub async fn get_flight_spline_path(
         })
         .collect();
 
-    let count = points.len();
-    Json(FlightSplinePathResponse { points, count }).into_response()
+    Json(DataListResponse { data: points }).into_response()
 }
 
 /// Generate an appropriate filename for the KML download
@@ -477,9 +441,15 @@ pub async fn search_flights(
                     flight_views.push(flight_view);
                 }
 
-                Json(FlightsListResponse {
-                    flights: flight_views,
-                    total_count,
+                let page = (offset / limit) + 1;
+                let total_pages = ((total_count as f64) / (limit as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: flight_views,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -549,9 +519,15 @@ pub async fn search_flights(
                     flight_views.push(flight_view);
                 }
 
-                Json(FlightsListResponse {
-                    flights: flight_views,
-                    total_count,
+                let page = (offset / limit) + 1;
+                let total_pages = ((total_count as f64) / (limit as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: flight_views,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -634,12 +610,13 @@ pub async fn get_airport_flights(
                     arrival_airport,
                     aircraft_info,
                 );
-                flight_responses.push(FlightResponse {
-                    flight: flight_view,
-                });
+                flight_responses.push(flight_view);
             }
 
-            Json(flight_responses).into_response()
+            Json(DataListResponse {
+                data: flight_responses,
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get flights for airport {}: {}", airport_id, e);
@@ -686,7 +663,7 @@ pub async fn get_nearby_flights(
                 flight_views.push(flight_view);
             }
 
-            Json(flight_views).into_response()
+            Json(DataListResponse { data: flight_views }).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get nearby flights for flight {}: {}", id, e);
@@ -832,6 +809,5 @@ pub async fn get_flight_gaps(
         }
     }
 
-    let count = gaps.len();
-    Json(FlightGapsResponse { gaps, count }).into_response()
+    Json(DataListResponse { data: gaps }).into_response()
 }

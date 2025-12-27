@@ -96,7 +96,7 @@
 		// Only add to watchlist if aircraft was found
 		if (aircraft && aircraft.id) {
 			// Check for duplicates
-			const existingEntry = $watchlist.entries.find((entry) => entry.aircraft_id === aircraft.id);
+			const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
 			if (existingEntry) {
 				errorMessage = 'This aircraft is already in your watchlist';
 				return;
@@ -156,7 +156,7 @@
 	// Add individual aircraft to watchlist
 	async function addAircraftToWatchlist(aircraft: Aircraft) {
 		// Check for duplicates
-		const existingEntry = $watchlist.entries.find((entry) => entry.aircraft_id === aircraft.id);
+		const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
 		if (existingEntry) {
 			return; // Already in watchlist
 		}
@@ -176,7 +176,7 @@
 
 	// Check if aircraft is already in watchlist
 	function isAircraftInWatchlist(aircraftId: string): boolean {
-		return $watchlist.entries.some((entry) => entry.aircraft_id === aircraftId);
+		return $watchlist.entries.some((entry) => entry.aircraftId === aircraftId);
 	}
 
 	// Handle club selection change
@@ -202,11 +202,11 @@
 	const aircraftRegistry = $derived(AircraftRegistry.getInstance());
 	const entriesWithAircraft = $derived(
 		$watchlist.entries.map((entry) => {
-			const aircraft = entry.aircraft || aircraftRegistry.getAircraft(entry.aircraft_id);
+			const aircraft = entry.aircraft || aircraftRegistry.getAircraft(entry.aircraftId);
 			return {
 				...entry,
 				aircraft: aircraft || {
-					id: entry.aircraft_id,
+					id: entry.aircraftId,
 					registration: 'Unknown',
 					aircraftModel: 'Unknown',
 					addressType: 'Unknown',
@@ -702,7 +702,7 @@
 					{#if entriesWithAircraft.length > 0}
 						<div class="flex-1 overflow-y-auto">
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{#each entriesWithAircraft as entry (entry.aircraft_id)}
+								{#each entriesWithAircraft as entry (entry.aircraftId)}
 									<div
 										class="rounded border border-surface-300 bg-surface-50 p-3 dark:border-surface-600 dark:bg-surface-800"
 									>
@@ -749,19 +749,19 @@
 											<div class="flex items-center justify-between pt-1">
 												<Switch
 													class="flex justify-between p-2"
-													checked={entry.send_email}
+													checked={entry.sendEmail}
 													onCheckedChange={() =>
-														toggleEmailNotification(entry.aircraft_id, entry.send_email)}
+														toggleEmailNotification(entry.aircraftId, entry.sendEmail)}
 												>
 													<Switch.Label class="text-sm font-medium">Email</Switch.Label>
 													<Switch.Control>
 														<Switch.Thumb />
 													</Switch.Control>
-													<Switch.HiddenInput name="watchlist-{entry.aircraft_id}" />
+													<Switch.HiddenInput name="watchlist-{entry.aircraftId}" />
 												</Switch>
 												<button
 													class="preset-tonal-error-500 btn btn-sm"
-													onclick={() => removeWatchlistEntry(entry.aircraft_id)}
+													onclick={() => removeWatchlistEntry(entry.aircraftId)}
 												>
 													<X size={16} />
 												</button>

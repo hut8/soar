@@ -3,18 +3,19 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::aircraft::AircraftModel;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::aircraft_repo::AircraftRepository;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::web::AppState;
 
-use super::json_error;
 use super::views::{AircraftRegistrationView, club::AircraftModelView};
+use super::{
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,16 +32,6 @@ fn default_page() -> i64 {
 
 fn default_per_page() -> i64 {
     50
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AircraftIssuesResponse {
-    pub duplicate_device_addresses: Vec<AircraftModel>,
-    pub total_count: i64,
-    pub page: i64,
-    pub per_page: i64,
-    pub total_pages: i64,
 }
 
 pub async fn get_aircraft_registrations_by_club(
@@ -122,7 +113,10 @@ pub async fn get_aircraft_registrations_by_club(
         aircraft_views.push(view);
     }
 
-    Json(aircraft_views).into_response()
+    Json(DataListResponse {
+        data: aircraft_views,
+    })
+    .into_response()
 }
 
 /// Get aircraft registration for an aircraft by aircraft ID
@@ -139,7 +133,10 @@ pub async fn get_device_aircraft_registration(
         .await
     {
         Ok(Some(aircraft_registration)) => {
-            return Json(aircraft_registration).into_response();
+            return Json(DataResponse {
+                data: aircraft_registration,
+            })
+            .into_response();
         }
         Ok(None) => {
             // Fallback: try to find aircraft and then look up by registration number
@@ -167,8 +164,11 @@ pub async fn get_device_aircraft_registration(
                     .get_aircraft_registration_model_by_n_number(registration)
                     .await
                 {
-                    Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-                    Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+                    Ok(Some(aircraft_model)) => Json(DataResponse {
+                        data: aircraft_model,
+                    })
+                    .into_response(),
+                    Ok(None) => (StatusCode::NO_CONTENT).into_response(),
                     Err(e) => {
                         tracing::error!(
                             "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
@@ -185,7 +185,7 @@ pub async fn get_device_aircraft_registration(
                 }
             } else {
                 // No registration available
-                (StatusCode::NOT_FOUND).into_response()
+                (StatusCode::NO_CONTENT).into_response()
             }
         }
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
@@ -228,7 +228,7 @@ pub async fn get_device_aircraft_model(
                         {
                             Ok(Some(aircraft_model)) => aircraft_model,
                             Ok(None) => {
-                                return (StatusCode::NOT_FOUND).into_response();
+                                return (StatusCode::NO_CONTENT).into_response();
                             }
                             Err(e) => {
                                 tracing::error!(
@@ -246,7 +246,7 @@ pub async fn get_device_aircraft_model(
                         }
                     } else {
                         // No registration available
-                        return (StatusCode::NOT_FOUND).into_response();
+                        return (StatusCode::NO_CONTENT).into_response();
                     }
                 }
                 Ok(None) => {
@@ -283,7 +283,7 @@ pub async fn get_device_aircraft_model(
         .await
     {
         Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+        Ok(None) => (StatusCode::NO_CONTENT).into_response(),
         Err(e) => {
             tracing::error!(
                 "Failed to get aircraft model for aircraft {} with codes {}-{}-{}: {}",
@@ -321,12 +321,13 @@ pub async fn get_aircraft_issues(
         Ok((duplicate_aircraft, total_count)) => {
             let total_pages = (total_count as f64 / per_page as f64).ceil() as i64;
 
-            Json(AircraftIssuesResponse {
-                duplicate_device_addresses: duplicate_aircraft,
-                total_count,
-                page,
-                per_page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: duplicate_aircraft,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
