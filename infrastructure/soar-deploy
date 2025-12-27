@@ -199,21 +199,88 @@ sleep 2
 log_info "Checking current database migration status..."
 sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
 
-# Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
-log_info "Running database migrations from temporary binary..."
-if sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; exec '$TEMP_BIN_PATH' migrate"; then
-    log_info "Database migrations completed successfully"
-else
-    log_error "Database migrations failed"
-    log_error "Database may be in a partially migrated state"
-    log_error "DO NOT restart services - manual intervention required"
+# Run database migrations via systemd service (async, survives SSH disconnect)
+log_info "Starting database migrations via systemd service..."
+log_info "This allows migrations to continue if SSH connection is lost"
+
+# Reset the migration service to clear any previous state
+systemctl reset-failed "soar-migrate@${ENVIRONMENT}.service" 2>/dev/null || true
+
+# Start the migration service (runs asynchronously)
+if ! systemctl start "soar-migrate@${ENVIRONMENT}.service"; then
+    log_error "Failed to start migration service"
+    log_error "Check: systemctl status soar-migrate@${ENVIRONMENT}.service"
     log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
     rm -f "$TEMP_BIN_PATH"
-    log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
-    log_info "To investigate:"
-    log_info "  1. Check migration logs above"
-    log_info "  2. Verify database state manually"
-    log_info "  3. Fix any issues before attempting to restart services"
+    exit 1
+fi
+
+log_info "Migration service started successfully"
+log_info "Monitoring migration progress..."
+
+# Poll for migration completion (check every 5 seconds, timeout after 2 hours)
+MAX_WAIT=7200  # 2 hours
+ELAPSED=0
+POLL_INTERVAL=5
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    # Check systemd service status
+    if systemctl is-active --quiet "soar-migrate@${ENVIRONMENT}.service"; then
+        # Still running
+        echo -n "."
+        sleep $POLL_INTERVAL
+        ELAPSED=$((ELAPSED + POLL_INTERVAL))
+
+        # Show progress every 30 seconds
+        if [ $((ELAPSED % 30)) -eq 0 ]; then
+            log_info "Migration still running... (${ELAPSED}s elapsed)"
+            # Show last few log lines
+            journalctl -u "soar-migrate@${ENVIRONMENT}.service" -n 3 --no-pager 2>/dev/null || true
+        fi
+    elif systemctl is-failed --quiet "soar-migrate@${ENVIRONMENT}.service"; then
+        # Migration failed
+        echo ""
+        log_error "Database migration FAILED"
+        log_error "Migration service exited with error"
+        log_error "Database may be in a partially migrated state"
+        log_error "DO NOT restart services - manual intervention required"
+        echo ""
+        log_error "Last 50 lines of migration logs:"
+        journalctl -u "soar-migrate@${ENVIRONMENT}.service" -n 50 --no-pager
+        echo ""
+        log_info "Migration status file:"
+        cat "/var/soar/migration-status/${ENVIRONMENT}.json" 2>/dev/null || log_warn "No status file found"
+        echo ""
+        log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+        rm -f "$TEMP_BIN_PATH"
+        log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
+        log_info "To investigate:"
+        log_info "  1. Check migration logs: journalctl -u soar-migrate@${ENVIRONMENT} -n 200"
+        log_info "  2. Check migration log file in /var/soar/logs/migrations/"
+        log_info "  3. Verify database state manually"
+        log_info "  4. Fix any issues before attempting to restart services"
+        log_error "NOTE: Email and Sentry notifications should have been sent automatically"
+        exit 1
+    else
+        # Migration completed successfully
+        echo ""
+        log_info "Database migrations completed successfully (${ELAPSED}s)"
+
+        # Show final status
+        log_info "Migration status:"
+        cat "/var/soar/migration-status/${ENVIRONMENT}.json" 2>/dev/null || log_warn "No status file found"
+
+        break
+    fi
+done
+
+# Check if we timed out
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    log_error "Migration timed out after ${MAX_WAIT} seconds"
+    log_error "Migration may still be running in background"
+    log_error "Check: systemctl status soar-migrate@${ENVIRONMENT}.service"
+    log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+    rm -f "$TEMP_BIN_PATH"
     exit 1
 fi
 

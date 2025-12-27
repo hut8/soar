@@ -1,0 +1,36 @@
+[Unit]
+Description=SOAR Database Migration for %i environment
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+WorkingDirectory=/home/soar/soar
+
+# Environment file with SMTP and Sentry config
+# %i is the instance name (staging or production)
+EnvironmentFile=/etc/soar/env-%i
+EnvironmentFile=-/etc/soar/env
+
+# Migration-specific environment
+Environment="MIGRATION_ENV=%i"
+Environment="RUST_BACKTRACE=1"
+
+# Run the migration runner script
+ExecStart=/usr/local/bin/soar-migration-runner %i
+
+# Timeout after 2 hours (7200 seconds)
+TimeoutStartSec=7200
+
+# Always restart on failure to ensure cleanup/notification
+Restart=no
+RemainAfterExit=yes
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=soar-migrate-%i
+
+[Install]
+WantedBy=multi-user.target

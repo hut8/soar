@@ -1,0 +1,294 @@
+#!/bin/bash
+# SOAR Database Migration Runner with Email and Sentry Notifications
+#
+# This script runs database migrations and sends notifications on failure.
+# It's designed to be called by the systemd soar-migrate@.service
+#
+# Usage: soar-migration-runner <environment>
+#   environment: staging or production
+
+set -euo pipefail
+
+ENVIRONMENT="${1:-staging}"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOG_DIR="/var/soar/logs/migrations"
+STATUS_DIR="/var/soar/migration-status"
+LOG_FILE="${LOG_DIR}/migration-${ENVIRONMENT}-${TIMESTAMP}.log"
+STATUS_FILE="${STATUS_DIR}/${ENVIRONMENT}.json"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Create directories if they don't exist
+mkdir -p "$LOG_DIR"
+mkdir -p "$STATUS_DIR"
+
+# Logging functions
+log() {
+    echo -e "${BLUE}[$(date -u +%Y-%m-%dT%H:%M:%SZ)]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    echo -e "${RED}[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ERROR:${NC} $*" | tee -a "$LOG_FILE" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}[$(date -u +%Y-%m-%dT%H:%M:%SZ)] SUCCESS:${NC} $*" | tee -a "$LOG_FILE"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[$(date -u +%Y-%m-%dT%H:%M:%SZ)] WARNING:${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Update status file
+update_status() {
+    local status="$1"
+    local message="${2:-}"
+    local exit_code="${3:-0}"
+
+    cat > "$STATUS_FILE" <<EOF
+{
+  "status": "$status",
+  "environment": "$ENVIRONMENT",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "log_file": "$LOG_FILE",
+  "message": "$message",
+  "exit_code": $exit_code
+}
+EOF
+}
+
+# Send email notification
+send_email_notification() {
+    local subject="$1"
+    local body="$2"
+
+    # Check if email is configured
+    if [ -z "${FROM_EMAIL:-}" ] || [ -z "${SMTP_SERVER:-}" ]; then
+        log_warning "Email not configured, skipping email notification"
+        return 0
+    fi
+
+    # Determine recipient email (use environment variable or default)
+    local to_email="${MIGRATION_ALERT_EMAIL:-${FROM_EMAIL}}"
+
+    log "Sending email notification to $to_email"
+
+    # Use Python to send email (available on Ubuntu by default)
+    python3 -c "
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+
+smtp_server = os.environ.get('SMTP_SERVER', 'localhost')
+smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+smtp_username = os.environ.get('SMTP_USERNAME', '')
+smtp_password = os.environ.get('SMTP_PASSWORD', '')
+from_email = os.environ.get('FROM_EMAIL')
+from_name = os.environ.get('FROM_NAME', 'SOAR Migrations')
+
+message = MIMEMultipart('alternative')
+message['Subject'] = '''$subject'''
+message['From'] = f'{from_name} <{from_email}>'
+message['To'] = '''$to_email'''
+
+text_body = '''$body'''
+message.attach(MIMEText(text_body, 'plain'))
+
+try:
+    if smtp_port == 465:
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.sendmail(from_email, '''$to_email''', message.as_string())
+    else:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            if smtp_port == 587:
+                server.starttls()
+            if smtp_username:
+                server.login(smtp_username, smtp_password)
+            server.sendmail(from_email, '''$to_email''', message.as_string())
+    print('Email sent successfully')
+except Exception as e:
+    print(f'Failed to send email: {e}')
+    exit(1)
+" || log_error "Failed to send email notification"
+}
+
+# Send Sentry notification
+send_sentry_notification() {
+    local message="$1"
+    local level="${2:-error}"
+    local log_excerpt="${3:-}"
+
+    # Check if Sentry is configured
+    if [ -z "${SENTRY_DSN:-}" ]; then
+        log_warning "Sentry not configured, skipping Sentry notification"
+        return 0
+    fi
+
+    log "Sending Sentry notification (level: $level)"
+
+    # Use curl to send to Sentry
+    # Get Sentry project ID and key from DSN
+    local sentry_key=$(echo "$SENTRY_DSN" | sed -n 's|.*//\([^:]*\):.*|\1|p')
+    local sentry_project=$(echo "$SENTRY_DSN" | sed -n 's|.*/\([0-9]*\)$|\1|p')
+    local sentry_host=$(echo "$SENTRY_DSN" | sed -n 's|.*@\([^/]*\)/.*|\1|p')
+
+    if [ -z "$sentry_key" ] || [ -z "$sentry_project" ] || [ -z "$sentry_host" ]; then
+        log_error "Failed to parse Sentry DSN"
+        return 1
+    fi
+
+    local sentry_url="https://${sentry_host}/api/${sentry_project}/store/"
+
+    # Get hostname
+    local hostname=$(hostname)
+
+    # Create Sentry event JSON
+    local event_json=$(cat <<EOF_JSON
+{
+  "message": "$message",
+  "level": "$level",
+  "platform": "other",
+  "server_name": "$hostname",
+  "environment": "$ENVIRONMENT",
+  "tags": {
+    "migration": "true",
+    "environment": "$ENVIRONMENT",
+    "type": "database_migration"
+  },
+  "extra": {
+    "log_file": "$LOG_FILE",
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "log_excerpt": "$log_excerpt"
+  }
+}
+EOF_JSON
+)
+
+    # Send to Sentry
+    curl -s -X POST "$sentry_url" \
+        -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=$sentry_key, sentry_client=soar-migration-runner/1.0" \
+        -H "Content-Type: application/json" \
+        -d "$event_json" > /dev/null 2>&1 || log_error "Failed to send Sentry notification"
+}
+
+# Main migration execution
+run_migration() {
+    log "Starting database migration for $ENVIRONMENT environment"
+    log "Log file: $LOG_FILE"
+
+    # Update status to running
+    update_status "running" "Migration in progress"
+
+    # Determine database URL based on environment
+    if [ "$ENVIRONMENT" = "production" ]; then
+        export DATABASE_URL="${DATABASE_URL:-postgres://soar@localhost/soar}"
+    else
+        export DATABASE_URL="${DATABASE_URL:-postgres://soar@localhost/soar_staging}"
+    fi
+
+    log "Database: $DATABASE_URL"
+    log "Running diesel migration run..."
+
+    # Run migration and capture output
+    local migration_output
+    local migration_exit_code=0
+
+    if migration_output=$(diesel migration run 2>&1); then
+        log_success "Migration completed successfully"
+        echo "$migration_output" >> "$LOG_FILE"
+
+        # Update status to completed
+        update_status "completed" "Migration completed successfully"
+
+        # Send success notification to Sentry (info level)
+        send_sentry_notification "Database migration completed successfully for $ENVIRONMENT" "info" ""
+
+        return 0
+    else
+        migration_exit_code=$?
+        log_error "Migration failed with exit code $migration_exit_code"
+        echo "$migration_output" >> "$LOG_FILE"
+
+        # Update status to failed
+        update_status "failed" "Migration failed with exit code $migration_exit_code" "$migration_exit_code"
+
+        # Get last 50 lines of output for notifications
+        local log_excerpt=$(echo "$migration_output" | tail -n 50 | sed 's/"/\\"/g' | tr '\n' ' ')
+
+        # Send email notification
+        local email_subject="[SOAR ${ENVIRONMENT^^}] Database Migration FAILED"
+        local email_body="Database migration failed on $ENVIRONMENT environment.
+
+Environment: $ENVIRONMENT
+Hostname: $(hostname)
+Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+Exit Code: $migration_exit_code
+Log File: $LOG_FILE
+
+Last 50 lines of output:
+----------------------------------------
+$migration_output
+----------------------------------------
+
+Please check the logs and investigate immediately.
+
+To view full logs:
+  journalctl -u soar-migrate@$ENVIRONMENT -n 200
+
+To view log file:
+  cat $LOG_FILE
+"
+
+        send_email_notification "$email_subject" "$email_body"
+
+        # Send Sentry notification
+        send_sentry_notification "Database migration failed for $ENVIRONMENT (exit code: $migration_exit_code)" "error" "$log_excerpt"
+
+        return $migration_exit_code
+    fi
+}
+
+# Cleanup function
+cleanup() {
+    local exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+        log_error "Migration runner exiting with code $exit_code"
+    else
+        log_success "Migration runner completed successfully"
+    fi
+
+    exit $exit_code
+}
+
+# Set up cleanup trap
+trap cleanup EXIT
+
+# Main execution
+log "========================================="
+log "SOAR Database Migration Runner"
+log "Environment: $ENVIRONMENT"
+log "========================================="
+
+# Validate environment
+if [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "production" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'staging' or 'production')"
+    exit 1
+fi
+
+# Run the migration
+run_migration
+
+log "========================================="
+log "Migration runner completed"
+log "========================================="

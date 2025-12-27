@@ -388,6 +388,22 @@ sudo cp infrastructure/nats-server.service /etc/systemd/system/
 sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
 sudo cp infrastructure/photon.service /etc/systemd/system/
 
+# Install migration service (templated for staging/production)
+echo -e "${BLUE}Installing migration service...${NC}"
+sudo cp infrastructure/systemd/soar-migrate@.service /etc/systemd/system/
+
+# Install migration helper scripts
+echo -e "${BLUE}Installing migration helper scripts...${NC}"
+sudo install -m 755 infrastructure/soar-migration-runner /usr/local/bin/
+sudo install -m 755 infrastructure/soar-migration-status /usr/local/bin/
+
+# Create migration log and status directories
+echo -e "${BLUE}Creating migration directories...${NC}"
+sudo mkdir -p /var/soar/logs/migrations
+sudo mkdir -p /var/soar/migration-status
+sudo chown -R soar:soar /var/soar/logs/migrations
+sudo chown -R soar:soar /var/soar/migration-status
+
 # Reload systemd daemon
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
@@ -893,3 +909,38 @@ else
     echo "  Status: Data not installed (download manually)"
     echo "  Download data: See docs/photon-deployment.md for instructions"
 fi
+echo
+echo -e "${BLUE}=========================================${NC}"
+echo -e "${BLUE}Database Migration System${NC}"
+echo -e "${BLUE}=========================================${NC}"
+echo
+echo -e "${GREEN}✓ Migration service installed: soar-migrate@${ENVIRONMENT}.service${NC}"
+echo -e "${GREEN}✓ Migration runner installed: /usr/local/bin/soar-migration-runner${NC}"
+echo -e "${GREEN}✓ Migration status checker: /usr/local/bin/soar-migration-status${NC}"
+echo
+echo -e "${YELLOW}Migration Features:${NC}"
+echo "  • Runs migrations asynchronously via systemd"
+echo "  • Survives SSH disconnects"
+echo "  • Email notifications on failure"
+echo "  • Sentry alerts on failure"
+echo "  • Detailed logging to systemd journal and files"
+echo "  • 2-hour timeout for long-running migrations"
+echo
+echo -e "${YELLOW}Migration Usage:${NC}"
+echo "  Manual migration run:"
+echo "    sudo systemctl start soar-migrate@${ENVIRONMENT}"
+echo
+echo "  Check migration status:"
+echo "    soar-migration-status ${ENVIRONMENT}"
+echo
+echo "  View migration logs:"
+echo "    journalctl -u soar-migrate@${ENVIRONMENT} -f"
+echo
+echo "  Migration log files:"
+echo "    /var/soar/logs/migrations/"
+echo
+echo -e "${YELLOW}Note:${NC} soar-deploy automatically uses this migration system"
+echo
+echo -e "${GREEN}=========================================${NC}"
+echo -e "${GREEN}Server provisioning complete for $ENVIRONMENT environment!${NC}"
+echo -e "${GREEN}=========================================${NC}"
