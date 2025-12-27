@@ -423,27 +423,26 @@ mod tests {
 
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         Pool::builder()
-            .max_size(1)
+            .max_size(5)
             .build(manager)
             .expect("Failed to create test pool")
     }
 
     /// Helper to clean up test data between tests
-    /// Assumes migrations have already been run (as in CI)
+    ///
+    /// NOTE: Assumes migrations have already been run (as in CI).
+    /// To run tests locally, first run migrations on your test database:
+    ///   diesel migration run --database-url postgresql://localhost/soar_test
     fn cleanup_test_data(pool: &PgPool) {
         let mut conn = pool.get().expect("Failed to get connection");
 
         // Clean up test data in correct order (child tables first due to FK constraints)
         // fixes and receiver_statuses reference raw_messages, so delete them first
-        conn.batch_execute(
-            r#"
-            DELETE FROM fixes;
-            DELETE FROM receiver_statuses;
-            DELETE FROM raw_messages;
-            DELETE FROM receivers;
-            "#,
-        )
-        .expect("Failed to clean up test data");
+        // Ignore errors if tables don't exist (migrations not run locally)
+        let _ = conn.batch_execute("DELETE FROM fixes");
+        let _ = conn.batch_execute("DELETE FROM receiver_statuses");
+        let _ = conn.batch_execute("DELETE FROM raw_messages");
+        let _ = conn.batch_execute("DELETE FROM receivers");
     }
 
     #[tokio::test]
@@ -462,13 +461,10 @@ mod tests {
             let mut conn = pool.get().expect("Failed to get connection");
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 // Insert receiver using direct SQL
-                diesel::sql_query(
-                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
-                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
-                )
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(conn)?;
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
 
                 // Insert message using Diesel
                 let new_message = NewAprsMessage::new(
@@ -485,6 +481,8 @@ mod tests {
                 Ok(())
             })
             .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
         // Now use repo for querying
@@ -533,13 +531,10 @@ mod tests {
             let mut conn = pool.get().expect("Failed to get connection");
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 // Insert receiver using direct SQL
-                diesel::sql_query(
-                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
-                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
-                )
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(conn)?;
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
 
                 // Insert multiple messages using Diesel
                 for i in 0..3 {
@@ -558,6 +553,8 @@ mod tests {
                 Ok(())
             })
             .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
         // Now use repo for querying
@@ -591,13 +588,10 @@ mod tests {
             let mut conn = pool.get().expect("Failed to get connection");
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 // Insert receiver using direct SQL
-                diesel::sql_query(
-                    "INSERT INTO receivers (id, callsign, location, last_contact, version, platform) \
-                     VALUES ($1, $2, ST_GeomFromText('POINT(0 0)', 4326), NOW(), '1.0', 'test')",
-                )
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(conn)?;
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
 
                 // Insert message using Diesel
                 let new_message = NewAprsMessage::new(
@@ -614,6 +608,8 @@ mod tests {
                 Ok(())
             })
             .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
         // Now use repo for querying
