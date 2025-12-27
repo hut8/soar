@@ -17,7 +17,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::WebSocketMessage;
 use crate::web::AppState;
 
-use super::devices::enrich_aircraft_with_registration_data;
+use super::aircraft_search::enrich_aircraft_with_registration_data;
 use super::json_error;
 
 /// Area tracker configuration

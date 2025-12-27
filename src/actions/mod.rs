@@ -1,4 +1,5 @@
 pub mod aircraft;
+pub mod aircraft_search;
 pub mod airports;
 pub mod airspaces;
 pub mod analytics;
@@ -6,7 +7,6 @@ pub mod aprs_messages;
 pub mod auth;
 pub mod clubs;
 pub mod coverage;
-pub mod devices;
 pub mod fixes;
 pub mod flights;
 pub mod pilots;
@@ -18,13 +18,13 @@ pub mod views;
 pub mod watchlist;
 
 pub use aircraft::*;
+pub use aircraft_search::*;
 pub use airports::*;
 pub use airspaces::*;
 pub use analytics::*;
 pub use aprs_messages::*;
 pub use auth::*;
 pub use clubs::*;
-pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
 pub use receivers::*;
@@ -52,6 +52,14 @@ pub struct DataResponse<T> {
 #[serde(rename_all = "camelCase")]
 pub struct DataListResponse<T> {
     pub data: Vec<T>,
+}
+
+/// Standard wrapper for list responses with total count
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataListResponseWithTotal<T> {
+    pub data: Vec<T>,
+    pub total: i64,
 }
 
 /// Pagination metadata (nested in paginated responses)

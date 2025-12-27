@@ -1879,23 +1879,28 @@
 
 			// Fetch aircraft with their latest position only (no fix history)
 			// Fixes will accumulate from WebSocket after this
-			const aircraft = await fixFeed.fetchAircraftInBoundingBox(
+			const response = await fixFeed.fetchAircraftInBoundingBox(
 				sw.lat(), // south
 				ne.lat(), // north
 				sw.lng(), // west
-				ne.lng() // east
-				// No 'after' parameter - backend doesn't fetch fixes anymore
+				ne.lng(), // east
+				undefined, // No 'after' parameter - backend doesn't fetch fixes anymore
+				MAX_AIRCRAFT_DISPLAY // Backend returns 'total' field to detect if there are more
 			);
 
-			console.log(`[REST] Received ${aircraft.length} aircraft with latest positions`);
+			const { data: aircraft, total } = response;
 
-			// Store total aircraft count
-			totalAircraftInViewport = aircraft.length;
+			console.log(
+				`[REST] Received ${aircraft.length} aircraft with latest positions (total: ${total})`
+			);
+
+			// Store total aircraft count from the backend
+			totalAircraftInViewport = total;
 
 			// Check if we've exceeded the display limit
-			if (aircraft.length > MAX_AIRCRAFT_DISPLAY) {
+			if (total > MAX_AIRCRAFT_DISPLAY) {
 				console.warn(
-					`[REST] Aircraft count (${aircraft.length}) exceeds display limit (${MAX_AIRCRAFT_DISPLAY}). Not rendering aircraft.`
+					`[REST] Aircraft count (${total}) exceeds display limit (${MAX_AIRCRAFT_DISPLAY}). Not rendering aircraft.`
 				);
 				aircraftLimitExceeded = true;
 				// Clear any existing aircraft markers

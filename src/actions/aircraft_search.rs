@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use crate::actions::views::{Aircraft, AircraftView, AirportInfo, FlightView};
 use crate::actions::{
-    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+    DataListResponse, DataListResponseWithTotal, DataResponse, PaginatedDataResponse,
+    PaginationMetadata, json_error,
 };
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
@@ -59,6 +60,8 @@ pub struct AircraftSearchQuery {
     /// Optional aircraft types filter (comma-separated list, e.g., "glider,tow_tug")
     #[serde(rename = "aircraft-types")]
     pub aircraft_types: Option<String>,
+    /// Optional limit for number of aircraft returned (for bounding box searches)
+    pub limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,15 +196,24 @@ pub async fn get_aircraft_fixes(
     }
 }
 
-/// Search devices by bounding box with enriched aircraft data
-async fn search_devices_by_bbox(
+/// Search aircraft by bounding box with enriched aircraft data
+async fn search_aircraft_by_bbox(
     north: f64,
     south: f64,
     east: f64,
     west: f64,
     after: Option<DateTime<Utc>>,
+    limit: Option<i64>,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
+    // Validate limit (hard cap at 1000)
+    if let Some(lim) = limit
+        && lim > 1000
+    {
+        return json_error(StatusCode::BAD_REQUEST, "Limit cannot exceed 1000 aircraft")
+            .into_response();
+    }
+
     // Validate coordinates
     if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
         return json_error(
@@ -238,24 +250,53 @@ async fn search_devices_by_bbox(
 
     let fixes_repo = FixesRepository::new(pool.clone());
 
+    // First, get the total count of aircraft in the bounding box
+    let total_count = match fixes_repo
+        .count_aircraft_in_bounding_box(north, west, south, east, cutoff_time)
+        .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!("Failed to count aircraft in bounding box: {}", e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to count aircraft in bounding box",
+            )
+            .into_response();
+        }
+    };
+
+    info!("Total aircraft in bounding box: {}", total_count);
+
     // Perform bounding box search - don't fetch fixes, only aircraft with latest position
     // Fixes will come from WebSocket after page load
     match fixes_repo
         .get_aircraft_with_fixes_in_bounding_box(north, west, south, east, cutoff_time, None)
         .await
     {
-        Ok(aircraft_with_fixes) => {
+        Ok(mut aircraft_with_fixes) => {
             info!(
                 "Found {} aircraft in bounding box",
                 aircraft_with_fixes.len()
             );
+
+            // Apply limit if specified
+            if let Some(lim) = limit {
+                let limit_usize = lim.max(0) as usize;
+                aircraft_with_fixes.truncate(limit_usize);
+                info!("Limited aircraft to {} results", aircraft_with_fixes.len());
+            }
 
             // Enrich with aircraft registration and model data
             let enriched =
                 enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
 
             info!("Enriched {} aircraft, returning response", enriched.len());
-            Json(DataListResponse { data: enriched }).into_response()
+            Json(DataListResponseWithTotal {
+                data: enriched,
+                total: total_count,
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
@@ -363,7 +404,7 @@ pub async fn search_aircraft(
             query.west,
         ) {
             (Some(north), Some(south), Some(east), Some(west)) => {
-                search_devices_by_bbox(north, south, east, west, query.after, state.pool).await.into_response()
+                search_aircraft_by_bbox(north, south, east, west, query.after, query.limit, state.pool).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
