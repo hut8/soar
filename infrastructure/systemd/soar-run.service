@@ -16,7 +16,7 @@ ExecStart=/usr/local/bin/soar run --archive --no-adsb
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
-EnvironmentFile=/etc/soar/env
+EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes

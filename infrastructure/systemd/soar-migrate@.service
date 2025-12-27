@@ -1,0 +1,40 @@
+[Unit]
+Description=SOAR Database Migration for %i environment
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+WorkingDirectory=/var/soar
+
+# Environment file with database, SMTP, and Sentry config
+# %i is the instance name (staging or production)
+# - staging: /etc/soar/env-staging
+# - production: /etc/soar/env-production
+EnvironmentFile=/etc/soar/env-%i
+
+# Migration-specific environment
+Environment="RUST_BACKTRACE=1"
+
+# Run the soar migrate command directly
+# For staging: /usr/local/bin/soar-staging migrate
+# For production: /usr/local/bin/soar migrate
+ExecStart=/bin/sh -c 'if [ "%i" = "staging" ]; then exec /usr/local/bin/soar-staging migrate; else exec /usr/local/bin/soar migrate; fi'
+
+# No timeout - complex migrations (like TimescaleDB conversion) can take hours
+# The deployment script has its own polling timeout
+TimeoutStartSec=infinity
+
+# Don't restart - migrations should only run once per invocation
+# Email and Sentry notifications are sent by the Rust command itself
+Restart=no
+RemainAfterExit=no
+
+# Logging - all output goes to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=soar-migrate-%i
+
+[Install]
+WantedBy=multi-user.target

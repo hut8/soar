@@ -16,7 +16,7 @@ ExecStart=/usr/local/bin/soar web --interface 127.0.0.1 --port 61225
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
-EnvironmentFile=/etc/soar/env
+EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes
