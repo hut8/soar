@@ -257,13 +257,13 @@
 					.setLngLat(e.lngLat)
 					.setHTML(
 						`
-						<div style="background-color: #1e293b; color: #e2e8f0; padding: 0.5rem; border-radius: 0.25rem;">
-							<p style="font-weight: 600; margin-bottom: 0.25rem;">Coverage Hex</p>
-							<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Fixes: ${props.fixCount.toLocaleString()}</p>
-							<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
-							${props.avgAltitudeMslFeet ? `<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							<p style="font-size: 0.875rem; color: #94a3b8;">Resolution: ${props.resolution}</p>
+						<div class="bg-surface-800 text-surface-50 p-2 rounded">
+							<p class="font-semibold mb-1">Coverage Hex</p>
+							<p class="text-sm mb-0.5">Fixes: ${props.fixCount.toLocaleString()}</p>
+							<p class="text-sm mb-0.5">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
+							${props.avgAltitudeMslFeet ? `<p class="text-sm mb-0.5">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p class="text-sm mb-0.5">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+							<p class="text-sm text-surface-400">Resolution: ${props.resolution}</p>
 						</div>
 					`
 					)
