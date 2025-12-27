@@ -166,8 +166,13 @@ else
     )
 fi
 
+# Template services (no environment suffix, used with systemd @instance syntax)
+TEMPLATE_SERVICES=(
+    "soar-migrate@.service"
+)
+
 # All services (for stopping and installing)
-ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}")
+ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}" "${TEMPLATE_SERVICES[@]}")
 
 # Create temporary binary directory with timestamp
 TIMESTAMP=$(date +%s)
