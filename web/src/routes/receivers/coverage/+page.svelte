@@ -18,6 +18,7 @@
 	let minAltitude = 0;
 	let maxAltitude = 50000;
 	let showAdvancedFilters = false;
+	let currentPopup: maplibregl.Popup | null = null;
 
 	// Default to last 30 days
 	function getDefaultDates() {
@@ -194,30 +195,38 @@
 				};
 				const props = feature.properties;
 
-				const popup = new maplibregl.Popup({
+				// Remove previous popup if it exists
+				if (currentPopup) {
+					currentPopup.remove();
+				}
+
+				currentPopup = new maplibregl.Popup({
 					closeButton: false,
 					closeOnClick: false
 				})
 					.setLngLat(e.lngLat)
 					.setHTML(
 						`
-						<div class="p-2">
-							<p class="font-semibold">Coverage Hex</p>
-							<p class="text-sm">Fixes: ${props.fixCount.toLocaleString()}</p>
-							<p class="text-sm">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
-							${props.avgAltitudeMslFeet ? `<p class="text-sm">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p class="text-sm">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							<p class="text-sm text-gray-500">Resolution: ${props.resolution}</p>
+						<div style="background-color: #1e293b; color: #e2e8f0; padding: 0.5rem; border-radius: 0.25rem;">
+							<p style="font-weight: 600; margin-bottom: 0.25rem;">Coverage Hex</p>
+							<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Fixes: ${props.fixCount.toLocaleString()}</p>
+							<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
+							${props.avgAltitudeMslFeet ? `<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p style="font-size: 0.875rem; margin-bottom: 0.125rem;">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+							<p style="font-size: 0.875rem; color: #94a3b8;">Resolution: ${props.resolution}</p>
 						</div>
 					`
 					)
 					.addTo(map!);
+			});
 
-				// Remove popup when mouse leaves
-				map!.once('mouseleave', 'coverage-hexes', () => {
-					popup.remove();
-					map!.getCanvas().style.cursor = '';
-				});
+			// Remove popup when mouse leaves the hexagon layer
+			map.on('mouseleave', 'coverage-hexes', () => {
+				if (currentPopup) {
+					currentPopup.remove();
+					currentPopup = null;
+				}
+				map!.getCanvas().style.cursor = '';
 			});
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
