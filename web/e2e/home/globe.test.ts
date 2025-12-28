@@ -7,13 +7,18 @@ test.describe('Globe Page', () => {
 
 	test('should display globe page with correct elements', async ({ page }) => {
 		// Check page title
-		await expect(page).toHaveTitle(/globe|3d|map|soar/i);
+		await expect(page).toHaveTitle(/globe|3d|soar/i);
 
 		// Wait for page to load
 		await page.waitForLoadState('networkidle');
 
 		// Give time for 3D rendering to initialize
 		await page.waitForTimeout(2000);
+
+		// Note: Globe page is a full-screen Cesium viewer with no traditional h1 heading
+		// Verify the Cesium container exists instead
+		const cesiumContainer = page.locator('.cesium-container');
+		await expect(cesiumContainer).toBeVisible();
 
 		// Take screenshot for visual regression testing
 		await expect(page).toHaveScreenshot('globe-page.png', {

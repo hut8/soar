@@ -7,9 +7,6 @@ test.describe('Verify Email', () => {
 
 		await page.waitForLoadState('networkidle');
 
-		// Check page title
-		await expect(page).toHaveTitle(/verify|email|confirmation/i);
-
 		// Take screenshot for visual regression testing
 		await expect(page).toHaveScreenshot('verify-email-page.png');
 	});

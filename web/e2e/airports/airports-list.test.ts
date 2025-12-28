@@ -10,9 +10,9 @@ test.describe('Airports List', () => {
 		// Wait for page to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Check main heading
+		// Check main heading (page has "Airport Search" not "Airports")
 		await expect(
-			authenticatedPage.getByRole('heading', { name: /airports/i, level: 1 })
+			authenticatedPage.getByRole('heading', { name: /airport search/i, level: 1 })
 		).toBeVisible();
 
 		// Take screenshot for visual regression testing

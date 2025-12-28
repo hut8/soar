@@ -305,6 +305,20 @@ test.afterEach(async () => {
 
 ## Troubleshooting
 
+### Quick Fix: Delete Test User
+
+**Symptom**: `duplicate key value violates unique constraint "users_email_unique_idx"`
+
+**Solution**: Delete the existing test user before running tests
+
+```bash
+# From the web/ directory
+psql -U postgres -d soar_test -c "DELETE FROM users WHERE email = 'test@example.com';"
+npm test
+```
+
+This happens when the test user already exists from a previous run. The seed-test-data command tries to create it again and fails.
+
 ### Tests Failing Due to Missing Data
 
 **Symptom**: Login fails, aircraft not found, "no results" everywhere

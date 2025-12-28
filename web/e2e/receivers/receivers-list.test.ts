@@ -12,9 +12,9 @@ test.describe('Receivers List', () => {
 		// Wait for page to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Check main heading
+		// Check main heading (page has "Receiver Search" not "Receivers")
 		await expect(
-			authenticatedPage.getByRole('heading', { name: /receivers/i, level: 1 })
+			authenticatedPage.getByRole('heading', { name: /receiver search/i, level: 1 })
 		).toBeVisible();
 
 		// Take screenshot for visual regression testing

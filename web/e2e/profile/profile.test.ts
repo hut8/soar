@@ -2,17 +2,21 @@ import { test, expect } from '../fixtures/auth.fixture';
 
 test.describe('Profile Page', () => {
 	test('should display profile page with correct elements', async ({ authenticatedPage }) => {
-		await authenticatedPage.goto('/profile');
+		// The authenticatedPage fixture already logged in and is at '/'
+		// Navigate to profile via the user button dropdown
+		await authenticatedPage.getByRole('button', { name: 'Test' }).click();
+		await authenticatedPage.getByRole('link', { name: /profile|account/i }).click();
+
+		// Wait for navigation to profile page
+		await authenticatedPage.waitForURL(/\/profile/);
+		await authenticatedPage.waitForLoadState('networkidle');
 
 		// Check page title
 		await expect(authenticatedPage).toHaveTitle(/profile/i);
 
-		// Wait for page to load
-		await authenticatedPage.waitForLoadState('networkidle');
-
-		// Check main heading
+		// Check main heading (page has "Welcome, {name}!" when authenticated)
 		await expect(
-			authenticatedPage.getByRole('heading', { name: /profile|account/i, level: 1 })
+			authenticatedPage.getByRole('heading', { name: /welcome/i, level: 1 })
 		).toBeVisible();
 
 		// Take screenshot for visual regression testing
