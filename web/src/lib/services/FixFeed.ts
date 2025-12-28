@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment';
-import type { Aircraft, Fix } from '$lib/types';
+import type { Aircraft, Fix, PaginatedDataResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
@@ -437,7 +437,7 @@ export class FixFeed {
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall('/aircraft', {
+			const response = await serverCall<PaginatedDataResponse<Aircraft>>('/aircraft', {
 				params: {
 					south,
 					north,
@@ -447,7 +447,7 @@ export class FixFeed {
 					...(limit && { limit })
 				}
 			});
-			return response as { data: Aircraft[]; total: number };
+			return { data: response.data, total: response.metadata.totalCount };
 		} catch (error) {
 			console.error('Failed to fetch aircraft in bounding box:', error);
 			return { data: [], total: 0 };
