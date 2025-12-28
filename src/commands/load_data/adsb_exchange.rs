@@ -180,6 +180,8 @@ pub async fn load_adsb_exchange_data(
                 .cloned();
 
             // Skip records with no useful data
+            // NOTE: registration is intentionally NOT checked here - we want to preserve registrations
+            // from other sources (FAA, FlarmNet) which are more authoritative
             if icao_model_code.is_none()
                 && record.owner_operator.is_none()
                 && record.manufacturer.is_none()
@@ -190,6 +192,10 @@ pub async fn load_adsb_exchange_data(
                 && record.year.is_none()
                 && record.is_military.is_none()
             {
+                debug!(
+                    "Skipping ICAO {} - no useful data (reg: {:?})",
+                    record.icao, record.registration
+                );
                 skipped_no_data += 1;
                 continue;
             }
@@ -206,7 +212,14 @@ pub async fn load_adsb_exchange_data(
                 .registration
                 .as_ref()
                 .filter(|r| !r.is_empty())
-                .map(|r| canonicalize_registration(r))
+                .map(|r| {
+                    let canonical = canonicalize_registration(r);
+                    debug!(
+                        "ICAO {}: registration '{}' -> canonical '{}'",
+                        record.icao, r, canonical
+                    );
+                    canonical
+                })
                 .unwrap_or_default();
 
             // Build aircraft model from manufacturer and model
@@ -242,14 +255,20 @@ pub async fn load_adsb_exchange_data(
                 let mut conn = pool.get()?;
 
                 // Use ON CONFLICT to handle existing records
-                // Only update owner_operator if it's currently NULL or empty
+                // Only update fields if they're currently NULL or empty (preserve more authoritative sources)
                 let result = diesel::insert_into(aircraft::table)
                     .values(&batch_inserts)
                     .on_conflict(aircraft::address)
                     .do_update()
                     .set((
-                        aircraft::registration.eq(diesel::dsl::sql("COALESCE(NULLIF(excluded.registration, ''), aircraft.registration)")),
-                        aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(excluded.icao_model_code, aircraft.icao_model_code)")),
+                        // Only update registration if current value is NULL or empty string
+                        aircraft::registration.eq(diesel::dsl::sql(
+                            "CASE WHEN (aircraft.registration IS NULL OR aircraft.registration = '')
+                             THEN NULLIF(excluded.registration, '')
+                             ELSE aircraft.registration END"
+                        )),
+                        // Only update icao_model_code if current value is NULL
+                        aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(aircraft.icao_model_code, excluded.icao_model_code)")),
                         // Only update aircraft_model if current value is NULL or empty string
                         aircraft::aircraft_model.eq(diesel::dsl::sql(
                             "CASE WHEN (aircraft.aircraft_model IS NULL OR aircraft.aircraft_model = '')
@@ -262,11 +281,16 @@ pub async fn load_adsb_exchange_data(
                              THEN excluded.owner_operator
                              ELSE aircraft.owner_operator END"
                         )),
-                        aircraft::aircraft_category.eq(diesel::dsl::sql("COALESCE(excluded.aircraft_category, aircraft.aircraft_category)")),
-                        aircraft::engine_count.eq(diesel::dsl::sql("COALESCE(excluded.engine_count, aircraft.engine_count)")),
-                        aircraft::engine_type.eq(diesel::dsl::sql("COALESCE(excluded.engine_type, aircraft.engine_type)")),
-                        aircraft::faa_pia.eq(diesel::dsl::sql("COALESCE(excluded.faa_pia, aircraft.faa_pia)")),
-                        aircraft::faa_ladd.eq(diesel::dsl::sql("COALESCE(excluded.faa_ladd, aircraft.faa_ladd)")),
+                        // Only update aircraft_category if current value is NULL (preserve FAA/FlarmNet data)
+                        aircraft::aircraft_category.eq(diesel::dsl::sql("COALESCE(aircraft.aircraft_category, excluded.aircraft_category)")),
+                        // Only update engine_count if current value is NULL (preserve FAA/FlarmNet data)
+                        aircraft::engine_count.eq(diesel::dsl::sql("COALESCE(aircraft.engine_count, excluded.engine_count)")),
+                        // Only update engine_type if current value is NULL (preserve FAA/FlarmNet data)
+                        aircraft::engine_type.eq(diesel::dsl::sql("COALESCE(aircraft.engine_type, excluded.engine_type)")),
+                        // Only update faa_pia if current value is NULL (preserve FAA data)
+                        aircraft::faa_pia.eq(diesel::dsl::sql("COALESCE(aircraft.faa_pia, excluded.faa_pia)")),
+                        // Only update faa_ladd if current value is NULL (preserve FAA data)
+                        aircraft::faa_ladd.eq(diesel::dsl::sql("COALESCE(aircraft.faa_ladd, excluded.faa_ladd)")),
                         // Only update year and is_military if current value is NULL (FAA data is canonical)
                         aircraft::year.eq(diesel::dsl::sql("COALESCE(aircraft.year, excluded.year)")),
                         aircraft::is_military.eq(diesel::dsl::sql("COALESCE(aircraft.is_military, excluded.is_military)")),
