@@ -26,39 +26,53 @@ Our E2E tests use **Playwright** to test the application in real browsers (Chrom
 
 ## Test Database Setup
 
-E2E tests use a separate `soar_test` database with seeded test data. **You must set up the test database before running E2E tests.**
+E2E tests use **per-worker database isolation** for true test independence. Each Playwright worker gets its own isolated database cloned from a template.
+
+### How It Works
+
+1. **Template Database** (`soar_test_template`): Created once with schema and seed data
+2. **Worker Databases** (`soar_test_worker_0`, `soar_test_worker_1`, etc.): Cloned from template for each worker
+3. **Worker Servers**: Each worker starts its own web server on a unique port (5000, 5001, 5002, etc.)
+4. **Automatic Cleanup**: Worker databases are dropped after tests complete
 
 ### Quick Setup (Recommended)
 
-From the project root:
+The template database is created automatically when you run tests:
 
 ```bash
-./scripts/setup-test-db.sh
+cd web
+npm test
 ```
 
-This script:
+The first time (or when using CI), Playwright's global setup will:
 
-1. Drops and recreates the `soar_test` database
-2. Creates the PostGIS extension
-3. Runs all database migrations
-4. Seeds realistic test data using the `fake` crate
+1. Build the release binary
+2. Create `soar_test_template` database
+3. Run migrations on the template
+4. Seed the template with test data
 
-### Manual Setup
+Each test worker then:
+
+1. Clones the template to create its own database
+2. Starts its own web server on a unique port
+3. Runs tests in complete isolation
+4. Cleans up its database when done
+
+### Manual Template Setup
+
+If you want to pre-create the template database:
 
 ```bash
-# Set up environment
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/soar_test"
+./scripts/setup-test-template.sh
+../target/release/soar seed-test-data
+```
 
-# Drop and recreate database
-psql -U postgres -c "DROP DATABASE IF EXISTS soar_test;"
-psql -U postgres -c "CREATE DATABASE soar_test;"
-psql -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+### Cleaning Up Orphaned Worker Databases
 
-# Run migrations
-diesel migration run
+If tests are interrupted, worker databases may remain. Clean them up with:
 
-# Seed test data
-cargo run --bin soar -- seed-test-data
+```bash
+./scripts/cleanup-test-workers.sh
 ```
 
 ### Test Data
@@ -305,29 +319,30 @@ test.afterEach(async () => {
 
 ## Troubleshooting
 
-### Quick Fix: Delete Test User
+### Tests Failing Due to Missing Template Database
 
-**Symptom**: `duplicate key value violates unique constraint "users_email_unique_idx"`
+**Symptom**: Tests fail with "template database does not exist" or connection errors
 
-**Solution**: Delete the existing test user before running tests
-
-```bash
-# From the web/ directory
-psql -U postgres -d soar_test -c "DELETE FROM users WHERE email = 'test@example.com';"
-npm test
-```
-
-This happens when the test user already exists from a previous run. The seed-test-data command tries to create it again and fails.
-
-### Tests Failing Due to Missing Data
-
-**Symptom**: Login fails, aircraft not found, "no results" everywhere
-
-**Solution**: Reset the test database
+**Solution**: Rebuild the template database
 
 ```bash
-./scripts/setup-test-db.sh
+./scripts/setup-test-template.sh
+../target/release/soar seed-test-data
 ```
+
+Or simply run tests again - global setup will create it automatically.
+
+### Worker Databases Not Cleaned Up
+
+**Symptom**: Multiple `soar_test_worker_*` databases remain in PostgreSQL
+
+**Solution**: Run the cleanup script
+
+```bash
+./scripts/cleanup-test-workers.sh
+```
+
+This is safe to run anytime and only affects test worker databases.
 
 ### Tests are flaky
 

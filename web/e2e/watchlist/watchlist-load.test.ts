@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect } from '../fixtures/worker-database.fixture';
 import { test } from '../fixtures/auth.fixture';
 
 test.describe('Watchlist', () => {

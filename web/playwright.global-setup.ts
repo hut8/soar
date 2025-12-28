@@ -43,22 +43,38 @@ export default async function globalSetup() {
 		console.log('\n✅ Using existing release binary with embedded assets\n');
 	}
 
-	console.log('🌱 Seeding test database...\n');
+	console.log('🗂️  Setting up test template database...\n');
 
 	try {
-		// Run the seed command
+		// Create the template database (with migrations)
+		console.log('Creating template database...');
+		execSync('../scripts/setup-test-template.sh', {
+			cwd: __dirname,
+			stdio: 'inherit',
+			env: {
+				...process.env,
+				PGHOST: 'localhost',
+				PGPORT: '5432',
+				PGUSER: 'postgres',
+				PGPASSWORD: 'postgres'
+			}
+		});
+
+		// Seed the template database with test data
+		console.log('\nSeeding template database...');
 		execSync('../target/release/soar seed-test-data', {
 			cwd: __dirname,
 			stdio: 'inherit',
 			env: {
 				...process.env,
-				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test'
+				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test_template'
 			}
 		});
 
-		console.log('\n✅ Test database seeded successfully\n');
+		console.log('\n✅ Test template database ready\n');
+		console.log('ℹ️  Each test worker will create its own database from this template\n');
 	} catch (error) {
-		console.error('\n❌ Failed to seed test database:', error);
+		console.error('\n❌ Failed to setup test template database:', error);
 		throw error;
 	}
 }

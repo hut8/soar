@@ -22,9 +22,8 @@ export default defineConfig({
 
 	// Shared settings for all projects
 	use: {
-		// Base URL for navigation
-		// Use PLAYWRIGHT_BASE_URL environment variable in CI/Docker, otherwise default to localhost
-		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
+		// Base URL is provided by worker-scoped fixture (each worker has its own server)
+		// This allows true test isolation with per-worker databases
 
 		// Ignore HTTPS errors for test environments
 		ignoreHTTPSErrors: true,
@@ -74,40 +73,14 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	// In CI, servers are started manually in the workflow
-	// In local development, Playwright starts them automatically
-	webServer: process.env.CI
-		? undefined
-		: {
-				// Start soar web server with embedded assets and test database
-				// This matches production architecture: single process serving both API and assets
-				command: '../target/release/soar web --port 4173 --interface localhost',
-				port: 4173,
-				timeout: 120000, // 2 minutes for server startup
-				reuseExistingServer: true, // Can reuse since globalSetup seeds database first
-				env: {
-					// Test database
-					DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
-					// JWT secret for tests
-					JWT_SECRET: 'test_jwt_secret_key_for_e2e_tests_only',
-					// NATS (use test instance or disable if not needed)
-					NATS_URL: 'nats://localhost:4222',
-					// Environment
-					SOAR_ENV: 'test',
-					// Disable Sentry in tests
-					SENTRY_DSN: '',
-					// SMTP configuration - for local testing, run:
-					//   docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.20
-					// Or use ./scripts/run-acceptance-tests which handles this automatically
-					SMTP_SERVER: 'localhost',
-					SMTP_PORT: '1025',
-					SMTP_USERNAME: 'test',
-					SMTP_PASSWORD: 'test',
-					FROM_EMAIL: 'test@soar.local',
-					FROM_NAME: 'SOAR Test',
-					BASE_URL: 'http://localhost:4173'
-				}
-			},
+	// NOTE: Web servers are now started per-worker via the worker-database.fixture.ts
+	// This provides true test isolation with each worker having its own database and server
+	// Workers start servers on ports 5000, 5001, 5002, etc.
+	//
+	// The global webServer config is disabled because:
+	// 1. Each worker needs its own isolated database
+	// 2. Each worker starts its own server on a unique port
+	// 3. This enables parallel test execution without data conflicts
 
 	// Screenshot comparison settings
 	expect: {

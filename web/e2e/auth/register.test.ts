@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/worker-database.fixture';
 import { testUsers } from '../fixtures/data.fixture';
 
 interface MailpitRecipient {
@@ -79,9 +79,11 @@ test.describe('Registration', () => {
 		await expect(page).toHaveScreenshot('register-page.png');
 	});
 
-	test.skip('should successfully register a new user', async ({ page }) => {
+	test('should successfully register a new user', async ({ page }) => {
 		// Fill in the registration form with new user data
-		const timestamp = Date.now(); // Use timestamp to ensure unique email
+		// With per-worker database isolation, each worker has its own database
+		// so timestamp-based unique emails will work reliably without conflicts
+		const timestamp = Date.now();
 		const uniqueEmail = `test${timestamp}@example.com`;
 
 		await page.getByPlaceholder('First name').fill('Test');
