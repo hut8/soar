@@ -50,10 +50,10 @@
 			// Build query parameters for bounding box search
 
 			const params = new URLSearchParams({
-				latitude_min: south.toString(),
-				latitude_max: north.toString(),
-				longitude_min: west.toString(),
-				longitude_max: east.toString()
+				south: south.toString(),
+				north: north.toString(),
+				west: west.toString(),
+				east: east.toString()
 			});
 
 			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
