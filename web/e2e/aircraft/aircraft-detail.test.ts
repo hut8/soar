@@ -3,6 +3,9 @@ import { goToAircraft, searchAircraftByRegistration } from '../utils/navigation'
 import { testAircraft } from '../fixtures/data.fixture';
 
 test.describe('Aircraft Detail', () => {
+	// Mark all tests in this suite as slow (triple timeout) due to multi-step navigation
+	test.slow();
+
 	// Helper function to navigate to a test aircraft detail page
 	// Searches for a known test aircraft and navigates to it
 	async function navigateToTestDevice(page: Page) {
