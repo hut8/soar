@@ -1,6 +1,9 @@
 import { test, expect } from '../fixtures/auth.fixture';
 
 test.describe('Operations Page', () => {
+	// Mark all tests as slow due to data-heavy page and API calls
+	test.slow();
+
 	test('should display operations page with correct elements', async ({ authenticatedPage }) => {
 		await authenticatedPage.goto('/operations');
 

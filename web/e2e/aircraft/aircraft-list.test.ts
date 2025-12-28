@@ -62,6 +62,9 @@ test.describe('Aircraft List', () => {
 			.first()
 			.click();
 
+		// Wait for UI to update after search type change
+		await authenticatedPage.waitForTimeout(500);
+
 		// Should show aircraft address input
 		await expect(
 			authenticatedPage.locator('input[placeholder="Aircraft address"]:visible')

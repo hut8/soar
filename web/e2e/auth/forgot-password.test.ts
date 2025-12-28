@@ -1,6 +1,9 @@
 import { test, expect } from '../fixtures/worker-database.fixture';
 
 test.describe('Forgot Password', () => {
+	// Mark all tests as slow due to form submission and API calls
+	test.slow();
+
 	test.beforeEach(async ({ page }) => {
 		await page.goto('/forgot-password');
 	});

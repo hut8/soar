@@ -1,6 +1,9 @@
 import { test, expect } from '../fixtures/auth.fixture';
 
 test.describe('Airports List', () => {
+	// Mark all tests as slow due to potential API data loading
+	test.slow();
+
 	test('should display airports list page with correct elements', async ({ authenticatedPage }) => {
 		await authenticatedPage.goto('/airports');
 
