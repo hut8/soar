@@ -53,18 +53,18 @@
 	let { data }: { data: PageData } = $props();
 
 	interface FlightGap {
-		gap_start: string;
-		gap_end: string;
+		gapStart: string;
+		gapEnd: string;
 		durationSeconds: number;
-		distance_meters: number;
-		callsign_before: string | null;
-		callsign_after: string | null;
-		squawk_before: string | null;
-		squawk_after: string | null;
-		climb_rate_before: number | null;
-		climb_rate_after: number | null;
-		avg_climb_rate_10_before: number | null;
-		avg_climb_rate_10_after: number | null;
+		distanceMeters: number;
+		callsignBefore: string | null;
+		callsignAfter: string | null;
+		squawkBefore: string | null;
+		squawkAfter: string | null;
+		climbRateBefore: number | null;
+		climbRateAfter: number | null;
+		avgClimbRate10Before: number | null;
+		avgClimbRate10After: number | null;
 	}
 
 	interface FlightGapsResponse {
@@ -1986,7 +1986,7 @@
 					Found {flightGaps.length} gap{flightGaps.length !== 1 ? 's' : ''} of 5+ minutes between fixes
 				</div>
 
-				{#each flightGaps as gap, index (gap.gap_start)}
+				{#each flightGaps as gap, index (gap.gapStart)}
 					<div class="preset-tonal-surface-500 card p-4">
 						<div class="mb-3 flex items-center gap-2">
 							<span class="chip preset-filled-warning-500 text-sm font-semibold">
@@ -1999,51 +1999,51 @@
 							<!-- Time Information -->
 							<div>
 								<div class="text-surface-600-300-token text-sm">Start Time</div>
-								<div class="font-semibold">{dayjs(gap.gap_start).format('h:mm:ss A')}</div>
+								<div class="font-semibold">{dayjs(gap.gapStart).format('h:mm:ss A')}</div>
 								<div class="text-surface-500-400-token text-xs">
-									{dayjs(gap.gap_start).format('MMM D, YYYY')}
+									{dayjs(gap.gapStart).format('MMM D, YYYY')}
 								</div>
 							</div>
 
 							<div>
 								<div class="text-surface-600-300-token text-sm">End Time</div>
-								<div class="font-semibold">{dayjs(gap.gap_end).format('h:mm:ss A')}</div>
+								<div class="font-semibold">{dayjs(gap.gapEnd).format('h:mm:ss A')}</div>
 								<div class="text-surface-500-400-token text-xs">
-									{dayjs(gap.gap_end).format('MMM D, YYYY')}
+									{dayjs(gap.gapEnd).format('MMM D, YYYY')}
 								</div>
 							</div>
 
 							<div>
 								<div class="text-surface-600-300-token text-sm">Distance Covered</div>
-								<div class="font-semibold">{formatDistanceMeters(gap.distance_meters)}</div>
+								<div class="font-semibold">{formatDistanceMeters(gap.distanceMeters)}</div>
 							</div>
 
 							<!-- Callsign and Squawk -->
-							{#if gap.callsign_before || gap.callsign_after}
+							{#if gap.callsignBefore || gap.callsignAfter}
 								<div>
 									<div class="text-surface-600-300-token text-sm">Callsign</div>
 									<div class="font-mono text-sm">
-										{#if gap.callsign_before === gap.callsign_after}
-											{gap.callsign_before || 'N/A'}
+										{#if gap.callsignBefore === gap.callsignAfter}
+											{gap.callsignBefore || 'N/A'}
 										{:else}
-											<span>{gap.callsign_before || 'N/A'}</span>
+											<span>{gap.callsignBefore || 'N/A'}</span>
 											<span class="text-surface-500-400-token mx-1">→</span>
-											<span>{gap.callsign_after || 'N/A'}</span>
+											<span>{gap.callsignAfter || 'N/A'}</span>
 										{/if}
 									</div>
 								</div>
 							{/if}
 
-							{#if gap.squawk_before || gap.squawk_after}
+							{#if gap.squawkBefore || gap.squawkAfter}
 								<div>
 									<div class="text-surface-600-300-token text-sm">Squawk Code</div>
 									<div class="font-mono text-sm">
-										{#if gap.squawk_before === gap.squawk_after}
-											{gap.squawk_before || 'N/A'}
+										{#if gap.squawkBefore === gap.squawkAfter}
+											{gap.squawkBefore || 'N/A'}
 										{:else}
-											<span>{gap.squawk_before || 'N/A'}</span>
+											<span>{gap.squawkBefore || 'N/A'}</span>
 											<span class="text-surface-500-400-token mx-1">→</span>
-											<span>{gap.squawk_after || 'N/A'}</span>
+											<span>{gap.squawkAfter || 'N/A'}</span>
 										{/if}
 									</div>
 								</div>
@@ -2055,9 +2055,9 @@
 									Climb Rate (immediately before/after)
 								</div>
 								<div class="text-sm">
-									<span>{formatClimbRate(gap.climb_rate_before)}</span>
+									<span>{formatClimbRate(gap.climbRateBefore)}</span>
 									<span class="text-surface-500-400-token mx-1">→</span>
-									<span>{formatClimbRate(gap.climb_rate_after)}</span>
+									<span>{formatClimbRate(gap.climbRateAfter)}</span>
 								</div>
 							</div>
 
@@ -2065,14 +2065,14 @@
 								<div class="text-surface-600-300-token text-sm">
 									Avg Climb Rate (10 fixes before)
 								</div>
-								<div class="text-sm">{formatClimbRate(gap.avg_climb_rate_10_before)}</div>
+								<div class="text-sm">{formatClimbRate(gap.avgClimbRate10Before)}</div>
 							</div>
 
 							<div>
 								<div class="text-surface-600-300-token text-sm">
 									Avg Climb Rate (10 fixes after)
 								</div>
-								<div class="text-sm">{formatClimbRate(gap.avg_climb_rate_10_after)}</div>
+								<div class="text-sm">{formatClimbRate(gap.avgClimbRate10After)}</div>
 							</div>
 						</div>
 					</div>

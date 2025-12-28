@@ -105,6 +105,7 @@ pub struct Fix {
 /// Extended Fix struct that includes raw packet data from aprs_messages table
 /// Used for API responses where raw packet data is needed
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FixWithRawPacket {
     #[serde(flatten)]
     pub fix: Fix,
@@ -116,6 +117,7 @@ pub struct FixWithRawPacket {
 /// Extended Fix struct that includes both raw packet and aircraft information
 /// Used for receiver fixes API where aircraft details need to be displayed
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FixWithAircraftInfo {
     #[serde(flatten)]
     pub fix: Fix,
