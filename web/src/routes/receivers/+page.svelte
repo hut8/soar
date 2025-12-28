@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, MapPin, Radio, Navigation, Map } from '@lucide/svelte';
+	import { Search, MapPin, Radio, Navigation, Map, ExternalLink } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -172,12 +172,16 @@
 		}
 	}
 
-	function formatCoordinates(
-		lat: number | null | undefined,
-		lng: number | null | undefined
-	): string {
-		if (lat == null || lng == null) return '—';
-		return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+	function formatAddress(receiver: Receiver): string {
+		const parts: string[] = [];
+
+		if (receiver.streetAddress) parts.push(receiver.streetAddress);
+		if (receiver.city) parts.push(receiver.city);
+		if (receiver.region) parts.push(receiver.region);
+		if (receiver.country) parts.push(receiver.country);
+		if (receiver.postalCode) parts.push(receiver.postalCode);
+
+		return parts.length > 0 ? parts.join(', ') : '—';
 	}
 
 	function getLastHeard(updatedAt: string): string {
@@ -407,16 +411,26 @@
 							<div
 								class="space-y-2 border-t border-surface-200 pt-3 text-sm dark:border-surface-700"
 							>
-								{#if receiver.country}
+								{#if formatAddress(receiver) !== '—'}
 									<div class="flex items-center gap-2 text-surface-600 dark:text-surface-400">
 										<MapPin class="h-4 w-4 flex-shrink-0" />
-										<span>{receiver.country}</span>
+										<span>{formatAddress(receiver)}</span>
 									</div>
 								{/if}
 
-								{#if receiver.latitude != null && receiver.longitude != null}
-									<div class="font-mono text-xs text-surface-500 dark:text-surface-400">
-										{formatCoordinates(receiver.latitude, receiver.longitude)}
+								{#if receiver.fromOgnDb}
+									<div class="text-xs text-surface-600 dark:text-surface-400">
+										In OGN Database:
+										<button
+											onclick={(e) => {
+												e.stopPropagation();
+												window.open('http://wiki.glidernet.org/list-of-receivers', '_blank');
+											}}
+											class="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
+										>
+											Yes
+											<ExternalLink class="h-3 w-3" />
+										</button>
 									</div>
 								{/if}
 
@@ -437,8 +451,8 @@
 							<tr>
 								<th>Callsign</th>
 								<th>Description</th>
-								<th>Country</th>
-								<th>Coordinates</th>
+								<th>Address</th>
+								<th>In OGN Database</th>
 								<th>Last Heard</th>
 							</tr>
 						</thead>
@@ -452,9 +466,24 @@
 									<td class="text-surface-600-300-token">
 										{receiver.description || '—'}
 									</td>
-									<td>{receiver.country || '—'}</td>
-									<td class="text-surface-500-400-token text-sm">
-										{formatCoordinates(receiver.latitude, receiver.longitude)}
+									<td class="text-surface-600-300-token text-sm">
+										{formatAddress(receiver)}
+									</td>
+									<td class="text-center">
+										{#if receiver.fromOgnDb}
+											<a
+												href="http://wiki.glidernet.org/list-of-receivers"
+												target="_blank"
+												rel="noopener noreferrer"
+												class="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300"
+												onclick={(e) => e.stopPropagation()}
+											>
+												Yes
+												<ExternalLink class="h-3 w-3" />
+											</a>
+										{:else}
+											<span class="text-surface-500-400-token">No</span>
+										{/if}
 									</td>
 									<td class="text-surface-500-400-token text-sm">
 										{getLastHeard(receiver.updatedAt)}
