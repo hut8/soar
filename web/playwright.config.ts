@@ -1,9 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-	// Global setup to create template database for per-worker isolation
-	globalSetup: './playwright.global-setup.ts',
-
 	// Test directory
 	testDir: 'e2e',
 
@@ -14,16 +11,17 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0, // Disabled retries for faster feedback
-	// Allow parallel execution in CI - use PLAYWRIGHT_WORKERS env var to override
-	workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : undefined,
+	workers: process.env.CI ? 4 : undefined, // Limit workers in CI to prevent resource exhaustion
 
 	// Reporter configuration
 	reporter: [['html'], ['list'], ...(process.env.CI ? [['github' as const]] : [])],
 
 	// Shared settings for all projects
 	use: {
-		// Base URL is provided by worker-scoped fixture (each worker has its own server)
-		// This allows true test isolation with per-worker databases
+		// Base URL points to shared preview server
+		// In CI: Started by CI workflow on port 4173
+		// Locally: Start with `npm run preview` before running tests
+		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
 
 		// Ignore HTTPS errors for test environments
 		ignoreHTTPSErrors: true,
@@ -73,14 +71,9 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	// NOTE: Web servers are now started per-worker via the worker-database.fixture.ts
-	// This provides true test isolation with each worker having its own database and server
-	// Workers start servers on ports 5000, 5001, 5002, etc.
-	//
-	// The global webServer config is disabled because:
-	// 1. Each worker needs its own isolated database
-	// 2. Each worker starts its own server on a unique port
-	// 3. This enables parallel test execution without data conflicts
+	// NOTE: Web server is started externally (by CI workflow or manually with `npm run preview`)
+	// All test workers share the same server and database
+	// Tests ensure data isolation through unique identifiers (timestamps, UUIDs)
 
 	// Screenshot comparison settings
 	expect: {
