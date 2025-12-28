@@ -17,6 +17,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::WebSocketMessage;
 use crate::web::AppState;
 
+use super::DataListResponse;
 use super::aircraft_search::enrich_aircraft_with_registration_data;
 use super::json_error;
 
@@ -690,7 +691,7 @@ async fn get_fixes_by_device_id(
         .get_fixes_for_aircraft(aircraft_id, Some(limit.unwrap_or(1000)), None)
         .await
     {
-        Ok(fixes) => Json(fixes).into_response(),
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             error!("Failed to get fixes by device ID: {}", e);
             json_error(
@@ -711,7 +712,7 @@ async fn get_fixes_by_flight_id(
     let fixes_repo = FixesRepository::new(pool);
 
     match fixes_repo.get_fixes_for_flight(flight_id, limit).await {
-        Ok(fixes) => Json(fixes).into_response(),
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             error!("Failed to get fixes by flight ID: {}", e);
             json_error(
