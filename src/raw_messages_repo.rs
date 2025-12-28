@@ -543,10 +543,12 @@ mod tests {
                     .execute(conn)?;
 
                 // Insert multiple messages using Diesel
+                // Use distinct timestamps to avoid deadlocks in TimescaleDB hypertable
+                let base_time = Utc::now();
                 for i in 0..3 {
                     let new_message = NewAprsMessage::new(
                         format!("TEST{}>APRS:>Test message {}", i, i),
-                        Utc::now(),
+                        base_time + chrono::Duration::milliseconds(i as i64 * 100),
                         receiver_id,
                         None,
                     );

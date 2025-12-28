@@ -1,9 +1,0 @@
-[Unit]
-Description=pg_partman partition maintenance (staging)
-After=postgresql.service
-
-[Service]
-Type=oneshot
-User=soar
-ExecStart=/usr/bin/psql postgres://localhost/soar_staging -c "CALL partman.run_maintenance_proc()"
-# Logs to journalctl by default (view with: journalctl -u partman-maintenance-staging)

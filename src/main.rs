@@ -748,13 +748,14 @@ async fn main() -> Result<()> {
 
     // Create separate filter for fmt_layer (console output)
     // Use RUST_LOG if set, otherwise default based on environment
+    // Note: async_nats is set to warn to suppress "slow consumers" INFO logs during high load
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
-            EnvFilter::new("warn,hyper_util=info,rustls=info")
+            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn")
         } else if is_staging {
-            EnvFilter::new("info,hyper_util=info,rustls=info")
+            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn")
         } else {
-            EnvFilter::new("debug,hyper_util=info,rustls=info")
+            EnvFilter::new("debug,hyper_util=info,rustls=info,async_nats=warn")
         }
     });
 
@@ -1224,6 +1225,37 @@ async fn main() -> Result<()> {
             // Send email notification and Sentry event
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
+
+            // Query and display the latest migration version
+            use diesel::prelude::*;
+            match diesel_pool.get() {
+                Ok(mut conn) => {
+                    #[derive(QueryableByName)]
+                    struct MigrationVersion {
+                        #[diesel(sql_type = diesel::sql_types::Text)]
+                        version: String,
+                    }
+
+                    match diesel::sql_query(
+                        "SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 1",
+                    )
+                    .get_result::<MigrationVersion>(&mut conn)
+                    {
+                        Ok(latest) => {
+                            info!("Latest migration applied: {}", latest.version);
+                        }
+                        Err(e) => {
+                            warn!("Could not query latest migration version: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Could not get database connection to query latest migration: {}",
+                        e
+                    );
+                }
+            }
 
             // Send success notifications (email and Sentry)
             // Note: We can't easily determine which migrations were applied after the fact,

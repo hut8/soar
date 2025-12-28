@@ -36,6 +36,11 @@ const SERVER_STATUS_QUEUE_SIZE: usize = 50;
 const ELEVATION_QUEUE_SIZE: usize = 1000;
 const AGL_DATABASE_QUEUE_SIZE: usize = 1000;
 
+// NATS subscriber capacity
+// Controls how many messages can be buffered per subscription before triggering slow consumer warnings
+// Set to 10,000 messages (from default ~512) to handle bursts during high load
+const NATS_SUBSCRIBER_PENDING_MESSAGES: usize = 10_000;
+
 fn queue_warning_threshold(queue_size: usize) -> usize {
     queue_size / 2
 }
@@ -1054,12 +1059,16 @@ pub async fn handle_run(
                     let nats_client_name = soar::nats_client_name("run-beast");
                     let nats_result = async_nats::ConnectOptions::new()
                         .name(&nats_client_name)
+                        .subscription_capacity(NATS_SUBSCRIBER_PENDING_MESSAGES)
                         .connect(&beast_nats_url)
                         .await;
 
                     let nats_client = match nats_result {
                         Ok(client) => {
-                            info!("Connected to NATS for Beast messages successfully");
+                            info!(
+                                "Connected to NATS for Beast messages (subscription capacity: {} messages)",
+                                NATS_SUBSCRIBER_PENDING_MESSAGES
+                            );
                             client
                         }
                         Err(e) => {
@@ -1139,12 +1148,16 @@ pub async fn handle_run(
             let nats_client_name = soar::nats_client_name("run");
             let nats_result = async_nats::ConnectOptions::new()
                 .name(&nats_client_name)
+                .subscription_capacity(NATS_SUBSCRIBER_PENDING_MESSAGES)
                 .connect(&nats_url)
                 .await;
 
             let nats_client = match nats_result {
                 Ok(client) => {
-                    info!("Connected to NATS successfully");
+                    info!(
+                        "Connected to NATS for APRS messages (subscription capacity: {} messages)",
+                        NATS_SUBSCRIBER_PENDING_MESSAGES
+                    );
                     client
                 }
                 Err(e) => {

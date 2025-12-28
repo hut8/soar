@@ -174,21 +174,6 @@ pub(crate) async fn timeout_flight(
 
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
-    // Fetch the flight to get the last_fix_at timestamp
-    let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await? {
-        Some(f) => f,
-        None => {
-            error!("Flight {} not found when timing out", flight_id);
-            // Remove from active flights even if flight doesn't exist
-            let mut flights = active_flights.write().await;
-            flights.remove(&aircraft_id);
-            return Ok(());
-        }
-    };
-
-    // Use last_fix_at as the timeout time
-    let timeout_time = flight.last_fix_at;
-
     // Fetch last fix to get coordinates for reverse geocoding
     let last_fix = ctx
         .fixes_repo
@@ -215,9 +200,10 @@ pub(crate) async fn timeout_flight(
     };
 
     // Mark flight as timed out in database WITH phase information and end location
+    // The timeout timestamp will be set to the current last_fix_at value atomically
     match ctx
         .flights_repo
-        .timeout_flight_with_phase(flight_id, timeout_time, timeout_phase, end_location_id)
+        .timeout_flight_with_phase(flight_id, timeout_phase, end_location_id)
         .await
     {
         Ok(true) => {

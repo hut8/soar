@@ -69,12 +69,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Build custom PostgreSQL image with pg_partman
+      - name: Build custom PostgreSQL image with TimescaleDB
         working-directory: .
         run: |
-          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+          docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
 
-      - name: Start PostgreSQL service with pg_partman
+      - name: Start PostgreSQL service with TimescaleDB
         working-directory: .
         run: |
           docker run -d \
@@ -87,7 +87,7 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            postgis-partman:test
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         working-directory: .
@@ -290,11 +290,11 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Build custom PostgreSQL image with pg_partman
+      - name: Build custom PostgreSQL image with TimescaleDB
         run: |
-          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+          docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
 
-      - name: Start PostgreSQL service with pg_partman
+      - name: Start PostgreSQL service with TimescaleDB
         run: |
           docker run -d \
             --name postgres \
@@ -306,7 +306,7 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            postgis-partman:test
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         run: |

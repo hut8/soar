@@ -19,7 +19,7 @@ async-trait = "0.1"
 bcrypt = "0.17"
 bigdecimal = { version = "0.4", features = ["serde"] }
 axum = { version = "0.8.8", features = ["macros", "ws"] }
-axum-extra = { version = "0.12.3", features = ["typed-header"] }
+axum-extra = { version = "0.12.5", features = ["typed-header"] }
 bytes = "1.11"
 http-body = "1.0"
 http-body-util = "0.1"
@@ -33,7 +33,7 @@ google_maps = { version = "3.9.1", features = [
     "elevation",
     "reqwest-rustls-tls",
 ], default-features = false }
-h3o = { version = "0.6", features = ["geo"] }
+h3o = { version = "0.9", features = ["geo"] }
 geo = "0.30"
 include_dir = "0.7"
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
