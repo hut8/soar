@@ -376,6 +376,14 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: diesel migration run
 
+      - name: Setup test template database
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+        run: ./scripts/setup-test-template.sh
+
       - name: Cache cargo-nextest
         id: cache-nextest
         uses: actions/cache@v5
