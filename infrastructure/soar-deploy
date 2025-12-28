@@ -134,7 +134,6 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
         "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
-        "partman-maintenance${SERVICE_SUFFIX}.service"
         "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
@@ -142,7 +141,6 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
         "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
-        "partman-maintenance${SERVICE_SUFFIX}.timer"
     )
 else
     TIMER_SERVICES=(
@@ -152,7 +150,6 @@ else
         "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
-        "partman-maintenance${SERVICE_SUFFIX}.service"
         "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
@@ -162,7 +159,6 @@ else
         "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
         "soar-backup-base${SERVICE_SUFFIX}.timer"
         "soar-backup-verify${SERVICE_SUFFIX}.timer"
-        "partman-maintenance${SERVICE_SUFFIX}.timer"
     )
 fi
 
@@ -875,6 +871,27 @@ fi
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
+
+# Remove obsolete partman systemd files (pg_partman replaced by TimescaleDB)
+log_info "Removing obsolete partman systemd files..."
+PARTMAN_FILES_REMOVED=0
+for partman_file in "partman-maintenance${SERVICE_SUFFIX}.service" "partman-maintenance${SERVICE_SUFFIX}.timer"; do
+    if [ -f "/etc/systemd/system/$partman_file" ]; then
+        log_info "Stopping and disabling $partman_file..."
+        systemctl stop "$partman_file" 2>/dev/null || true
+        systemctl disable "$partman_file" 2>/dev/null || true
+        log_info "Removing $partman_file..."
+        rm -f "/etc/systemd/system/$partman_file"
+        ((PARTMAN_FILES_REMOVED++)) || true
+    fi
+done
+
+if [ $PARTMAN_FILES_REMOVED -gt 0 ]; then
+    log_info "Removed $PARTMAN_FILES_REMOVED partman systemd file(s)"
+    systemctl daemon-reload
+else
+    log_info "No partman systemd files found (already removed or not present)"
+fi
 
 # Enable target file
 if [ -f "/etc/systemd/system/$TARGET_FILE" ]; then
