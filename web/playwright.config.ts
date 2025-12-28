@@ -4,9 +4,6 @@ export default defineConfig({
 	// Test directory
 	testDir: 'e2e',
 
-	// Global setup - runs once before all tests
-	globalSetup: './e2e/global-setup.ts',
-
 	// Maximum time one test can run
 	timeout: 30 * 1000,
 

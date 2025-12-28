@@ -109,6 +109,7 @@ aws-sdk-s3 = "1.80"
 hex-literal = "1.1"
 serial_test = "3.2"
 tempfile = "3.24.0"
+fs2 = "0.4"
 
 [build-dependencies]
 vergen-git2 = { version = "1.0", features = ["build", "cargo"] }
