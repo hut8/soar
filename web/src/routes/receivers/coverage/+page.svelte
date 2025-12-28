@@ -22,6 +22,10 @@
 	let currentPopup: maplibregl.Popup | null = null;
 	let autoResolution = true; // Auto-select resolution based on zoom level
 	let moveDebounceTimer: number | null = null;
+	let receiverSearchQuery = '';
+	let receiverSearchResults: Receiver[] = [];
+	let searchDebounceTimer: number | null = null;
+	let showReceiverDropdown = false;
 
 	// Default to last 30 days
 	function getDefaultDates() {
@@ -127,6 +131,9 @@
 	}
 
 	onMount(() => {
+		// Add click-outside handler for receiver dropdown
+		document.addEventListener('click', handleClickOutside);
+
 		// Initialize MapLibre map centered on US
 		map = new maplibregl.Map({
 			container: mapContainer,
@@ -181,6 +188,7 @@
 		});
 
 		return () => {
+			document.removeEventListener('click', handleClickOutside);
 			map?.remove();
 		};
 	});
@@ -396,6 +404,58 @@
 	function toggleAdvancedFilters() {
 		showAdvancedFilters = !showAdvancedFilters;
 	}
+
+	async function searchReceivers(query: string) {
+		if (query.trim().length === 0) {
+			receiverSearchResults = [];
+			return;
+		}
+
+		try {
+			const params = new URLSearchParams({ q: query.trim() });
+			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
+			receiverSearchResults = response.data || [];
+		} catch (err) {
+			console.error('Failed to search receivers:', err);
+			receiverSearchResults = [];
+		}
+	}
+
+	function handleReceiverSearchInput() {
+		// Clear previous timer
+		if (searchDebounceTimer !== null) {
+			clearTimeout(searchDebounceTimer);
+		}
+
+		// Set a new timer to search after 300ms
+		searchDebounceTimer = window.setTimeout(() => {
+			searchReceivers(receiverSearchQuery);
+			searchDebounceTimer = null;
+		}, 300);
+	}
+
+	function selectReceiver(receiverId: string, callsign: string) {
+		selectedReceiverId = receiverId;
+		receiverSearchQuery = callsign;
+		showReceiverDropdown = false;
+		receiverSearchResults = [];
+		handleReceiverChange();
+	}
+
+	function clearReceiverSelection() {
+		selectedReceiverId = '';
+		receiverSearchQuery = '';
+		receiverSearchResults = [];
+		showReceiverDropdown = false;
+		handleReceiverChange();
+	}
+
+	function handleClickOutside(event: MouseEvent) {
+		const target = event.target as HTMLElement;
+		if (!target.closest('#receiver-search') && !target.closest('.receiver-dropdown')) {
+			showReceiverDropdown = false;
+		}
+	}
 </script>
 
 <div class="flex h-screen flex-col">
@@ -506,19 +566,53 @@
 
 				<div class="grid gap-4 md:grid-cols-2">
 					<!-- Receiver Filter -->
-					<div class="space-y-2">
-						<label for="receiver" class="text-sm font-medium text-gray-300">Receiver:</label>
-						<select
-							id="receiver"
-							bind:value={selectedReceiverId}
-							onchange={handleReceiverChange}
-							class="variant-filled-surface select w-full"
-						>
-							<option value="">All Receivers</option>
-							{#each receivers as receiver (receiver.id)}
-								<option value={receiver.id}>{receiver.callsign}</option>
-							{/each}
-						</select>
+					<div class="relative space-y-2">
+						<label for="receiver-search" class="text-sm font-medium text-gray-300">Receiver:</label>
+						<div class="relative">
+							<input
+								id="receiver-search"
+								type="text"
+								placeholder={selectedReceiverId
+									? receiverSearchQuery
+									: 'All Receivers (type to search)'}
+								bind:value={receiverSearchQuery}
+								oninput={handleReceiverSearchInput}
+								onfocus={() => {
+									showReceiverDropdown = true;
+									if (receiverSearchQuery.trim().length > 0) {
+										searchReceivers(receiverSearchQuery);
+									}
+								}}
+								class="variant-filled-surface input w-full pr-8"
+							/>
+							{#if selectedReceiverId}
+								<button
+									onclick={clearReceiverSelection}
+									class="absolute top-1/2 right-2 -translate-y-1/2 text-gray-400 hover:text-white"
+									title="Clear selection"
+								>
+									×
+								</button>
+							{/if}
+						</div>
+
+						{#if showReceiverDropdown && receiverSearchResults.length > 0}
+							<div
+								class="receiver-dropdown variant-filled-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-surface-400 shadow-lg"
+							>
+								{#each receiverSearchResults as receiver (receiver.id)}
+									<button
+										onclick={() => selectReceiver(receiver.id, receiver.callsign)}
+										class="w-full px-3 py-2 text-left text-sm hover:bg-surface-600"
+									>
+										<div class="font-medium">{receiver.callsign}</div>
+										{#if receiver.description}
+											<div class="text-xs text-gray-400">{receiver.description}</div>
+										{/if}
+									</button>
+								{/each}
+							</div>
+						{/if}
 					</div>
 
 					<!-- Altitude Filter -->
