@@ -40,14 +40,22 @@
 	let startDate = defaultDates.start;
 	let endDate = defaultDates.end;
 
+	// Normalize longitude to [-180, 180] range
+	function normalizeLongitude(lng: number): number {
+		// Wrap longitude to -180 to 180 range
+		while (lng > 180) lng -= 360;
+		while (lng < -180) lng += 360;
+		return lng;
+	}
+
 	async function loadReceivers() {
 		if (!map) return;
 
 		try {
 			// Get current map bounds
 			const bounds = map.getBounds();
-			const west = bounds.getWest();
-			const east = bounds.getEast();
+			const west = normalizeLongitude(bounds.getWest());
+			const east = normalizeLongitude(bounds.getEast());
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
@@ -201,8 +209,8 @@
 
 		try {
 			const bounds = map.getBounds();
-			const west = bounds.getWest();
-			const east = bounds.getEast();
+			const west = normalizeLongitude(bounds.getWest());
+			const east = normalizeLongitude(bounds.getEast());
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
