@@ -47,7 +47,7 @@ test.describe('Aircraft List', () => {
 		).toBeVisible();
 	});
 
-	test.skip('should switch between search types', async ({ authenticatedPage }) => {
+	test('should switch between search types', async ({ authenticatedPage }) => {
 		await goToAircraft(authenticatedPage);
 
 		// Initially should show registration search
@@ -239,30 +239,6 @@ test.describe('Aircraft List', () => {
 			// Take screenshot of aircraft detail page
 			await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-from-list.png');
 		}
-	});
-
-	// Skipping this test as it's prone to race conditions in CI
-	// The backend is fast enough that the loading state often completes before Playwright can detect it
-	test.skip('should show loading state during search', async ({ authenticatedPage }) => {
-		await goToAircraft(authenticatedPage);
-
-		// Fill in registration
-		await authenticatedPage
-			.locator('input[placeholder*="Aircraft registration"]:visible')
-			.fill(testAircraft.validRegistration);
-
-		// Start search (don't await - we want to check loading state)
-		const searchPromise = authenticatedPage
-			.getByRole('button', { name: /search aircraft/i })
-			.click();
-
-		// Check for loading indicator
-		// The button text changes to "Searching..."
-		await expect(authenticatedPage.getByRole('button', { name: /searching/i })).toBeVisible();
-
-		// Wait for search to complete
-		await searchPromise;
-		await authenticatedPage.waitForLoadState('networkidle');
 	});
 
 	test('should show pagination when results exceed page size', async ({ authenticatedPage }) => {

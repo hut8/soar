@@ -46,7 +46,7 @@ test.describe('Aircraft Detail', () => {
 		await page.waitForLoadState('networkidle');
 	}
 
-	test.skip('should display aircraft detail authenticatedPage', async ({ authenticatedPage }) => {
+	test('should display aircraft detail authenticatedPage', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Check page has aircraft-related content
@@ -69,9 +69,7 @@ test.describe('Aircraft Detail', () => {
 		});
 	});
 
-	test.skip('should display aircraft address and type information', async ({
-		authenticatedPage
-	}) => {
+	test('should display aircraft address and type information', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Should show aircraft address in the format "Address: ICAO-ABC123" or similar
@@ -82,7 +80,7 @@ test.describe('Aircraft Detail', () => {
 		expect(addressText).toMatch(/ICAO|OGN|FLARM/i);
 	});
 
-	test.skip('should display aircraft registration information if available', async ({
+	test('should display aircraft registration information if available', async ({
 		authenticatedPage
 	}) => {
 		await navigateToTestDevice(authenticatedPage);
@@ -96,7 +94,7 @@ test.describe('Aircraft Detail', () => {
 		).toBeVisible();
 	});
 
-	test.skip('should display fixes (position reports) list', async ({ authenticatedPage }) => {
+	test('should display fixes (position reports) list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Wait for authenticatedPage to load
@@ -113,7 +111,7 @@ test.describe('Aircraft Detail', () => {
 		});
 	});
 
-	test.skip('should display flights list', async ({ authenticatedPage }) => {
+	test('should display flights list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Wait for authenticatedPage to load
@@ -128,7 +126,7 @@ test.describe('Aircraft Detail', () => {
 		});
 	});
 
-	test.skip('should navigate back to aircraft list', async ({ authenticatedPage }) => {
+	test('should navigate back to aircraft list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Click the back button
@@ -153,13 +151,7 @@ test.describe('Aircraft Detail', () => {
 		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-not-found.png');
 	});
 
-	test.skip('should show loading state while fetching data', async ({ authenticatedPage }) => {
-		// This test is skipped because loading states are too fast to reliably test
-		// and the test uses dynamic aircraft navigation which adds complexity
-		await navigateToTestDevice(authenticatedPage);
-	});
-
-	test.skip('should display aircraft status badges if available', async ({ authenticatedPage }) => {
+	test('should display aircraft status badges if available', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -171,7 +163,7 @@ test.describe('Aircraft Detail', () => {
 		expect(hasBadges).toBeGreaterThanOrEqual(0);
 	});
 
-	test.skip('should paginate fixes if there are many', async ({ authenticatedPage }) => {
+	test('should paginate fixes if there are many', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -200,7 +192,7 @@ test.describe('Aircraft Detail', () => {
 		}
 	});
 
-	test.skip('should paginate flights if there are many', async ({ authenticatedPage }) => {
+	test('should paginate flights if there are many', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');

@@ -220,21 +220,4 @@ test.describe('Registration', () => {
 		// Should navigate to login page
 		await expect(page).toHaveURL(/\/login/);
 	});
-
-	test.skip('should disable form during submission', async ({ page }) => {
-		// This test is skipped because the registration completes too quickly in E2E environment
-		// to reliably catch the loading state. The button text changes from "Create Account" to
-		// "Creating Account..." for such a short time that Playwright cannot consistently detect it.
-
-		// Fill in form
-		const timestamp = Date.now();
-		await page.getByPlaceholder('First name').fill('Test');
-		await page.getByPlaceholder('Last name').fill('User');
-		await page.getByPlaceholder(/email/i).fill(`test${timestamp}@example.com`);
-		await page.getByPlaceholder('Password', { exact: true }).fill('password123');
-		await page.getByPlaceholder('Confirm password').fill('password123');
-
-		// Submit and complete
-		await page.getByRole('button', { name: /create account/i }).click();
-	});
 });

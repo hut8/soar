@@ -116,20 +116,4 @@ test.describe('Login', () => {
 		// Should navigate to forgot password page
 		await expect(page).toHaveURL(/\/forgot-password/);
 	});
-
-	// Skipping this test as it's prone to race conditions in CI
-	// The backend is fast enough that the loading state often completes before Playwright can detect it
-	test.skip('should disable form during submission', async ({ page }) => {
-		// Fill in credentials
-		await fillLoginForm(page, testUsers.validUser.email, testUsers.validUser.password);
-
-		// Start submission (don't await - we want to check loading state)
-		const submitPromise = page.getByRole('button', { name: /sign in/i }).click();
-
-		// Check that button shows loading state
-		await expect(page.getByRole('button', { name: /signing in/i })).toBeVisible();
-
-		// Wait for submission to complete
-		await submitPromise;
-	});
 });
