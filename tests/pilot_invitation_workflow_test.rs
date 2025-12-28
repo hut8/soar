@@ -1,6 +1,7 @@
 mod common;
 
 use common::TestDatabase;
+use serial_test::serial;
 use soar::clubs_repo::ClubsRepository;
 use soar::users::User;
 use soar::users_repo::UsersRepository;
@@ -12,6 +13,7 @@ async fn setup_test_db() -> TestDatabase {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_create_pilot_without_email() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -44,6 +46,7 @@ async fn test_create_pilot_without_email() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_send_invitation_to_pilot() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -89,6 +92,7 @@ async fn test_send_invitation_to_pilot() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_complete_pilot_registration() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -145,6 +149,7 @@ async fn test_complete_pilot_registration() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_full_pilot_invitation_workflow() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -202,6 +207,7 @@ async fn test_full_pilot_invitation_workflow() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_get_pilots_by_club() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -261,6 +267,7 @@ async fn test_get_pilots_by_club() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_soft_delete_pilot() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
@@ -291,6 +298,7 @@ async fn test_soft_delete_pilot() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_cannot_send_invitation_twice() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
