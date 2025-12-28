@@ -17,10 +17,11 @@ RUN mkdir -p /usr/share/keyrings && \
     echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
     tee /etc/apt/sources.list.d/timescaledb.list
 
-# Install pg_partman and TimescaleDB extensions
+# Install pg_partman, TimescaleDB, and H3 extensions
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         postgresql-17-partman \
+        postgresql-17-h3 \
         timescaledb-2-postgresql-17 \
         timescaledb-toolkit-postgresql-17 \
         timescaledb-tools \

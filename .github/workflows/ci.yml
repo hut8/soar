@@ -172,7 +172,7 @@ jobs:
           # Create PostGIS extension
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-          # Run migrations
+          # Run migrations (includes h3 extension setup)
           diesel migration run
 
           # Build the project to get the seed-test-data command
@@ -354,6 +354,8 @@ jobs:
         run: |
           # Create PostGIS extension (already available in postgis/postgis image)
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+          # H3 extensions will be created by migrations
 
       - name: Check Rust formatting
         run: cargo fmt --check
