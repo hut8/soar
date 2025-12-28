@@ -748,13 +748,14 @@ async fn main() -> Result<()> {
 
     // Create separate filter for fmt_layer (console output)
     // Use RUST_LOG if set, otherwise default based on environment
+    // Note: async_nats is set to warn to suppress "slow consumers" INFO logs during high load
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
-            EnvFilter::new("warn,hyper_util=info,rustls=info")
+            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn")
         } else if is_staging {
-            EnvFilter::new("info,hyper_util=info,rustls=info")
+            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn")
         } else {
-            EnvFilter::new("debug,hyper_util=info,rustls=info")
+            EnvFilter::new("debug,hyper_util=info,rustls=info,async_nats=warn")
         }
     });
 
