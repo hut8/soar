@@ -438,21 +438,17 @@ pub(crate) async fn process_state_transition(
                         metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
                             .record(distance_km);
 
-                        // Clear the timeout in the database
-                        if let Err(e) = ctx.flights_repo.clear_timeout(flight_id).await {
-                            warn!("Failed to clear timeout for flight {}: {}", flight_id, e);
-                        }
-
-                        // Update last_fix_at to current fix timestamp
+                        // Atomically clear the timeout and update last_fix_at in a single database operation
+                        // This prevents violating the check_timeout_after_last_fix constraint
                         if let Err(e) = ctx
                             .flights_repo
-                            .update_last_fix_at(flight_id, fix.timestamp)
+                            .resume_timed_out_flight(flight_id, fix.timestamp)
                             .await
                         {
-                            warn!(
-                                "Failed to update last_fix_at for resumed flight {}: {}",
-                                flight_id, e
-                            );
+                            error!("Failed to resume timed-out flight {}: {}", flight_id, e);
+                            // If we can't resume the flight, don't continue processing this fix
+                            // Return the fix unmodified so it can be processed again later
+                            return Ok(fix);
                         }
 
                         // Add flight back to ctx.active_flights map with updated position/altitude
