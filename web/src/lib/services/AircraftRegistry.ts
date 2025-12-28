@@ -26,7 +26,6 @@ export class AircraftRegistry {
 	private static instance: AircraftRegistry | null = null;
 	private aircraft = new Map<string, AircraftWithFixesCache>();
 	private subscribers = new Set<AircraftRegistrySubscriber>();
-	private readonly storageKeyPrefix = 'aircraft.';
 	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private readonly aircraftCacheExpiration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private refreshIntervalId: number | null = null;
@@ -114,20 +113,13 @@ export class AircraftRegistry {
 		});
 	}
 
-	// Get an aircraft by ID, loading from localStorage if needed
+	// Get an aircraft by ID from memory cache
 	public getAircraft(aircraftId: string): Aircraft | null {
-		// Check in-memory cache first
+		// Check in-memory cache
 		if (this.aircraft.has(aircraftId)) {
 			const cached = this.aircraft.get(aircraftId)!;
 			// Return aircraft with current fixes
 			return { ...cached.aircraft, fixes: cached.fixes };
-		}
-
-		// Try to load from localStorage
-		const stored = this.loadAircraftFromStorage(aircraftId);
-		if (stored) {
-			this.aircraft.set(aircraftId, stored);
-			return { ...stored.aircraft, fixes: stored.fixes };
 		}
 
 		return null;
@@ -160,7 +152,6 @@ export class AircraftRegistry {
 		const cached_at = Date.now();
 
 		this.aircraft.set(aircraft.id, { aircraft, fixes: existingFixes, cached_at });
-		this.saveAircraftToStorage({ aircraft, fixes: existingFixes, cached_at });
 
 		// Notify subscribers
 		this.notifySubscribers({
@@ -365,12 +356,12 @@ export class AircraftRegistry {
 		}
 		this.pendingEvents = [];
 
-		// Clear localStorage
+		// Clean up any old localStorage entries from previous versions
 		if (browser) {
 			const keys = [];
 			for (let i = 0; i < localStorage.length; i++) {
 				const key = localStorage.key(i);
-				if (key && key.startsWith(this.storageKeyPrefix)) {
+				if (key && key.startsWith('aircraft.')) {
 					keys.push(key);
 				}
 			}
@@ -381,53 +372,6 @@ export class AircraftRegistry {
 			type: 'aircraft_changed',
 			aircraft: []
 		});
-	}
-
-	// Private methods for localStorage management
-	private saveAircraftToStorage(cached: AircraftWithFixesCache): void {
-		if (!browser) return;
-
-		// Validate that aircraft has a valid ID before saving
-		if (!cached.aircraft.id) {
-			console.warn('Attempted to save aircraft with undefined ID, skipping:', cached.aircraft);
-			return;
-		}
-
-		try {
-			const key = this.storageKeyPrefix + cached.aircraft.id;
-			// Strip fixes entirely before saving to localStorage - they should never be cached
-			const cacheWithoutFixes = {
-				aircraft: cached.aircraft,
-				cached_at: cached.cached_at
-			};
-			localStorage.setItem(key, JSON.stringify(cacheWithoutFixes));
-		} catch (error) {
-			console.warn('Failed to save aircraft to localStorage:', error);
-		}
-	}
-
-	private loadAircraftFromStorage(aircraftId: string): AircraftWithFixesCache | null {
-		if (!browser) return null;
-
-		const key = this.storageKeyPrefix + aircraftId;
-		const stored = localStorage.getItem(key);
-
-		if (stored) {
-			try {
-				const data = JSON.parse(stored) as AircraftWithFixesCache;
-				// Handle backward compatibility: if cached_at is missing, set it to 0 (will be refreshed)
-				if (!data.cached_at) {
-					data.cached_at = 0;
-				}
-				return data;
-			} catch (e) {
-				console.warn('Failed to parse stored aircraft %s:', aircraftId, e);
-				// Remove corrupted data
-				localStorage.removeItem(key);
-			}
-		}
-
-		return null;
 	}
 
 	// Check if an aircraft cache entry is stale
@@ -474,7 +418,6 @@ export class AircraftRegistry {
 	// Start periodic refresh of stale aircraft
 	private startPeriodicRefresh(): void {
 		// Initial refresh on load
-		this.loadAllAircraftFromStorage();
 		void this.refreshStaleAircraft();
 
 		// Set up periodic refresh every hour
@@ -492,56 +435,6 @@ export class AircraftRegistry {
 			window.clearInterval(this.refreshIntervalId);
 			this.refreshIntervalId = null;
 		}
-	}
-
-	// Clean up malformed localStorage keys (e.g., 'aircraft.undefined')
-	private cleanupMalformedStorageKeys(): void {
-		if (!browser) return;
-
-		const keysToRemove: string[] = [];
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key && key.startsWith(this.storageKeyPrefix)) {
-				const aircraftId = key.substring(this.storageKeyPrefix.length);
-				// Remove keys with invalid aircraft IDs (undefined, null, empty string)
-				if (!aircraftId || aircraftId === 'undefined' || aircraftId === 'null') {
-					keysToRemove.push(key);
-				}
-			}
-		}
-
-		if (keysToRemove.length > 0) {
-			console.log(`[REGISTRY] Removing ${keysToRemove.length} malformed localStorage keys`);
-			keysToRemove.forEach((key) => {
-				console.log(`[REGISTRY] Removing malformed key: ${key}`);
-				localStorage.removeItem(key);
-			});
-		}
-	}
-
-	// Load all aircraft from localStorage into memory
-	private loadAllAircraftFromStorage(): void {
-		if (!browser) return;
-
-		// Clean up any malformed keys first
-		this.cleanupMalformedStorageKeys();
-
-		console.log('[REGISTRY] Loading aircraft from localStorage');
-		let count = 0;
-
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key && key.startsWith(this.storageKeyPrefix)) {
-				const aircraftId = key.substring(this.storageKeyPrefix.length);
-				const cached = this.loadAircraftFromStorage(aircraftId);
-				if (cached) {
-					this.aircraft.set(aircraftId, cached);
-					count++;
-				}
-			}
-		}
-
-		console.log(`[REGISTRY] Loaded ${count} aircraft from localStorage`);
 	}
 
 	// Batch load recent fixes for an aircraft from API
