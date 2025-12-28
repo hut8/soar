@@ -22,6 +22,9 @@ export async function login(page: Page, email: string, password: string): Promis
 	// Navigate to login page
 	await page.goto('/login');
 
+	// Wait for page to be fully loaded
+	await page.waitForLoadState('networkidle');
+
 	// Fill in the login form
 	await page.getByPlaceholder('Enter your email').fill(email);
 	await page.getByPlaceholder('Enter your password').fill(password);
@@ -31,6 +34,10 @@ export async function login(page: Page, email: string, password: string): Promis
 
 	// Wait for navigation to complete (redirects to home page on success)
 	await page.waitForURL('/');
+	await page.waitForLoadState('networkidle');
+
+	// Wait for authentication to be fully established by checking for user button
+	await page.getByRole('button', { name: 'Test' }).waitFor({ state: 'visible', timeout: 10000 });
 }
 
 /**
