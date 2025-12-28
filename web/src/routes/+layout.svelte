@@ -127,6 +127,17 @@
 	<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 	<meta name="apple-mobile-web-app-title" content="SOAR" />
 	<meta name="theme-color" content="#0ea5e9" />
+
+	<!-- Google Analytics -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-DW6KXT6VG1"></script>
+	<script>
+		window.dataLayer = window.dataLayer || [];
+		function gtag() {
+			dataLayer.push(arguments);
+		}
+		gtag('js', new Date());
+		gtag('config', 'G-DW6KXT6VG1');
+	</script>
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
