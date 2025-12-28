@@ -33,7 +33,8 @@ type WorkerFixtures = {
 export const test = base.extend<{ page: Page }, WorkerFixtures>({
 	// Create isolated database for this worker from template
 	workerDatabaseUrl: [
-		async (_props, use, workerInfo) => {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars, no-empty-pattern
+		async ({}, use, workerInfo) => {
 			const workerIndex = workerInfo.workerIndex;
 			const dbName = `soar_test_worker_${workerIndex}`;
 
@@ -85,7 +86,8 @@ export const test = base.extend<{ page: Page }, WorkerFixtures>({
 
 	// Determine base URL for this worker
 	workerBaseURL: [
-		async (_props, use, workerInfo) => {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars, no-empty-pattern
+		async ({}, use, workerInfo) => {
 			const workerIndex = workerInfo.workerIndex;
 			const port = 5000 + workerIndex; // Port 5000, 5001, 5002, etc.
 			const baseURL = `http://localhost:${port}`;
