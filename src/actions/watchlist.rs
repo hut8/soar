@@ -6,6 +6,7 @@ use axum::{
 use tracing::error;
 use uuid::Uuid;
 
+use crate::actions::{DataListResponse, DataResponse};
 use crate::auth::AuthUser;
 use crate::watchlist::{AddToWatchlistRequest, UpdateWatchlistRequest};
 use crate::watchlist_repo::WatchlistRepository;
@@ -20,7 +21,7 @@ pub async fn get_watchlist(
     let user_id = auth_user.0.id;
 
     match repo.get_by_user(user_id).await {
-        Ok(entries) => Json(entries).into_response(),
+        Ok(entries) => Json(DataListResponse { data: entries }).into_response(),
         Err(e) => {
             error!("Failed to get watchlist: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get watchlist").into_response()
@@ -38,7 +39,7 @@ pub async fn add_to_watchlist(
     let user_id = auth_user.0.id;
 
     match repo.add(user_id, req.aircraft_id, req.send_email).await {
-        Ok(entry) => (StatusCode::CREATED, Json(entry)).into_response(),
+        Ok(entry) => (StatusCode::CREATED, Json(DataResponse { data: entry })).into_response(),
         Err(e) => {
             error!("Failed to add to watchlist: {}", e);
             (

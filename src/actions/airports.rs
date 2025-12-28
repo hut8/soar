@@ -166,7 +166,7 @@ pub async fn search_airports(
             .search_nearby(lat, lng, radius, params.limit)
             .await
         {
-            Ok(airports) => Json(airports).into_response(),
+            Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
                 error!("Failed to search nearby airports: {}", e);
                 json_error(
@@ -187,7 +187,7 @@ pub async fn search_airports(
         }
 
         match airports_repo.fuzzy_search(&query, params.limit).await {
-            Ok(airports) => Json(airports).into_response(),
+            Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
                 error!("Failed to search airports: {}", e);
                 json_error(

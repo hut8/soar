@@ -13,6 +13,7 @@ use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightPilotInfo {
     pub pilot: User,
     pub role: String,

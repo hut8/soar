@@ -6,7 +6,6 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use chrono::{Duration, Utc};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -17,7 +16,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::WebSocketMessage;
 use crate::web::AppState;
 
-use super::aircraft_search::enrich_aircraft_with_registration_data;
+use super::DataListResponse;
 use super::json_error;
 
 /// Area tracker configuration
@@ -28,11 +27,6 @@ pub struct FixesQueryParams {
     pub aircraft_id: Option<uuid::Uuid>,
     pub flight_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
-    pub latitude_max: Option<f64>,
-    pub latitude_min: Option<f64>,
-    pub longitude_max: Option<f64>,
-    pub longitude_min: Option<f64>,
-    pub after: Option<chrono::DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -590,94 +584,6 @@ async fn handle_subscriptions(
     }
 }
 
-/// Search for devices with fixes in a bounding box (returns enriched devices, not fixes)
-async fn search_fixes_by_bbox(
-    lat_max: f64,
-    lat_min: f64,
-    lon_max: f64,
-    lon_min: f64,
-    after: Option<chrono::DateTime<Utc>>,
-    pool: crate::web::PgPool,
-) -> impl IntoResponse {
-    // Validate coordinates
-    if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "Latitude must be between -90 and 90 degrees",
-        )
-        .into_response();
-    }
-
-    if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "Longitude must be between -180 and 180 degrees",
-        )
-        .into_response();
-    }
-
-    if lat_min >= lat_max {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "latitude_min must be less than latitude_max",
-        )
-        .into_response();
-    }
-
-    if lon_min >= lon_max {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "longitude_min must be less than longitude_max",
-        )
-        .into_response();
-    }
-
-    // Set default cutoff time to 24 hours ago if not provided
-    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
-
-    info!(
-        "Performing bounding box search with cutoff_time: {}",
-        cutoff_time
-    );
-
-    let fixes_repo = FixesRepository::new(pool.clone());
-
-    // Perform bounding box search
-    match fixes_repo
-        .get_aircraft_with_fixes_in_bounding_box(
-            lat_max,
-            lon_min,
-            lat_min,
-            lon_max,
-            cutoff_time,
-            None,
-        )
-        .await
-    {
-        Ok(aircraft_with_fixes) => {
-            info!(
-                "Found {} aircraft in bounding box",
-                aircraft_with_fixes.len()
-            );
-
-            // Enrich with aircraft registration and model data
-            let enriched =
-                enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
-
-            info!("Enriched {} aircraft, returning response", enriched.len());
-            Json(enriched).into_response()
-        }
-        Err(e) => {
-            error!("Failed to get aircraft with fixes in bounding box: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft with fixes in bounding box",
-            )
-            .into_response()
-        }
-    }
-}
-
 /// Get fixes for a specific device
 async fn get_fixes_by_device_id(
     aircraft_id: uuid::Uuid,
@@ -690,7 +596,7 @@ async fn get_fixes_by_device_id(
         .get_fixes_for_aircraft(aircraft_id, Some(limit.unwrap_or(1000)), None)
         .await
     {
-        Ok(fixes) => Json(fixes).into_response(),
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             error!("Failed to get fixes by device ID: {}", e);
             json_error(
@@ -711,7 +617,7 @@ async fn get_fixes_by_flight_id(
     let fixes_repo = FixesRepository::new(pool);
 
     match fixes_repo.get_fixes_for_flight(flight_id, limit).await {
-        Ok(fixes) => Json(fixes).into_response(),
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             error!("Failed to get fixes by flight ID: {}", e);
             json_error(
@@ -723,28 +629,7 @@ async fn get_fixes_by_flight_id(
     }
 }
 
-/// Get recent fixes (default search with no specific filters)
-async fn get_recent_fixes_default(
-    limit: Option<i64>,
-    pool: crate::web::PgPool,
-) -> impl IntoResponse {
-    let fixes_repo = FixesRepository::new(pool);
-
-    match fixes_repo.get_recent_fixes(limit.unwrap_or(100)).await {
-        Ok(fixes) => Json(fixes).into_response(),
-        Err(e) => {
-            error!("Failed to get recent fixes: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get recent fixes",
-            )
-            .into_response()
-        }
-    }
-}
-
 #[instrument(skip(state), fields(
-    has_bbox = params.latitude_max.is_some(),
     has_device = params.aircraft_id.is_some(),
     has_flight = params.flight_id.is_some()
 ))]
@@ -754,51 +639,8 @@ pub async fn search_fixes(
 ) -> impl IntoResponse {
     info!("Starting search_fixes request");
 
-    // Check if bounding box parameters are provided
-    let has_bounding_box = params.latitude_max.is_some()
-        || params.latitude_min.is_some()
-        || params.longitude_max.is_some()
-        || params.longitude_min.is_some();
-
-    // Check if device or flight parameters are provided
-    let has_device_or_flight = params.aircraft_id.is_some() || params.flight_id.is_some();
-
-    // Validate mutual exclusivity
-    if has_bounding_box && has_device_or_flight {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "Bounding box search is mutually exclusive with device_id and flight_id parameters",
-        )
-        .into_response();
-    }
-
-    if has_bounding_box && params.limit.is_some() {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            "Bounding box search is mutually exclusive with limit parameter",
-        )
-        .into_response();
-    }
-
-    // Route to appropriate handler
-    if has_bounding_box {
-        // Validate all four bounding box parameters are provided
-        match (
-            params.latitude_max,
-            params.latitude_min,
-            params.longitude_max,
-            params.longitude_min,
-        ) {
-            (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
-                search_fixes_by_bbox(lat_max, lat_min, lon_max, lon_min, params.after, state.pool).await.into_response()
-            }
-            _ => json_error(
-                StatusCode::BAD_REQUEST,
-                "When using bounding box search, all four parameters must be provided: latitude_max, latitude_min, longitude_max, longitude_min",
-            )
-            .into_response(),
-        }
-    } else if let Some(aircraft_id) = params.aircraft_id {
+    // Route to appropriate handler based on parameters
+    if let Some(aircraft_id) = params.aircraft_id {
         get_fixes_by_device_id(aircraft_id, params.limit, state.pool)
             .await
             .into_response()
@@ -807,8 +649,10 @@ pub async fn search_fixes(
             .await
             .into_response()
     } else {
-        get_recent_fixes_default(params.limit, state.pool)
-            .await
-            .into_response()
+        json_error(
+            StatusCode::BAD_REQUEST,
+            "Either aircraft_id or flight_id parameter is required",
+        )
+        .into_response()
     }
 }

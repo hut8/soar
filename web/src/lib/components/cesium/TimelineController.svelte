@@ -11,7 +11,7 @@
 	import { Play, Pause, RotateCcw, Camera } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
-	import type { Flight, Fix } from '$lib/types';
+	import type { Flight, Fix, DataListResponse } from '$lib/types';
 
 	// Props
 	let {
@@ -63,11 +63,8 @@
 			flight = flightResponse;
 
 			// Load all fixes for the flight
-			interface FixesResponse {
-				fixes: Fix[];
-			}
-			const fixesResponse = await serverCall<FixesResponse>(`/flights/${flightId}/fixes`);
-			fixes = fixesResponse.fixes;
+			const fixesResponse = await serverCall<DataListResponse<Fix>>(`/flights/${flightId}/fixes`);
+			fixes = fixesResponse.data || [];
 
 			if (fixes.length === 0) {
 				console.warn('No fixes found for flight');

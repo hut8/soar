@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { User as UserIcon, X } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
-	import type { User } from '$lib/types';
+	import type { User, DataListResponse } from '$lib/types';
 
 	let {
 		isOpen = $bindable(false),
@@ -36,8 +36,8 @@
 		error = '';
 
 		try {
-			const response = await serverCall<{ pilots: User[] }>(`/clubs/${clubId}/pilots`);
-			pilots = response.pilots || [];
+			const response = await serverCall<DataListResponse<User>>(`/clubs/${clubId}/pilots`);
+			pilots = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load pilots: ${errorMessage}`;

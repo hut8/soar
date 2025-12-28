@@ -7,7 +7,7 @@
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import { getAddressTypeLabel } from '$lib/formatters';
-	import type { Aircraft } from '$lib/types';
+	import type { Aircraft, DataListResponse, DataResponse, Club } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
 	// State
@@ -55,11 +55,11 @@
 			// Search for aircraft by registration
 			searchInProgress = true;
 			try {
-				const response = await serverCall<{ aircraft: Aircraft[] }>(
+				const response = await serverCall<DataListResponse<Aircraft>>(
 					`/aircraft?registration=${encodeURIComponent(registration)}`
 				);
-				if (response.aircraft && response.aircraft.length > 0) {
-					aircraft = response.aircraft[0];
+				if (response.data && response.data.length > 0) {
+					aircraft = response.data[0];
 				} else {
 					errorMessage = `Aircraft with registration "${registration}" not found`;
 				}
@@ -77,11 +77,11 @@
 			// Search for aircraft by address and type
 			searchInProgress = true;
 			try {
-				const response = await serverCall<{ aircraft: Aircraft[] }>(
+				const response = await serverCall<DataListResponse<Aircraft>>(
 					`/aircraft?address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(addressType)}`
 				);
-				if (response.aircraft && response.aircraft.length > 0) {
-					aircraft = response.aircraft[0];
+				if (response.data && response.data.length > 0) {
+					aircraft = response.data[0];
 				} else {
 					errorMessage = `Aircraft with address "${address}" (${addressType}) not found`;
 				}
@@ -136,10 +136,10 @@
 		clubErrorMessage = '';
 
 		try {
-			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
+			const response = await serverCall<DataListResponse<Aircraft>>(`/clubs/${clubId}/aircraft`);
 			// Only update if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubAircraft = response.aircraft || [];
+				clubAircraft = response.data || [];
 			}
 		} catch (error) {
 			console.warn(`Failed to fetch aircraft for club:`, error);
@@ -230,8 +230,8 @@
 		}
 
 		try {
-			const club = await serverCall<{ name: string }>(`/clubs/${clubId}`);
-			clubNames.set(clubId, club.name);
+			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
+			clubNames.set(clubId, response.data.name);
 		} catch (error) {
 			console.warn(`Failed to fetch club name for ${clubId}:`, error);
 			clubNames.set(clubId, 'Unknown Club');

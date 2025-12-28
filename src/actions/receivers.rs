@@ -584,7 +584,7 @@ pub async fn get_receiver_aggregate_stats(
 
     Json(ReceiverAggregateStatsResponse {
         fix_counts_by_aprs_type: fix_counts,
-        fix_counts_by_device: device_fix_counts,
+        fix_counts_by_aircraft: device_fix_counts,
     })
     .into_response()
 }
@@ -592,5 +592,5 @@ pub async fn get_receiver_aggregate_stats(
 #[derive(Debug, Serialize)]
 pub struct ReceiverAggregateStatsResponse {
     pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
-    pub fix_counts_by_device: Vec<AircraftFixCount>,
+    pub fix_counts_by_aircraft: Vec<AircraftFixCount>,
 }

@@ -709,9 +709,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/aggregate-stats",
             get(actions::get_receiver_aggregate_stats),
         )
-        // APRS messages routes
-        .route("/aprs-messages", post(actions::get_aprs_messages_bulk))
-        .route("/aprs-messages/{id}", get(actions::get_aprs_message))
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))
