@@ -314,9 +314,9 @@ enum Commands {
         #[arg(long)]
         end_date: Option<chrono::NaiveDate>,
 
-        /// H3 resolutions to aggregate (comma-separated, e.g., "6,7,8")
-        /// Resolution 6: ~36km² per hex, Resolution 7: ~5km² per hex, Resolution 8: ~0.7km² per hex
-        #[arg(long, default_value = "6,7,8", value_delimiter = ',')]
+        /// H3 resolutions to aggregate (comma-separated, e.g., "3,4,5,6,7,8")
+        /// Resolution 3: ~12,400km² per hex, Resolution 4: ~1,770km² per hex, Resolution 5: ~252km² per hex, Resolution 6: ~36km² per hex, Resolution 7: ~5km² per hex, Resolution 8: ~0.7km² per hex
+        #[arg(long, default_value = "3,4,5,6,7,8", value_delimiter = ',')]
         resolutions: Vec<i16>,
     },
     /// Dump unified FlarmNet device database to JSONL file

@@ -1,4 +1,5 @@
 mod adsb_exchange;
+mod aircraft_home_base;
 mod aircraft_models;
 mod aircraft_registrations;
 mod aircraft_types;
@@ -322,6 +323,23 @@ pub async fn handle_load_data(
     if link_home_bases {
         let metrics = home_base_linking::link_home_bases_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "link_home_bases");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+
+        // Calculate aircraft home bases (copy from clubs + calculate from flight stats)
+        let metrics =
+            aircraft_home_base::calculate_aircraft_home_bases_with_metrics(diesel_pool.clone())
+                .await;
+        record_stage_metrics(&metrics, "calculate_aircraft_home_bases");
 
         if !metrics.success
             && let Some(ref config) = email_config
