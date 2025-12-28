@@ -18,8 +18,6 @@ use crate::web::AppState;
 pub struct ReceiverSearchQuery {
     /// General text search across callsign, description, country, contact, and email
     pub query: Option<String>,
-    /// Short alias for query parameter (e.g., /receivers?q=search)
-    pub q: Option<String>,
     /// Receiver callsign (partial match)
     pub callsign: Option<String>,
     /// Location-based search parameters
@@ -53,7 +51,7 @@ pub async fn get_receiver_by_id(
 
 /// Search receivers by query, location, callsign, or bounding box
 #[instrument(skip(state), fields(
-    has_query = query.query.is_some() || query.q.is_some(),
+    has_query = query.query.is_some(),
     has_location = query.latitude.is_some() && query.longitude.is_some(),
     has_bbox = query.north.is_some(),
     has_callsign = query.callsign.is_some()
@@ -64,9 +62,8 @@ pub async fn search_receivers(
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
 
-    // Priority 1: General text query search (supports both 'query' and 'q' parameters)
-    let search_query = query.query.or(query.q);
-    if let Some(search_query) = search_query {
+    // Priority 1: General text query search
+    if let Some(search_query) = query.query {
         info!("Performing query search: {}", search_query);
         match receiver_repo.search_by_query(&search_query).await {
             Ok(receivers) => {

@@ -412,7 +412,7 @@
 		}
 
 		try {
-			const params = new URLSearchParams({ q: query.trim() });
+			const params = new URLSearchParams({ query: query.trim() });
 			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
 			receiverSearchResults = response.data || [];
 		} catch (err) {
