@@ -1,6 +1,12 @@
 import { test as base, type Page } from '@playwright/test';
 import { execSync, spawn, type ChildProcess } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// ES module workaround for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Worker-scoped fixture for isolated database and web server per test worker.
