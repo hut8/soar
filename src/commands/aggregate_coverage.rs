@@ -13,7 +13,9 @@ use soar::web::PgPool;
 ///
 /// If start_date or end_date are None, automatically determines the date range:
 /// - end_date defaults to yesterday
-/// - start_date defaults to (last coverage date + 1), or oldest fix date if no coverage exists
+/// - start_date defaults to 30 days ago (from end_date)
+///
+/// This ensures all resolutions have coverage for the last 30 days by default.
 pub async fn aggregate_coverage(
     pool: PgPool,
     start_date: Option<NaiveDate>,
@@ -30,42 +32,15 @@ pub async fn aggregate_coverage(
         yesterday
     });
 
-    // Determine start date (auto-detect if not specified)
-    let start_date = match start_date {
-        Some(date) => {
-            info!("Using specified start date: {}", date);
-            date
-        }
-        None => {
-            info!("No start date specified, auto-detecting from database...");
-            let last_coverage_date = find_last_coverage_date(pool.clone()).await?;
-
-            match last_coverage_date {
-                Some(last_date) => {
-                    let next_date = last_date + chrono::Duration::days(1);
-                    info!(
-                        "Last coverage date: {}, starting from: {}",
-                        last_date, next_date
-                    );
-                    next_date
-                }
-                None => {
-                    info!("No existing coverage found, checking for oldest fix...");
-                    let oldest_fix_date = find_oldest_fix_date(pool.clone()).await?;
-                    match oldest_fix_date {
-                        Some(oldest) => {
-                            info!("Oldest fix date: {}, starting from: {}", oldest, oldest);
-                            oldest
-                        }
-                        None => {
-                            warn!("No fixes found in database, nothing to aggregate");
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-        }
-    };
+    // Determine start date (default to 30 days ago if not specified)
+    let start_date = start_date.unwrap_or_else(|| {
+        let thirty_days_ago = end_date - chrono::Duration::days(30);
+        info!(
+            "No start date specified, defaulting to 30 days ago: {}",
+            thirty_days_ago
+        );
+        thirty_days_ago
+    });
 
     // Validate date range
     if start_date > end_date {
@@ -238,58 +213,4 @@ async fn fetch_and_aggregate_fixes(
         Ok(results)
     })
     .await?
-}
-
-/// Find the most recent date in the receiver_coverage_h3 table
-async fn find_last_coverage_date(pool: PgPool) -> Result<Option<NaiveDate>> {
-    use soar::schema::receiver_coverage_h3;
-
-    let pool_clone = pool.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        use diesel::dsl::max;
-
-        let mut conn = pool_clone
-            .get()
-            .context("Failed to get database connection")?;
-
-        let max_date = receiver_coverage_h3::table
-            .select(max(receiver_coverage_h3::date))
-            .first::<Option<NaiveDate>>(&mut conn)
-            .context("Failed to query max coverage date")?;
-
-        Ok::<Option<NaiveDate>, anyhow::Error>(max_date)
-    })
-    .await??;
-
-    Ok(result)
-}
-
-/// Find the oldest date in the fixes table
-async fn find_oldest_fix_date(pool: PgPool) -> Result<Option<NaiveDate>> {
-    let pool_clone = pool.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let mut conn = pool_clone
-            .get()
-            .context("Failed to get database connection")?;
-
-        // Query for the minimum timestamp from fixes table
-        #[derive(QueryableByName)]
-        struct MinTimestamp {
-            #[diesel(sql_type = sql_types::Nullable<sql_types::Timestamptz>)]
-            min_timestamp: Option<DateTime<Utc>>,
-        }
-
-        let query = diesel::sql_query(
-            "SELECT MIN(timestamp) as min_timestamp FROM fixes WHERE timestamp IS NOT NULL",
-        );
-
-        let result: MinTimestamp = query
-            .get_result(&mut conn)
-            .context("Failed to query min fix timestamp")?;
-
-        Ok::<Option<NaiveDate>, anyhow::Error>(result.min_timestamp.map(|ts| ts.date_naive()))
-    })
-    .await??;
-
-    Ok(result)
 }
