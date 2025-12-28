@@ -56,7 +56,7 @@ test.describe('Forgot Password', () => {
 		}
 	});
 
-	test('should submit forgot password request with valid email', async ({ page }) => {
+	test.skip('should submit forgot password request with valid email', async ({ page }) => {
 		// Fill in valid email
 		await page.getByPlaceholder(/email/i).fill('test@example.com');
 

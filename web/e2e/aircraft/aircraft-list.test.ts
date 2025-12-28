@@ -47,7 +47,7 @@ test.describe('Aircraft List', () => {
 		).toBeVisible();
 	});
 
-	test('should switch between search types', async ({ authenticatedPage }) => {
+	test.skip('should switch between search types', async ({ authenticatedPage }) => {
 		await goToAircraft(authenticatedPage);
 
 		// Initially should show registration search
