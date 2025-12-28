@@ -2,9 +2,6 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use diesel::sql_types;
-use h3o::{LatLng, Resolution};
-use rayon::prelude::*;
-use std::collections::HashMap;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -131,7 +128,9 @@ pub async fn aggregate_coverage(
     Ok(())
 }
 
-/// Fetch fixes and aggregate into H3 hexes using SQL
+/// Fetch fixes and aggregate into H3 hexes using PostgreSQL h3 extension
+/// This is MUCH faster than the old approach because all H3 conversion and
+/// aggregation happens in the database using native h3_lat_lng_to_cell()
 async fn fetch_and_aggregate_fixes(
     pool: PgPool,
     start_date: NaiveDate,
@@ -151,183 +150,94 @@ async fn fetch_and_aggregate_fixes(
     tokio::task::spawn_blocking(move || {
         let mut conn = pool_clone.get()?;
 
-        // Query fixes and group by receiver, date
-        // We'll convert lat/lng to H3 in Rust (can't do in SQL without extension)
         #[derive(QueryableByName)]
-        struct FixRow {
+        struct AggregatedCoverage {
+            #[diesel(sql_type = diesel::sql_types::BigInt)]
+            h3_index: i64,
             #[diesel(sql_type = diesel::sql_types::Uuid)]
             receiver_id: Uuid,
             #[diesel(sql_type = diesel::sql_types::Date)]
             date: NaiveDate,
-            #[diesel(sql_type = diesel::sql_types::Double)]
-            latitude: f64,
-            #[diesel(sql_type = diesel::sql_types::Double)]
-            longitude: f64,
-            #[diesel(sql_type = diesel::sql_types::Nullable<sql_types::Integer>)]
-            altitude_msl_feet: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Integer)]
+            fix_count: i32,
             #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-            timestamp: DateTime<Utc>,
+            first_seen_at: DateTime<Utc>,
+            #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+            last_seen_at: DateTime<Utc>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<sql_types::Integer>)]
+            min_altitude_msl_feet: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<sql_types::Integer>)]
+            max_altitude_msl_feet: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<sql_types::Integer>)]
+            avg_altitude_msl_feet: Option<i32>,
         }
 
-        info!("Fetching fixes from {} to {}", start_datetime, end_datetime);
-        let fetch_start = std::time::Instant::now();
+        info!(
+            "Aggregating fixes from {} to {} using PostgreSQL h3 extension",
+            start_datetime, end_datetime
+        );
+        let start = std::time::Instant::now();
 
-        let fixes: Vec<FixRow> = diesel::sql_query(
+        // Use h3_lat_lng_to_cell() PostgreSQL function for efficient H3 conversion
+        // All aggregation happens in the database - WAY faster than fetching + processing in Rust
+        let coverage_data: Vec<AggregatedCoverage> = diesel::sql_query(
             r#"
             SELECT
+                h3_lat_lng_to_cell(latitude, longitude, $3)::bigint AS h3_index,
                 receiver_id,
-                DATE(received_at) as date,
-                latitude,
-                longitude,
-                altitude_msl_feet,
-                timestamp
+                DATE(received_at) AS date,
+                COUNT(*)::integer AS fix_count,
+                MIN(timestamp) AS first_seen_at,
+                MAX(timestamp) AS last_seen_at,
+                MIN(altitude_msl_feet) AS min_altitude_msl_feet,
+                MAX(altitude_msl_feet) AS max_altitude_msl_feet,
+                AVG(altitude_msl_feet)::integer AS avg_altitude_msl_feet
             FROM fixes
             WHERE received_at >= $1 AND received_at < $2
-            ORDER BY receiver_id, date, timestamp
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+            GROUP BY h3_index, receiver_id, date
+            ORDER BY h3_index, receiver_id, date
             "#,
         )
         .bind::<sql_types::Timestamptz, _>(start_datetime)
         .bind::<sql_types::Timestamptz, _>(end_datetime)
+        .bind::<sql_types::SmallInt, _>(resolution)
         .load(&mut conn)
-        .context("Failed to fetch fixes for coverage aggregation")?;
+        .context("Failed to aggregate fixes for coverage")?;
 
-        let fetch_duration = fetch_start.elapsed();
+        let duration = start.elapsed();
         info!(
-            "Fetched {} fixes in {:.2}s, converting to H3...",
-            fixes.len(),
-            fetch_duration.as_secs_f64()
+            "Aggregated {} coverage hexes in {:.2}s using PostgreSQL h3 extension",
+            coverage_data.len(),
+            duration.as_secs_f64()
         );
 
-        if fixes.is_empty() {
+        if coverage_data.is_empty() {
             warn!("No fixes found in the specified date range");
             return Ok(Vec::new());
         }
 
-        // Group by (h3_index, receiver_id, date) and aggregate using rayon for parallelization
-        let res = Resolution::try_from(resolution as u8)
-            .context(format!("Invalid H3 resolution: {}", resolution))?;
-
-        let h3_start = std::time::Instant::now();
-
-        // Use rayon to parallelize H3 conversion and aggregation
-        let coverage_map: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate> = fixes
-            .par_iter()
-            .fold(HashMap::new, |mut map, fix| {
-                // Convert lat/lng to H3 (skip invalid coordinates)
-                if let Ok(latlng) = LatLng::new(fix.latitude, fix.longitude) {
-                    let h3_index: u64 = latlng.to_cell(res).into();
-                    let h3_i64 = h3_index as i64;
-                    let key = (h3_i64, fix.receiver_id, fix.date);
-
-                    map.entry(key)
-                        .and_modify(|agg: &mut CoverageAggregate| {
-                            agg.fix_count += 1;
-                            agg.first_seen_at = agg.first_seen_at.min(fix.timestamp);
-                            agg.last_seen_at = agg.last_seen_at.max(fix.timestamp);
-
-                            if let Some(alt) = fix.altitude_msl_feet {
-                                agg.min_altitude =
-                                    Some(agg.min_altitude.map_or(alt, |min: i32| min.min(alt)));
-                                agg.max_altitude =
-                                    Some(agg.max_altitude.map_or(alt, |max: i32| max.max(alt)));
-                                agg.altitude_sum += alt as i64;
-                                agg.altitude_count += 1;
-                            }
-                        })
-                        .or_insert_with(|| CoverageAggregate {
-                            fix_count: 1,
-                            first_seen_at: fix.timestamp,
-                            last_seen_at: fix.timestamp,
-                            min_altitude: fix.altitude_msl_feet,
-                            max_altitude: fix.altitude_msl_feet,
-                            altitude_sum: fix.altitude_msl_feet.unwrap_or(0) as i64,
-                            altitude_count: if fix.altitude_msl_feet.is_some() {
-                                1
-                            } else {
-                                0
-                            },
-                        });
-                }
-                map
-            })
-            .reduce(
-                HashMap::new,
-                |mut map1: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate>,
-                 map2: HashMap<(i64, Uuid, NaiveDate), CoverageAggregate>| {
-                    // Merge two hashmaps by combining aggregates for matching keys
-                    for (key, agg2) in map2 {
-                        map1.entry(key)
-                            .and_modify(|agg1: &mut CoverageAggregate| {
-                                agg1.fix_count += agg2.fix_count;
-                                agg1.first_seen_at = agg1.first_seen_at.min(agg2.first_seen_at);
-                                agg1.last_seen_at = agg1.last_seen_at.max(agg2.last_seen_at);
-                                agg1.min_altitude = match (agg1.min_altitude, agg2.min_altitude) {
-                                    (Some(a), Some(b)) => Some(a.min(b)),
-                                    (Some(a), None) => Some(a),
-                                    (None, Some(b)) => Some(b),
-                                    (None, None) => None,
-                                };
-                                agg1.max_altitude = match (agg1.max_altitude, agg2.max_altitude) {
-                                    (Some(a), Some(b)) => Some(a.max(b)),
-                                    (Some(a), None) => Some(a),
-                                    (None, Some(b)) => Some(b),
-                                    (None, None) => None,
-                                };
-                                agg1.altitude_sum += agg2.altitude_sum;
-                                agg1.altitude_count += agg2.altitude_count;
-                            })
-                            .or_insert(agg2);
-                    }
-                    map1
-                },
-            );
-
-        let h3_duration = h3_start.elapsed();
-        info!(
-            "Converted {} unique hexes in {:.2}s ({:.0} fixes/sec)",
-            coverage_map.len(),
-            h3_duration.as_secs_f64(),
-            fixes.len() as f64 / h3_duration.as_secs_f64()
-        );
-
         // Convert to NewReceiverCoverageH3
-        let coverage_data: Vec<NewReceiverCoverageH3> = coverage_map
+        let results: Vec<NewReceiverCoverageH3> = coverage_data
             .into_iter()
-            .map(|((h3_index, receiver_id, date), agg)| {
-                let avg_altitude = if agg.altitude_count > 0 {
-                    Some((agg.altitude_sum / agg.altitude_count as i64) as i32)
-                } else {
-                    None
-                };
-
-                NewReceiverCoverageH3 {
-                    h3_index,
-                    resolution,
-                    receiver_id,
-                    date,
-                    fix_count: agg.fix_count,
-                    first_seen_at: agg.first_seen_at,
-                    last_seen_at: agg.last_seen_at,
-                    min_altitude_msl_feet: agg.min_altitude,
-                    max_altitude_msl_feet: agg.max_altitude,
-                    avg_altitude_msl_feet: avg_altitude,
-                }
+            .map(|row| NewReceiverCoverageH3 {
+                h3_index: row.h3_index,
+                resolution,
+                receiver_id: row.receiver_id,
+                date: row.date,
+                fix_count: row.fix_count,
+                first_seen_at: row.first_seen_at,
+                last_seen_at: row.last_seen_at,
+                min_altitude_msl_feet: row.min_altitude_msl_feet,
+                max_altitude_msl_feet: row.max_altitude_msl_feet,
+                avg_altitude_msl_feet: row.avg_altitude_msl_feet,
             })
             .collect();
 
-        Ok(coverage_data)
+        Ok(results)
     })
     .await?
-}
-
-struct CoverageAggregate {
-    fix_count: i32,
-    first_seen_at: DateTime<Utc>,
-    last_seen_at: DateTime<Utc>,
-    min_altitude: Option<i32>,
-    max_altitude: Option<i32>,
-    altitude_sum: i64,
-    altitude_count: i32,
 }
 
 /// Find the most recent date in the receiver_coverage_h3 table
