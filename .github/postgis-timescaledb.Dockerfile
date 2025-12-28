@@ -17,10 +17,13 @@ RUN mkdir -p /usr/share/keyrings && \
     echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
     tee /etc/apt/sources.list.d/timescaledb.list
 
-# Install TimescaleDB and H3 extensions
+# Install TimescaleDB, H3, and pg_partman extensions
+# NOTE: pg_partman is kept for CI migration history (old migrations depend on it)
+# even though production has migrated to TimescaleDB
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         postgresql-17-h3 \
+        postgresql-17-partman \
         timescaledb-2-postgresql-17 \
         timescaledb-toolkit-postgresql-17 \
         timescaledb-tools \
@@ -30,4 +33,4 @@ RUN apt-get update && \
 RUN echo "shared_preload_libraries = 'timescaledb'" >> /usr/share/postgresql/postgresql.conf.sample
 
 # postgis/postgis base image already has PostGIS configured
-# This image adds TimescaleDB and H3 on top of that
+# This image adds TimescaleDB, H3, and pg_partman (for migration history) on top of that
