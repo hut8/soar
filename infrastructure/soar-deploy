@@ -179,10 +179,33 @@ log_info "Creating temporary binary directory: $TEMP_BIN_DIR"
 mkdir -p "$TEMP_BIN_DIR"
 chown soar:soar "$TEMP_BIN_DIR"
 
-# Deploy new binary to temporary location first (avoids "text file busy")
+# Deploy new binary to temporary location first
 log_info "Deploying new binary to temporary location: $TEMP_BIN_PATH"
 install -m 755 -o soar -g soar "$DEPLOY_DIR/soar" "$TEMP_BIN_PATH"
 log_info "Binary deployed to temporary location"
+
+# Backup current binary and install new binary IMMEDIATELY
+# This ensures migrations run with the NEW binary, not the old one
+# (Running processes keep using the old inode, new processes get the new binary)
+mkdir -p "$BACKUP_DIR"
+chown soar:soar "$BACKUP_DIR"
+
+if [ -f "$BINARY_PATH" ]; then
+    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
+    log_info "Backing up current binary to $BACKUP_FILE..."
+    cp "$BINARY_PATH" "$BACKUP_FILE"
+    chown soar:soar "$BACKUP_FILE"
+else
+    log_warn "No existing binary to backup at $BINARY_PATH"
+fi
+
+log_info "Installing new binary to $BINARY_PATH..."
+install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
+log_info "Binary installed successfully at $BINARY_PATH"
+
+# Clean up temporary binary
+log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+rm -f "$TEMP_BIN_PATH"
 
 # Install migration service template early (needed before running migrations)
 log_info "Installing migration service template..."
@@ -320,28 +343,7 @@ log_info "Skipping timer stop (timers will continue on their schedule)"
 log_info "Waiting for services to fully terminate..."
 sleep 3
 
-# Backup current binary
-mkdir -p "$BACKUP_DIR"
-chown soar:soar "$BACKUP_DIR"
-
-if [ -f "$BINARY_PATH" ]; then
-    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
-    log_info "Backing up current binary to $BACKUP_FILE..."
-    cp "$BINARY_PATH" "$BACKUP_FILE"
-    chown soar:soar "$BACKUP_FILE"
-else
-    log_warn "No existing binary to backup at $BINARY_PATH"
-fi
-
-# Install new binary
-log_info "Installing new binary to $BINARY_PATH..."
-install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
-log_info "Binary installed successfully at $BINARY_PATH"
-
-# Clean up temporary binary
-log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
-rm -f "$TEMP_BIN_PATH"
-
+# Binary was already installed earlier (before migrations)
 # Check for obsolete systemd files that should be cleaned up
 log_info "Checking for obsolete systemd service and timer files..."
 OBSOLETE_FILES_FOUND=0
