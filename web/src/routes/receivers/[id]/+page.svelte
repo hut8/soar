@@ -55,25 +55,25 @@
 	}
 
 	interface AprsTypeCount {
-		aprs_type: string;
+		aprsType: string;
 		count: number;
 	}
 
 	interface AircraftFixCount {
-		aircraft_id: string;
+		aircraftId: string;
 		count: number;
 		aircraft?: Aircraft | null; // Aircraft details fetched separately
 	}
 
 	interface ReceiverStatistics {
-		average_update_interval_seconds: number | null;
-		total_status_count: number;
-		days_included: number | null;
+		averageUpdateIntervalSeconds: number | null;
+		totalStatusCount: number;
+		daysIncluded: number | null;
 	}
 
 	interface AggregateStatsResponse {
-		fix_counts_by_aprs_type: AprsTypeCount[];
-		fix_counts_by_aircraft: AircraftFixCount[];
+		fixCountsByAprsType: AprsTypeCount[];
+		fixCountsByAircraft: AircraftFixCount[];
 	}
 
 	// Extends Fix with aircraft and raw packet data
@@ -264,17 +264,14 @@
 			aggregateStats = response;
 
 			// Fetch aircraft details for each aircraft
-			if (aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0) {
+			if (aggregateStats && aggregateStats.fixCountsByAircraft.length > 0) {
 				await Promise.all(
-					aggregateStats.fix_counts_by_aircraft.map(async (aircraftCount) => {
+					aggregateStats.fixCountsByAircraft.map(async (aircraftCount) => {
 						try {
-							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraft_id}`);
+							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraftId}`);
 							aircraftCount.aircraft = aircraft;
 						} catch (err) {
-							console.warn(
-								`Failed to load aircraft details for ${aircraftCount.aircraft_id}:`,
-								err
-							);
+							console.warn(`Failed to load aircraft details for ${aircraftCount.aircraftId}:`, err);
 							aircraftCount.aircraft = null;
 						}
 					})
@@ -285,8 +282,8 @@
 			aggregateStatsError = `Failed to load aggregate statistics: ${errorMessage}`;
 			console.error('Error loading aggregate statistics:', err);
 			aggregateStats = {
-				fix_counts_by_aprs_type: [],
-				fix_counts_by_aircraft: []
+				fixCountsByAprsType: [],
+				fixCountsByAircraft: []
 			}; // Set to default on error to prevent retry loop
 		} finally {
 			loadingAggregateStats = false;
@@ -609,7 +606,7 @@
 						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Average Time Between Updates</p>
 							<p class="text-2xl font-semibold">
-								{formatDuration(statistics.average_update_interval_seconds)}
+								{formatDuration(statistics.averageUpdateIntervalSeconds)}
 							</p>
 						</div>
 
@@ -617,7 +614,7 @@
 						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Total Status Updates</p>
 							<p class="text-2xl font-semibold">
-								{statistics.total_status_count.toLocaleString()}
+								{statistics.totalStatusCount.toLocaleString()}
 							</p>
 						</div>
 
@@ -625,8 +622,8 @@
 						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Time Period</p>
 							<p class="text-2xl font-semibold">
-								{#if statistics.days_included}
-									Last {statistics.days_included} days
+								{#if statistics.daysIncluded}
+									Last {statistics.daysIncluded} days
 								{:else}
 									All time
 								{/if}
@@ -889,7 +886,7 @@
 								{/if}
 
 								<!-- Fixes by Aircraft -->
-								{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
+								{#if aggregateStats && aggregateStats.fixCountsByAircraft.length > 0}
 									<div class="mt-6 space-y-4">
 										<h3 class="h3">Fixes Received by Aircraft</h3>
 
@@ -904,14 +901,14 @@
 														</tr>
 													</thead>
 													<tbody>
-														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+														{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
 															<tr>
 																<td>
 																	<div class="flex items-center gap-2">
 																		{#if aircraftCount.aircraft}
 																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																		{:else}
-																			<span class="font-semibold">{aircraftCount.aircraft_id}</span>
+																			<span class="font-semibold">{aircraftCount.aircraftId}</span>
 																		{/if}
 																		{#if aircraftCount.aircraft?.aircraftTypeOgn}
 																			<span
@@ -938,7 +935,7 @@
 
 										<!-- Mobile: Cards -->
 										<div class="space-y-3 md:hidden">
-											{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+											{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
 												<div class="card p-4">
 													<div class="flex items-start justify-between gap-3">
 														<div class="min-w-0 flex-1">
@@ -946,7 +943,7 @@
 																{#if aircraftCount.aircraft}
 																	<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																{:else}
-																	<span>{aircraftCount.aircraft_id}</span>
+																	<span>{aircraftCount.aircraftId}</span>
 																{/if}
 															</div>
 															{#if aircraftCount.aircraft?.aircraftTypeOgn}
@@ -1299,14 +1296,14 @@
 							{:else if aggregateStats !== null}
 								<div class="space-y-6">
 									<!-- Fixes by APRS Type -->
-									{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_aircraft.length === 0}
+									{#if aggregateStats.fixCountsByAprsType.length === 0 && aggregateStats.fixCountsByAircraft.length === 0}
 										<p class="text-surface-500-400-token p-4 text-center">
 											No fix data available for this receiver
 										</p>
 									{:else}
 										<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 											<!-- Fixes by APRS Type -->
-											{#if aggregateStats.fix_counts_by_aprs_type.length > 0}
+											{#if aggregateStats.fixCountsByAprsType.length > 0}
 												<div class="space-y-4">
 													<h3 class="h3">Fixes Received by APRS Type</h3>
 
@@ -1321,9 +1318,9 @@
 																	</tr>
 																</thead>
 																<tbody>
-																	{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+																	{#each aggregateStats.fixCountsByAprsType as typeCount (typeCount.aprsType)}
 																		<tr>
-																			<td class="font-mono">{typeCount.aprs_type}</td>
+																			<td class="font-mono">{typeCount.aprsType}</td>
 																			<td class="text-right font-semibold">
 																				{typeCount.count.toLocaleString()}
 																			</td>
@@ -1336,10 +1333,10 @@
 
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
-														{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+														{#each aggregateStats.fixCountsByAprsType as typeCount (typeCount.aprsType)}
 															<div class="card p-4">
 																<div class="flex items-center justify-between gap-4">
-																	<div class="font-mono font-medium">{typeCount.aprs_type}</div>
+																	<div class="font-mono font-medium">{typeCount.aprsType}</div>
 																	<div class="text-right">
 																		<div class="text-lg font-bold">
 																			{typeCount.count.toLocaleString()}
@@ -1354,7 +1351,7 @@
 											{/if}
 
 											<!-- Fixes by Aircraft -->
-											{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
+											{#if aggregateStats && aggregateStats.fixCountsByAircraft.length > 0}
 												<div class="space-y-4">
 													<h3 class="h3">Fixes Received by Aircraft</h3>
 
@@ -1369,7 +1366,7 @@
 																	</tr>
 																</thead>
 																<tbody>
-																	{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+																	{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
 																		<tr>
 																			<td>
 																				{#if aircraftCount.aircraft}
@@ -1379,10 +1376,10 @@
 																					/>
 																				{:else}
 																					<a
-																						href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																						href={resolve(`/aircraft/${aircraftCount.aircraftId}`)}
 																						class="font-mono text-primary-500 hover:text-primary-600"
 																					>
-																						{aircraftCount.aircraft_id}
+																						{aircraftCount.aircraftId}
 																					</a>
 																				{/if}
 																			</td>
@@ -1398,7 +1395,7 @@
 
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
-														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
+														{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
 															<div class="card p-4">
 																<div class="flex items-center justify-between gap-4">
 																	<div class="font-medium">
@@ -1406,10 +1403,10 @@
 																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
 																		{:else}
 																			<a
-																				href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																				href={resolve(`/aircraft/${aircraftCount.aircraftId}`)}
 																				class="font-mono text-primary-500 hover:text-primary-600"
 																			>
-																				{aircraftCount.aircraft_id}
+																				{aircraftCount.aircraftId}
 																			</a>
 																		{/if}
 																	</div>
