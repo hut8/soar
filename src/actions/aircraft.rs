@@ -282,7 +282,10 @@ pub async fn get_device_aircraft_model(
         )
         .await
     {
-        Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
+        Ok(Some(aircraft_model)) => Json(DataResponse {
+            data: aircraft_model,
+        })
+        .into_response(),
         Ok(None) => (StatusCode::NO_CONTENT).into_response(),
         Err(e) => {
             tracing::error!(
