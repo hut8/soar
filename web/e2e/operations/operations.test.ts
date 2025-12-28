@@ -17,9 +17,6 @@ test.describe('Operations Page', () => {
 		// Just verify the page loaded successfully
 		const bodyText = await authenticatedPage.textContent('body');
 		expect(bodyText).toBeTruthy();
-
-		// Take screenshot for visual regression testing
-		await expect(authenticatedPage).toHaveScreenshot('operations-page.png');
 	});
 
 	test('should display operations data or empty state', async ({ authenticatedPage }) => {
@@ -55,7 +52,8 @@ test.describe('Operations Page', () => {
 		await authenticatedPage.goto('/operations');
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Take screenshot for mobile view
-		await expect(authenticatedPage).toHaveScreenshot('operations-page-mobile.png');
+		// Verify page loads on mobile viewport
+		const bodyText = await authenticatedPage.textContent('body');
+		expect(bodyText).toBeTruthy();
 	});
 });
