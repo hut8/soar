@@ -20,6 +20,8 @@
 	let maxAltitude = 50000;
 	let showAdvancedFilters = false;
 	let currentPopup: maplibregl.Popup | null = null;
+	let autoResolution = true; // Auto-select resolution based on zoom level
+	let moveDebounceTimer: number | null = null;
 
 	// Default to last 30 days
 	function getDefaultDates() {
@@ -35,12 +37,41 @@
 	let endDate = defaultDates.end;
 
 	async function loadReceivers() {
+		if (!map) return;
+
 		try {
-			const response = await serverCall<{ receivers: Receiver[] }>('/receivers');
-			receivers = response.receivers || [];
+			// Get current map bounds
+			const bounds = map.getBounds();
+			const west = bounds.getWest();
+			const east = bounds.getEast();
+			const south = bounds.getSouth();
+			const north = bounds.getNorth();
+
+			// Build query parameters for bounding box search
+
+			const params = new URLSearchParams({
+				south: south.toString(),
+				north: north.toString(),
+				west: west.toString(),
+				east: east.toString()
+			});
+
+			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
+			receivers = response.data || [];
+			console.log(`Loaded ${receivers.length} receivers in current view`);
 		} catch (err) {
 			console.error('Failed to load receivers:', err);
 		}
+	}
+
+	// Calculate smart resolution based on zoom level
+	function getSmartResolution(zoom: number): number {
+		if (zoom >= 11) return 8; // ~0.7 km² - very close zoom
+		if (zoom >= 9) return 7; // ~5 km² - close zoom
+		if (zoom >= 7) return 6; // ~36 km² - medium zoom
+		if (zoom >= 5) return 5; // ~252 km² - wider zoom
+		if (zoom >= 3) return 4; // ~1,770 km² - regional zoom
+		return 3; // ~12,400 km² - continental zoom
 	}
 
 	function displayReceiversOnMap() {
@@ -133,9 +164,20 @@
 			displayReceiversOnMap();
 		});
 
-		// Reload coverage when user stops moving the map
+		// Reload coverage and receivers when user stops moving the map (with 1s debounce)
 		map.on('moveend', () => {
-			loadCoverage();
+			// Clear any existing timer
+			if (moveDebounceTimer !== null) {
+				clearTimeout(moveDebounceTimer);
+			}
+
+			// Set a new timer to reload after 1 second
+			moveDebounceTimer = window.setTimeout(async () => {
+				loadCoverage();
+				await loadReceivers();
+				displayReceiversOnMap();
+				moveDebounceTimer = null;
+			}, 1000);
 		});
 
 		return () => {
@@ -156,36 +198,74 @@
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
-			// Build query parameters
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- URLSearchParams created fresh on each call, no persistent state
-			const params = new URLSearchParams({
-				resolution: resolution.toString(),
-				west: west.toString(),
-				east: east.toString(),
-				south: south.toString(),
-				north: north.toString(),
-				start_date: startDate,
-				end_date: endDate,
-				limit: '5000'
-			});
-
-			// Add optional filters if they're set
-			if (selectedReceiverId) {
-				params.append('receiver_id', selectedReceiverId);
-			}
-			if (minAltitude > 0) {
-				params.append('min_altitude', minAltitude.toString());
-			}
-			if (maxAltitude < 50000) {
-				params.append('max_altitude', maxAltitude.toString());
+			// Use smart resolution based on zoom level if auto mode is enabled
+			let selectedResolution = resolution;
+			if (autoResolution) {
+				selectedResolution = getSmartResolution(map.getZoom());
 			}
 
-			const response = await serverCall<CoverageGeoJsonResponse>(
-				`/coverage/hexes?${params.toString()}`
-			);
+			// Try to load coverage, reducing resolution if we hit the limit
+			let currentResolution = selectedResolution;
+			let response: CoverageGeoJsonResponse | null = null;
+			let attempts = 0;
+			const maxAttempts = 6; // We have 6 resolutions (3-8)
+
+			while (attempts < maxAttempts) {
+				// Build query parameters
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- URLSearchParams created fresh on each call, no persistent state
+				const params = new URLSearchParams({
+					resolution: currentResolution.toString(),
+					west: west.toString(),
+					east: east.toString(),
+					south: south.toString(),
+					north: north.toString(),
+					start_date: startDate,
+					end_date: endDate,
+					limit: '5000'
+				});
+
+				// Add optional filters if they're set
+				if (selectedReceiverId) {
+					params.append('receiver_id', selectedReceiverId);
+				}
+				if (minAltitude > 0) {
+					params.append('min_altitude', minAltitude.toString());
+				}
+				if (maxAltitude < 50000) {
+					params.append('max_altitude', maxAltitude.toString());
+				}
+
+				response = await serverCall<CoverageGeoJsonResponse>(
+					`/coverage/hexes?${params.toString()}`
+				);
+
+				const count = response.features?.length || 0;
+
+				// If we hit the limit and we're not at the lowest resolution, try a lower resolution
+				if (count >= 5000 && currentResolution > 3) {
+					console.log(
+						`Hit limit with ${count} hexagons at resolution ${currentResolution}, trying lower resolution...`
+					);
+					currentResolution--;
+					attempts++;
+				} else {
+					// Success! Update the resolution display if it changed
+					if (currentResolution !== selectedResolution && autoResolution) {
+						console.log(
+							`Auto-adjusted from resolution ${selectedResolution} to ${currentResolution} to stay under limit`
+						);
+					}
+					resolution = currentResolution;
+					break;
+				}
+			}
+
+			if (!response) {
+				throw new Error('Failed to load coverage after multiple attempts');
+			}
 
 			hexCount = response.features?.length || 0;
-			console.log(`Loaded ${hexCount} coverage hexagons`);
+			console.log(`Loaded ${hexCount} coverage hexagons at resolution ${resolution}`);
 
 			// Remove existing coverage layer if it exists
 			if (map.getLayer('coverage-hexes')) {
@@ -288,7 +368,17 @@
 	}
 
 	function handleResolutionChange() {
+		// Disable auto mode when manually selecting a resolution
+		autoResolution = false;
 		loadCoverage();
+	}
+
+	function handleAutoResolutionToggle() {
+		if (autoResolution && map) {
+			// Immediately apply smart resolution
+			resolution = getSmartResolution(map.getZoom());
+			loadCoverage();
+		}
 	}
 
 	function handleDateChange() {
@@ -336,12 +426,26 @@
 					id="resolution"
 					bind:value={resolution}
 					onchange={handleResolutionChange}
-					class="variant-filled-surface select w-24"
+					disabled={autoResolution}
+					class="variant-filled-surface select w-32"
+					class:opacity-50={autoResolution}
 				>
+					<option value={3}>3 (~12,400 km²)</option>
+					<option value={4}>4 (~1,770 km²)</option>
+					<option value={5}>5 (~252 km²)</option>
 					<option value={6}>6 (~36 km²)</option>
 					<option value={7}>7 (~5 km²)</option>
 					<option value={8}>8 (~0.7 km²)</option>
 				</select>
+				<label class="flex items-center gap-1.5 text-sm text-gray-300">
+					<input
+						type="checkbox"
+						bind:checked={autoResolution}
+						onchange={handleAutoResolutionToggle}
+						class="checkbox"
+					/>
+					Auto
+				</label>
 			</div>
 
 			<!-- Date range -->
