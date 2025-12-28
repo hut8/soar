@@ -1,5 +1,6 @@
 import { test as base, type Page } from '@playwright/test';
 import { execSync, spawn, type ChildProcess } from 'child_process';
+import path from 'path';
 
 /**
  * Worker-scoped fixture for isolated database and web server per test worker.
@@ -105,11 +106,13 @@ export const test = base.extend<{ page: Page }, WorkerFixtures>({
 
 			console.log(`[Worker ${workerIndex}] Starting web server on port ${port}...`);
 
+			// Binary path: from web/e2e/fixtures/ go up to project root, then into target/release
+			const binaryPath = path.join(__dirname, '../../../target/release/soar');
+
 			const serverProcess = spawn(
-				'../target/release/soar',
+				binaryPath,
 				['web', '--port', port.toString(), '--interface', 'localhost'],
 				{
-					cwd: __dirname,
 					env: {
 						...process.env,
 						DATABASE_URL: workerDatabaseUrl,
