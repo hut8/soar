@@ -40,7 +40,7 @@ test.describe('Flights List', () => {
 		}
 	});
 
-	test.skip('should display flights data or empty state', async ({ authenticatedPage }) => {
+	test('should display flights data or empty state', async ({ authenticatedPage }) => {
 		await authenticatedPage.goto('/flights');
 		await authenticatedPage.waitForLoadState('networkidle');
 

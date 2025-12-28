@@ -4,9 +4,7 @@ test.describe('Operations Page', () => {
 	// Mark all tests as slow due to data-heavy page and API calls
 	test.slow();
 
-	test.skip('should display operations page with correct elements', async ({
-		authenticatedPage
-	}) => {
+	test('should display operations page with correct elements', async ({ authenticatedPage }) => {
 		await authenticatedPage.goto('/operations');
 
 		// Check page title
@@ -52,7 +50,7 @@ test.describe('Operations Page', () => {
 		}
 	});
 
-	test.skip('should be responsive on mobile viewport', async ({ authenticatedPage }) => {
+	test('should be responsive on mobile viewport', async ({ authenticatedPage }) => {
 		await authenticatedPage.setViewportSize({ width: 375, height: 667 });
 		await authenticatedPage.goto('/operations');
 		await authenticatedPage.waitForLoadState('networkidle');
