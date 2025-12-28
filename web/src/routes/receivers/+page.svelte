@@ -7,25 +7,9 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import type { Receiver, DataListResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
-
-	interface Receiver {
-		id: string;
-		callsign: string;
-		description: string | null;
-		contact: string | null;
-		email: string | null;
-		country: string | null;
-		latitude: number | null;
-		longitude: number | null;
-		createdAt: string;
-		updatedAt: string;
-	}
-
-	interface ReceiverSearchResponse {
-		receivers: Receiver[];
-	}
 
 	interface PlaceLocation {
 		lat(): number;
@@ -123,8 +107,8 @@
 			if (queryParams.length > 0) {
 				endpoint += `?${queryParams.join('&')}`;
 			}
-			const response = await serverCall<ReceiverSearchResponse>(endpoint);
-			receivers = response.receivers || [];
+			const response = await serverCall<DataListResponse<Receiver>>(endpoint);
+			receivers = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search receivers: ${errorMessage}`;
@@ -216,8 +200,8 @@
 
 		try {
 			// Call API without any query parameters to get recently updated receivers
-			const response = await serverCall<ReceiverSearchResponse>('/receivers');
-			receivers = response.receivers || [];
+			const response = await serverCall<DataListResponse<Receiver>>('/receivers');
+			receivers = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receivers: ${errorMessage}`;

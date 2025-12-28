@@ -7,7 +7,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
-	import type { ClubWithSoaring } from '$lib/types';
+	import type { ClubWithSoaring, DataListResponse } from '$lib/types';
 
 	interface PlaceLocation {
 		lat(): number;
@@ -122,7 +122,8 @@
 				endpoint = `/clubs?${params}`;
 			}
 
-			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
+			const response = await serverCall<DataListResponse<ClubWithSoaring>>(endpoint);
+			clubs = response.data || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;

@@ -19,7 +19,8 @@
 		Airspace,
 		AirspaceFeatureCollection,
 		Fix,
-		Airport
+		Airport,
+		DataListResponse
 	} from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
@@ -797,23 +798,8 @@
 				limit: '100' // Limit to avoid too many markers
 			});
 
-			const data = await serverCall(`/airports?${params}`);
-			// Type guard to ensure we have the correct data structure
-			if (!Array.isArray(data)) {
-				throw new Error('Invalid response format: expected array');
-			}
-
-			airports = data.filter((airport: unknown): airport is Airport => {
-				return (
-					typeof airport === 'object' &&
-					airport !== null &&
-					'id' in airport &&
-					'ident' in airport &&
-					'name' in airport &&
-					'latitude_deg' in airport &&
-					'longitude_deg' in airport
-				);
-			});
+			const response = await serverCall<DataListResponse<Airport>>(`/airports?${params}`);
+			airports = response.data || [];
 
 			displayAirportsOnMap();
 		} catch (error) {
@@ -921,45 +907,8 @@
 				longitude_max: seLng.toString()
 			});
 
-			const data = await serverCall(`/receivers?${params}`);
-			// Type guard to ensure we have the correct data structure
-			if (!data || typeof data !== 'object' || !('receivers' in data)) {
-				throw new Error('Invalid response format: expected object with receivers array');
-			}
-
-			const response = data as { receivers: unknown[] };
-			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
-				// Validate receiver object
-				if (typeof receiver !== 'object' || receiver === null) {
-					console.error('Invalid receiver: not an object or is null', receiver);
-					return false;
-				}
-
-				// Check required fields
-				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
-				for (const field of requiredFields) {
-					if (!(field in receiver)) {
-						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
-						return false;
-					}
-				}
-
-				// Validate latitude and longitude are numbers (or null)
-				const lat = (receiver as Record<string, unknown>).latitude;
-				const lng = (receiver as Record<string, unknown>).longitude;
-
-				if (lat !== null && typeof lat !== 'number') {
-					console.error('Invalid receiver: latitude is not a number or null', receiver);
-					return false;
-				}
-
-				if (lng !== null && typeof lng !== 'number') {
-					console.error('Invalid receiver: longitude is not a number or null', receiver);
-					return false;
-				}
-
-				return true;
-			});
+			const response = await serverCall<DataListResponse<Receiver>>(`/receivers?${params}`);
+			receivers = response.data || [];
 
 			displayReceiversOnMap();
 		} catch (error) {

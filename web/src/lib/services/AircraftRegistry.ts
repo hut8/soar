@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix } from '$lib/types';
+import type { Aircraft, Fix, DataListResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -551,15 +551,15 @@ export class AircraftRegistry {
 			// Calculate timestamp for N hours ago in ISO 8601 UTC format
 			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
 
-			const response = await serverCall<{ fixes: Fix[] }>(`/aircraft/${aircraftId}/fixes`, {
+			const response = await serverCall<DataListResponse<Fix>>(`/aircraft/${aircraftId}/fixes`, {
 				params: { after }
 			});
-			if (response.fixes) {
+			if (response.data) {
 				// Add fixes to aircraft
-				for (const fix of response.fixes) {
+				for (const fix of response.data) {
 					await this.addFixToAircraft(fix, false);
 				}
-				return response.fixes;
+				return response.data;
 			}
 			return [];
 		} catch (error) {
