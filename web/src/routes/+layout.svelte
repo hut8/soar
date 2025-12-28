@@ -12,7 +12,7 @@
 	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
-	import { dev } from '$app/environment';
+	import { dev, browser } from '$app/environment';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
@@ -68,6 +68,21 @@
 		auth.initFromStorage();
 		theme.init();
 		backendMode.init();
+
+		// Load Google Analytics only on production domain
+		if (browser && window.location.hostname === 'glider.flights') {
+			const script = document.createElement('script');
+			script.async = true;
+			script.src = 'https://www.googletagmanager.com/gtag/js?id=G-DW6KXT6VG1';
+			document.head.appendChild(script);
+
+			window.dataLayer = window.dataLayer || [];
+			function gtag(...args: unknown[]) {
+				window.dataLayer.push(args);
+			}
+			gtag('js', new Date());
+			gtag('config', 'G-DW6KXT6VG1');
+		}
 
 		// Add click outside listener
 		document.addEventListener('click', handleClickOutside);
@@ -128,16 +143,7 @@
 	<meta name="apple-mobile-web-app-title" content="SOAR" />
 	<meta name="theme-color" content="#0ea5e9" />
 
-	<!-- Google Analytics -->
-	<script async src="https://www.googletagmanager.com/gtag/js?id=G-DW6KXT6VG1"></script>
-	<script>
-		window.dataLayer = window.dataLayer || [];
-		function gtag() {
-			dataLayer.push(arguments);
-		}
-		gtag('js', new Date());
-		gtag('config', 'G-DW6KXT6VG1');
-	</script>
+	<!-- Google Analytics is loaded dynamically in onMount for production only -->
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
