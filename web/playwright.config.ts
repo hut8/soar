@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-	// Global setup to seed test database before running tests
-	globalSetup: process.env.CI ? undefined : './playwright.global-setup.ts',
+	// Global setup to create template database for per-worker isolation
+	globalSetup: './playwright.global-setup.ts',
 
 	// Test directory
 	testDir: 'e2e',
