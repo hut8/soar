@@ -105,7 +105,7 @@ groups:
       # Alert when staging OGN ingest service is disconnected
       - uid: ogn_service_disconnected_staging
         title: "[Staging] OGN Ingest Service Disconnected"
-        condition: B
+        condition: C
         data:
           # Query A: Check if APRS connection is established (staging only)
           - refId: A
@@ -119,8 +119,23 @@ groups:
               maxDataPoints: 43200
               refId: A
 
-          # Condition B: Alert if connection gauge is 0 (disconnected)
+          # Reduce B: Convert time series to single value using last()
           - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
+              type: reduce
+              refId: B
+
+          # Condition C: Alert if connection gauge is 0 (disconnected)
+          - refId: C
             relativeTimeRange:
               from: 300
               to: 0
@@ -135,7 +150,7 @@ groups:
                     type: and
                   query:
                     params:
-                      - A
+                      - B
                   reducer:
                     params: []
                     type: last
@@ -143,11 +158,11 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: A
+              expression: B
               hide: false
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: B
+              refId: C
               type: threshold
 
         for: 1m
