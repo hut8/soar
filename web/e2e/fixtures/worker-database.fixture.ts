@@ -172,7 +172,12 @@ export const test = base.extend<{ page: Page }, WorkerFixtures>({
 	],
 
 	// Override page fixture to auto-prepend worker base URL
-	page: async ({ page, workerBaseURL }, use) => {
+	// IMPORTANT: Must depend on workerServerProcess to ensure server starts before tests run
+	page: async ({ page, workerBaseURL, workerServerProcess }, use) => {
+		// Wait for server to be running (workerServerProcess ensures this)
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _ensureServerRunning = workerServerProcess;
+
 		// Intercept page.goto to automatically prepend the worker's base URL
 		const originalGoto = page.goto.bind(page);
 		page.goto = async (url: string, options?: Parameters<typeof page.goto>[1]) => {
