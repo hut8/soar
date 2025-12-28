@@ -172,11 +172,7 @@ jobs:
           # Create PostGIS extension
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-          # Create H3 extensions (required for coverage hexagon queries)
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS h3 CASCADE;"
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"
-
-          # Run migrations
+          # Run migrations (includes h3 extension setup)
           diesel migration run
 
           # Build the project to get the seed-test-data command
@@ -359,9 +355,7 @@ jobs:
           # Create PostGIS extension (already available in postgis/postgis image)
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-          # Create H3 extensions (required for coverage hexagon queries)
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS h3 CASCADE;"
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS h3_postgis CASCADE;"
+          # H3 extensions will be created by migrations
 
       - name: Check Rust formatting
         run: cargo fmt --check
