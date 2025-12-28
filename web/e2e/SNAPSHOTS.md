@@ -11,6 +11,7 @@ Several E2E tests use Playwright's `toHaveScreenshot()` to capture and compare s
 ⚠️ **Baseline snapshots need to be generated**
 
 The following tests require baseline snapshots:
+
 - `aircraft-detail.test.ts`: 3 screenshot tests
 - `aircraft-list.test.ts`: 2 screenshot tests
 - `auth/forgot-password.test.ts`: 1 screenshot test
@@ -35,6 +36,7 @@ npm test -- --update-snapshots
 ```
 
 This will:
+
 1. Run all E2E tests
 2. Generate baseline PNG images in `e2e/**/*-snapshots/` directories
 3. Save snapshots with platform-specific naming (e.g., `*-chromium-linux.png`)
@@ -49,6 +51,7 @@ find e2e -name "*-snapshots" -type d
 ```
 
 Verify that:
+
 - ✅ Screenshots show the correct UI state
 - ✅ No sensitive data is visible
 - ✅ Layout looks correct
@@ -77,6 +80,7 @@ git commit -m "test: update snapshots after UI changes"
 ## Snapshot Naming Convention
 
 Playwright automatically names snapshots based on:
+
 - Test file name
 - Test description
 - Browser (e.g., `chromium`)
@@ -87,11 +91,13 @@ Example: `aircraft-detail-authenticatedPage-chromium-linux.png`
 ## Platform Differences
 
 Snapshots may differ across platforms due to:
+
 - Font rendering
 - Anti-aliasing
 - Browser versions
 
 For CI consistency, generate snapshots on:
+
 - **Platform**: Ubuntu 22.04 (matches CI)
 - **Browser**: Chromium (default in CI)
 
