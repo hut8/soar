@@ -19,7 +19,7 @@ use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct CoverageQueryParams {
-    /// H3 resolution (6, 7, or 8)
+    /// H3 resolution (3, 4, 5, 6, 7, or 8)
     pub resolution: Option<i16>,
 
     /// Bounding box: western longitude
@@ -78,9 +78,12 @@ pub async fn get_coverage_hexes(
 
     // Validate and set defaults
     let resolution = params.resolution.unwrap_or(7);
-    if ![6, 7, 8].contains(&resolution) {
-        return json_error(StatusCode::BAD_REQUEST, "Resolution must be 6, 7, or 8")
-            .into_response();
+    if ![3, 4, 5, 6, 7, 8].contains(&resolution) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Resolution must be 3, 4, 5, 6, 7, or 8",
+        )
+        .into_response();
     }
 
     let end_date = params

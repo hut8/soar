@@ -2,10 +2,10 @@
 -- This table tracks position fix coverage by receiver, time, and altitude
 CREATE TABLE receiver_coverage_h3 (
     -- H3 index stored as BIGINT for efficient indexing
-    -- H3 indexes at res 6-8 fit comfortably in 64-bit signed integer
+    -- H3 indexes at res 3-8 fit comfortably in 64-bit signed integer
     h3_index BIGINT NOT NULL,
 
-    -- H3 resolution (6, 7, or 8)
+    -- H3 resolution (3, 4, 5, 6, 7, or 8)
     resolution SMALLINT NOT NULL,
 
     -- Receiver that provided coverage
@@ -54,4 +54,4 @@ COMMENT ON COLUMN receiver_coverage_h3.h3_index IS
     'H3 cell index stored as BIGINT. Convert to/from using h3o Rust crate.';
 
 COMMENT ON COLUMN receiver_coverage_h3.resolution IS
-    'H3 resolution level. Supported: 6 (~36km²), 7 (~5km²), 8 (~0.7km²).';
+    'H3 resolution level. Supported: 3 (~12,400km²), 4 (~1,770km²), 5 (~252km²), 6 (~36km²), 7 (~5km²), 8 (~0.7km²).';
