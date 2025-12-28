@@ -397,6 +397,29 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get all receivers with valid coordinates
+    /// Returns receivers that have non-null latitude and longitude values
+    /// Ordered by callsign for consistent results
+    pub async fn get_receivers_with_coordinates(&self) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
+        })
+        .await?
+    }
+
     /// Delete a receiver and all associated photos and links
     pub async fn delete_receiver(&self, callsign: &str) -> Result<bool> {
         let pool = self.pool.clone();

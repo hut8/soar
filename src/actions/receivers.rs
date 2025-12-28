@@ -228,11 +228,12 @@ pub async fn search_receivers(
             }
         }
     } else {
-        // No search parameters provided - return recently updated receivers
-        info!("No search parameters provided, returning recently updated receivers");
-        match receiver_repo.get_recently_updated_receivers(10).await {
+        // No search parameters provided - return all receivers with valid coordinates
+        // This is useful for map displays where we want to show all receiver locations
+        info!("No search parameters provided, returning all receivers with coordinates");
+        match receiver_repo.get_receivers_with_coordinates().await {
             Ok(receivers) => {
-                info!("Returning {} recently updated receivers", receivers.len());
+                info!("Returning {} receivers with coordinates", receivers.len());
                 let receiver_models: Vec<ReceiverModel> =
                     receivers.into_iter().map(|r| r.into()).collect();
                 Json(DataListResponse {
@@ -241,7 +242,7 @@ pub async fn search_receivers(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get recently updated receivers: {}", e);
+                tracing::error!("Failed to get receivers with coordinates: {}", e);
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receivers")
                     .into_response()
             }
