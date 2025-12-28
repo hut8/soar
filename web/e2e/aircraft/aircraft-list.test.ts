@@ -65,9 +65,9 @@ test.describe('Aircraft List', () => {
 		// Wait for UI to update after search type change
 		await authenticatedPage.waitForTimeout(500);
 
-		// Should show aircraft address input
+		// Should show device address input
 		await expect(
-			authenticatedPage.locator('input[placeholder="Aircraft address"]:visible')
+			authenticatedPage.locator('input[placeholder="Device address"]:visible')
 		).toBeVisible();
 
 		// Should show address type selector (ICAO, OGN, FLARM)

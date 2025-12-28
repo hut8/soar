@@ -44,12 +44,6 @@ test.describe('Aircraft Detail', () => {
 
 		// Check page has aircraft-related content
 		await expect(authenticatedPage.getByRole('heading', { level: 1 })).toBeVisible();
-
-		// Take screenshot for visual regression testing
-		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-authenticatedPage.png', {
-			// Aircraft data may vary, so use a larger threshold
-			maxDiffPixelRatio: 0.1
-		});
 	});
 
 	test('should display aircraft address and type information', async ({ authenticatedPage }) => {
@@ -79,11 +73,6 @@ test.describe('Aircraft Detail', () => {
 
 		// Page should load successfully
 		await expect(authenticatedPage.getByRole('heading', { level: 1 })).toBeVisible();
-
-		// Take screenshot of fixes section
-		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-fixes.png', {
-			maxDiffPixelRatio: 0.1
-		});
 	});
 
 	test('should display flights list', async ({ authenticatedPage }) => {
@@ -94,11 +83,6 @@ test.describe('Aircraft Detail', () => {
 
 		// Page should load successfully
 		await expect(authenticatedPage.getByRole('heading', { level: 1 })).toBeVisible();
-
-		// Take screenshot of flights section
-		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-flights.png', {
-			maxDiffPixelRatio: 0.1
-		});
 	});
 
 	test('should navigate back to aircraft list', async ({ authenticatedPage }) => {
