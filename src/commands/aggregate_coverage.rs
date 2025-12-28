@@ -155,10 +155,11 @@ async fn fetch_and_aggregate_fixes(
 
         // Use h3_lat_lng_to_cell() PostgreSQL function for efficient H3 conversion
         // All aggregation happens in the database - WAY faster than fetching + processing in Rust
+        // Note: ST_MakePoint takes (longitude, latitude) in PostGIS (x, y order)
         let coverage_data: Vec<AggregatedCoverage> = diesel::sql_query(
             r#"
             SELECT
-                h3_lat_lng_to_cell(latitude, longitude, $3)::bigint AS h3_index,
+                h3_lat_lng_to_cell(ST_MakePoint(longitude, latitude)::geography, $3)::bigint AS h3_index,
                 receiver_id,
                 DATE(received_at) AS date,
                 COUNT(*)::integer AS fix_count,
