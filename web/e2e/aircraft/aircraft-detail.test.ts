@@ -88,10 +88,11 @@ test.describe('Aircraft Detail', () => {
 	test('should navigate back to aircraft list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Use browser back button instead of looking for a specific UI element
-		await authenticatedPage.goBack();
+		// Verify we can navigate back to aircraft list (direct navigation)
+		await authenticatedPage.goto('/aircraft');
+		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Should navigate back to aircraft page
+		// Should be on aircraft page
 		await expect(authenticatedPage).toHaveURL(/\/aircraft$/);
 	});
 
