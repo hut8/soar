@@ -181,4 +181,46 @@ test.describe('Aircraft Detail', () => {
 			}
 		}
 	});
+
+	test('should display aircraft images if available', async ({ authenticatedPage }) => {
+		await navigateToTestDevice(authenticatedPage);
+
+		await authenticatedPage.waitForLoadState('networkidle');
+
+		// Check if the "Aircraft Photos" section is visible
+		const photosHeading = authenticatedPage.getByRole('heading', { name: /aircraft photos/i });
+		const hasPhotos = await photosHeading.isVisible();
+
+		if (hasPhotos) {
+			// If photos section exists, verify the images are displayed
+			const imageGallery = authenticatedPage.locator('img[alt*="Aircraft photo"]');
+			const imageCount = await imageGallery.count();
+
+			// Should have at least one image
+			expect(imageCount).toBeGreaterThan(0);
+
+			// Verify first image has required attributes
+			const firstImage = imageGallery.first();
+			await expect(firstImage).toHaveAttribute('src', /.+/); // Has a valid src
+			await expect(firstImage).toHaveAttribute('loading', 'lazy'); // Lazy loading enabled
+
+			// Verify images are links to external photo pages
+			const imageLinks = authenticatedPage.locator(
+				'a[href*="airport-data.com"], a[href*="planespotters.net"]'
+			);
+			const linkCount = await imageLinks.count();
+			expect(linkCount).toBeGreaterThan(0);
+
+			// Verify photographer credit or source attribution is shown
+			const hasAttribution = await authenticatedPage
+				.locator('p:has-text("©"), p:has-text("Airport Data"), p:has-text("Planespotters")')
+				.count();
+			expect(hasAttribution).toBeGreaterThan(0);
+
+			// Take screenshot of the image gallery
+			await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-images.png', {
+				maxDiffPixelRatio: 0.1
+			});
+		}
+	});
 });
