@@ -134,7 +134,7 @@ pub async fn get_device_aircraft_registration(
     {
         Ok(Some(aircraft_registration)) => {
             return Json(DataResponse {
-                data: aircraft_registration,
+                data: AircraftRegistrationView::from(aircraft_registration),
             })
             .into_response();
         }
@@ -165,7 +165,7 @@ pub async fn get_device_aircraft_registration(
                     .await
                 {
                     Ok(Some(aircraft_model)) => Json(DataResponse {
-                        data: aircraft_model,
+                        data: AircraftRegistrationView::from(aircraft_model),
                     })
                     .into_response(),
                     Ok(None) => (StatusCode::NO_CONTENT).into_response(),
@@ -275,7 +275,7 @@ pub async fn get_device_aircraft_model(
 
     // Now get the aircraft model using the codes from the registration
     match aircraft_model_repo
-        .get_aircraft_model_by_key(
+        .get_aircraft_model_record_by_key(
             &aircraft_registration.manufacturer_code,
             &aircraft_registration.model_code,
             &aircraft_registration.series_code,
@@ -283,7 +283,7 @@ pub async fn get_device_aircraft_model(
         .await
     {
         Ok(Some(aircraft_model)) => Json(DataResponse {
-            data: aircraft_model,
+            data: AircraftModelView::from(aircraft_model),
         })
         .into_response(),
         Ok(None) => (StatusCode::NO_CONTENT).into_response(),

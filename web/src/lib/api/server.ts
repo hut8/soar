@@ -2,6 +2,8 @@ import { browser } from '$app/environment';
 import { dev } from '$app/environment';
 import { loading } from '$lib/stores/loading';
 import { backendMode } from '$lib/stores/backend';
+import { auth } from '$lib/stores/auth';
+import { toaster } from '$lib/toaster';
 import { get } from 'svelte/store';
 
 // Get the API base URL based on environment and backend mode
@@ -82,6 +84,24 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 		});
 
 		if (!response.ok) {
+			// Handle 401 Unauthorized - invalid/expired token
+			if (response.status === 401 && browser) {
+				// Clear the token from localStorage
+				localStorage.removeItem('auth_token');
+
+				// Log the user out
+				auth.logout();
+
+				// Show a toast notification
+				toaster.error({
+					title: 'Session Expired',
+					description: 'Your session has expired. Please log in again.'
+				});
+
+				// Throw error with a user-friendly message
+				throw new ServerError('Session expired', response.status);
+			}
+
 			// Try to parse error as JSON first (standard format: {"errors": "message"})
 			const errorText = await response.text();
 			let errorMessage = errorText || 'Request failed';

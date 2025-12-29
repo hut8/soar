@@ -406,10 +406,10 @@
 											<span class="ml-2">{plane.aircraftModel}</span>
 										</div>
 									{/if}
-									{#if plane.aircraftRegistration?.yearMfr}
+									{#if plane.aircraftRegistration?.yearManufactured}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Year:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.yearMfr}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.yearManufactured}</span>
 										</div>
 									{/if}
 									{#if plane.aircraftRegistration?.serialNumber}
@@ -424,10 +424,10 @@
 											<span class="ml-2">{plane.aircraftRegistration?.registrantName}</span>
 										</div>
 									{/if}
-									{#if plane.aircraftRegistration?.typeAircraft}
+									{#if plane.aircraftRegistration?.aircraftType}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Type:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.typeAircraft}</span>
+											<span class="ml-2">{plane.aircraftRegistration?.aircraftType}</span>
 										</div>
 									{/if}
 									{#if plane.model?.manufacturerName && plane.model?.modelName}
@@ -449,10 +449,17 @@
 											>
 										</div>
 									{/if}
-									{#if plane.aircraftRegistration?.engMfrMdl}
+									{#if plane.aircraftRegistration?.engineManufacturerCode || plane.aircraftRegistration?.engineModelCode}
 										<div class="border-surface-200-700-token border-b pb-2">
 											<span class="text-surface-600-300-token font-medium">Engine:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.engMfrMdl}</span>
+											<span class="ml-2"
+												>{[
+													plane.aircraftRegistration?.engineManufacturerCode,
+													plane.aircraftRegistration?.engineModelCode
+												]
+													.filter(Boolean)
+													.join('-')}</span
+											>
 										</div>
 									{/if}
 									{#if plane.aircraftRegistration?.statusCode}

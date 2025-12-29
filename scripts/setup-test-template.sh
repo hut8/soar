@@ -55,8 +55,8 @@ echo ""
 
 # Step 1: Drop existing template database
 echo -e "${YELLOW}[1/5] Dropping existing template database (if exists)...${NC}"
-# First unmark as template so we can drop it
-psql -d postgres -c "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '${TEMPLATE_DB_NAME}';" 2>/dev/null || true
+# First unmark as template and allow connections so we can drop it
+psql -d postgres -c "UPDATE pg_database SET datistemplate = FALSE, datallowconn = TRUE WHERE datname = '${TEMPLATE_DB_NAME}';" 2>/dev/null || true
 
 # Then drop the database
 psql -d postgres -c "DROP DATABASE IF EXISTS ${TEMPLATE_DB_NAME} WITH (FORCE);" || {
@@ -113,13 +113,13 @@ fi
 echo -e "${GREEN}✓ Migrations completed${NC}"
 echo ""
 
-# Step 5: Mark as template (prevents accidental connections)
-echo -e "${YELLOW}[5/5] Marking database as template...${NC}"
-psql -d postgres -c "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '${TEMPLATE_DB_NAME}';" || {
+# Step 5: Mark as template and prevent connections
+echo -e "${YELLOW}[5/5] Marking database as template and preventing connections...${NC}"
+psql -d postgres -c "UPDATE pg_database SET datistemplate = TRUE, datallowconn = FALSE WHERE datname = '${TEMPLATE_DB_NAME}';" || {
     echo -e "${YELLOW}Warning: Could not mark database as template${NC}"
     echo "This is not critical, but prevents accidental connections to the template."
 }
-echo -e "${GREEN}✓ Database marked as template${NC}"
+echo -e "${GREEN}✓ Database marked as template (connections disabled)${NC}"
 echo ""
 
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
