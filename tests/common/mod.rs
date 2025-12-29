@@ -189,6 +189,19 @@ impl TestDatabase {
                 "Failed to connect to PostgreSQL for database creation. Is PostgreSQL running?",
             )?;
 
+            // Terminate all connections to the template database before cloning
+            // This prevents "source database is being accessed by other users" errors
+            let terminate_sql = "
+                SELECT pg_terminate_backend(pg_stat_activity.pid)
+                FROM pg_stat_activity
+                WHERE pg_stat_activity.datname = 'soar_test_template'
+                  AND pid <> pg_backend_pid()
+            ";
+
+            diesel::sql_query(terminate_sql)
+                .execute(&mut conn)
+                .context("Failed to terminate connections to template database")?;
+
             // Create database from template
             // Note: db_name is randomly generated alphanumeric, safe from SQL injection
             let create_sql = format!(
