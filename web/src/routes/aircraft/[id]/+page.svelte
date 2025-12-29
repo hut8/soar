@@ -56,6 +56,20 @@
 	type FixesResponse = PaginatedDataResponse<Fix>;
 	type FlightsResponse = PaginatedDataResponse<Flight>;
 
+	// Aircraft images interfaces
+	interface AircraftImage {
+		source: 'airport_data' | 'planespotters';
+		pageUrl: string;
+		thumbnailUrl: string;
+		imageUrl?: string;
+		photographer?: string;
+	}
+
+	interface AircraftImageCollection {
+		images: AircraftImage[];
+		lastFetched: Record<string, string>;
+	}
+
 	let aircraft: Aircraft | null = null;
 	let aircraftRegistration: AircraftRegistration | null = null;
 	let aircraftModel: AircraftModel | null = null;
@@ -74,6 +88,8 @@
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
+	let aircraftImages: AircraftImage[] = [];
+	let loadingImages = true;
 
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.isAdmin === true;
@@ -101,6 +117,7 @@
 			await loadAircraft();
 			await loadFixes();
 			await loadFlights();
+			await loadImages();
 			if (isAdmin) {
 				await loadClubs();
 			}
@@ -195,6 +212,21 @@
 			flights = [];
 		} finally {
 			loadingFlights = false;
+		}
+	}
+
+	async function loadImages() {
+		loadingImages = true;
+		try {
+			const response = await serverCall<DataResponse<AircraftImageCollection>>(
+				`/aircraft/${aircraftId}/images`
+			);
+			aircraftImages = response.data.images || [];
+		} catch (err) {
+			console.error('Failed to load aircraft images:', err);
+			aircraftImages = [];
+		} finally {
+			loadingImages = false;
 		}
 	}
 
@@ -401,6 +433,42 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- Aircraft Images Section -->
+			{#if !loadingImages && aircraftImages.length > 0}
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
+						<Plane class="h-6 w-6" />
+						Aircraft Photos
+					</h2>
+
+					<div class="flex gap-4 overflow-x-auto pb-2">
+						{#each aircraftImages as image (image.thumbnailUrl)}
+							<a
+								href={image.pageUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="group relative flex-shrink-0"
+							>
+								<img
+									src={image.thumbnailUrl}
+									alt="Aircraft photo{image.photographer ? ` by ${image.photographer}` : ''}"
+									class="border-surface-300-600-token h-48 rounded-lg border object-cover transition-all group-hover:border-primary-500 group-hover:shadow-lg"
+									loading="lazy"
+								/>
+								{#if image.photographer}
+									<p class="text-surface-600-300-token mt-1 text-center text-xs">
+										© {image.photographer}
+									</p>
+								{/if}
+								<p class="text-surface-600-300-token mt-0.5 text-center text-xs capitalize">
+									{image.source === 'airport_data' ? 'Airport Data' : 'Planespotters'}
+								</p>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">

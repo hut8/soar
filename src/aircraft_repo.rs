@@ -194,6 +194,7 @@ impl AircraftRepository {
             year: None,
             is_military: None,
             current_fix: None,
+            images: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -278,6 +279,7 @@ impl AircraftRepository {
                 year: None,
                 is_military: None,
                 current_fix: None, // Will be populated when fix is inserted
+                images: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -581,6 +583,7 @@ impl AircraftRepository {
                         year: None,
                         is_military: None,
                         current_fix: None, // Not selected in this query
+                        images: None,      // Not selected in this query
                     };
                     (
                         model,
@@ -607,6 +610,43 @@ impl AircraftRepository {
                 "Updated aircraft {} club assignment to {:?}",
                 aircraft_id, club_id
             );
+            Ok(true)
+        } else {
+            warn!("No aircraft found with ID {}", aircraft_id);
+            Ok(false)
+        }
+    }
+
+    /// Get aircraft by ID (returns AircraftModel with all fields including images)
+    pub async fn get_aircraft_model_by_id(
+        &self,
+        aircraft_id: Uuid,
+    ) -> Result<Option<AircraftModel>> {
+        let mut conn = self.get_connection()?;
+
+        let model = aircraft::table
+            .filter(aircraft::id.eq(aircraft_id))
+            .select(AircraftModel::as_select())
+            .first(&mut conn)
+            .optional()?;
+
+        Ok(model)
+    }
+
+    /// Update the images cache for an aircraft
+    pub async fn update_images(
+        &self,
+        aircraft_id: Uuid,
+        images_json: serde_json::Value,
+    ) -> Result<bool> {
+        let mut conn = self.get_connection()?;
+
+        let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
+            .set(aircraft::images.eq(images_json))
+            .execute(&mut conn)?;
+
+        if rows_updated > 0 {
+            info!("Updated aircraft {} images cache", aircraft_id);
             Ok(true)
         } else {
             warn!("No aircraft found with ID {}", aircraft_id);

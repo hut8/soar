@@ -244,6 +244,7 @@ pub struct AircraftModel {
     pub year: Option<i16>,
     pub is_military: Option<bool>,
     pub current_fix: Option<serde_json::Value>,
+    pub images: Option<serde_json::Value>,
 }
 
 impl AircraftModel {
@@ -287,6 +288,7 @@ pub struct NewAircraft {
     pub year: Option<i16>,
     pub is_military: Option<bool>,
     pub current_fix: Option<serde_json::Value>,
+    pub images: Option<serde_json::Value>,
 }
 
 impl From<Aircraft> for NewAircraft {
@@ -329,6 +331,7 @@ impl From<Aircraft> for NewAircraft {
             year: device.year,
             is_military: device.is_military,
             current_fix: None, // Will be populated when fixes are processed
+            images: None,      // Not provided by DDB
         }
     }
 }
