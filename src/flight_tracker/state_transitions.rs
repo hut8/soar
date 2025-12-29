@@ -549,6 +549,7 @@ pub(crate) async fn process_state_transition(
                                 ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
                                 ctx.aircraft_repo.clone(),
+                                Arc::clone(ctx.active_flights),
                                 Arc::clone(ctx.aircraft_trackers),
                             );
                         }
