@@ -33,6 +33,7 @@ pub fn spawn_towing_detection_task(
     fixes_repo: FixesRepository,
     flights_repo: FlightsRepository,
     aircraft_repo: AircraftRepository,
+    active_flights: super::ActiveFlightsMap,
     aircraft_trackers: AircraftTrackersMap,
 ) {
     tokio::spawn(async move {
@@ -45,6 +46,7 @@ pub fn spawn_towing_detection_task(
             &fixes_repo,
             &flights_repo,
             &aircraft_repo,
+            &active_flights,
             &aircraft_trackers,
         )
         .await
@@ -89,6 +91,7 @@ async fn find_towed_glider(
     fixes_repo: &FixesRepository,
     flights_repo: &FlightsRepository,
     aircraft_repo: &AircraftRepository,
+    active_flights: &super::ActiveFlightsMap,
     aircraft_trackers: &AircraftTrackersMap,
 ) -> Result<Option<TowingInfo>> {
     // Get the latest fix for the towplane
@@ -122,6 +125,7 @@ async fn find_towed_glider(
         let candidate_gliders = find_nearby_gliders(
             &towplane_fix,
             towplane_aircraft_id,
+            active_flights,
             aircraft_trackers,
             fixes_repo,
             aircraft_repo,
@@ -184,7 +188,8 @@ async fn find_towed_glider(
 async fn find_nearby_gliders(
     towplane_fix: &Fix,
     towplane_aircraft_id: Uuid,
-    aircraft_trackers: &AircraftTrackersMap,
+    active_flights: &super::ActiveFlightsMap,
+    _aircraft_trackers: &AircraftTrackersMap,
     fixes_repo: &FixesRepository,
     aircraft_repo: &AircraftRepository,
 ) -> Result<Vec<(Uuid, Uuid)>> {
@@ -192,18 +197,16 @@ async fn find_nearby_gliders(
 
     // Get all active aircraft with flights
     let active_aircraft: Vec<(Uuid, Uuid)> = {
-        let trackers = aircraft_trackers.read().await;
-        trackers
+        let flights = active_flights.read().await;
+        flights
             .iter()
-            .filter_map(|(aircraft_id, tracker)| {
+            .filter_map(|(aircraft_id, state)| {
                 // Skip the towplane itself
                 if *aircraft_id == towplane_aircraft_id {
                     return None;
                 }
-                // Only consider aircraft with active flights
-                tracker
-                    .current_flight_id
-                    .map(|flight_id| (*aircraft_id, flight_id))
+                // Get the flight_id from the active flight state
+                Some((*aircraft_id, state.flight_id))
             })
             .collect()
     };
