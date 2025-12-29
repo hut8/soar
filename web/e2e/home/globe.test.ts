@@ -12,13 +12,13 @@ test.describe('Globe Page', () => {
 		// Wait for page to load
 		await page.waitForLoadState('networkidle');
 
+		// Wait for Cesium to load asynchronously and cesium container to appear
+		// Note: Cesium.js is 5.5MB and loads on-demand, so we give it 30s timeout
+		const cesiumContainer = page.locator('.cesium-container');
+		await expect(cesiumContainer).toBeVisible({ timeout: 30000 });
+
 		// Give time for 3D rendering to initialize
 		await page.waitForTimeout(2000);
-
-		// Note: Globe page is a full-screen Cesium viewer with no traditional h1 heading
-		// Verify the Cesium container exists instead
-		const cesiumContainer = page.locator('.cesium-container');
-		await expect(cesiumContainer).toBeVisible();
 
 		// Take screenshot for visual regression testing
 		await expect(page).toHaveScreenshot('globe-page.png', {
@@ -36,6 +36,10 @@ test.describe('Globe Page', () => {
 
 		await page.goto('/globe');
 		await page.waitForLoadState('networkidle');
+
+		// Wait for Cesium to load
+		const cesiumContainer = page.locator('.cesium-container');
+		await expect(cesiumContainer).toBeVisible({ timeout: 30000 });
 
 		// Wait for potential rendering
 		await page.waitForTimeout(2000);
