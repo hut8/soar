@@ -55,6 +55,14 @@
 				await loadCesiumScript();
 				cesiumLoading = false;
 
+				// Wait for DOM to update and container to be rendered
+				// Using requestAnimationFrame twice ensures the DOM has updated
+				await new Promise((resolve) => {
+					requestAnimationFrame(() => {
+						requestAnimationFrame(resolve);
+					});
+				});
+
 				if (!cesiumContainer) {
 					throw new Error('Cesium container not found');
 				}
