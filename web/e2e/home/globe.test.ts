@@ -1,6 +1,9 @@
 import { test, expect } from '../fixtures/worker-database.fixture';
 
 test.describe('Globe Page', () => {
+	// Increase timeout for globe tests as Cesium loads asynchronously (5.5MB)
+	test.setTimeout(90000);
+
 	test.beforeEach(async ({ page }) => {
 		await page.goto('/globe');
 	});
@@ -12,10 +15,18 @@ test.describe('Globe Page', () => {
 		// Wait for page to load
 		await page.waitForLoadState('networkidle');
 
+		// Check if error state is showing
+		const errorMessage = page.locator('.error-message');
+		const hasError = await errorMessage.isVisible();
+		if (hasError) {
+			const errorText = await errorMessage.textContent();
+			throw new Error(`Globe page showed error: ${errorText}`);
+		}
+
 		// Wait for Cesium to load asynchronously and cesium container to appear
-		// Note: Cesium.js is 5.5MB and loads on-demand, so we give it 30s timeout
+		// Note: Cesium.js is 5.5MB and loads on-demand, so we give it 60s timeout for CI
 		const cesiumContainer = page.locator('.cesium-container');
-		await expect(cesiumContainer).toBeVisible({ timeout: 30000 });
+		await expect(cesiumContainer).toBeVisible({ timeout: 60000 });
 
 		// Give time for 3D rendering to initialize
 		await page.waitForTimeout(2000);
@@ -37,9 +48,17 @@ test.describe('Globe Page', () => {
 		await page.goto('/globe');
 		await page.waitForLoadState('networkidle');
 
+		// Check if error state is showing
+		const errorMessage = page.locator('.error-message');
+		const hasError = await errorMessage.isVisible();
+		if (hasError) {
+			const errorText = await errorMessage.textContent();
+			throw new Error(`Globe page showed error: ${errorText}`);
+		}
+
 		// Wait for Cesium to load
 		const cesiumContainer = page.locator('.cesium-container');
-		await expect(cesiumContainer).toBeVisible({ timeout: 30000 });
+		await expect(cesiumContainer).toBeVisible({ timeout: 60000 });
 
 		// Wait for potential rendering
 		await page.waitForTimeout(2000);
