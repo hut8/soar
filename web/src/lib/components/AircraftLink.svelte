@@ -1,17 +1,15 @@
 <script lang="ts">
 	import { Plane, ExternalLink } from '@lucide/svelte';
 	import { getAircraftTitle } from '$lib/formatters';
-	import type { Aircraft, Flight } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 
 	let {
 		aircraft,
-		aircraftId,
 		size = 'md',
 		openInNewTab = false,
 		showIcon = false
 	}: {
-		aircraft?: Aircraft | Flight;
-		aircraftId?: string;
+		aircraft: Aircraft;
 		size?: 'sm' | 'md' | 'lg';
 		openInNewTab?: boolean;
 		showIcon?: boolean;
@@ -39,41 +37,13 @@
 	};
 
 	// Get aircraft ID and title
-	const id = $derived(
-		aircraftId ||
-			('aircraftId' in (aircraft || {}) ? (aircraft as Flight)?.aircraftId : aircraft!.id) ||
-			''
-	);
+	const id = $derived(aircraft.id);
+	const title = $derived(() => getAircraftTitle(aircraft));
 
-	const title = $derived(() => {
-		if (!aircraft) return '';
-
-		// Check if this is a Flight object (has aircraftId instead of id)
-		if ('aircraftId' in aircraft) {
-			const flight = aircraft as Flight;
-			// Map Flight (snake_case) fields to getAircraftTitle's expected format (camelCase)
-			return getAircraftTitle({
-				registration: flight.registration,
-				aircraftModel: flight.aircraftModel,
-				competitionNumber: null,
-				addressType: flight.deviceAddressType || '',
-				address: flight.deviceAddress || ''
-			});
-		}
-
-		// It's an Aircraft object
-		return getAircraftTitle(aircraft as Aircraft);
-	});
-
-	// Get country code (only available on Aircraft objects, not Flight)
+	// Get country code
 	const countryCode = $derived(() => {
-		if (!aircraft) return null;
-		// Only Aircraft objects have countryCode
-		if ('countryCode' in aircraft) {
-			const code = (aircraft as Aircraft).countryCode;
-			return code && code.trim() !== '' ? code.toUpperCase() : null;
-		}
-		return null;
+		const code = aircraft.countryCode;
+		return code && code.trim() !== '' ? code.toUpperCase() : null;
 	});
 
 	// Flag SVG URL from local flags directory
