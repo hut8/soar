@@ -298,8 +298,10 @@ impl AircraftRepository {
                 .set((
                     aircraft::last_fix_at.eq(fix_timestamp),
                     aircraft::aircraft_type_ogn.eq(packet_fields.aircraft_type),
-                    aircraft::icao_model_code.eq(packet_fields.icao_model_code),
-                    aircraft::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
+                    // Only update icao_model_code if current value is NULL (preserve data from authoritative sources)
+                    aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(aircraft.icao_model_code, excluded.icao_model_code)")),
+                    // Only update adsb_emitter_category if current value is NULL (preserve data from authoritative sources)
+                    aircraft::adsb_emitter_category.eq(diesel::dsl::sql("COALESCE(aircraft.adsb_emitter_category, excluded.adsb_emitter_category)")),
                     aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
                     // Only update aircraft_model if current value is NULL or empty string
                     aircraft::aircraft_model.eq(diesel::dsl::sql(
