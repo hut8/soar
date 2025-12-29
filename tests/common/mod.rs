@@ -156,14 +156,34 @@ impl TestDatabase {
     }
 
     /// Creates a new database from the template.
+    ///
+    /// Uses a file-based lock to ensure only one database is created at a time.
+    /// This prevents "source database is being accessed by other users" errors
+    /// when multiple tests try to clone from the template simultaneously.
     async fn create_database(admin_url: &str, db_name: &str) -> Result<()> {
         use diesel::Connection;
+        use fs2::FileExt;
+        use std::fs::OpenOptions;
 
         let admin_url = admin_url.to_string();
         let db_name = db_name.to_string();
 
         // Run blocking database creation in a blocking task
         tokio::task::spawn_blocking(move || {
+            // Acquire file-based lock to serialize template cloning
+            let lock_path = std::env::temp_dir().join("soar_test_template.lock");
+            let lock_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(&lock_path)
+                .context("Failed to create lock file for template database cloning")?;
+
+            // Acquire exclusive lock (blocks until available)
+            lock_file
+                .lock_exclusive()
+                .context("Failed to acquire lock for template database cloning")?;
+
             // Connect to postgres database for admin operations
             let mut conn = PgConnection::establish(&admin_url).context(
                 "Failed to connect to PostgreSQL for database creation. Is PostgreSQL running?",
@@ -176,7 +196,7 @@ impl TestDatabase {
                 db_name
             );
 
-            diesel::sql_query(&create_sql)
+            let result = diesel::sql_query(&create_sql)
                 .execute(&mut conn)
                 .with_context(|| {
                     format!(
@@ -188,8 +208,12 @@ impl TestDatabase {
                          This creates the template database with all migrations applied.",
                         db_name
                     )
-                })?;
+                });
 
+            // Lock is automatically released when lock_file is dropped
+            drop(lock_file);
+
+            result?;
             Ok::<(), anyhow::Error>(())
         })
         .await

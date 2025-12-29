@@ -423,6 +423,7 @@ pub struct ReceiverStatisticsQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverStatisticsResponse {
     pub average_update_interval_seconds: Option<f64>,
     pub total_status_count: i64,
@@ -436,12 +437,14 @@ pub struct ReceiverRawMessagesQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AprsTypeCount {
     pub aprs_type: String,
     pub count: i64,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftFixCount {
     pub aircraft_id: uuid::Uuid,
     pub count: i64,
@@ -585,6 +588,7 @@ pub async fn get_receiver_aggregate_stats(
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverAggregateStatsResponse {
     pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
     pub fix_counts_by_aircraft: Vec<AircraftFixCount>,

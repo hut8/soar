@@ -21,7 +21,8 @@ struct AdsbExchangeRecord {
     icao_type_code: Option<String>,
     #[serde(rename = "ownop")]
     owner_operator: Option<String>,
-    year: Option<i32>,
+    /// Year is a string in the JSON (e.g., "1970" or ""), not a number
+    year: Option<String>,
     manufacturer: Option<String>,
     model: Option<String>,
     faa_pia: Option<bool>,
@@ -226,6 +227,13 @@ pub async fn load_adsb_exchange_data(
             let aircraft_model =
                 build_aircraft_model(record.manufacturer.as_ref(), record.model.as_ref());
 
+            // Parse year from string (e.g., "1970") to i16, skipping empty strings
+            let year = record
+                .year
+                .as_ref()
+                .filter(|y| !y.is_empty())
+                .and_then(|y| y.parse::<i16>().ok());
+
             batch_inserts.push(NewAircraftAdsb {
                 address,
                 address_type,
@@ -243,7 +251,7 @@ pub async fn load_adsb_exchange_data(
                 engine_type,
                 faa_pia: record.faa_pia,
                 faa_ladd: record.faa_ladd,
-                year: record.year.and_then(|y| i16::try_from(y).ok()),
+                year,
                 is_military: record.is_military,
             });
         }
@@ -258,7 +266,7 @@ pub async fn load_adsb_exchange_data(
                 // Only update fields if they're currently NULL or empty (preserve more authoritative sources)
                 let result = diesel::insert_into(aircraft::table)
                     .values(&batch_inserts)
-                    .on_conflict(aircraft::address)
+                    .on_conflict((aircraft::address_type, aircraft::address))
                     .do_update()
                     .set((
                         // Only update registration if current value is NULL or empty string

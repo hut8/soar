@@ -55,8 +55,12 @@ echo ""
 
 # Step 1: Drop existing template database
 echo -e "${YELLOW}[1/5] Dropping existing template database (if exists)...${NC}"
+# First unmark as template so we can drop it
+psql -d postgres -c "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '${TEMPLATE_DB_NAME}';" 2>/dev/null || true
+
+# Then drop the database
 psql -d postgres -c "DROP DATABASE IF EXISTS ${TEMPLATE_DB_NAME} WITH (FORCE);" || {
-    echo -e "${RED}Failed to drop template database${NC}"
+    echo -e "${RED}Failed to drop template database with FORCE${NC}"
     echo ""
     echo "This may fail if you're using PostgreSQL < 13."
     echo "Trying without WITH (FORCE)..."

@@ -378,10 +378,10 @@ jobs:
 
       - name: Setup test template database
         env:
+          PGPASSWORD: postgres
           PGHOST: localhost
           PGPORT: 5432
           PGUSER: postgres
-          PGPASSWORD: postgres
         run: ./scripts/setup-test-template.sh
 
       - name: Cache cargo-nextest
