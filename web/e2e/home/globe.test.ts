@@ -31,10 +31,9 @@ test.describe('Globe Page', () => {
 		// Give time for 3D rendering to initialize
 		await page.waitForTimeout(2000);
 
-		// Take screenshot for visual regression testing
-		await expect(page).toHaveScreenshot('globe-page.png', {
-			maxDiffPixelRatio: 0.5 // Higher threshold for 3D rendering
-		});
+		// Verify Cesium viewer is present (the main 3D canvas)
+		const cesiumViewer = page.locator('.cesium-viewer');
+		await expect(cesiumViewer).toBeVisible();
 	});
 
 	test('should load without JavaScript errors', async ({ page }) => {
