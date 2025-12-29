@@ -118,6 +118,7 @@ diesel::table! {
         year -> Nullable<Int2>,
         is_military -> Nullable<Bool>,
         current_fix -> Nullable<Jsonb>,
+        images -> Nullable<Jsonb>,
     }
 }
 

@@ -436,10 +436,16 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     Ok(())
 }
 
-#[tracing::instrument]
-async fn setup_diesel_database(
-    app_name_prefix: &str,
-) -> Result<Pool<ConnectionManager<PgConnection>>> {
+/// Migration result containing the pool and migration information
+pub struct MigrationResult {
+    pub pool: Pool<ConnectionManager<PgConnection>>,
+    pub applied_migrations: Vec<String>,
+    pub duration_secs: f64,
+}
+
+async fn setup_diesel_database(app_name_prefix: &str) -> Result<MigrationResult> {
+    let migration_start = std::time::Instant::now();
+
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
@@ -544,8 +550,11 @@ async fn setup_diesel_database(
     }
 
     // Run migrations while holding the lock and handle result immediately
-    match connection.run_pending_migrations(MIGRATIONS) {
+    let applied_migration_names = match connection.run_pending_migrations(MIGRATIONS) {
         Ok(applied_migrations) => {
+            let migration_names: Vec<String> =
+                applied_migrations.iter().map(|m| m.to_string()).collect();
+
             if applied_migrations.is_empty() {
                 info!("No pending migrations to apply");
             } else {
@@ -571,6 +580,8 @@ async fn setup_diesel_database(
                     )
                 })?;
             info!("Migration lock released");
+
+            migration_names
         }
         Err(migration_error) => {
             // Release the advisory lock even if migrations failed
@@ -588,9 +599,15 @@ async fn setup_diesel_database(
                 "Failed to run migrations: {migration_error}"
             ));
         }
-    }
+    };
 
-    Ok(pool)
+    let duration_secs = migration_start.elapsed().as_secs_f64();
+
+    Ok(MigrationResult {
+        pool,
+        applied_migrations: applied_migration_names,
+        duration_secs,
+    })
 }
 
 /// Determine the best archive directory to use
@@ -1054,12 +1071,14 @@ async fn main() -> Result<()> {
     };
 
     // For Migrate command, handle errors specially to send notifications
-    let diesel_pool = if matches!(cli.command, Commands::Migrate {}) {
-        let start_time = std::time::Instant::now();
+    let (diesel_pool, migration_info) = if matches!(cli.command, Commands::Migrate {}) {
         match setup_diesel_database(app_name_prefix).await {
-            Ok(pool) => pool,
+            Ok(result) => (
+                result.pool,
+                Some((result.applied_migrations, result.duration_secs)),
+            ),
             Err(e) => {
-                let duration_secs = start_time.elapsed().as_secs_f64();
+                let duration_secs = std::time::Instant::now().elapsed().as_secs_f64();
                 let error_message = format!("{:#}", e);
 
                 // Send failure email
@@ -1096,7 +1115,8 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        setup_diesel_database(app_name_prefix).await?
+        let result = setup_diesel_database(app_name_prefix).await?;
+        (result.pool, None)
     };
 
     match cli.command {
@@ -1258,10 +1278,9 @@ async fn main() -> Result<()> {
             }
 
             // Send success notifications (email and Sentry)
-            // Note: We can't easily determine which migrations were applied after the fact,
-            // so we just report success. The actual migration details are in the logs.
             if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                let report = MigrationReport::success(vec![], 0.0);
+                let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
+                let report = MigrationReport::success(applied_migrations, duration_secs);
                 if let Err(e) = send_migration_email_report(&email_config, &report) {
                     warn!("Failed to send migration success email: {}", e);
                 }

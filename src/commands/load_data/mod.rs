@@ -1,10 +1,10 @@
 mod adsb_exchange;
+mod aircraft_backfill;
 mod aircraft_home_base;
 mod aircraft_models;
 mod aircraft_registrations;
 mod aircraft_types;
 mod airports_runways;
-mod device_backfill;
 mod device_linking;
 mod devices_receivers;
 mod home_base_linking;
@@ -356,7 +356,7 @@ pub async fn handle_load_data(
     // Backfill country codes for ICAO devices
     {
         let metrics =
-            device_backfill::backfill_country_codes_with_metrics(diesel_pool.clone()).await;
+            aircraft_backfill::backfill_country_codes_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "backfill_country_codes");
 
         if !metrics.success
@@ -374,7 +374,7 @@ pub async fn handle_load_data(
     // Backfill tail numbers for US ICAO devices
     {
         let metrics =
-            device_backfill::backfill_tail_numbers_with_metrics(diesel_pool.clone()).await;
+            aircraft_backfill::backfill_tail_numbers_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "backfill_tail_numbers");
 
         if !metrics.success
@@ -874,7 +874,7 @@ async fn get_airports_for_geocoding(
             .filter(airports::location_id.is_null())
             .filter(airports::latitude_deg.is_not_null())
             .filter(airports::longitude_deg.is_not_null())
-            .limit(1000) // Process in batches to avoid overwhelming the geocoding service
+            .limit(2500) // Process in batches to avoid overwhelming the geocoding service
             .select(soar::airports::AirportModel::as_select())
             .load::<soar::airports::AirportModel>(&mut conn)?;
 
