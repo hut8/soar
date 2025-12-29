@@ -2,7 +2,9 @@ use anyhow::{Context, Result, anyhow};
 use reqwest::Client;
 use tracing::{debug, info, warn};
 
-use crate::aircraft_images::{AircraftImage, AircraftImageSource, AirportDataResponse};
+use crate::aircraft_images::{
+    AircraftImage, AircraftImageSource, AirportDataResponse, PlanespottersResponse,
+};
 
 /// Client for fetching aircraft images from airport-data.com API
 #[derive(Clone)]
@@ -202,28 +204,180 @@ impl AircraftImagesClient {
         Ok(Vec::new())
     }
 
-    /// Fetch aircraft images from Planespotters.net API
-    ///
-    /// NOTE: This is a placeholder implementation. The planespotters.net API details
-    /// need to be provided to complete this implementation.
+    /// Fetch aircraft images from Planespotters.net by hex code
     ///
     /// # Arguments
-    /// * `registration` - Aircraft registration (e.g., "N8437D")
-    /// * `limit` - Maximum number of images to fetch
+    /// * `hex_code` - 6-character hex MODE-S code (e.g., "A12B3C")
+    pub async fn fetch_planespotters_by_hex(&self, hex_code: &str) -> Result<Vec<AircraftImage>> {
+        debug!(
+            "Fetching aircraft images from planespotters.net by hex: {}",
+            hex_code
+        );
+
+        let url = format!("https://api.planespotters.net/pub/photos/hex/{}", hex_code);
+
+        let response = self
+            .client
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .context("Failed to send request to planespotters.net")?;
+
+        let status = response.status();
+
+        // Handle rate limiting
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            warn!("Rate limited by planespotters.net API");
+            return Err(anyhow!("Rate limited by planespotters.net API"));
+        }
+
+        // Handle other error status codes
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Planespotters.net API error {}: {}", status, body));
+        }
+
+        let api_response: PlanespottersResponse = response
+            .json()
+            .await
+            .context("Failed to parse planespotters.net API response")?;
+
+        match api_response {
+            PlanespottersResponse::Success { photos } => {
+                let images: Vec<AircraftImage> =
+                    photos.into_iter().map(|photo| photo.into()).collect();
+
+                info!(
+                    "Fetched {} images from planespotters.net for hex: {}",
+                    images.len(),
+                    hex_code
+                );
+
+                Ok(images)
+            }
+            PlanespottersResponse::Error { error } => {
+                warn!("Planespotters.net API returned error: {}", error);
+                Ok(Vec::new()) // Return empty vec on API error
+            }
+        }
+    }
+
+    /// Fetch aircraft images from Planespotters.net by registration
+    ///
+    /// # Arguments
+    /// * `registration` - Aircraft registration (e.g., "N8437D", "D-ABCD")
+    pub async fn fetch_planespotters_by_registration(
+        &self,
+        registration: &str,
+    ) -> Result<Vec<AircraftImage>> {
+        debug!(
+            "Fetching aircraft images from planespotters.net by registration: {}",
+            registration
+        );
+
+        let url = format!(
+            "https://api.planespotters.net/pub/photos/reg/{}",
+            registration
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .context("Failed to send request to planespotters.net")?;
+
+        let status = response.status();
+
+        // Handle rate limiting
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            warn!("Rate limited by planespotters.net API");
+            return Err(anyhow!("Rate limited by planespotters.net API"));
+        }
+
+        // Handle other error status codes
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Planespotters.net API error {}: {}", status, body));
+        }
+
+        let api_response: PlanespottersResponse = response
+            .json()
+            .await
+            .context("Failed to parse planespotters.net API response")?;
+
+        match api_response {
+            PlanespottersResponse::Success { photos } => {
+                let images: Vec<AircraftImage> =
+                    photos.into_iter().map(|photo| photo.into()).collect();
+
+                info!(
+                    "Fetched {} images from planespotters.net for registration: {}",
+                    images.len(),
+                    registration
+                );
+
+                Ok(images)
+            }
+            PlanespottersResponse::Error { error } => {
+                warn!("Planespotters.net API returned error: {}", error);
+                Ok(Vec::new()) // Return empty vec on API error
+            }
+        }
+    }
+
+    /// Fetch aircraft images from Planespotters.net API
+    /// Tries hex code first, falls back to registration if no results
+    ///
+    /// # Arguments
+    /// * `hex_code` - Optional 6-character hex MODE-S code
+    /// * `registration` - Optional aircraft registration
     pub async fn fetch_from_planespotters(
         &self,
-        _registration: Option<&str>,
-        _limit: u8,
+        hex_code: Option<&str>,
+        registration: Option<&str>,
     ) -> Result<Vec<AircraftImage>> {
-        // TODO: Implement planespotters.net API integration
-        // Waiting for API documentation:
-        // - Endpoint URL
-        // - Request parameters (registration? hex code?)
-        // - Response format
-        // - Authentication requirements
-        // - Rate limits
+        // Try hex code first if available
+        if let Some(hex) = hex_code {
+            match self.fetch_planespotters_by_hex(hex).await {
+                Ok(images) if !images.is_empty() => {
+                    debug!("Found {} images by hex from planespotters", images.len());
+                    return Ok(images);
+                }
+                Ok(_) => {
+                    debug!(
+                        "No images found by hex from planespotters, trying registration fallback"
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to fetch by hex from planespotters: {}, trying registration fallback",
+                        e
+                    );
+                }
+            }
+        }
 
-        warn!("Planespotters.net API integration not yet implemented - returning empty results");
+        // Fall back to registration if hex didn't work
+        if let Some(reg) = registration {
+            match self.fetch_planespotters_by_registration(reg).await {
+                Ok(images) => {
+                    debug!(
+                        "Found {} images by registration from planespotters",
+                        images.len()
+                    );
+                    return Ok(images);
+                }
+                Err(e) => {
+                    warn!("Failed to fetch by registration from planespotters: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // No identifiers available or all methods failed
         Ok(Vec::new())
     }
 
@@ -231,7 +385,7 @@ impl AircraftImagesClient {
     ///
     /// # Arguments
     /// * `source` - Which image source to query
-    /// * `mode_s` - Optional MODE-S code
+    /// * `mode_s` - Optional MODE-S code (hex)
     /// * `registration` - Optional registration
     /// * `limit` - Maximum number of images to fetch
     pub async fn fetch_from_source(
@@ -246,7 +400,7 @@ impl AircraftImagesClient {
                 self.fetch_images(mode_s, registration, limit).await
             }
             AircraftImageSource::Planespotters => {
-                self.fetch_from_planespotters(registration, limit).await
+                self.fetch_from_planespotters(mode_s, registration).await
             }
         }
     }

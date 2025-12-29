@@ -200,6 +200,70 @@ impl From<AirportDataImage> for AircraftImage {
     }
 }
 
+/// Planespotters.net API response structure
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PlanespottersResponse {
+    Success { photos: Vec<PlanespottersPhoto> },
+    Error { error: String },
+}
+
+/// Single photo entry from Planespotters.net API
+#[derive(Debug, Deserialize)]
+pub struct PlanespottersPhoto {
+    /// Photo ID
+    pub id: String,
+
+    /// Thumbnail image (200px wide)
+    pub thumbnail: PlanespottersImage,
+
+    /// Large thumbnail (420px wide)
+    pub thumbnail_large: PlanespottersImage,
+
+    /// Link to photo page
+    pub link: String,
+
+    /// Photographer's name
+    pub photographer: String,
+}
+
+/// Image data from Planespotters.net
+#[derive(Debug, Deserialize)]
+pub struct PlanespottersImage {
+    /// Image URL
+    pub src: String,
+
+    /// Image dimensions
+    #[allow(dead_code)]
+    pub size: PlanespottersImageSize,
+}
+
+/// Image size from Planespotters.net
+#[derive(Debug, Deserialize)]
+pub struct PlanespottersImageSize {
+    #[allow(dead_code)]
+    pub width: u32,
+    #[allow(dead_code)]
+    pub height: u32,
+}
+
+impl From<PlanespottersPhoto> for AircraftImage {
+    fn from(photo: PlanespottersPhoto) -> Self {
+        AircraftImage {
+            source: AircraftImageSource::Planespotters,
+            page_url: photo.link,
+            thumbnail_url: photo.thumbnail.src,
+            // Use the larger thumbnail as the "full" image
+            image_url: Some(photo.thumbnail_large.src),
+            photographer: if photo.photographer.is_empty() {
+                None
+            } else {
+                Some(photo.photographer)
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
