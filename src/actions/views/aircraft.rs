@@ -76,6 +76,42 @@ impl From<AircraftDomain> for AircraftRegistrationView {
     }
 }
 
+impl From<crate::aircraft_registrations::AircraftRegistrationModel> for AircraftRegistrationView {
+    fn from(model: crate::aircraft_registrations::AircraftRegistrationModel) -> Self {
+        Self {
+            registration_number: model.registration_number,
+            serial_number: model.serial_number,
+            manufacturer_code: Some(model.manufacturer_code),
+            model_code: Some(model.model_code),
+            series_code: Some(model.series_code),
+            engine_manufacturer_code: model.engine_manufacturer_code,
+            engine_model_code: model.engine_model_code,
+            year_manufactured: model.year_mfr.and_then(|y| u16::try_from(y).ok()),
+            registrant_type: model.registrant_type_code,
+            registrant_name: model.registrant_name,
+            aircraft_type: model.aircraft_type.map(|at| at.to_string()),
+            engine_type: model.type_engine_code,
+            status_code: model.status_code,
+            transponder_code: model.transponder_code.and_then(|t| u32::try_from(t).ok()),
+            airworthiness_class: model.airworthiness_class,
+            airworthiness_date: model.airworthiness_date,
+            certificate_issue_date: model.certificate_issue_date,
+            expiration_date: model.expiration_date,
+            club_id: model.club_id,
+            home_base_airport_id: model
+                .home_base_airport_id
+                .map(|id| Uuid::from_u128(id as u128)),
+            kit_manufacturer_name: model.kit_mfr_name,
+            kit_model_name: model.kit_model_name,
+            other_names: vec![], // Not available in model, would need separate query
+            light_sport_type: model.light_sport_type,
+            aircraft_id: model.aircraft_id,
+            model: None,
+            aircraft_type_ogn: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftWithDeviceView {

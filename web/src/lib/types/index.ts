@@ -104,46 +104,35 @@ export interface Airport {
 	runways: Runway[];
 }
 
-// Aircraft registration information
+// Aircraft registration information (from FAA database)
 export interface AircraftRegistration {
-	nNumber: string;
+	registrationNumber: string;
 	serialNumber: string;
-	mfrMdlCode: string;
-	engMfrMdl: string;
-	yearMfr: number;
-	typeRegistrant: number;
-	name: string;
-	registrantName: string;
-	street: string;
-	street2: string;
-	city: string;
-	state: string;
-	zipCode: string;
-	region: string;
-	county: string;
-	country: string;
-	lastActionDate: string;
-	certIssueDate: string;
-	certification: string;
-	typeAircraft: number;
-	typeEngine: number;
-	statusCode: string;
-	modeSCode: string;
-	fractOwner: string;
-	airWorthDate: string;
-	otherNames1: string;
-	otherNames2: string;
-	otherNames3: string;
-	otherNames4: string;
-	otherNames5: string;
-	expirationDate: string;
-	uniqueId: string;
-	kitMfr: string;
-	kitModel: string;
-	modeSCodeHex: string;
-	transponderCode: number | null; // Mode S code as decimal number
-	createdAt: string;
-	updatedAt: string;
+	manufacturerCode?: string;
+	modelCode?: string;
+	seriesCode?: string;
+	engineManufacturerCode?: string;
+	engineModelCode?: string;
+	yearManufactured?: number;
+	registrantType?: string;
+	registrantName?: string;
+	aircraftType?: string;
+	engineType?: number;
+	statusCode?: string;
+	transponderCode?: number;
+	airworthinessClass?: string;
+	airworthinessDate?: string;
+	certificateIssueDate?: string;
+	expirationDate?: string;
+	clubId?: string;
+	homeBaseAirportId?: string;
+	kitManufacturerName?: string;
+	kitModelName?: string;
+	otherNames?: string[];
+	lightSportType?: string;
+	aircraftId?: string;
+	model?: AircraftModel; // Embedded model data if available
+	aircraftTypeOgn?: string; // OGN aircraft type if available
 }
 
 // Aircraft model information

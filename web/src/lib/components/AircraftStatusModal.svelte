@@ -175,26 +175,6 @@
 		};
 	}
 
-	// Get aircraft type description
-	function getAircraftTypeDescription(typeAircraft: number | undefined): string {
-		if (typeAircraft === undefined) return 'Unknown';
-
-		// FAA aircraft type codes
-		const typeMap: Record<number, string> = {
-			1: 'Glider',
-			2: 'Balloon',
-			3: 'Blimp/Dirigible',
-			4: 'Fixed wing single engine',
-			5: 'Fixed wing multi engine',
-			6: 'Rotorcraft',
-			7: 'Weight-shift-control',
-			8: 'Powered parachute',
-			9: 'Gyroplane'
-		};
-
-		return typeMap[typeAircraft] || `Type ${typeAircraft}`;
-	}
-
 	// Update direction to aircraft
 	function updateDirectionToAircraft() {
 		if (!userLocation || !selectedAircraft) {
@@ -571,43 +551,53 @@
 											{formatTransponderCode(aircraftRegistration.transponderCode)}
 										</dd>
 									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Year</dt>
-										<dd>{aircraftRegistration.yearMfr}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Type</dt>
-										<dd>{getAircraftTypeDescription(aircraftRegistration.typeAircraft)}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Status</dt>
-										<dd>
-											{getStatusCodeDescription(aircraftRegistration.statusCode)}
-											<span class="ml-1 text-xs text-surface-500 dark:text-surface-500"
-												>({aircraftRegistration.statusCode})</span
-											>
-										</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
-											Certificate Issue
-										</dt>
-										<dd>{dayjs(aircraftRegistration.certIssueDate).format('YYYY-MM-DD')}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Expiration</dt>
-										<dd>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
-											Airworthiness
-										</dt>
-										<dd>{dayjs(aircraftRegistration.airWorthDate).format('YYYY-MM-DD')}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Last Action</dt>
-										<dd>{dayjs(aircraftRegistration.lastActionDate).format('YYYY-MM-DD')}</dd>
-									</div>
+									{#if aircraftRegistration.yearManufactured}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Year</dt>
+											<dd>{aircraftRegistration.yearManufactured}</dd>
+										</div>
+									{/if}
+									{#if aircraftRegistration.aircraftType}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Type</dt>
+											<dd>{aircraftRegistration.aircraftType}</dd>
+										</div>
+									{/if}
+									{#if aircraftRegistration.statusCode}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Status</dt>
+											<dd>
+												{getStatusCodeDescription(aircraftRegistration.statusCode)}
+												<span class="ml-1 text-xs text-surface-500 dark:text-surface-500"
+													>({aircraftRegistration.statusCode})</span
+												>
+											</dd>
+										</div>
+									{/if}
+									{#if aircraftRegistration.certificateIssueDate}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Certificate Issue
+											</dt>
+											<dd>
+												{dayjs(aircraftRegistration.certificateIssueDate).format('YYYY-MM-DD')}
+											</dd>
+										</div>
+									{/if}
+									{#if aircraftRegistration.expirationDate}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Expiration</dt>
+											<dd>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</dd>
+										</div>
+									{/if}
+									{#if aircraftRegistration.airworthinessDate}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Airworthiness
+											</dt>
+											<dd>{dayjs(aircraftRegistration.airworthinessDate).format('YYYY-MM-DD')}</dd>
+										</div>
+									{/if}
 								</dl>
 							</div>
 						{/if}

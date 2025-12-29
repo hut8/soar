@@ -315,6 +315,34 @@ impl AircraftModelRepository {
         .await?
     }
 
+    /// Get aircraft model record by composite key (for API views)
+    /// Returns the database record directly instead of converting to domain model
+    pub async fn get_aircraft_model_record_by_key(
+        &self,
+        manufacturer_code_param: &str,
+        model_code_param: &str,
+        series_code_param: &str,
+    ) -> Result<Option<AircraftModelRecord>> {
+        let pool = self.pool.clone();
+        let manufacturer_code_param = manufacturer_code_param.to_string();
+        let model_code_param = model_code_param.to_string();
+        let series_code_param = series_code_param.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            aircraft_models::table
+                .filter(aircraft_models::manufacturer_code.eq(&manufacturer_code_param))
+                .filter(aircraft_models::model_code.eq(&model_code_param))
+                .filter(aircraft_models::series_code.eq(&series_code_param))
+                .select(AircraftModelRecord::as_select())
+                .first::<AircraftModelRecord>(&mut conn)
+                .optional()
+                .map_err(Into::into)
+        })
+        .await?
+    }
+
     /// Get aircraft models by multiple composite keys (batch query)
     #[instrument(skip(self, keys), fields(key_count = keys.len()))]
     pub async fn get_aircraft_models_by_keys(
