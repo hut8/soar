@@ -66,11 +66,11 @@ pub struct AircraftSearchQuery {
 
 #[derive(Debug, Deserialize)]
 pub struct BulkAircraftQuery {
-    /// Comma-separated list of aircraft UUIDs (max 10)
+    /// Comma-separated list of aircraft UUIDs (max 100)
     pub ids: String,
 }
 
-/// Get multiple aircraft by their UUIDs (max 10)
+/// Get multiple aircraft by their UUIDs (max 100)
 #[instrument(skip(state))]
 pub async fn get_aircraft_bulk(
     Query(query): Query<BulkAircraftQuery>,
@@ -81,11 +81,11 @@ pub async fn get_aircraft_bulk(
     // Parse the comma-separated IDs
     let id_strings: Vec<&str> = query.ids.split(',').map(|s| s.trim()).collect();
 
-    // Validate max 10 IDs
-    if id_strings.len() > 10 {
+    // Validate max 100 IDs
+    if id_strings.len() > 100 {
         return json_error(
             StatusCode::BAD_REQUEST,
-            "Maximum 10 device IDs allowed per request",
+            "Maximum 100 device IDs allowed per request",
         )
         .into_response();
     }

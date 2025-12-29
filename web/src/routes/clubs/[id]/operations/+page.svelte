@@ -24,7 +24,7 @@
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
-	import type { Flight } from '$lib/types';
+	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
@@ -41,6 +41,10 @@
 	let loadingFlights = $state(true);
 	let error = $state('');
 	let flightsError = $state('');
+
+	// Enriched flight details with aircraft data
+	let flightsInProgressDetails = $state<FlightDetails[]>([]);
+	let completedFlightsDetails = $state<FlightDetails[]>([]);
 
 	// Pilot modal state
 	let pilotModalOpen = $state(false);
@@ -66,6 +70,51 @@
 		if (selectedDate && clubId) {
 			loadFlights();
 		}
+	});
+
+	// Fetch aircraft data whenever flights change
+	$effect(() => {
+		async function fetchAircraftData() {
+			// Combine all flights to get unique aircraft IDs
+			const allFlights = [...flightsInProgress, ...completedFlights];
+			const aircraftIds = Array.from(
+				new Set(allFlights.filter((f) => f.aircraftId).map((f) => f.aircraftId!))
+			);
+
+			if (aircraftIds.length === 0) {
+				// No aircraft IDs, just create FlightDetails with null aircraft
+				flightsInProgressDetails = flightsInProgress.map((flight) => ({ flight, aircraft: null }));
+				completedFlightsDetails = completedFlights.map((flight) => ({ flight, aircraft: null }));
+				return;
+			}
+
+			try {
+				// Fetch bulk aircraft data
+				const response = await serverCall<DataResponse<Record<string, Aircraft>>>(
+					`/aircraft/bulk?ids=${aircraftIds.join(',')}`
+				);
+
+				const aircraftMap = response.data;
+
+				// Decorate both flight arrays
+				flightsInProgressDetails = flightsInProgress.map((flight) => ({
+					flight,
+					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
+				}));
+
+				completedFlightsDetails = completedFlights.map((flight) => ({
+					flight,
+					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
+				}));
+			} catch (err) {
+				console.error('Failed to fetch aircraft data:', err);
+				// On error, create FlightDetails with null aircraft
+				flightsInProgressDetails = flightsInProgress.map((flight) => ({ flight, aircraft: null }));
+				completedFlightsDetails = completedFlights.map((flight) => ({ flight, aircraft: null }));
+			}
+		}
+
+		fetchAircraftData();
 	});
 
 	function extractErrorMessage(err: unknown): string {
@@ -318,20 +367,20 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each flightsInProgress as flight (flight.id)}
+									{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
 										<tr>
 											<td>
 												<div class="flex flex-col gap-1">
-													{#if flight.aircraftId}
-														<AircraftLink aircraft={flight} size="md" />
+													{#if aircraft}
+														<AircraftLink {aircraft} size="md" />
 													{:else}
-														<span class="font-medium"
-															>{flight.registration ||
+														<span class="font-medium">
+															{flight.registration ||
 																formatAircraftAddress(
 																	flight.deviceAddress,
 																	flight.deviceAddressType
-																)}</span
-														>
+																)}
+														</span>
 													{/if}
 												</div>
 											</td>
@@ -394,12 +443,12 @@
 
 					<!-- Mobile: Cards -->
 					<div class="space-y-4 md:hidden">
-						{#each flightsInProgress as flight (flight.id)}
+						{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
 							<div class="card p-4">
 								<div class="mb-3 flex items-start justify-between gap-2">
 									<div class="flex-1">
-										{#if flight.aircraftId}
-											<AircraftLink aircraft={flight} size="md" />
+										{#if aircraft}
+											<AircraftLink {aircraft} size="md" />
 										{:else}
 											<div class="font-medium">
 												{flight.registration ||
@@ -502,21 +551,21 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each completedFlights as flight (flight.id)}
+								{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
 									<tr>
 										<td>
 											<div class="flex flex-col gap-1">
 												<div class="flex items-center gap-2">
-													{#if flight.aircraftId}
-														<AircraftLink aircraft={flight} size="md" />
+													{#if aircraft}
+														<AircraftLink {aircraft} size="md" />
 													{:else}
-														<span class="font-medium"
-															>{flight.registration ||
+														<span class="font-medium">
+															{flight.registration ||
 																formatAircraftAddress(
 																	flight.deviceAddress,
 																	flight.deviceAddressType
-																)}</span
-														>
+																)}
+														</span>
 													{/if}
 													{#if flight.towedByAircraftId}
 														<span
@@ -622,12 +671,12 @@
 
 				<!-- Mobile: Cards -->
 				<div class="space-y-4 md:hidden">
-					{#each completedFlights as flight (flight.id)}
+					{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
 						<div class="card p-4">
 							<div class="mb-3 flex items-start justify-between gap-2">
 								<div class="flex-1">
-									{#if flight.aircraftId}
-										<AircraftLink aircraft={flight} size="md" />
+									{#if aircraft}
+										<AircraftLink {aircraft} size="md" />
 									{:else}
 										<div class="font-medium">
 											{flight.registration ||

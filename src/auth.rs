@@ -29,7 +29,7 @@ pub struct Claims {
 impl Claims {
     pub fn new(user: &User) -> Self {
         let now = Utc::now();
-        let exp = now + Duration::days(7); // Token expires in 7 days
+        let exp = now + Duration::days(180); // Token expires in 180 days (6 months)
 
         Self {
             sub: user.id.to_string(),
