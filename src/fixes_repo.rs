@@ -890,6 +890,7 @@ impl FixesRepository {
                     year: None,                     // Not selected in this query
                     is_military: None,              // Not selected in this query
                     current_fix: None,              // Not selected in this query
+                    images: None,                   // Not selected in this query
                 })
                 .collect();
 

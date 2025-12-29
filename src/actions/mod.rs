@@ -1,4 +1,5 @@
 pub mod aircraft;
+pub mod aircraft_images;
 pub mod aircraft_search;
 pub mod airports;
 pub mod airspaces;
@@ -17,6 +18,7 @@ pub mod views;
 pub mod watchlist;
 
 pub use aircraft::*;
+pub use aircraft_images::*;
 pub use aircraft_search::*;
 pub use airports::*;
 pub use airspaces::*;

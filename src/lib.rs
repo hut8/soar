@@ -6,6 +6,8 @@
 pub mod actions;
 pub mod agl_batch_writer;
 pub mod aircraft;
+pub mod aircraft_images;
+pub mod aircraft_images_client;
 pub mod aircraft_registrations;
 pub mod aircraft_registrations_repo;
 pub mod aircraft_repo;

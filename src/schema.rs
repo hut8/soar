@@ -132,6 +132,7 @@ diesel::table! {
         engine_type -> Nullable<EngineType>,
         from_adsbx_ddb -> Bool,
         current_fix -> Nullable<Jsonb>,
+        images -> Nullable<Jsonb>,
     }
 }
 
