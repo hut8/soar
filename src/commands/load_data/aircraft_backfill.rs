@@ -123,7 +123,7 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
                     Ok(_) => {
                         updated_count += 1;
                         info!(
-                            "Updated device {} with country code: {}",
+                            "Updated aircraft {} with country code: {}",
                             device_model.id, extracted_country_code
                         );
                     }
