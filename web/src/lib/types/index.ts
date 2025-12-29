@@ -298,6 +298,13 @@ export interface Flight {
 	callsign?: string;
 }
 
+// FlightDetails combines Flight with full Aircraft data
+// Used when displaying flight lists that need complete aircraft information
+export interface FlightDetails {
+	flight: Flight;
+	aircraft: Aircraft | null; // null if aircraft data couldn't be fetched
+}
+
 export interface WatchlistEntry {
 	userId: string;
 	aircraftId: string;

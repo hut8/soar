@@ -5,7 +5,6 @@
 	import { resolve } from '$app/paths';
 	import {
 		ArrowLeft,
-		Radio,
 		Plane,
 		User,
 		Calendar,
@@ -180,10 +179,15 @@
 				`/aircraft/${aircraftId}/flights?page=${page}&perPage=100`
 			);
 			flights = response.data || [];
-			// Sort by takeoffTime descending (most recent first)
+			// Sort by takeoffTime if available, otherwise createdAt (most recent first)
+			// This matches the backend COALESCE(takeoff_time, created_at) sorting
 			flights.sort((a, b) => {
-				const timeA = a.takeoffTime ? new Date(a.takeoffTime).getTime() : 0;
-				const timeB = b.takeoffTime ? new Date(b.takeoffTime).getTime() : 0;
+				const timeA = a.takeoffTime
+					? new Date(a.takeoffTime).getTime()
+					: new Date(a.createdAt).getTime();
+				const timeB = b.takeoffTime
+					? new Date(b.takeoffTime).getTime()
+					: new Date(b.createdAt).getTime();
 				return timeB - timeA;
 			});
 			flightsPage = response.metadata.page || 1;
@@ -320,7 +324,7 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Radio class="h-8 w-8 text-primary-500" />
+							<Plane class="h-8 w-8 text-primary-500" />
 							<div>
 								<h1 class="h1">
 									{aircraft.registration || 'Unknown'}
@@ -362,7 +366,14 @@
 									? 'preset-filled-success-500'
 									: 'preset-filled-secondary-500'}"
 							>
-								{aircraft.fromOgnDdb ? 'From OGN DB' : 'Not in OGN DB'}
+								{aircraft.fromOgnDdb ? 'In OGN DB' : 'Not in OGN DB'}
+							</span>
+							<span
+								class="badge {aircraft.fromAdsbxDdb
+									? 'preset-filled-success-500'
+									: 'preset-filled-secondary-500'}"
+							>
+								{aircraft.fromAdsbxDdb ? 'In ADSB Exchange DB' : 'Not in ADSB Exchange DB'}
 							</span>
 							{#if aircraft.aircraftTypeOgn}
 								<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
@@ -370,8 +381,8 @@
 								</span>
 							{/if}
 							{#if aircraft.trackerDeviceType}
-								<span class="preset-tonal-primary-500 badge text-xs">
-									{aircraft.trackerDeviceType}
+								<span class="badge preset-filled-tertiary-500 text-xs">
+									OGN Tracker Device Type: {aircraft.trackerDeviceType}
 								</span>
 							{/if}
 							{#if aircraft.countryCode}

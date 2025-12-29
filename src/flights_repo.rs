@@ -1,6 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use diesel::dsl::sql;
 use diesel::prelude::*;
+use diesel::sql_types::Timestamp;
 use uuid::Uuid;
 
 use crate::flights::{Flight, FlightModel, TimeoutPhase};
@@ -132,7 +134,7 @@ impl FlightsRepository {
 
             let flight_models: Vec<FlightModel> = flights
                 .filter(aircraft_id.eq(device_id_val))
-                .order(takeoff_time.desc())
+                .order(sql::<Timestamp>("COALESCE(takeoff_time, created_at)").desc())
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
 
@@ -167,7 +169,7 @@ impl FlightsRepository {
             let offset = (page - 1) * per_page;
             let flight_models: Vec<FlightModel> = flights
                 .filter(aircraft_id.eq(device_id_val))
-                .order(takeoff_time.desc())
+                .order(sql::<Timestamp>("COALESCE(takeoff_time, created_at)").desc())
                 .limit(per_page)
                 .offset(offset)
                 .select(FlightModel::as_select())

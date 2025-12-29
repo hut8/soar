@@ -7,9 +7,10 @@
 		getAircraftTypeColor,
 		getFlagPath
 	} from '$lib/formatters';
-	import type { Flight } from '$lib/types';
+	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
+	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
 
@@ -20,6 +21,46 @@
 	}
 
 	let { flights, showEnd = false, showAircraft = true }: Props = $props();
+
+	// Internal state for enriched flight details
+	let flightDetails: FlightDetails[] = $state([]);
+
+	// Fetch aircraft data whenever flights change
+	$effect(() => {
+		async function fetchAircraftData() {
+			// Extract unique aircraft IDs from flights
+			const aircraftIds = Array.from(
+				new Set(flights.filter((f) => f.aircraftId).map((f) => f.aircraftId!))
+			);
+
+			if (aircraftIds.length === 0) {
+				// No aircraft IDs, just create FlightDetails with null aircraft
+				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
+				return;
+			}
+
+			try {
+				// Fetch bulk aircraft data
+				const response = await serverCall<DataResponse<Record<string, Aircraft>>>(
+					`/aircraft/bulk?ids=${aircraftIds.join(',')}`
+				);
+
+				const aircraftMap = response.data;
+
+				// Decorate flights with aircraft data
+				flightDetails = flights.map((flight) => ({
+					flight,
+					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
+				}));
+			} catch (err) {
+				console.error('Failed to fetch aircraft data:', err);
+				// On error, create FlightDetails with null aircraft
+				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
+			}
+		}
+
+		fetchAircraftData();
+	});
 
 	function formatAircraftAddress(address: string, addressType: string): string {
 		const typePrefix = addressType === 'Flarm' ? 'F' : addressType === 'Ogn' ? 'O' : 'I';
@@ -132,14 +173,14 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each flights as flight (flight.id)}
+				{#each flightDetails as { flight, aircraft } (flight.id)}
 					<tr>
 						{#if showAircraft}
 							<td>
 								<div class="flex flex-col gap-1">
 									<div class="flex items-center gap-2">
-										{#if flight.aircraftId}
-											<AircraftLink aircraft={flight} size="md" />
+										{#if aircraft}
+											<AircraftLink {aircraft} size="md" />
 										{:else}
 											<span class="font-medium"
 												>{flight.registration ||
@@ -307,14 +348,14 @@
 
 <!-- Mobile Cards -->
 <div class="block space-y-4 md:hidden">
-	{#each flights as flight (flight.id)}
+	{#each flightDetails as { flight, aircraft } (flight.id)}
 		<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
 			<!-- Aircraft info -->
 			<div class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3">
 				<div class="flex flex-wrap items-center gap-2">
 					{#if showAircraft}
-						{#if flight.aircraftId}
-							<AircraftLink aircraft={flight} size="md" />
+						{#if aircraft}
+							<AircraftLink {aircraft} size="md" />
 						{:else}
 							<span class="font-semibold"
 								>{flight.registration ||
