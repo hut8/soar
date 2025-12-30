@@ -32,11 +32,10 @@ test.describe('Globe Page', () => {
 		if (errorCount > 0 && (await errorMessage.isVisible())) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
-			// Skip the test if WebGL initialization failed
-			test.skip(
-				errorText?.includes('WebGL') || errorText?.includes('initialization failed'),
-				'WebGL not available in headless CI environment'
-			);
+			if (errorText?.includes('WebGL') || errorText?.includes('initialization failed')) {
+				// Skip the test - WebGL not available in headless CI
+				test.skip();
+			}
 			// If we get here, it's an unexpected error
 			throw new Error(`Globe page showed unexpected error: ${errorText}`);
 		}
@@ -80,11 +79,10 @@ test.describe('Globe Page', () => {
 		if (errorCount > 0 && (await errorMessage.isVisible())) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
-			// Skip the test if WebGL initialization failed
-			test.skip(
-				errorText?.includes('WebGL') || errorText?.includes('initialization failed'),
-				'WebGL not available in headless CI environment'
-			);
+			if (errorText?.includes('WebGL') || errorText?.includes('initialization failed')) {
+				// Skip the test - WebGL not available in headless CI
+				test.skip();
+			}
 			// If we get here, it's an unexpected error
 			throw new Error(`Globe page showed unexpected error: ${errorText}`);
 		}
