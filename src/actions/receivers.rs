@@ -7,11 +7,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::{
-    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
-};
+use crate::actions::{DataResponse, PaginatedDataResponse, PaginationMetadata, json_error};
 use crate::receiver_repo::ReceiverRepository;
-use crate::receivers::ReceiverModel;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +27,9 @@ pub struct ReceiverSearchQuery {
     pub north: Option<f64>,
     pub west: Option<f64>,
     pub east: Option<f64>,
+    /// Pagination parameters
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
 }
 
 /// Get a receiver by its ID
@@ -62,13 +62,34 @@ pub async fn search_receivers(
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
 
+    // Extract pagination parameters
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
+
     // Priority 1: General text query search
     if let Some(search_query) = query.query {
         info!("Performing query search: {}", search_query);
-        match receiver_repo.search_by_query(&search_query).await {
-            Ok(receivers) => {
-                info!("Found {} receivers matching query", receivers.len());
-                return Json(DataListResponse { data: receivers }).into_response();
+        match receiver_repo
+            .search_by_query_paginated(&search_query, page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers matching query (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                return Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
+                })
+                .into_response();
             }
             Err(e) => {
                 tracing::error!(
@@ -112,12 +133,26 @@ pub async fn search_receivers(
         );
 
         match receiver_repo
-            .get_receivers_within_radius(lat, lon, radius)
+            .get_receivers_within_radius_paginated(lat, lon, radius, page, per_page)
             .await
         {
-            Ok(receivers) => {
-                info!("Found {} receivers within radius", receivers.len());
-                return Json(DataListResponse { data: receivers }).into_response();
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers within radius (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                return Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
+                })
+                .into_response();
             }
             Err(e) => {
                 tracing::error!("Failed to search receivers by location: {}", e);
@@ -179,12 +214,20 @@ pub async fn search_receivers(
 
                 // Perform bounding box search
                 match receiver_repo
-                    .get_receivers_in_bounding_box(north, west, south, east)
+                    .get_receivers_in_bounding_box_paginated(north, west, south, east, page, per_page)
                     .await
                 {
-                    Ok(receivers) => {
-                        info!("Found {} receivers in bounding box", receivers.len());
-                        Json(DataListResponse { data: receivers }).into_response()
+                    Ok((receivers, total_count)) => {
+                        info!("Found {} receivers in bounding box (page {} of {})", receivers.len(), page, ((total_count as f64) / (per_page as f64)).ceil() as i64);
+                        let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                        Json(PaginatedDataResponse {
+                            data: receivers,
+                            metadata: PaginationMetadata {
+                                page,
+                                total_pages,
+                                total_count,
+                            },
+                        }).into_response()
                     }
                     Err(e) => {
                         tracing::error!("Failed to get receivers in bounding box: {}", e);
@@ -204,12 +247,25 @@ pub async fn search_receivers(
         }
     } else if let Some(callsign) = query.callsign {
         // Search by callsign
-        match receiver_repo.search_by_callsign(&callsign).await {
-            Ok(receivers) => {
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(DataListResponse {
-                    data: receiver_models,
+        match receiver_repo
+            .search_by_callsign_paginated(&callsign, page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers matching callsign (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -226,13 +282,25 @@ pub async fn search_receivers(
         // No search parameters provided - return all receivers with valid coordinates
         // This is useful for map displays where we want to show all receiver locations
         info!("No search parameters provided, returning all receivers with coordinates");
-        match receiver_repo.get_receivers_with_coordinates().await {
-            Ok(receivers) => {
-                info!("Returning {} receivers with coordinates", receivers.len());
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(DataListResponse {
-                    data: receiver_models,
+        match receiver_repo
+            .get_receivers_with_coordinates_paginated(page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Returning {} receivers with coordinates (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }

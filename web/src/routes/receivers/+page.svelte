@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { Search, MapPin, Radio, Navigation, Map, ExternalLink } from '@lucide/svelte';
+	import {
+		Search,
+		MapPin,
+		Radio,
+		Navigation,
+		Map,
+		ExternalLink,
+		ChevronLeft,
+		ChevronRight
+	} from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -7,7 +16,7 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Receiver, DataListResponse } from '$lib/types';
+	import type { Receiver, PaginatedDataResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
@@ -28,6 +37,12 @@
 	let loading = $state(false);
 	let error = $state('');
 	let searchMode = $state<'query' | 'location' | 'nearme'>('query');
+
+	// Pagination state
+	let currentPage = $state(1);
+	let totalPages = $state(1);
+	let totalCount = $state(0);
+	let perPage = 50;
 
 	// Query search
 	let searchQuery = $state('');
@@ -74,9 +89,13 @@
 		}
 	}
 
-	async function searchReceivers() {
+	async function searchReceivers(resetPage = true) {
 		loading = true;
 		error = '';
+
+		if (resetPage) {
+			currentPage = 1;
+		}
 
 		try {
 			let endpoint = '/receivers';
@@ -104,11 +123,17 @@
 				queryParams.push(`radius_miles=${radiusMiles}`);
 			}
 
+			// Add pagination parameters
+			queryParams.push(`page=${currentPage}`);
+			queryParams.push(`per_page=${perPage}`);
+
 			if (queryParams.length > 0) {
 				endpoint += `?${queryParams.join('&')}`;
 			}
-			const response = await serverCall<DataListResponse<Receiver>>(endpoint);
+			const response = await serverCall<PaginatedDataResponse<Receiver>>(endpoint);
 			receivers = response.data || [];
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search receivers: ${errorMessage}`;
@@ -203,9 +228,13 @@
 		error = '';
 
 		try {
-			// Call API without any query parameters to get recently updated receivers
-			const response = await serverCall<DataListResponse<Receiver>>('/receivers');
+			// Call API with pagination to get recently updated receivers
+			const response = await serverCall<PaginatedDataResponse<Receiver>>(
+				`/receivers?page=${currentPage}&per_page=${perPage}`
+			);
 			receivers = response.data || [];
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receivers: ${errorMessage}`;
@@ -213,6 +242,28 @@
 			receivers = [];
 		} finally {
 			loading = false;
+		}
+	}
+
+	function goToPage(page: number) {
+		currentPage = page;
+		// Re-run the current search with the new page
+		if (searchQuery || selectedLatitude !== null) {
+			searchReceivers(false);
+		} else {
+			loadRecentReceivers();
+		}
+	}
+
+	function nextPage() {
+		if (currentPage < totalPages) {
+			goToPage(currentPage + 1);
+		}
+	}
+
+	function previousPage() {
+		if (currentPage > 1) {
+			goToPage(currentPage - 1);
 		}
 	}
 
@@ -297,7 +348,7 @@
 
 				<button
 					class="btn w-full preset-filled-primary-500"
-					onclick={searchReceivers}
+					onclick={() => searchReceivers()}
 					disabled={loading}
 				>
 					{#if loading}
@@ -328,7 +379,7 @@
 
 				<button
 					class="btn w-full preset-filled-primary-500"
-					onclick={searchReceivers}
+					onclick={() => searchReceivers()}
 					disabled={loading}
 				>
 					{#if loading}
@@ -380,14 +431,41 @@
 	<!-- Results Section -->
 	{#if receivers.length > 0}
 		<section class="space-y-4">
-			<h2 class="h3">
-				{#if !searchQuery && selectedLatitude === null}
-					Recently Updated Receivers
-				{:else}
-					Results
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<h2 class="h3">
+					{#if !searchQuery && selectedLatitude === null}
+						Recently Updated Receivers
+					{:else}
+						Results
+					{/if}
+					<span class="text-surface-500-400-token">({totalCount} total)</span>
+				</h2>
+
+				<!-- Pagination Controls -->
+				{#if totalPages > 1}
+					<div class="flex items-center gap-2">
+						<button
+							class="btn preset-outlined btn-sm"
+							onclick={previousPage}
+							disabled={currentPage === 1 || loading}
+						>
+							<ChevronLeft class="h-4 w-4" />
+							Previous
+						</button>
+						<span class="text-sm text-surface-600 dark:text-surface-400">
+							Page {currentPage} of {totalPages}
+						</span>
+						<button
+							class="btn preset-outlined btn-sm"
+							onclick={nextPage}
+							disabled={currentPage === totalPages || loading}
+						>
+							Next
+							<ChevronRight class="h-4 w-4" />
+						</button>
+					</div>
 				{/if}
-				<span class="text-surface-500-400-token">({receivers.length})</span>
-			</h2>
+			</div>
 
 			<!-- Mobile: Card Layout -->
 			<div class="grid gap-4 md:hidden">
@@ -494,6 +572,31 @@
 					</table>
 				</div>
 			</div>
+
+			<!-- Bottom Pagination Controls -->
+			{#if totalPages > 1}
+				<div class="flex items-center justify-center gap-2 pt-4">
+					<button
+						class="btn preset-outlined btn-sm"
+						onclick={previousPage}
+						disabled={currentPage === 1 || loading}
+					>
+						<ChevronLeft class="h-4 w-4" />
+						Previous
+					</button>
+					<span class="text-sm text-surface-600 dark:text-surface-400">
+						Page {currentPage} of {totalPages}
+					</span>
+					<button
+						class="btn preset-outlined btn-sm"
+						onclick={nextPage}
+						disabled={currentPage === totalPages || loading}
+					>
+						Next
+						<ChevronRight class="h-4 w-4" />
+					</button>
+				</div>
+			{/if}
 		</section>
 	{:else if !loading && receivers.length === 0 && (searchQuery || selectedLatitude !== null)}
 		<div class="text-surface-500-400-token card p-6 text-center">

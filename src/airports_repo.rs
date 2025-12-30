@@ -532,7 +532,7 @@ impl AirportsRepository {
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
                        continent, iso_country, iso_region, municipality, scheduled_service,
                        icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
-                       NULL::float8 as distance_meters
+                       location_id, NULL::float8 as distance_meters
                 FROM airports
                 WHERE latitude_deg IS NOT NULL
                   AND longitude_deg IS NOT NULL
@@ -617,5 +617,43 @@ mod tests {
         assert_eq!(airport.elevation_ft, Some(11));
         assert_eq!(airport.iso_country, Some("US".to_string()));
         assert!(!airport.scheduled_service);
+    }
+
+    #[test]
+    fn test_airport_with_distance_has_location_id() {
+        // This test ensures AirportWithDistance struct has all required fields
+        // including location_id which was previously missing from SQL queries.
+        // This is a compile-time check - if any field is missing, this won't compile.
+
+        use super::AirportWithDistance;
+        use uuid::Uuid;
+
+        let test_uuid = Uuid::new_v4();
+        let _test_struct = AirportWithDistance {
+            id: 1,
+            ident: "TEST".to_string(),
+            airport_type: "small_airport".to_string(),
+            name: "Test Airport".to_string(),
+            latitude_deg: Some(BigDecimal::from_str("40.0").unwrap()),
+            longitude_deg: Some(BigDecimal::from_str("-74.0").unwrap()),
+            elevation_ft: Some(100),
+            continent: Some("NA".to_string()),
+            iso_country: Some("US".to_string()),
+            iso_region: Some("US-PA".to_string()),
+            municipality: Some("Test City".to_string()),
+            scheduled_service: false,
+            icao_code: Some("KTEST".to_string()),
+            iata_code: None,
+            gps_code: Some("TEST".to_string()),
+            local_code: Some("TEST".to_string()),
+            home_link: None,
+            wikipedia_link: None,
+            keywords: None,
+            location_id: Some(test_uuid), // This field must be present
+            distance_meters: Some(1000.0),
+        };
+
+        // If this compiles, all fields are present including location_id
+        // No assertion needed - this is a compile-time check
     }
 }
