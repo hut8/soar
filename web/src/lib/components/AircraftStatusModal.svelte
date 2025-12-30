@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation, Star } from '@lucide/svelte';
-	import type { Aircraft, Fix, AircraftRegistration, AircraftModel, Flight } from '$lib/types';
+	import type {
+		Aircraft,
+		Fix,
+		AircraftRegistration,
+		AircraftModel,
+		Flight,
+		DataResponse
+	} from '$lib/types';
 	import {
 		formatTitleCase,
 		formatAircraftAddress,
@@ -74,13 +81,8 @@
 		loadingFlight = true;
 
 		try {
-			// Import AircraftRegistry and serverCall
-			const { AircraftRegistry } = await import('$lib/services/AircraftRegistry');
+			// Import serverCall
 			const { serverCall } = await import('$lib/api/server');
-			const registry = AircraftRegistry.getInstance();
-
-			// Load recent fixes from API
-			await registry.loadRecentFixesFromAPI(selectedAircraft.id, 100);
 
 			// Update recent fixes from the aircraft (last 24 hours)
 			const now = Date.now();
@@ -91,23 +93,24 @@
 				return fixTime > twentyFourHoursAgo;
 			});
 
-			// Check if aircraft has registration/model data
-			aircraftRegistration = selectedAircraft.aircraftRegistration || null;
-			aircraftModel = selectedAircraft.aircraftModelDetails || null;
+			// Load aircraft registration and model data from API
+			const [registrationResponse, modelResponse, flightResponse] = await Promise.all([
+				serverCall<DataResponse<AircraftRegistration>>(
+					`/aircraft/${selectedAircraft.id}/registration`
+				).catch(() => null),
+				serverCall<DataResponse<AircraftModel>>(`/aircraft/${selectedAircraft.id}/model`).catch(
+					() => null
+				),
+				selectedAircraft.activeFlightId
+					? serverCall<DataResponse<Flight>>(`/flights/${selectedAircraft.activeFlightId}`).catch(
+							() => null
+						)
+					: Promise.resolve(null)
+			]);
 
-			// Load current flight - use currentFix.flight if available, otherwise fetch
-			if (selectedAircraft.currentFix?.flight) {
-				currentFlight = selectedAircraft.currentFix.flight;
-			} else if (selectedAircraft.activeFlightId) {
-				try {
-					currentFlight = await serverCall(`/flights/${selectedAircraft.activeFlightId}`);
-				} catch (error) {
-					console.warn('Failed to load flight data:', error);
-					currentFlight = null;
-				}
-			} else {
-				currentFlight = null;
-			}
+			aircraftRegistration = registrationResponse?.data || null;
+			aircraftModel = modelResponse?.data || null;
+			currentFlight = selectedAircraft.currentFix?.flight || flightResponse?.data || null;
 		} catch (error) {
 			console.warn('Failed to load aircraft data:', error);
 			aircraftRegistration = null;
