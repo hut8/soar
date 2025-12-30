@@ -245,7 +245,7 @@ impl PhotonClient {
                     Some(10.0) => "10",
                     _ => "other",
                 };
-                metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => radius_label)
+                metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => radius_label)
                     .increment(1);
 
                 if let Some(r) = radius {

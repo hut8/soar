@@ -184,14 +184,15 @@ pub(crate) async fn create_start_end_location(
         Ok(result) => {
             let latency_ms = start.elapsed().as_millis() as f64;
             metrics::histogram!("flight_tracker.location.pelias.latency_ms").record(latency_ms);
-            metrics::counter!("flight_tracker.location.pelias.success").increment(1);
+            metrics::counter!("flight_tracker.location.pelias.success_total").increment(1);
 
             // Check if we got structured data (city/state/country) vs just a generic name
             let has_structured_data =
                 result.city.is_some() || result.state.is_some() || result.country.is_some();
 
             if !has_structured_data {
-                metrics::counter!("flight_tracker.location.pelias.no_structured_data").increment(1);
+                metrics::counter!("flight_tracker.location.pelias.no_structured_data_total")
+                    .increment(1);
                 debug!(
                     "Pelias returned no structured data for {} location ({}, {}), only name: {}",
                     context, latitude, longitude, result.display_name
@@ -240,7 +241,7 @@ pub(crate) async fn create_start_end_location(
                         "end (timeout)" => "end_timeout",
                         _ => "unknown",
                     };
-                    metrics::counter!("flight_tracker.location.created", "type" => metric_type)
+                    metrics::counter!("flight_tracker.location.created_total", "type" => metric_type)
                         .increment(1);
 
                     Some(created_location.id)
@@ -255,7 +256,7 @@ pub(crate) async fn create_start_end_location(
             }
         }
         Err(e) => {
-            metrics::counter!("flight_tracker.location.pelias.failure").increment(1);
+            metrics::counter!("flight_tracker.location.pelias.failure_total").increment(1);
             warn!(
                 "Reverse geocoding failed for {} location at coordinates ({}, {}): {}",
                 context, latitude, longitude, e

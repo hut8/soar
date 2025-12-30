@@ -71,13 +71,13 @@ impl AnalyticsCache {
         let key = CacheKey::DailyFlights(start_date, end_date);
 
         if let Some(cached) = self.daily_flights_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.daily_flights_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_daily_flights(start_date, end_date).await?;
         self.daily_flights_cache.insert(key, result.clone()).await;
 
@@ -91,13 +91,13 @@ impl AnalyticsCache {
         let key = CacheKey::DurationDistribution;
 
         if let Some(cached) = self.duration_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.duration_distribution_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_duration_distribution().await?;
         self.duration_cache.insert(key, result.clone()).await;
 
@@ -111,13 +111,13 @@ impl AnalyticsCache {
         let key = CacheKey::HourlyFlights(hours);
 
         if let Some(cached) = self.hourly_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.hourly_flights_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_hourly_flights(hours).await?;
         self.hourly_cache.insert(key, result.clone()).await;
 
@@ -131,13 +131,13 @@ impl AnalyticsCache {
         let key = CacheKey::AircraftOutliers(format!("{:.2}", threshold));
 
         if let Some(cached) = self.outliers_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.aircraft_outliers_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_device_outliers(threshold).await?;
         self.outliers_cache.insert(key, result.clone()).await;
 
@@ -151,13 +151,13 @@ impl AnalyticsCache {
         let key = CacheKey::TopAircraft(limit, period_days);
 
         if let Some(cached) = self.top_aircraft_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.top_aircraft_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_top_aircraft(limit, period_days).await?;
         self.top_aircraft_cache.insert(key, result.clone()).await;
 
@@ -176,13 +176,13 @@ impl AnalyticsCache {
         let key = CacheKey::ClubAnalytics(start_date, end_date, club_id);
 
         if let Some(cached) = self.club_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.club_analytics_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self
             .repo
             .get_club_analytics(start_date, end_date, club_id)
@@ -204,13 +204,13 @@ impl AnalyticsCache {
         let key = CacheKey::AirportActivity(start_date, end_date, limit);
 
         if let Some(cached) = self.airport_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.airport_activity_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self
             .repo
             .get_airport_activity(start_date, end_date, limit)
@@ -227,13 +227,13 @@ impl AnalyticsCache {
         let key = CacheKey::Summary;
 
         if let Some(cached) = self.summary_cache.get(&key).await {
-            metrics::counter!("analytics.cache.hit").increment(1);
+            metrics::counter!("analytics.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.summary_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("analytics.cache.miss").increment(1);
+        metrics::counter!("analytics.cache.miss_total").increment(1);
         let result = self.repo.get_summary().await?;
         self.summary_cache.insert(key, result.clone()).await;
 

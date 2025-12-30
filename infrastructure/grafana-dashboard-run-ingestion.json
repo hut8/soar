@@ -122,7 +122,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_type_received{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(aprs_type_received_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "{{type}}",
           "range": true,
           "refId": "A"
@@ -195,7 +195,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) / (rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) + rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m]))",
+          "expr": "rate(generic_processor_receiver_cache_hit_total{component=\"run\",environment=\"$environment\"}[5m]) / (rate(generic_processor_receiver_cache_hit_total{component=\"run\",environment=\"$environment\"}[5m]) + rate(generic_processor_receiver_cache_miss_total{component=\"run\",environment=\"$environment\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -294,7 +294,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(generic_processor_receiver_cache_hit_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Hits/sec",
           "range": true,
           "refId": "A"
@@ -305,7 +305,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(generic_processor_receiver_cache_miss_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Misses/sec",
           "range": true,
           "refId": "B"
@@ -417,7 +417,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_nats_consumed{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_nats_consumed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Beast Messages Consumed/sec",
           "range": true,
           "refId": "A"
@@ -428,7 +428,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_intake_processed{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_intake_processed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Beast Intake Processed/sec",
           "range": true,
           "refId": "B"
@@ -543,7 +543,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_decode_success{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_decode_success_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Decode Success/sec",
           "range": true,
           "refId": "A"
@@ -554,7 +554,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_decode_failed{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_decode_failed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Decode Failed/sec",
           "range": true,
           "refId": "B"
@@ -653,7 +653,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_fixes_processed{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_fixes_processed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Fixes Processed/sec",
           "range": true,
           "refId": "A"
@@ -664,7 +664,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_no_fix_created{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_no_fix_created_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "No Fix Created/sec",
           "range": true,
           "refId": "B"
@@ -675,7 +675,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_run_raw_message_stored{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "rate(beast_run_raw_message_stored_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Raw Messages Stored/sec",
           "range": true,
           "refId": "C"

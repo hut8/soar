@@ -177,7 +177,7 @@ impl PacketRouter {
                 "PacketRouter internal queue disconnected, cannot send server message: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected").increment(1);
+            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
         }
     }
 
@@ -200,7 +200,7 @@ impl PacketRouter {
                     "Server status queue CLOSED - cannot route server message: {}",
                     e
                 );
-                metrics::counter!("aprs.server_status_queue.closed").increment(1);
+                metrics::counter!("aprs.server_status_queue.closed_total").increment(1);
             } else {
                 trace!("Routed server message to queue");
             }
@@ -231,7 +231,7 @@ impl PacketRouter {
                 "PacketRouter internal queue disconnected, cannot send packet: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected").increment(1);
+            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
         }
     }
 
@@ -245,7 +245,7 @@ impl PacketRouter {
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
     ) {
-        metrics::counter!("aprs.router.process_packet_internal.called").increment(1);
+        metrics::counter!("aprs.router.process_packet_internal.called_total").increment(1);
 
         // Step 1: Generic processing - archives, identifies receiver, inserts APRS message
         let context = match self
@@ -254,7 +254,7 @@ impl PacketRouter {
             .await
         {
             Some(ctx) => {
-                metrics::counter!("aprs.router.generic_processor.success").increment(1);
+                metrics::counter!("aprs.router.generic_processor.success_total").increment(1);
                 ctx
             }
             None => {
@@ -262,7 +262,7 @@ impl PacketRouter {
                     "Generic processing failed for packet from {}, skipping routing",
                     packet.from
                 );
-                metrics::counter!("aprs.router.generic_processor.failed").increment(1);
+                metrics::counter!("aprs.router.generic_processor.failed_total").increment(1);
                 return;
             }
         };
@@ -273,11 +273,12 @@ impl PacketRouter {
 
         match &packet.data {
             AprsData::Position(_) => {
-                metrics::counter!("aprs.router.packet_type.position").increment(1);
+                metrics::counter!("aprs.router.packet_type.position_total").increment(1);
                 // Route based on position source type
                 match position_source {
                     PositionSourceType::Aircraft => {
-                        metrics::counter!("aprs.router.position_source.aircraft").increment(1);
+                        metrics::counter!("aprs.router.position_source.aircraft_total")
+                            .increment(1);
                         // Route to aircraft position queue
                         if let Some(tx) = &self.aircraft_position_tx {
                             if let Err(e) = tx.send_async((packet, context)).await {
@@ -285,14 +286,14 @@ impl PacketRouter {
                                     "Aircraft position queue CLOSED - cannot route packet from {}: {}",
                                     packet_from, e
                                 );
-                                metrics::counter!("aprs.aircraft_queue.closed").increment(1);
+                                metrics::counter!("aprs.aircraft_queue.closed_total").increment(1);
                             } else {
                                 trace!("Routed aircraft position to queue");
-                                metrics::counter!("aprs.router.routed.aircraft").increment(1);
+                                metrics::counter!("aprs.router.routed.aircraft_total").increment(1);
                             }
                         } else {
                             trace!("No aircraft position queue configured, packet archived only");
-                            metrics::counter!("aprs.router.no_queue.aircraft").increment(1);
+                            metrics::counter!("aprs.router.no_queue.aircraft_total").increment(1);
                         }
                     }
                     PositionSourceType::Receiver => {
@@ -303,7 +304,7 @@ impl PacketRouter {
                                     "Receiver position queue CLOSED - cannot route packet from {}: {}",
                                     packet_from, e
                                 );
-                                metrics::counter!("aprs.receiver_position_queue.closed")
+                                metrics::counter!("aprs.receiver_position_queue.closed_total")
                                     .increment(1);
                             } else {
                                 trace!("Routed receiver position to queue");
@@ -327,7 +328,7 @@ impl PacketRouter {
                 }
             }
             AprsData::Status(_) => {
-                metrics::counter!("aprs.router.packet_type.status").increment(1);
+                metrics::counter!("aprs.router.packet_type.status_total").increment(1);
                 // Route to receiver status queue
                 trace!(
                     "Received status packet from {} (source type: {:?})",
@@ -339,7 +340,7 @@ impl PacketRouter {
                             "Receiver status queue CLOSED - cannot route packet from {}: {}",
                             packet_from, e
                         );
-                        metrics::counter!("aprs.receiver_status_queue.closed").increment(1);
+                        metrics::counter!("aprs.receiver_status_queue.closed_total").increment(1);
                     } else {
                         trace!("Routed receiver status to queue");
                     }

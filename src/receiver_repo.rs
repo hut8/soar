@@ -881,7 +881,7 @@ impl ReceiverRepository {
             let elapsed = now.signed_duration_since(last_update);
             if elapsed.num_seconds() < 5 {
                 // Less than 5 seconds since last update - skip database write
-                metrics::counter!("receiver_repo.latest_packet_at.skipped").increment(1);
+                metrics::counter!("receiver_repo.latest_packet_at.skipped_total").increment(1);
                 return Ok(true);
             }
         }
@@ -904,7 +904,7 @@ impl ReceiverRepository {
         // Update cache with the current timestamp
         if result.is_ok() {
             self.latest_packet_at_cache.insert(receiver_id, now);
-            metrics::counter!("receiver_repo.latest_packet_at.updated").increment(1);
+            metrics::counter!("receiver_repo.latest_packet_at.updated_total").increment(1);
         }
 
         result

@@ -451,7 +451,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_established{component=\"ingest-adsb\"}",
+          "expr": "beast_connection_established_total{component=\"ingest-adsb\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_failed{component=\"ingest-adsb\"}",
+          "expr": "beast_connection_failed_total{component=\"ingest-adsb\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_timeout{component=\"ingest-adsb\"}",
+          "expr": "beast_timeout_total{component=\"ingest-adsb\"}",
           "legendFormat": "Timeout",
           "range": true,
           "refId": "C"
@@ -571,7 +571,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_bytes_received{component=\"ingest-adsb\"}[1m])",
+          "expr": "rate(beast_bytes_received_total{component=\"ingest-adsb\"}[1m])",
           "legendFormat": "Bytes/sec",
           "range": true,
           "refId": "A"
@@ -765,7 +765,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_published{component=\"ingest-adsb\"}",
+          "expr": "beast_frames_published_total{component=\"ingest-adsb\"}",
           "legendFormat": "Published",
           "range": true,
           "refId": "A"
@@ -776,7 +776,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_dropped{component=\"ingest-adsb\"}",
+          "expr": "beast_frames_dropped_total{component=\"ingest-adsb\"}",
           "legendFormat": "Dropped",
           "range": true,
           "refId": "B"

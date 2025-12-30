@@ -151,7 +151,7 @@ pub async fn handle_ingest_adsb(
             }
             Err(e) => {
                 error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("beast.nats.connection_failed").increment(1);
+                metrics::counter!("beast.nats.connection_failed_total").increment(1);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
@@ -187,7 +187,7 @@ pub async fn handle_ingest_adsb(
             }
             Err(e) => {
                 error!("ADS-B ingestion failed: {} - retrying in 1s", e);
-                metrics::counter!("beast.ingest_failed").increment(1);
+                metrics::counter!("beast.ingest_failed_total").increment(1);
 
                 // Mark NATS as disconnected
                 {

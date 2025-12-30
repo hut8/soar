@@ -30,7 +30,7 @@ fn record_stage_metrics(metrics: &EntityMetrics, stage_name: &str) {
     let stage_name = stage_name.to_string();
     metrics::histogram!("data_load.stage.duration_seconds", "stage" => stage_name.clone())
         .record(metrics.duration_secs);
-    metrics::counter!("data_load.stage.records_loaded", "stage" => stage_name.clone())
+    metrics::counter!("data_load.stage.records_loaded_total", "stage" => stage_name.clone())
         .increment(metrics.records_loaded as u64);
     metrics::gauge!("data_load.stage.success", "stage" => stage_name.clone())
         .set(if metrics.success { 1.0 } else { 0.0 });

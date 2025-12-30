@@ -107,13 +107,13 @@ impl CoverageCache {
         );
 
         if let Some(cached) = self.cache.get(&key).await {
-            metrics::counter!("coverage.cache.hit").increment(1);
+            metrics::counter!("coverage.cache.hit_total").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("coverage.query.hexes_ms").record(duration_ms);
             return Ok(cached);
         }
 
-        metrics::counter!("coverage.cache.miss").increment(1);
+        metrics::counter!("coverage.cache.miss_total").increment(1);
         let result = self
             .repo
             .get_coverage_geojson(

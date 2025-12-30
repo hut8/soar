@@ -39,7 +39,7 @@ impl NatsPublisher {
                 Ok(()) => {
                     let duration_ms = start.elapsed().as_millis() as f64;
                     metrics::histogram!("beast.nats.publish_duration_ms").record(duration_ms);
-                    metrics::counter!("beast.nats.published").increment(1);
+                    metrics::counter!("beast.nats.published_total").increment(1);
 
                     // Log slow publishes
                     if duration_ms > 100.0 {
@@ -48,7 +48,7 @@ impl NatsPublisher {
                 }
                 Err(e) => {
                     error!("Failed to publish Beast message to NATS: {}", e);
-                    metrics::counter!("beast.nats.publish_error").increment(1);
+                    metrics::counter!("beast.nats.publish_error_total").increment(1);
                 }
             }
         });
@@ -61,7 +61,7 @@ impl NatsPublisher {
             .await
             .context("Failed to publish Beast message to NATS")?;
 
-        metrics::counter!("beast.nats.published").increment(1);
+        metrics::counter!("beast.nats.published_total").increment(1);
 
         Ok(())
     }

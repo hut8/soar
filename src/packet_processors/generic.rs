@@ -79,7 +79,7 @@ impl GenericProcessor {
         let receiver_id = if let Some(cached_id) = self.receiver_cache.get(&receiver_callsign) {
             // Cache hit - use cached receiver ID
             trace!("Receiver {} found in cache", receiver_callsign);
-            metrics::counter!("generic_processor.receiver_cache.hit").increment(1);
+            metrics::counter!("generic_processor.receiver_cache.hit_total").increment(1);
             cached_id
         } else {
             // Cache miss - lookup/insert in database
@@ -87,7 +87,7 @@ impl GenericProcessor {
                 "Receiver {} not in cache, querying database",
                 receiver_callsign
             );
-            metrics::counter!("generic_processor.receiver_cache.miss").increment(1);
+            metrics::counter!("generic_processor.receiver_cache.miss_total").increment(1);
 
             match self
                 .receiver_repo

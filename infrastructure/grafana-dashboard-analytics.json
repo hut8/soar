@@ -370,7 +370,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '48 hours'\nORDER BY hour ASC",
+          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -379,7 +379,7 @@
           }
         }
       ],
-      "title": "Hourly Flight Activity (Last 48 Hours)",
+      "title": "Hourly Flight Activity (Last 30 Days)",
       "type": "timeseries"
     },
     {

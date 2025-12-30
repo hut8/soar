@@ -214,14 +214,14 @@ impl ElevationService {
 
         // Check elevation cache first (fastest path)
         if let Some(cached_elevation) = self.elevation_cache.get(&cache_key).await {
-            counter!("elevation_cache_hits").increment(1);
+            counter!("elevation_cache_hits_total").increment(1);
             gauge!("elevation_cache_entries").set(self.elevation_cache.entry_count() as f64);
             histogram!("elevation_lookup_duration_seconds").record(start.elapsed().as_secs_f64());
             return Ok(cached_elevation);
         }
 
         // Elevation cache miss - need to look up from HGT tile
-        counter!("elevation_cache_misses").increment(1);
+        counter!("elevation_cache_misses_total").increment(1);
 
         // Determine which tile we need
         let lat_floor = lat.floor() as i32;
@@ -230,11 +230,11 @@ impl ElevationService {
 
         // Check if we have this tile cached, or load it
         let hgt_tile = if let Some(cached) = self.tile_cache.get(&tile_key).await {
-            counter!("elevation_tile_cache_hits").increment(1);
+            counter!("elevation_tile_cache_hits_total").increment(1);
             cached
         } else {
             // Tile cache miss - need to load from disk
-            counter!("elevation_tile_cache_misses").increment(1);
+            counter!("elevation_tile_cache_misses_total").increment(1);
 
             let tile_load_start = Instant::now();
 
@@ -363,7 +363,7 @@ impl ElevationService {
             "Downloading elevation tile from S3: s3://{}/{}",
             bucket, s3_key
         );
-        counter!("elevation_s3_download_attempts").increment(1);
+        counter!("elevation_s3_download_attempts_total").increment(1);
 
         // Download from S3
         let download_start = Instant::now();
@@ -380,11 +380,11 @@ impl ElevationService {
                 // Check if it's a 404 (tile doesn't exist in S3 either - likely ocean)
                 if e.to_string().contains("404") || e.to_string().contains("NoSuchKey") {
                     debug!("Tile not found in S3: {}", s3_key);
-                    counter!("elevation_s3_tile_not_found").increment(1);
+                    counter!("elevation_s3_tile_not_found_total").increment(1);
                     return Ok(false);
                 }
                 // Other error - propagate
-                counter!("elevation_s3_download_errors").increment(1);
+                counter!("elevation_s3_download_errors_total").increment(1);
                 return Err(e.into());
             }
         };
@@ -414,7 +414,7 @@ impl ElevationService {
 
         histogram!("elevation_s3_download_duration_seconds")
             .record(download_start.elapsed().as_secs_f64());
-        counter!("elevation_s3_downloads_success").increment(1);
+        counter!("elevation_s3_downloads_success_total").increment(1);
 
         info!("Successfully downloaded elevation tile: {:?}", tile_path);
         Ok(true)
