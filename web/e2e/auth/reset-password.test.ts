@@ -40,7 +40,7 @@ test.describe('Reset Password', () => {
 		await page.waitForLoadState('networkidle');
 
 		// Try to submit without filling fields
-		const submitButton = page.getByRole('button', { name: /reset|submit|save/i });
+		const submitButton = page.getByRole('button', { name: /reset|submit|save|update/i });
 		const hasSubmit = await submitButton.isVisible().catch(() => false);
 
 		if (hasSubmit) {
@@ -71,7 +71,7 @@ test.describe('Reset Password', () => {
 			await passwordInputs.nth(1).fill('password456');
 
 			// Submit form - check if button exists first
-			const submitButton = page.getByRole('button', { name: /reset|submit|save/i });
+			const submitButton = page.getByRole('button', { name: /reset|submit|save|update/i });
 			const hasSubmit = await submitButton.isVisible().catch(() => false);
 
 			if (hasSubmit) {
