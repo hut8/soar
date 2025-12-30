@@ -19,17 +19,15 @@ test.describe('Globe Page', () => {
 		// Cesium loads asynchronously, so we need to wait for initialization to complete
 		const errorMessage = page.locator('.error-message');
 		const cesiumContainer = page.locator('.cesium-container');
+		const loadingSpinner = page.locator('.loading-spinner');
 
-		// Wait for loading to finish (either error or success state appears)
-		await Promise.race([
-			errorMessage.waitFor({ state: 'visible', timeout: 60000 }),
-			cesiumContainer.waitFor({ state: 'visible', timeout: 60000 })
-		]).catch(() => {
-			// If both timeout, that's okay, we'll check below
+		// Wait for loading spinner to disappear (initialization complete)
+		await loadingSpinner.waitFor({ state: 'hidden', timeout: 60000 }).catch(() => {
+			// Spinner might not be present, that's okay
 		});
 
 		// Check if error state is showing (WebGL may not be available in CI)
-		const hasError = await errorMessage.isVisible();
+		const hasError = await errorMessage.isVisible({ timeout: 5000 }).catch(() => false);
 		if (hasError) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
@@ -41,7 +39,7 @@ test.describe('Globe Page', () => {
 		}
 
 		// Verify Cesium container is visible
-		await expect(cesiumContainer).toBeVisible();
+		await expect(cesiumContainer).toBeVisible({ timeout: 10000 });
 
 		// Give time for 3D rendering to initialize
 		await page.waitForTimeout(2000);
@@ -66,17 +64,15 @@ test.describe('Globe Page', () => {
 		// Cesium loads asynchronously, so we need to wait for initialization to complete
 		const errorMessage = page.locator('.error-message');
 		const cesiumContainer = page.locator('.cesium-container');
+		const loadingSpinner = page.locator('.loading-spinner');
 
-		// Wait for loading to finish (either error or success state appears)
-		await Promise.race([
-			errorMessage.waitFor({ state: 'visible', timeout: 60000 }),
-			cesiumContainer.waitFor({ state: 'visible', timeout: 60000 })
-		]).catch(() => {
-			// If both timeout, that's okay, we'll check below
+		// Wait for loading spinner to disappear (initialization complete)
+		await loadingSpinner.waitFor({ state: 'hidden', timeout: 60000 }).catch(() => {
+			// Spinner might not be present, that's okay
 		});
 
 		// Check if error state is showing (WebGL may not be available in CI)
-		const hasError = await errorMessage.isVisible();
+		const hasError = await errorMessage.isVisible({ timeout: 5000 }).catch(() => false);
 		if (hasError) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
@@ -88,7 +84,7 @@ test.describe('Globe Page', () => {
 		}
 
 		// Verify Cesium container is visible
-		await expect(cesiumContainer).toBeVisible();
+		await expect(cesiumContainer).toBeVisible({ timeout: 10000 });
 
 		// Wait for potential rendering
 		await page.waitForTimeout(2000);
