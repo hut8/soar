@@ -5,23 +5,6 @@ use std::{env, path::PathBuf, sync::Arc, time::Instant};
 use tracing::{debug, info, warn};
 
 use super::hgt::HGT;
-use crate::Fix;
-use uuid::Uuid;
-
-/// Task for calculating elevation/AGL for a fix
-/// Sent through a separate bounded channel to prevent blocking main processing
-pub struct ElevationTask {
-    pub fix_id: Uuid,
-    pub fix: Fix,
-}
-
-/// Task for batch updating AGL values in database
-/// Sent from elevation workers to the batch database writer
-pub struct AglDatabaseTask {
-    pub fix_id: Uuid,
-    pub altitude_agl_feet: Option<i32>,
-}
-
 /// Round coordinates to ~100m grid (0.001 degrees ≈ 111m)
 /// This creates a cache key that groups nearby lookups together
 fn round_coord_for_cache(coord: f64) -> i32 {

@@ -257,63 +257,6 @@ impl FixesRepository {
         .await?
     }
 
-    /// Batch update AGL values for multiple fixes in a single query
-    /// This is much more efficient than individual updates when processing many fixes
-    /// Returns the number of fixes updated
-    pub async fn batch_update_altitude_agl(
-        &self,
-        tasks: &[crate::elevation::AglDatabaseTask],
-    ) -> Result<usize> {
-        if tasks.is_empty() {
-            return Ok(0);
-        }
-
-        let pool = self.pool.clone();
-
-        // Clone the task data for the blocking task
-        let tasks_data: Vec<(Uuid, Option<i32>)> = tasks
-            .iter()
-            .map(|task| (task.fix_id, task.altitude_agl_feet))
-            .collect();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Build a true batch UPDATE using a VALUES clause for efficiency
-            // This is 10-100x faster than individual UPDATEs in a loop
-            // UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true
-            // FROM (VALUES (uuid1, agl1), (uuid2, agl2), ...) AS data(id, agl)
-            // WHERE fixes.id = data.id
-
-            // Build the VALUES clause
-            // Safe to use format! here since UUIDs are validated by Uuid type
-            // and agl values are Option<i32> from our own code
-            let mut value_clauses = Vec::new();
-
-            for (fix_id, agl_value) in &tasks_data {
-                let agl_str = match agl_value {
-                    Some(v) => v.to_string(),
-                    None => "NULL".to_string(),
-                };
-                value_clauses.push(format!("('{}'::uuid, {}::int4)", fix_id, agl_str));
-            }
-
-            let values_clause = value_clauses.join(", ");
-            let sql = format!(
-                "UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true \
-                 FROM (VALUES {}) AS data(id, agl) \
-                 WHERE fixes.id = data.id",
-                values_clause
-            );
-
-            // Execute the batch UPDATE
-            let updated_count = diesel::sql_query(sql).execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(updated_count)
-        })
-        .await?
-    }
-
     /// Get fixes for a specific aircraft ID within a time range (original method)
     pub async fn get_fixes_for_aircraft_with_time_range(
         &self,
