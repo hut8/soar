@@ -169,9 +169,13 @@ export class AircraftRegistry {
 			}
 		}
 
+		// Strip out currentFix after we've used it - fixes array is the source of truth
+		const aircraftToStore = { ...aircraft };
+		delete aircraftToStore.currentFix;
+
 		const cached_at = Date.now();
 
-		this.aircraft.set(aircraft.id, { aircraft, fixes: existingFixes, cached_at });
+		this.aircraft.set(aircraft.id, { aircraft: aircraftToStore, fixes: existingFixes, cached_at });
 
 		// Notify subscribers
 		this.notifySubscribers({
