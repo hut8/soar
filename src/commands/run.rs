@@ -8,7 +8,6 @@ use soar::aircraft_repo::AircraftRepository;
 use soar::beast::cpr_decoder::CprDecoder;
 use soar::beast::{adsb_message_to_fix, decode_beast_frame};
 use soar::fix_processor::FixProcessor;
-use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
 use soar::ogn_aprs_aircraft::AircraftType;
@@ -33,8 +32,6 @@ const AIRCRAFT_QUEUE_SIZE: usize = 1000;
 const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
 const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
 const SERVER_STATUS_QUEUE_SIZE: usize = 50;
-const ELEVATION_QUEUE_SIZE: usize = 1000;
-const AGL_DATABASE_QUEUE_SIZE: usize = 1000;
 
 // NATS subscriber capacity
 // Controls how many messages can be buffered per subscription before triggering slow consumer warnings
@@ -362,21 +359,7 @@ pub async fn handle_run(
     let elevation_path =
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
-
-    // Check elevation processing mode (default: synchronous)
-    // Set ELEVATION_PROCESSING_ASYNC=true to use async queue-based processing (legacy mode)
-    let use_async_elevation = env::var("ELEVATION_PROCESSING_ASYNC")
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(false);
-
-    info!(
-        "Elevation processing mode: {}",
-        if use_async_elevation {
-            "asynchronous (queue-based)"
-        } else {
-            "synchronous (inline)"
-        }
-    );
+    info!("Elevation processing mode: synchronous (inline)");
 
     info!(
         "Environment: {}, using NATS subject '{}'",
@@ -412,36 +395,6 @@ pub async fn handle_run(
 
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);
-
-    // Conditionally create elevation processing infrastructure based on mode
-    let (elevation_tx_opt, elevation_rx_opt) = if use_async_elevation {
-        // Create separate bounded channel for elevation/AGL calculations
-        // This prevents elevation lookups (which can be slow) from blocking the main processing queue
-        let (elevation_tx, elevation_rx) =
-            flume::bounded::<soar::elevation::ElevationTask>(ELEVATION_QUEUE_SIZE);
-
-        info!(
-            "Created bounded elevation processing queue with capacity {}",
-            ELEVATION_QUEUE_SIZE
-        );
-
-        // Create separate bounded channel for AGL database updates
-        // This separates the fast elevation calculation from the slower database updates
-        // and allows batching of database writes for much better throughput
-        let (agl_db_tx, agl_db_rx) =
-            flume::bounded::<soar::elevation::AglDatabaseTask>(AGL_DATABASE_QUEUE_SIZE);
-
-        info!("Created bounded AGL database update queue with capacity 100");
-
-        // Store for later use in spawning workers
-        (
-            Some((elevation_tx, agl_db_tx, agl_db_rx)),
-            Some(elevation_rx),
-        )
-    } else {
-        info!("Async elevation processing disabled - using synchronous mode");
-        (None, None)
-    };
 
     // Log suppressed APRS types if any
     if !suppress_aprs_types.is_empty() {
@@ -484,33 +437,20 @@ pub async fn handle_run(
     {
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
-            let processor = processor_with_nats
+            processor_with_nats
                 .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
-                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone());
-
-            // Configure elevation processing mode
-            if let Some((elevation_tx, _, _)) = &elevation_tx_opt {
-                processor.with_async_elevation(elevation_tx.clone())
-            } else {
-                processor.with_sync_elevation(flight_tracker.elevation_db().clone())
-            }
+                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone())
+                .with_sync_elevation(flight_tracker.elevation_db().clone())
         }
         Err(e) => {
             warn!(
                 "Failed to create FixProcessor with NATS ({}), falling back to processor without NATS",
                 e
             );
-            let processor =
-                FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
-                    .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
-                    .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone());
-
-            // Configure elevation processing mode
-            if let Some((elevation_tx, _, _)) = &elevation_tx_opt {
-                processor.with_async_elevation(elevation_tx.clone())
-            } else {
-                processor.with_sync_elevation(flight_tracker.elevation_db().clone())
-            }
+            FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
+                .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
+                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone())
+                .with_sync_elevation(flight_tracker.elevation_db().clone())
         }
     };
 
@@ -730,78 +670,6 @@ pub async fn handle_run(
         info!("Spawned Beast intake queue processor");
     }
 
-    // Conditionally spawn elevation workers and batch writer (async mode only)
-    if let (Some((_, agl_db_tx, agl_db_rx)), Some(elevation_rx)) =
-        (elevation_tx_opt.as_ref(), elevation_rx_opt.as_ref())
-    {
-        // Spawn AGL batch database writer (async mode only)
-        let fixes_repo_for_batch_writer = FixesRepository::new(diesel_pool.clone());
-        let agl_db_rx_clone = agl_db_rx.clone();
-        tokio::spawn(
-            async move {
-                soar::agl_batch_writer::batch_writer_task(
-                    agl_db_rx_clone,
-                    fixes_repo_for_batch_writer,
-                )
-                .await;
-            }
-            .instrument(tracing::info_span!("agl_batch_writer")),
-        );
-        info!("Spawned AGL batch database writer (batch size: 100, timeout: 5s)");
-
-        // Spawn multiple dedicated elevation processing workers
-        // These workers handle AGL calculations separately to prevent them from blocking main processing
-        // Using multiple workers allows parallel elevation lookups, which can be I/O intensive
-        // The ElevationDB uses Arc<Mutex<LruCache>> internally, so all workers share the same cache
-        let num_elevation_workers = 8;
-        let elevation_db = flight_tracker.elevation_db().clone();
-
-        for elevation_worker_id in 0..num_elevation_workers {
-            let worker_elevation_rx = elevation_rx.clone();
-            let worker_elevation_db = elevation_db.clone();
-            let worker_agl_db_tx = agl_db_tx.clone();
-
-            tokio::spawn(
-                async move {
-                    while let Ok(task) = worker_elevation_rx.recv_async().await {
-                                let start = std::time::Instant::now();
-
-                                // Calculate AGL (no database update here, just calculation)
-                                let agl = soar::flight_tracker::altitude::calculate_altitude_agl(
-                                    &worker_elevation_db,
-                                    &task.fix,
-                                )
-                                .await;
-
-                                let duration = start.elapsed();
-                                metrics::histogram!("aprs.elevation.duration_ms")
-                                    .record(duration.as_millis() as f64);
-                                metrics::counter!("aprs.elevation.processed", "worker_id" => elevation_worker_id.to_string()).increment(1);
-
-                                // Send calculated AGL to database batch writer (blocking)
-                                let agl_task = soar::elevation::AglDatabaseTask {
-                                    fix_id: task.fix_id,
-                                    altitude_agl_feet: agl,
-                                };
-
-                                // Block until space is available - never drop AGL updates
-                                if let Err(e) = worker_agl_db_tx.send_async(agl_task).await {
-                                    warn!("AGL database queue is closed: {}", e);
-                                }
-                    }
-                }
-                .instrument(tracing::info_span!("elevation_worker", worker_id = elevation_worker_id)),
-            );
-        }
-
-        info!(
-            "Spawned {} dedicated elevation processing workers (sharing elevation and dataset caches)",
-            num_elevation_workers
-        );
-    } else {
-        info!("Skipping async elevation workers - using synchronous elevation processing");
-    }
-
     // Spawn dedicated worker pools for each processor type
     // Aircraft position workers (80 workers - heaviest processing due to FixProcessor + flight tracking)
     // Increased from 20 to 80 because aircraft queue was constantly full at 1,000 capacity
@@ -913,7 +781,6 @@ pub async fn handle_run(
     let metrics_receiver_status_rx = receiver_status_rx.clone();
     let metrics_receiver_position_rx = receiver_position_rx.clone();
     let metrics_server_status_rx = server_status_rx.clone();
-    let metrics_elevation_rx_opt = elevation_rx_opt.clone();
     let metrics_db_pool = diesel_pool.clone();
     tokio::spawn(
         async move {
@@ -928,7 +795,6 @@ pub async fn handle_run(
                 let receiver_status_depth = metrics_receiver_status_rx.len();
                 let receiver_position_depth = metrics_receiver_position_rx.len();
                 let server_status_depth = metrics_server_status_rx.len();
-                let elevation_depth = metrics_elevation_rx_opt.as_ref().map_or(0, |rx| rx.len());
 
                 // Get database pool state
                 let pool_state = metrics_db_pool.state();
@@ -941,7 +807,6 @@ pub async fn handle_run(
                 metrics::gauge!("aprs.receiver_position_queue.depth")
                     .set(receiver_position_depth as f64);
                 metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
-                metrics::gauge!("aprs.elevation_queue.depth").set(elevation_depth as f64);
 
                 // Report database pool state to Prometheus
                 metrics::gauge!("aprs.db_pool.total_connections")
@@ -969,12 +834,6 @@ pub async fn handle_run(
                         receiver_position_depth
                     );
                 }
-                if elevation_depth > queue_warning_threshold(ELEVATION_QUEUE_SIZE) {
-                    warn!(
-                        "Elevation queue building up: {} tasks (50% full)",
-                        elevation_depth
-                    );
-                }
             }
         }
         .instrument(tracing::info_span!("queue_metrics_reporter")),
@@ -986,7 +845,6 @@ pub async fn handle_run(
     let shutdown_receiver_status_rx = receiver_status_rx.clone();
     let shutdown_receiver_position_rx = receiver_position_rx.clone();
     let shutdown_server_status_rx = server_status_rx.clone();
-    let shutdown_elevation_rx_opt = elevation_rx_opt.clone();
     let shutdown_aprs_intake_opt = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let shutdown_beast_intake_opt = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
 
@@ -1005,9 +863,8 @@ pub async fn handle_run(
                         let receiver_status_depth = shutdown_receiver_status_rx.len();
                         let receiver_position_depth = shutdown_receiver_position_rx.len();
                         let server_status_depth = shutdown_server_status_rx.len();
-                        let elevation_depth = shutdown_elevation_rx_opt.as_ref().map_or(0, |rx| rx.len());
 
-                        let total_queued = intake_depth + beast_intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth + elevation_depth;
+                        let total_queued = intake_depth + beast_intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth;
 
                         if total_queued == 0 {
                             info!("All queues drained, shutting down now");
@@ -1015,8 +872,8 @@ pub async fn handle_run(
                         }
 
                         info!(
-                            "Waiting for queues to drain ({}/600s): {} intake, {} beast_intake, {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
-                            i, intake_depth, beast_intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
+                            "Waiting for queues to drain ({}/600s): {} intake, {} beast_intake, {} aircraft, {} rx_status, {} rx_pos, {} server",
+                            i, intake_depth, beast_intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

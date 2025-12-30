@@ -4,7 +4,7 @@ use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
 use crate::aircraft_repo::{AircraftPacketFields, AircraftRepository};
-use crate::elevation::{ElevationService, ElevationTask};
+use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
@@ -19,10 +19,6 @@ use ogn_parser::AprsPacket;
 pub enum ElevationMode {
     /// Synchronous: Calculate elevation inline before database insert
     Sync { elevation_db: Box<ElevationService> },
-    /// Asynchronous: Queue elevation tasks for processing by dedicated workers
-    Async {
-        channel: flume::Sender<ElevationTask>,
-    },
 }
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
@@ -59,14 +55,6 @@ impl FixProcessor {
     pub fn with_sync_elevation(mut self, elevation_db: ElevationService) -> Self {
         self.elevation_mode = Some(ElevationMode::Sync {
             elevation_db: Box::new(elevation_db),
-        });
-        self
-    }
-
-    /// Configure asynchronous elevation processing (legacy mode)
-    pub fn with_async_elevation(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
-        self.elevation_mode = Some(ElevationMode::Async {
-            channel: elevation_tx,
         });
         self
     }
@@ -453,33 +441,7 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 4: Calculate and update altitude_agl via dedicated elevation channel (async mode only)
-        // In sync mode, elevation was already calculated before database insert (Step 0)
-        // This prevents slow elevation lookups from blocking the main processing queue in async mode
-        if let Some(ElevationMode::Async { channel }) = &self.elevation_mode {
-            let elevation_queue_start = std::time::Instant::now();
-            let task = ElevationTask {
-                fix_id: updated_fix.id,
-                fix: updated_fix.clone(),
-            };
-
-            // Send to elevation queue with blocking send_async
-            // Never drops elevation tasks - applies backpressure if queue fills
-            // Large queue (100K) prevents backpressure under normal conditions
-            match channel.send_async(task).await {
-                Ok(_) => {
-                    metrics::counter!("aprs.elevation.queued").increment(1);
-                }
-                Err(_) => {
-                    error!("Elevation processing channel is closed");
-                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
-                }
-            }
-            metrics::histogram!("aprs.aircraft.elevation_queue_ms")
-                .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);
-        }
-
-        // Step 5: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 4: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
             // Look up flight information if this fix is part of a flight
