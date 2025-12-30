@@ -95,8 +95,8 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Load all ICAO aircraft without country_code
-        let devices_to_update: Vec<AircraftModel> = aircraft
+        // First, backfill country codes from ICAO addresses
+        let icao_devices: Vec<AircraftModel> = aircraft
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.is_null())
             .select(AircraftModel::as_select())
@@ -104,28 +104,23 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
 
         info!(
             "Found {} ICAO aircraft without country codes",
-            devices_to_update.len()
+            icao_devices.len()
         );
 
         let mut updated_count = 0;
 
-        // Iterate over each device and extract country code
-        for device_model in devices_to_update {
+        // Extract country codes from ICAO addresses
+        for device_model in icao_devices {
             if let Some(extracted_country_code) = Aircraft::extract_country_code_from_icao(
                 device_model.address as u32,
                 AddressType::Icao,
             ) {
-                // Update the device with the extracted country code
                 match diesel::update(aircraft.filter(id.eq(device_model.id)))
                     .set(country_code.eq(&extracted_country_code))
                     .execute(&mut conn)
                 {
                     Ok(_) => {
                         updated_count += 1;
-                        info!(
-                            "Updated aircraft {} with country code: {}",
-                            device_model.id, extracted_country_code
-                        );
                     }
                     Err(e) => {
                         warn!(
@@ -134,15 +129,57 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
                         );
                     }
                 }
-            } else {
-                warn!(
-                    "Could not extract country code for device {} (address: {:06X})",
-                    device_model.id, device_model.address
-                );
             }
         }
 
-        Ok(updated_count)
+        info!(
+            "Updated {} ICAO aircraft with country codes from addresses",
+            updated_count
+        );
+
+        // Second, backfill country codes from registrations for all aircraft (FLARM, OGN, and ICAO fallback)
+        let devices_with_registration: Vec<AircraftModel> = aircraft
+            .filter(country_code.is_null())
+            .filter(registration.is_not_null())
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
+
+        info!(
+            "Found {} aircraft without country codes but with registrations",
+            devices_with_registration.len()
+        );
+
+        let mut registration_updated_count = 0;
+
+        // Extract country codes from registrations
+        for device_model in devices_with_registration {
+            if let Some(ref reg) = device_model.registration
+                && let Some(extracted_country_code) =
+                    Aircraft::extract_country_code_from_registration(reg)
+            {
+                match diesel::update(aircraft.filter(id.eq(device_model.id)))
+                    .set(country_code.eq(&extracted_country_code))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => {
+                        registration_updated_count += 1;
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to update device {} with country code from registration: {}",
+                            device_model.id, e
+                        );
+                    }
+                }
+            }
+        }
+
+        info!(
+            "Updated {} aircraft with country codes from registrations",
+            registration_updated_count
+        );
+
+        Ok(updated_count + registration_updated_count)
     })
     .await?
 }
