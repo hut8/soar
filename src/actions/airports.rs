@@ -21,10 +21,10 @@ pub struct AirportSearchParams {
     pub longitude: Option<f64>,
     pub radius: Option<f64>,
     // Bounding box parameters
-    pub nw_lat: Option<f64>, // Northwest corner latitude
-    pub nw_lng: Option<f64>, // Northwest corner longitude
-    pub se_lat: Option<f64>, // Southeast corner latitude
-    pub se_lng: Option<f64>, // Southeast corner longitude
+    pub north: Option<f64>,
+    pub south: Option<f64>,
+    pub east: Option<f64>,
+    pub west: Option<f64>,
 }
 
 pub async fn get_airport_by_id(
@@ -72,11 +72,11 @@ pub async fn search_airports(
     let airports_repo = AirportsRepository::new(state.pool.clone());
 
     // Check if bounding box parameters are provided
-    if let (Some(nw_lat), Some(nw_lng), Some(se_lat), Some(se_lng)) =
-        (params.nw_lat, params.nw_lng, params.se_lat, params.se_lng)
+    if let (Some(north), Some(south), Some(east), Some(west)) =
+        (params.north, params.south, params.east, params.west)
     {
         // Validate bounding box coordinates
-        if !(-90.0..=90.0).contains(&nw_lat) || !(-90.0..=90.0).contains(&se_lat) {
+        if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
             return json_error(
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
@@ -84,7 +84,7 @@ pub async fn search_airports(
             .into_response();
         }
 
-        if !(-180.0..=180.0).contains(&nw_lng) || !(-180.0..=180.0).contains(&se_lng) {
+        if !(-180.0..=180.0).contains(&east) || !(-180.0..=180.0).contains(&west) {
             return json_error(
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
@@ -92,10 +92,18 @@ pub async fn search_airports(
             .into_response();
         }
 
+        if south >= north {
+            return json_error(StatusCode::BAD_REQUEST, "south must be less than north")
+                .into_response();
+        }
+
+        // Note: west can be >= east when crossing the International Date Line
+        // The PostGIS query handles this case by splitting into two bounding boxes
+
         // Get airports within the bounding box
         let runways_repo = RunwaysRepository::new(state.pool);
         match airports_repo
-            .get_airports_in_bounding_box(nw_lat, nw_lng, se_lat, se_lng, params.limit)
+            .get_airports_in_bounding_box(north, south, east, west, params.limit)
             .await
         {
             Ok(airports) => {

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix, DataListResponse } from '$lib/types';
+import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -197,10 +197,10 @@ export class AircraftRegistry {
 	// Create or update aircraft from backend API data
 	public async updateAircraftFromAPI(aircraftId: string): Promise<Aircraft | null> {
 		try {
-			const apiAircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			if (!apiAircraft) return null;
+			const response = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
+			if (!response || !response.data) return null;
 
-			this.setAircraft(apiAircraft);
+			this.setAircraft(response.data);
 			return this.getAircraft(aircraftId);
 		} catch (error) {
 			console.warn('Failed to fetch aircraft from API:', aircraftId, error);
