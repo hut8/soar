@@ -27,15 +27,18 @@ test.describe('Globe Page', () => {
 		});
 
 		// Check if error state is showing (WebGL may not be available in CI)
-		const hasError = await errorMessage.isVisible({ timeout: 5000 }).catch(() => false);
-		if (hasError) {
+		// Use count() first to check if error element exists, then get text
+		const errorCount = await errorMessage.count();
+		if (errorCount > 0 && (await errorMessage.isVisible())) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
-			if (errorText?.includes('WebGL') || errorText?.includes('initialization failed')) {
-				test.skip();
-				return;
-			}
-			throw new Error(`Globe page showed error: ${errorText}`);
+			// Skip the test if WebGL initialization failed
+			test.skip(
+				errorText?.includes('WebGL') || errorText?.includes('initialization failed'),
+				'WebGL not available in headless CI environment'
+			);
+			// If we get here, it's an unexpected error
+			throw new Error(`Globe page showed unexpected error: ${errorText}`);
 		}
 
 		// Verify Cesium container is visible
@@ -72,15 +75,18 @@ test.describe('Globe Page', () => {
 		});
 
 		// Check if error state is showing (WebGL may not be available in CI)
-		const hasError = await errorMessage.isVisible({ timeout: 5000 }).catch(() => false);
-		if (hasError) {
+		// Use count() first to check if error element exists, then get text
+		const errorCount = await errorMessage.count();
+		if (errorCount > 0 && (await errorMessage.isVisible())) {
 			const errorText = await errorMessage.textContent();
 			// WebGL initialization failure is expected in headless CI environments
-			if (errorText?.includes('WebGL') || errorText?.includes('initialization failed')) {
-				test.skip();
-				return;
-			}
-			throw new Error(`Globe page showed error: ${errorText}`);
+			// Skip the test if WebGL initialization failed
+			test.skip(
+				errorText?.includes('WebGL') || errorText?.includes('initialization failed'),
+				'WebGL not available in headless CI environment'
+			);
+			// If we get here, it's an unexpected error
+			throw new Error(`Globe page showed unexpected error: ${errorText}`);
 		}
 
 		// Verify Cesium container is visible
