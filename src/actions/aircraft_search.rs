@@ -236,9 +236,8 @@ async fn search_aircraft_by_bbox(
             .into_response();
     }
 
-    if west >= east {
-        return json_error(StatusCode::BAD_REQUEST, "west must be less than east").into_response();
-    }
+    // Note: west can be >= east when crossing the International Date Line
+    // The PostGIS query in fixes_repo.rs handles this case by splitting into two bounding boxes
 
     // Set default cutoff time to 15 minutes ago if not provided
     let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::minutes(15));

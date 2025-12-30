@@ -9,6 +9,11 @@ export interface DataListResponse<T> {
 	data: T[];
 }
 
+export interface DataListResponseWithTotal<T> {
+	data: T[];
+	total: number;
+}
+
 export interface PaginationMetadata {
 	page: number;
 	totalPages: number;
