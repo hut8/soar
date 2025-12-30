@@ -293,10 +293,20 @@ pub struct NewAircraft {
 
 impl From<Aircraft> for NewAircraft {
     fn from(device: Aircraft) -> Self {
-        // Extract country code from ICAO address if not already present
-        let country_code = device.country_code.or_else(|| {
-            Aircraft::extract_country_code_from_icao(device.address, device.address_type)
-        });
+        // Extract country code from ICAO address or registration if not already present
+        let country_code = device
+            .country_code
+            .or_else(|| {
+                // Try ICAO address first
+                Aircraft::extract_country_code_from_icao(device.address, device.address_type)
+            })
+            .or_else(|| {
+                // Fall back to extracting from registration if available
+                device
+                    .registration
+                    .as_ref()
+                    .and_then(|reg| Aircraft::extract_country_code_from_registration(reg))
+            });
 
         Self {
             address: device.address as i32,
@@ -392,6 +402,21 @@ pub struct AircraftWithSource {
 pub struct AircraftFetcher;
 
 impl Aircraft {
+    /// Extracts the two-letter country code from a registration string
+    /// Returns Some(country_code) if the registration can be parsed and a country identified
+    /// Returns None if parsing fails or the registration belongs to an organization
+    pub fn extract_country_code_from_registration(registration: &str) -> Option<String> {
+        // Parse using flydent with icao24bit=false (since this is a registration, not ICAO address)
+        let parser = flydent::Parser::new();
+        parser.parse(registration, false, false).and_then(|entity| {
+            // Extract ISO2 country code from the entity
+            match entity {
+                flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                flydent::EntityResult::Organization { .. } => None,
+            }
+        })
+    }
+
     /// Extracts the two-letter country code from an ICAO address
     /// Returns Some(country_code) if the address is ICAO and a country can be identified
     /// Returns None for non-ICAO addresses (FLARM, OGN) or if parsing fails
@@ -567,23 +592,34 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                             // Parse FLARM ID as hex address
                             let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                            // Normalize registration using thread-local parser
-                            let registration = PARSER.with(|parser| {
-                                let normalized =
-                                    match parser.borrow().parse(&record.registration, false, false)
-                                    {
-                                        Some(r) => r.canonical_callsign().to_string(),
-                                        None => {
-                                            // If flydent can't parse it, return the original
-                                            // This handles edge cases where the registration format is unusual
-                                            record.registration.clone()
-                                        }
-                                    };
-                                // Convert empty strings to None
-                                if normalized.is_empty() {
-                                    None
-                                } else {
-                                    Some(normalized)
+                            // Normalize registration and extract country code using thread-local parser
+                            let (registration, country_code) = PARSER.with(|parser| {
+                                match parser.borrow().parse(&record.registration, false, false) {
+                                    Some(entity) => {
+                                        let normalized = entity.canonical_callsign().to_string();
+                                        let country = match entity {
+                                            flydent::EntityResult::Country { iso2, .. } => {
+                                                Some(iso2)
+                                            }
+                                            flydent::EntityResult::Organization { .. } => None,
+                                        };
+                                        let reg = if normalized.is_empty() {
+                                            None
+                                        } else {
+                                            Some(normalized)
+                                        };
+                                        (reg, country)
+                                    }
+                                    None => {
+                                        // If flydent can't parse it, return the original
+                                        // This handles edge cases where the registration format is unusual
+                                        let reg = if record.registration.is_empty() {
+                                            None
+                                        } else {
+                                            Some(record.registration.clone())
+                                        };
+                                        (reg, None)
+                                    }
                                 }
                             });
 
@@ -613,7 +649,7 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 icao_model_code: None,
                                 adsb_emitter_category: None,
                                 tracker_device_type: None,
-                                country_code: None, // Not extracted from FLARM addresses
+                                country_code, // Extracted from registration
                                 owner_operator: None,
                                 aircraft_category: None,
                                 engine_count: None,
@@ -770,25 +806,36 @@ impl AircraftFetcher {
                                 // Parse FLARM ID as hex address
                                 let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                                // Normalize registration using thread-local parser
-                                let registration = PARSER.with(|parser| {
-                                    let normalized = match parser.borrow().parse(
-                                        &record.registration,
-                                        false,
-                                        false,
-                                    ) {
-                                        Some(r) => r.canonical_callsign().to_string(),
+                                // Normalize registration and extract country code using thread-local parser
+                                let (registration, country_code) = PARSER.with(|parser| {
+                                    match parser.borrow().parse(&record.registration, false, false)
+                                    {
+                                        Some(entity) => {
+                                            let normalized =
+                                                entity.canonical_callsign().to_string();
+                                            let country = match entity {
+                                                flydent::EntityResult::Country { iso2, .. } => {
+                                                    Some(iso2)
+                                                }
+                                                flydent::EntityResult::Organization { .. } => None,
+                                            };
+                                            let reg = if normalized.is_empty() {
+                                                None
+                                            } else {
+                                                Some(normalized)
+                                            };
+                                            (reg, country)
+                                        }
                                         None => {
                                             // If flydent can't parse it, return the original
                                             // This handles edge cases where the registration format is unusual
-                                            record.registration.clone()
+                                            let reg = if record.registration.is_empty() {
+                                                None
+                                            } else {
+                                                Some(record.registration.clone())
+                                            };
+                                            (reg, None)
                                         }
-                                    };
-                                    // Convert empty strings to None
-                                    if normalized.is_empty() {
-                                        None
-                                    } else {
-                                        Some(normalized)
                                     }
                                 });
 
@@ -818,7 +865,7 @@ impl AircraftFetcher {
                                     icao_model_code: None,
                                     adsb_emitter_category: None,
                                     tracker_device_type: None,
-                                    country_code: None, // Not extracted from FLARM addresses
+                                    country_code, // Extracted from registration
                                     owner_operator: None,
                                     aircraft_category: None,
                                     engine_count: None,
@@ -1467,5 +1514,55 @@ mod tests {
                 canonical
             );
         }
+    }
+
+    #[test]
+    fn test_extract_country_code_from_registration() {
+        // Test Australian registration
+        let au_code = Aircraft::extract_country_code_from_registration("VH-XJJ");
+        assert_eq!(
+            au_code,
+            Some("AU".to_string()),
+            "VH-XJJ should be Australia"
+        );
+
+        // Test US registration
+        let us_code = Aircraft::extract_country_code_from_registration("N841X");
+        assert_eq!(
+            us_code,
+            Some("US".to_string()),
+            "N841X should be United States"
+        );
+
+        // Test German registration
+        let de_code = Aircraft::extract_country_code_from_registration("D-ABCD");
+        assert_eq!(de_code, Some("DE".to_string()), "D-ABCD should be Germany");
+
+        // Test UK registration
+        let gb_code = Aircraft::extract_country_code_from_registration("G-ABCD");
+        assert_eq!(
+            gb_code,
+            Some("GB".to_string()),
+            "G-ABCD should be United Kingdom"
+        );
+
+        // Test French registration
+        let fr_code = Aircraft::extract_country_code_from_registration("F-JJIJ");
+        assert_eq!(fr_code, Some("FR".to_string()), "F-JJIJ should be France");
+
+        // Test Canadian registration
+        let ca_code = Aircraft::extract_country_code_from_registration("C-GABC");
+        assert_eq!(ca_code, Some("CA".to_string()), "C-GABC should be Canada");
+
+        // Test invalid registration
+        let invalid_code = Aircraft::extract_country_code_from_registration("INVALID");
+        assert_eq!(
+            invalid_code, None,
+            "Invalid registration should return None"
+        );
+
+        // Test empty string
+        let empty_code = Aircraft::extract_country_code_from_registration("");
+        assert_eq!(empty_code, None, "Empty registration should return None");
     }
 }
