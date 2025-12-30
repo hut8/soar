@@ -43,6 +43,7 @@ export default defineConfig({
 			use: {
 				...devices['Desktop Chrome'],
 				// Disable security features that can interfere with Docker/testing
+				// Enable SwiftShader for software WebGL rendering (required for Cesium)
 				launchOptions: {
 					args: [
 						'--no-sandbox',
@@ -51,8 +52,7 @@ export default defineConfig({
 						'--disable-web-security',
 						'--disable-features=IsolateOrigins,site-per-process',
 						'--disable-blink-features=AutomationControlled',
-						'--disable-gpu',
-						'--disable-software-rasterizer',
+						'--use-gl=swiftshader', // Enable software WebGL for Cesium 3D globe
 						'--disable-accelerated-2d-canvas'
 					]
 				}
