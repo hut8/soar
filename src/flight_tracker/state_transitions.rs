@@ -193,7 +193,8 @@ pub(crate) async fn process_state_transition(
                         "Aircraft {} has {:.1}h gap and is climbing - ending flight {} and creating new flight",
                         fix.aircraft_id, gap_hours, state.flight_id
                     );
-                    metrics::counter!("flight_tracker.coalesce.rejected.gap_hours").increment(1);
+                    metrics::counter!("flight_tracker.coalesce.rejected.gap_hours_total")
+                        .increment(1);
 
                     // End the current flight
                     if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
@@ -232,7 +233,7 @@ pub(crate) async fn process_state_transition(
                             let mut flights = ctx.active_flights.write().await;
                             flights.insert(fix.aircraft_id, new_state);
 
-                            metrics::counter!("flight_tracker.flight_created.gap_split")
+                            metrics::counter!("flight_tracker.flight_created.gap_split_total")
                                 .increment(1);
                         }
                         Err(e) => {
@@ -328,7 +329,8 @@ pub(crate) async fn process_state_transition(
                             "Aircraft {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
                             fix.aircraft_id, prev_callsign, new_callsign
                         );
-                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch").increment(1);
+                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
+                            .increment(1);
                         false
                     }
                     _ => true, // Coalesce if either has no callsign, or callsigns match
@@ -414,11 +416,13 @@ pub(crate) async fn process_state_transition(
                             fix.altitude_agl_feet,
                             fix.climb_fpm
                         );
-                        metrics::counter!("flight_tracker.coalesce.rejected.probable_landing")
-                            .increment(1);
+                        metrics::counter!(
+                            "flight_tracker.coalesce.rejected.probable_landing_total"
+                        )
+                        .increment(1);
                         metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
                             .record(distance_km);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours_total")
                             .record(gap_hours as f64);
                         // Don't resume - fall through to create new flight
                     } else {
@@ -434,7 +438,7 @@ pub(crate) async fn process_state_transition(
                             gap_hours as f64
                         );
 
-                        metrics::counter!("flight_tracker.coalesce.resumed").increment(1);
+                        metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
                         metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
                             .record(distance_km);
 
@@ -480,7 +484,7 @@ pub(crate) async fn process_state_transition(
             // No recent timed-out flight to resume, so create a new flight
             // Check if this is a takeoff or mid-flight appearance
             // We need to query recent fixes to determine this
-            metrics::counter!("flight_tracker.coalesce.no_timeout_flight").increment(1);
+            metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
             let recent_fixes = ctx
                 .fixes_repo
                 .get_fixes_for_aircraft(fix.aircraft_id, Some(3), None)
@@ -535,7 +539,8 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
-                        metrics::counter!("flight_tracker.flight_created.takeoff").increment(1);
+                        metrics::counter!("flight_tracker.flight_created.takeoff_total")
+                            .increment(1);
 
                         // If this is a towplane taking off, spawn towing detection task
                         if is_towtug {
@@ -589,7 +594,8 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
-                        metrics::counter!("flight_tracker.flight_created.airborne").increment(1);
+                        metrics::counter!("flight_tracker.flight_created.airborne_total")
+                            .increment(1);
                         // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {

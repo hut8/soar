@@ -187,7 +187,7 @@ impl RawMessagesRepository {
                 .execute(&mut conn)
             {
                 Ok(_) => {
-                    metrics::counter!("aprs.messages.inserted").increment(1);
+                    metrics::counter!("aprs.messages.inserted_total").increment(1);
                     Ok::<Uuid, anyhow::Error>(message_id)
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -196,7 +196,7 @@ impl RawMessagesRepository {
                 )) => {
                     // Duplicate message on redelivery - this is expected after crashes
                     debug!("Duplicate aprs_message detected on redelivery");
-                    metrics::counter!("aprs.messages.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("aprs.messages.duplicate_on_redelivery_total").increment(1);
 
                     // Find existing message ID by natural key
                     let existing = raw_messages
@@ -246,7 +246,7 @@ impl RawMessagesRepository {
 
             match insert_result {
                 Ok(_) => {
-                    metrics::counter!("beast.messages.inserted").increment(1);
+                    metrics::counter!("beast.messages.inserted_total").increment(1);
                     Ok::<Uuid, anyhow::Error>(message_id)
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -255,7 +255,7 @@ impl RawMessagesRepository {
                 )) => {
                     // Duplicate message on redelivery - this is expected after crashes
                     debug!("Duplicate beast message detected on redelivery");
-                    metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
 
                     // Find existing message ID by natural key
                     use crate::schema::raw_messages::dsl::*;
@@ -306,9 +306,9 @@ impl RawMessagesRepository {
                     .execute(conn)?;
 
                     if insert_result > 0 {
-                        metrics::counter!("beast.messages.inserted").increment(1);
+                        metrics::counter!("beast.messages.inserted_total").increment(1);
                     } else {
-                        metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+                        metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
                     }
                 }
                 Ok(())

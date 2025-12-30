@@ -43,9 +43,12 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - Always prefer Diesel's query builder and type-safe methods over raw SQL
 - **NEVER use CREATE INDEX CONCURRENTLY in Diesel migrations** - Diesel migrations run in transactions, which don't support CONCURRENTLY. Use regular CREATE INDEX instead
 
-### SERVER ACCESS
+### SERVER ACCESS AND DEPLOYMENT
 - You are running on the staging server. The staging server is named "supervillain". You can always run commands that do not modify anything. Ask before running commands that modify something.
 - You have access to the production server by running "ssh glider.flights". The user you are running as already has "sudo" access. Ask before connecting or using sudo unless I give you permission in advance.
+- **NEVER attempt to deploy or restart services without explicit instructions** - Only build/check code, do not deploy
+- **Use `cargo check` for validation** - Do not run deployment scripts or restart systemd services unless instructed
+- **Ask before any service modifications** - This includes systemctl restart, deployment scripts, or copying binaries to production locations
 
 ### DATABASE SAFETY RULES (CRITICAL)
 - **Development Database**: `soar_dev` - This is where you work

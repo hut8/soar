@@ -559,16 +559,16 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     metrics::gauge!("websocket_connections").set(0.0);
     metrics::gauge!("websocket_active_subscriptions").set(0.0);
     metrics::gauge!("websocket_queue_depth").set(0.0);
-    metrics::counter!("websocket_messages_sent").absolute(0);
-    metrics::counter!("websocket_send_errors").absolute(0);
-    metrics::counter!("websocket_serialization_errors").absolute(0);
-    metrics::counter!("websocket_aircraft_subscribes").absolute(0);
-    metrics::counter!("websocket_aircraft_unsubscribes").absolute(0);
-    metrics::counter!("websocket_area_subscribes").absolute(0);
-    metrics::counter!("websocket_area_unsubscribes").absolute(0);
-    metrics::counter!("websocket_area_bulk_subscribes").absolute(0);
-    metrics::counter!("websocket_area_bulk_unsubscribes").absolute(0);
-    metrics::counter!("websocket_area_bulk_validation_errors").absolute(0);
+    metrics::counter!("websocket_messages_sent_total").absolute(0);
+    metrics::counter!("websocket_send_errors_total").absolute(0);
+    metrics::counter!("websocket_serialization_errors_total").absolute(0);
+    metrics::counter!("websocket_aircraft_subscribes_total").absolute(0);
+    metrics::counter!("websocket_aircraft_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_subscribes_total").absolute(0);
+    metrics::counter!("websocket_area_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_subscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_validation_errors_total").absolute(0);
 
     // Initialize analytics metrics
     crate::metrics::initialize_analytics_metrics();

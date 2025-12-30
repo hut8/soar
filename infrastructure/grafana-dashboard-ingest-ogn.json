@@ -451,7 +451,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_established{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_established_total{component=\"ingest-ogn\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_failed{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_failed_total{component=\"ingest-ogn\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_ended{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_ended_total{component=\"ingest-ogn\"}",
           "legendFormat": "Ended",
           "range": true,
           "refId": "C"
@@ -570,7 +570,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_keepalive_sent{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_keepalive_sent_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "Keepalive Messages/min",
           "range": true,
           "refId": "A"
@@ -667,8 +667,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_connection_operation_failed{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
-          "legendFormat": "Connection Operation Failed",
+          "expr": "(rate(aprs_connection_failed_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "Connection Failed/min",
           "range": true,
           "refId": "A"
         },
@@ -678,8 +678,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_connection_operation_failed{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
-          "legendFormat": "Connection Operation Failed",
+          "expr": "(rate(aprs_connection_operation_failed_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "Connection Operation Failed/min",
           "range": true,
           "refId": "B"
         },
@@ -689,8 +689,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_connection_operation_failed{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
-          "legendFormat": "Connection Operation Failed",
+          "expr": "(rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "NATS Publish Errors/min",
           "range": true,
           "refId": "C"
         },
@@ -700,8 +700,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_connection_operation_failed{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
-          "legendFormat": "Connection Operation Failed",
+          "expr": "(rate(aprs_nats_connection_failed_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "NATS Connection Failed/min",
           "range": true,
           "refId": "D"
         }
@@ -810,7 +810,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_received_server{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_received_server_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "Server Messages/min",
           "range": true,
           "refId": "A"
@@ -821,7 +821,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_received_aprs{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_received_aprs_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "APRS Messages/min",
           "range": true,
           "refId": "B"
@@ -918,7 +918,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queued_server{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_queued_server_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "Server Messages/min",
           "range": true,
           "refId": "A"
@@ -929,7 +929,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queued_aprs{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_queued_aprs_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "APRS Messages/min",
           "range": true,
           "refId": "B"
@@ -1039,7 +1039,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_published{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_nats_published_total{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "Messages/min",
           "range": true,
           "refId": "A"
@@ -1136,7 +1136,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_nats_publish_error{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
+          "expr": "(rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
           "legendFormat": "Publish Errors",
           "range": true,
           "refId": "A"
@@ -1208,7 +1208,7 @@
         "x": 0,
         "y": 84
       },
-      "id": 100,
+      "id": 112,
       "options": {
         "legend": {
           "calcs": [
@@ -1344,7 +1344,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(rate(aprs_nats_slow_publish{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "expr": "(rate(aprs_nats_slow_publish_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
           "legendFormat": "Slow Publishes (>100ms)",
           "refId": "A"
         }

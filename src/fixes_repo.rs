@@ -189,7 +189,7 @@ impl FixesRepository {
                 .execute(&mut conn)
             {
                 Ok(_) => {
-                    metrics::counter!("aprs.fixes.inserted").increment(1);
+                    metrics::counter!("aprs.fixes.inserted_total").increment(1);
                     trace!(
                         "Inserted fix | Aircraft: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
                         new_fix.aircraft_id,
@@ -225,7 +225,7 @@ impl FixesRepository {
                         "Duplicate fix detected for aircraft {} at {}",
                         new_fix.aircraft_id, new_fix.timestamp
                     );
-                    metrics::counter!("aprs.fixes.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("aprs.fixes.duplicate_on_redelivery_total").increment(1);
                     // Not an error - just skip the duplicate
                     Ok(())
                 }

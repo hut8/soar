@@ -59,7 +59,7 @@ pub async fn get_airspaces(
     let repo = AirspacesRepository::new(state.pool.clone());
 
     // Record metrics
-    metrics::counter!("api.airspaces.requests").increment(1);
+    metrics::counter!("api.airspaces.requests_total").increment(1);
     let start = std::time::Instant::now();
 
     match repo
@@ -81,7 +81,7 @@ pub async fn get_airspaces(
         }
         Err(e) => {
             error!("Failed to fetch airspaces: {}", e);
-            metrics::counter!("api.airspaces.errors").increment(1);
+            metrics::counter!("api.airspaces.errors_total").increment(1);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &format!("Failed to fetch airspaces: {}", e),

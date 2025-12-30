@@ -189,7 +189,7 @@ impl FixProcessor {
                 let tracker_device_type = packet.to.to_string();
 
                 // Track APRS type before filtering
-                metrics::counter!("aprs.type.received", "type" => tracker_device_type.clone())
+                metrics::counter!("aprs.type.received_total", "type" => tracker_device_type.clone())
                     .increment(1);
 
                 // Check if this APRS type is suppressed
@@ -199,7 +199,7 @@ impl FixProcessor {
                     .any(|t| t == &tracker_device_type)
                 {
                     trace!("Suppressing fix from APRS type: {}", tracker_device_type);
-                    metrics::counter!("aprs.fixes.suppressed").increment(1);
+                    metrics::counter!("aprs.fixes.suppressed_total").increment(1);
                     return;
                 }
 
@@ -211,7 +211,7 @@ impl FixProcessor {
                         .any(|t| t == ac_type)
                 {
                     trace!("Skipping fix from OGN aircraft type: {:?}", ac_type);
-                    metrics::counter!("aprs.fixes.skipped_aircraft_type", "aircraft_type" => ac_type.to_string())
+                    metrics::counter!("aprs.fixes.skipped_aircraft_type_total", "aircraft_type" => ac_type.to_string())
                         .increment(1);
                     return;
                 }
@@ -354,7 +354,7 @@ impl FixProcessor {
 
             metrics::histogram!("aprs.elevation.sync_duration_ms")
                 .record(elevation_start.elapsed().as_micros() as f64 / 1000.0);
-            metrics::counter!("aprs.elevation.sync_processed").increment(1);
+            metrics::counter!("aprs.elevation.sync_processed_total").increment(1);
         }
 
         // Step 1: Process through flight detection AND save to database

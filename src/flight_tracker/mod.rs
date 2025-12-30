@@ -435,7 +435,7 @@ impl FlightTracker {
                 // Clean up the device lock after successful timeout
                 self.cleanup_device_lock(aircraft_id).await;
                 // Increment timeout counter
-                metrics::counter!("flight_tracker_timeouts_detected").increment(1);
+                metrics::counter!("flight_tracker_timeouts_detected_total").increment(1);
             }
         }
 

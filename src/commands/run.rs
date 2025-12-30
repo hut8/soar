@@ -52,7 +52,7 @@ async fn process_aprs_message(
     let start_time = std::time::Instant::now();
 
     // Track that we're processing a message
-    metrics::counter!("aprs.process_aprs_message.called").increment(1);
+    metrics::counter!("aprs.process_aprs_message.called_total").increment(1);
 
     // Extract timestamp from the beginning of the message
     // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
@@ -92,17 +92,17 @@ async fn process_aprs_message(
     match ogn_parser::parse(actual_message) {
         Ok(parsed) => {
             // Track successful parse
-            metrics::counter!("aprs.parse.success").increment(1);
+            metrics::counter!("aprs.parse.success_total").increment(1);
 
             // Call PacketRouter to archive, process, and route to queues
             packet_router
                 .process_packet(parsed, actual_message, received_at)
                 .await;
 
-            metrics::counter!("aprs.router.process_packet.called").increment(1);
+            metrics::counter!("aprs.router.process_packet.called_total").increment(1);
         }
         Err(e) => {
-            metrics::counter!("aprs.parse.failed").increment(1);
+            metrics::counter!("aprs.parse.failed_total").increment(1);
             // For OGNFNT sources with invalid lat/lon, log as trace instead of error
             // These are common and expected issues with this data source
             let error_str = e.to_string();
@@ -135,7 +135,7 @@ async fn process_beast_message(
     let start_time = std::time::Instant::now();
 
     // Track that we're processing a message
-    metrics::counter!("beast.run.process_beast_message.called").increment(1);
+    metrics::counter!("beast.run.process_beast_message.called_total").increment(1);
 
     // Validate minimum message length (8-byte timestamp + at least 7-byte frame)
     if message_bytes.len() < 15 {
@@ -143,7 +143,7 @@ async fn process_beast_message(
             "Invalid Beast message: too short ({} bytes, expected at least 15)",
             message_bytes.len()
         );
-        metrics::counter!("beast.run.invalid_message").increment(1);
+        metrics::counter!("beast.run.invalid_message_total").increment(1);
         return;
     }
 
@@ -164,12 +164,12 @@ async fn process_beast_message(
     // Decode the Beast frame using rs1090
     let decoded = match decode_beast_frame(raw_frame, received_at) {
         Ok(decoded) => {
-            metrics::counter!("beast.run.decode.success").increment(1);
+            metrics::counter!("beast.run.decode.success_total").increment(1);
             decoded
         }
         Err(e) => {
             debug!("Failed to decode Beast frame: {}", e);
-            metrics::counter!("beast.run.decode.failed").increment(1);
+            metrics::counter!("beast.run.decode.failed_total").increment(1);
             return;
         }
     };
@@ -179,7 +179,7 @@ async fn process_beast_message(
         Ok(icao) => icao,
         Err(e) => {
             debug!("Failed to extract ICAO address: {}", e);
-            metrics::counter!("beast.run.icao_extraction_failed").increment(1);
+            metrics::counter!("beast.run.icao_extraction_failed_total").increment(1);
             return;
         }
     };
@@ -195,7 +195,7 @@ async fn process_beast_message(
                 "Failed to get/create aircraft for ICAO {:06X}: {}",
                 icao_address, e
             );
-            metrics::counter!("beast.run.aircraft_lookup_failed").increment(1);
+            metrics::counter!("beast.run.aircraft_lookup_failed_total").increment(1);
             return;
         }
     };
@@ -211,12 +211,12 @@ async fn process_beast_message(
         .await
     {
         Ok(id) => {
-            metrics::counter!("beast.run.raw_message_stored").increment(1);
+            metrics::counter!("beast.run.raw_message_stored_total").increment(1);
             id
         }
         Err(e) => {
             warn!("Failed to store raw Beast message: {}", e);
-            metrics::counter!("beast.run.raw_message_store_failed").increment(1);
+            metrics::counter!("beast.run.raw_message_store_failed_total").increment(1);
             return;
         }
     };
@@ -234,7 +234,7 @@ async fn process_beast_message(
         Ok(fix_opt) => fix_opt,
         Err(e) => {
             debug!("Failed to convert ADS-B message to fix: {}", e);
-            metrics::counter!("beast.run.adsb_to_fix_failed").increment(1);
+            metrics::counter!("beast.run.adsb_to_fix_failed_total").increment(1);
             return;
         }
     };
@@ -243,17 +243,17 @@ async fn process_beast_message(
     if let Some(fix) = fix_opt {
         match fix_processor.process_fix(fix).await {
             Ok(_) => {
-                metrics::counter!("beast.run.fixes_processed").increment(1);
+                metrics::counter!("beast.run.fixes_processed_total").increment(1);
             }
             Err(e) => {
                 warn!("Failed to process Beast fix: {}", e);
-                metrics::counter!("beast.run.fix_processing_failed").increment(1);
+                metrics::counter!("beast.run.fix_processing_failed_total").increment(1);
             }
         }
     } else {
         // No fix created (message didn't contain position/velocity data)
         debug!("ADS-B message did not produce a fix (no position/velocity)");
-        metrics::counter!("beast.run.no_fix_created").increment(1);
+        metrics::counter!("beast.run.no_fix_created_total").increment(1);
     }
 
     // Record processing latency
@@ -610,7 +610,7 @@ pub async fn handle_run(
                 while let Ok(message) = nats_intake_rx.recv_async().await {
                     process_aprs_message(&message, &intake_router).await;
                     messages_processed += 1;
-                    metrics::counter!("aprs.intake.processed").increment(1);
+                    metrics::counter!("aprs.intake.processed_total").increment(1);
 
                     // Update intake queue depth metric
                     metrics::gauge!("aprs.nats.intake_queue_depth")
@@ -654,7 +654,7 @@ pub async fn handle_run(
                     )
                     .await;
                     messages_processed += 1;
-                    metrics::counter!("beast.run.intake.processed").increment(1);
+                    metrics::counter!("beast.run.intake.processed_total").increment(1);
 
                     // Update Beast intake queue depth metric
                     metrics::gauge!("beast.run.nats.intake_queue_depth")
@@ -690,9 +690,9 @@ pub async fn handle_run(
                     let duration = start.elapsed();
                     metrics::histogram!("aprs.aircraft.duration_ms")
                         .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.aircraft.processed").increment(1);
-                    metrics::counter!("aprs.messages.processed.aircraft").increment(1);
-                    metrics::counter!("aprs.messages.processed.total").increment(1);
+                    metrics::counter!("aprs.aircraft.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
                 }
             }
             .instrument(tracing::info_span!("aircraft_worker", worker_id)),
@@ -716,9 +716,9 @@ pub async fn handle_run(
                     let duration = start.elapsed();
                     metrics::histogram!("aprs.receiver_status.duration_ms")
                         .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.receiver_status.processed").increment(1);
-                    metrics::counter!("aprs.messages.processed.receiver_status").increment(1);
-                    metrics::counter!("aprs.messages.processed.total").increment(1);
+                    metrics::counter!("aprs.receiver_status.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
                 }
             }
             .instrument(tracing::info_span!("receiver_status_worker", worker_id)),
@@ -742,9 +742,10 @@ pub async fn handle_run(
                     let duration = start.elapsed();
                     metrics::histogram!("aprs.receiver_position.duration_ms")
                         .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.receiver_position.processed").increment(1);
-                    metrics::counter!("aprs.messages.processed.receiver_position").increment(1);
-                    metrics::counter!("aprs.messages.processed.total").increment(1);
+                    metrics::counter!("aprs.receiver_position.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.receiver_position_total")
+                        .increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
                 }
             }
             .instrument(tracing::info_span!("receiver_position_worker", worker_id)),
@@ -766,9 +767,9 @@ pub async fn handle_run(
                     let duration = start.elapsed();
                     metrics::histogram!("aprs.server_status.duration_ms")
                         .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.server_status.processed").increment(1);
-                    metrics::counter!("aprs.messages.processed.server").increment(1);
-                    metrics::counter!("aprs.messages.processed.total").increment(1);
+                    metrics::counter!("aprs.server_status.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.server_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
                 }
             }
             .instrument(tracing::info_span!("server_status_worker", worker_id)),
@@ -933,7 +934,7 @@ pub async fn handle_run(
                                 "Failed to connect to NATS for Beast: {} - retrying in 1s",
                                 e
                             );
-                            metrics::counter!("beast.run.nats.connection_failed").increment(1);
+                            metrics::counter!("beast.run.nats.connection_failed_total").increment(1);
                             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                             continue;
                         }
@@ -956,7 +957,7 @@ pub async fn handle_run(
                                 "Failed to subscribe to Beast NATS subject: {} - retrying in 1s",
                                 e
                             );
-                            metrics::counter!("beast.run.nats.subscription_failed").increment(1);
+                            metrics::counter!("beast.run.nats.subscription_failed_total").increment(1);
                             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                             continue;
                         }
@@ -974,7 +975,7 @@ pub async fn handle_run(
                         // Send message to Beast intake queue (blocking send for backpressure)
                         match intake_tx.send_async(message_bytes).await {
                             Ok(_) => {
-                                metrics::counter!("beast.run.nats.consumed").increment(1);
+                                metrics::counter!("beast.run.nats.consumed_total").increment(1);
                             }
                             Err(e) => {
                                 // Channel closed - intake processor stopped, likely due to shutdown
@@ -989,7 +990,7 @@ pub async fn handle_run(
 
                     // If we reach here, the subscriber stream ended (either normally or with error)
                     warn!("Beast NATS subscriber stopped - reconnecting in 1s");
-                    metrics::counter!("beast.run.nats.subscription_ended").increment(1);
+                    metrics::counter!("beast.run.nats.subscription_ended_total").increment(1);
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
             }
@@ -1019,7 +1020,7 @@ pub async fn handle_run(
                 }
                 Err(e) => {
                     error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                    metrics::counter!("aprs.nats.connection_failed").increment(1);
+                    metrics::counter!("aprs.nats.connection_failed_total").increment(1);
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     continue;
                 }
@@ -1039,7 +1040,7 @@ pub async fn handle_run(
                         "Failed to subscribe to APRS NATS subject: {} - retrying in 1s",
                         e
                     );
-                    metrics::counter!("aprs.nats.subscription_failed").increment(1);
+                    metrics::counter!("aprs.nats.subscription_failed_total").increment(1);
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     continue;
                 }
@@ -1058,7 +1059,7 @@ pub async fn handle_run(
                     Ok(s) => s,
                     Err(e) => {
                         warn!("Failed to decode NATS message as UTF-8: {}", e);
-                        metrics::counter!("aprs.nats.decode_error").increment(1);
+                        metrics::counter!("aprs.nats.decode_error_total").increment(1);
                         continue;
                     }
                 };
@@ -1067,7 +1068,7 @@ pub async fn handle_run(
                 // When intake queue is full, this will block and stop reading from NATS
                 match intake_tx_clone.send_async(message).await {
                     Ok(_) => {
-                        metrics::counter!("aprs.nats.consumed").increment(1);
+                        metrics::counter!("aprs.nats.consumed_total").increment(1);
                     }
                     Err(e) => {
                         // Channel closed - intake processor stopped, likely due to shutdown
@@ -1082,7 +1083,7 @@ pub async fn handle_run(
 
             // If we reach here, the subscriber stream ended (either normally or with error)
             warn!("APRS NATS subscriber stopped - reconnecting in 1s");
-            metrics::counter!("aprs.nats.subscription_ended").increment(1);
+            metrics::counter!("aprs.nats.subscription_ended_total").increment(1);
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
     } else {

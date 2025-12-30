@@ -787,7 +787,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_messages_sent{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_messages_sent_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Messages Sent/sec",
           "range": true,
           "refId": "A"
@@ -798,7 +798,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_send_errors{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_send_errors_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Send Errors/sec",
           "range": true,
           "refId": "B"
@@ -809,7 +809,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_serialization_errors{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_serialization_errors_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Serialization Errors/sec",
           "range": true,
           "refId": "C"
@@ -902,7 +902,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_aircraft_subscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_aircraft_subscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Device Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -913,7 +913,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_aircraft_unsubscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_aircraft_unsubscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Device Unsubscribes/sec",
           "range": true,
           "refId": "B"
@@ -1006,7 +1006,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_subscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_area_subscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Area Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -1017,7 +1017,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_unsubscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_area_unsubscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Area Unsubscribes/sec",
           "range": true,
           "refId": "B"

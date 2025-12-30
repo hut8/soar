@@ -74,7 +74,7 @@ pub async fn get_coverage_hexes(
     Query(params): Query<CoverageQueryParams>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    metrics::counter!("coverage.api.hexes.requests").increment(1);
+    metrics::counter!("coverage.api.hexes.requests_total").increment(1);
 
     // Validate and set defaults
     let resolution = params.resolution.unwrap_or(7);
@@ -123,7 +123,7 @@ pub async fn get_coverage_hexes(
         .await
     {
         Ok(features) => {
-            metrics::counter!("coverage.api.hexes.success").increment(1);
+            metrics::counter!("coverage.api.hexes.success_total").increment(1);
             metrics::histogram!("coverage.api.hexes.count").record(features.len() as f64);
 
             (
@@ -136,7 +136,7 @@ pub async fn get_coverage_hexes(
                 .into_response()
         }
         Err(e) => {
-            metrics::counter!("coverage.api.errors").increment(1);
+            metrics::counter!("coverage.api.errors_total").increment(1);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &format!("Failed to get coverage hexes: {}", e),

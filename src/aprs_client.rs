@@ -143,7 +143,7 @@ impl AprsClient {
                         // Start graceful shutdown - flush remaining messages with timeout
                         let queue_depth = raw_message_rx.len();
                         info!("Flushing {} remaining messages from queue...", queue_depth);
-                        metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").increment(queue_depth as u64);
+                        metrics::counter!("aprs.shutdown.queue_depth_at_shutdown_total").increment(queue_depth as u64);
 
                         let flush_start = std::time::Instant::now();
                         let flush_timeout = Duration::from_secs(10);
@@ -438,7 +438,7 @@ impl AprsClient {
             match TcpStream::connect(addr).await {
                 Ok(stream) => {
                     info!("Connected to APRS server at {}", addr);
-                    metrics::counter!("aprs.connection.established").increment(1);
+                    metrics::counter!("aprs.connection.established_total").increment(1);
                     metrics::gauge!("aprs.connection.connected").set(1.0);
 
                     // Mark as connected in health state
@@ -553,7 +553,7 @@ impl AprsClient {
                     ));
                 }
                 trace!("Sent keepalive to APRS server");
-                metrics::counter!("aprs.keepalive.sent").increment(1);
+                metrics::counter!("aprs.keepalive.sent_total").increment(1);
                 last_keepalive = tokio::time::Instant::now();
             }
 
@@ -594,10 +594,10 @@ impl AprsClient {
                                 // Track message types for debugging
                                 let is_server_message = trimmed_line.starts_with('#');
                                 if is_server_message {
-                                    metrics::counter!("aprs.raw_message.received.server")
+                                    metrics::counter!("aprs.raw_message.received.server_total")
                                         .increment(1);
                                 } else {
-                                    metrics::counter!("aprs.raw_message.received.aprs")
+                                    metrics::counter!("aprs.raw_message.received.aprs_total")
                                         .increment(1);
                                 }
 
@@ -627,11 +627,13 @@ impl AprsClient {
                                     Ok(Ok(())) => {
                                         if is_server_message {
                                             trace!("Queued server message for JetStream");
-                                            metrics::counter!("aprs.raw_message.queued.server")
-                                                .increment(1);
+                                            metrics::counter!(
+                                                "aprs.raw_message.queued.server_total"
+                                            )
+                                            .increment(1);
                                         } else {
                                             trace!("Queued APRS message for JetStream");
-                                            metrics::counter!("aprs.raw_message.queued.aprs")
+                                            metrics::counter!("aprs.raw_message.queued.aprs_total")
                                                 .increment(1);
 
                                             // Update last message time in health state for APRS messages (not server messages)
@@ -656,7 +658,8 @@ impl AprsClient {
                                             "Queue send blocked for 10+ seconds after {:.1}s - JetStream publisher stuck, reconnecting",
                                             duration.as_secs_f64()
                                         );
-                                        metrics::counter!("aprs.queue_send_timeout").increment(1);
+                                        metrics::counter!("aprs.queue_send_timeout_total")
+                                            .increment(1);
 
                                         sentry::capture_message(
                                             "APRS queue send timed out - JetStream publisher stuck",

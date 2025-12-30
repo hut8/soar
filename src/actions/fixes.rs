@@ -206,7 +206,7 @@ async fn handle_bulk_area_subscription(
                 subscribed_areas.remove(&area_key);
                 receivers.remove(&area_key);
                 metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                metrics::counter!("websocket_area_unsubscribes").increment(1);
+                metrics::counter!("websocket_area_unsubscribes_total").increment(1);
             }
 
             // Subscribe to new squares
@@ -217,7 +217,7 @@ async fn handle_bulk_area_subscription(
                         subscribed_areas.insert(area_key.clone());
                         receivers.insert(area_key, receiver);
                         metrics::gauge!("websocket_active_subscriptions").increment(1.0);
-                        metrics::counter!("websocket_area_subscribes").increment(1);
+                        metrics::counter!("websocket_area_subscribes_total").increment(1);
                     }
                     Err(e) => {
                         error!("Failed to subscribe to area {}: {}", area_key, e);
@@ -228,7 +228,7 @@ async fn handle_bulk_area_subscription(
 
             // Store new bounds and track metrics
             *current_bulk_bounds = Some(new_bounds.clone());
-            metrics::counter!("websocket_area_bulk_subscribes").increment(1);
+            metrics::counter!("websocket_area_bulk_subscribes_total").increment(1);
             metrics::histogram!("websocket_area_bulk_squares_per_subscription")
                 .record(new_square_set.len() as f64);
 
@@ -246,11 +246,11 @@ async fn handle_bulk_area_subscription(
                 live_fix_service.unsubscribe_from_area(lat, lon).await?;
                 receivers.remove(&area_key);
                 metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                metrics::counter!("websocket_area_unsubscribes").increment(1);
+                metrics::counter!("websocket_area_unsubscribes_total").increment(1);
             }
 
             *current_bulk_bounds = None;
-            metrics::counter!("websocket_area_bulk_unsubscribes").increment(1);
+            metrics::counter!("websocket_area_bulk_unsubscribes_total").increment(1);
 
             info!("Successfully unsubscribed from all bulk areas");
 
@@ -397,18 +397,18 @@ async fn handle_websocket_write(
             Ok(json) => json,
             Err(e) => {
                 error!("Failed to serialize WebSocket message: {}", e);
-                metrics::counter!("websocket_serialization_errors").increment(1);
+                metrics::counter!("websocket_serialization_errors_total").increment(1);
                 continue;
             }
         };
 
         if let Err(e) = sender.send(Message::Text(fix_json.into())).await {
             error!("Failed to send WebSocket message to client: {}", e);
-            metrics::counter!("websocket_send_errors").increment(1);
+            metrics::counter!("websocket_send_errors_total").increment(1);
             break;
         }
 
-        metrics::counter!("websocket_messages_sent").increment(1);
+        metrics::counter!("websocket_messages_sent_total").increment(1);
     }
 }
 
@@ -440,7 +440,7 @@ async fn handle_subscriptions(
                                                     subscribed_aircraft.push(id.clone());
                                                     receivers.insert(id.clone(), receiver);
                                                     metrics::gauge!("websocket_active_subscriptions").increment(1.0);
-                                                    metrics::counter!("websocket_aircraft_subscribes").increment(1);
+                                                    metrics::counter!("websocket_aircraft_subscribes_total").increment(1);
                                                     info!("Successfully subscribed to aircraft: {}", id);
                                                 }
                                                 Err(e) => {
@@ -455,7 +455,7 @@ async fn handle_subscriptions(
                                             subscribed_aircraft.retain(|aircraft_id| aircraft_id != &id);
                                             receivers.remove(&id);
                                             metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                                            metrics::counter!("websocket_aircraft_unsubscribes").increment(1);
+                                            metrics::counter!("websocket_aircraft_unsubscribes_total").increment(1);
                                             if let Err(e) = live_fix_service.unsubscribe_from_aircraft(&id).await {
                                                 error!("Failed to unsubscribe from aircraft {}: {}", id, e);
                                             } else {
@@ -485,7 +485,7 @@ async fn handle_subscriptions(
                                     }
                                     Err(e) => {
                                         error!("Failed to handle bulk area subscription: {}", e);
-                                        metrics::counter!("websocket_area_bulk_validation_errors").increment(1);
+                                        metrics::counter!("websocket_area_bulk_validation_errors_total").increment(1);
                                     }
                                 }
                             }
