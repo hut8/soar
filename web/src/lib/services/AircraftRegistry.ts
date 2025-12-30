@@ -148,7 +148,27 @@ export class AircraftRegistry {
 		}
 
 		// Get existing fixes if any, or use the ones from the aircraft, or empty array
-		const existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+		let existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+
+		// If this is a new aircraft with a currentFix but no fixes array, use currentFix as the initial fix
+		if (
+			!this.aircraft.has(aircraft.id) &&
+			aircraft.currentFix &&
+			(!aircraft.fixes || aircraft.fixes.length === 0)
+		) {
+			try {
+				// currentFix is already a Fix object (or should be)
+				const fix = aircraft.currentFix as Fix;
+				existingFixes = [fix];
+				console.log('[REGISTRY] Initialized aircraft with currentFix:', {
+					aircraftId: aircraft.id,
+					fixTimestamp: fix.timestamp
+				});
+			} catch (error) {
+				console.warn('[REGISTRY] Failed to parse currentFix:', error);
+			}
+		}
+
 		const cached_at = Date.now();
 
 		this.aircraft.set(aircraft.id, { aircraft, fixes: existingFixes, cached_at });

@@ -482,110 +482,32 @@ async fn get_recent_aircraft_response(
     }
 }
 
-/// Helper function to enrich aircraft with registration and model data
-/// Optimized with batch queries to avoid N+1 query problem
-#[instrument(skip(pool, aircraft_with_fixes), fields(aircraft_count = aircraft_with_fixes.len()))]
+/// Helper function to convert aircraft with fixes to Aircraft views with latest fix
+#[instrument(skip(aircraft_with_fixes), fields(aircraft_count = aircraft_with_fixes.len()))]
 pub(crate) async fn enrich_aircraft_with_registration_data(
     aircraft_with_fixes: Vec<(crate::aircraft::AircraftModel, Vec<crate::fixes::Fix>)>,
-    pool: crate::web::PgPool,
+    _pool: crate::web::PgPool,
 ) -> Vec<Aircraft> {
-    use std::collections::HashMap;
-
     if aircraft_with_fixes.is_empty() {
         return Vec::new();
     }
 
-    let aircraft_registrations_repo =
-        crate::aircraft_registrations_repo::AircraftRegistrationsRepository::new(pool.clone());
-    let aircraft_model_repo = crate::faa::aircraft_model_repo::AircraftModelRepository::new(pool);
-
-    // Step 1: Collect all aircraft IDs
-    let device_ids: Vec<uuid::Uuid> = aircraft_with_fixes
-        .iter()
-        .map(|(aircraft, _)| aircraft.id)
-        .collect();
-
-    // Step 2: Batch fetch all aircraft registrations
-    info!(
-        "Fetching aircraft registrations for {} devices",
-        device_ids.len()
-    );
-    let registrations = aircraft_registrations_repo
-        .get_aircraft_registrations_by_device_ids(&device_ids)
-        .await
-        .unwrap_or_default();
-    info!("Fetched {} aircraft registrations", registrations.len());
-
-    // Step 3: Build HashMap for O(1) lookup: device_id -> registration
-    // Filter out registrations without device_id
-    let registration_map: HashMap<
-        uuid::Uuid,
-        crate::aircraft_registrations::AircraftRegistrationModel,
-    > = registrations
-        .into_iter()
-        .filter_map(|reg| reg.aircraft_id.map(|id| (id, reg)))
-        .collect();
-
-    // Step 4: Collect all unique (manufacturer, model, series) keys
-    let model_keys: Vec<(String, String, String)> = registration_map
-        .values()
-        .map(|reg| {
-            (
-                reg.manufacturer_code.clone(),
-                reg.model_code.clone(),
-                reg.series_code.clone(),
-            )
-        })
-        .collect();
-
-    // Step 5: Batch fetch all aircraft models
-    info!("Fetching aircraft models for {} keys", model_keys.len());
-    let models = aircraft_model_repo
-        .get_aircraft_models_by_keys(&model_keys)
-        .await
-        .unwrap_or_default();
-    info!("Fetched {} aircraft models", models.len());
-
-    // Step 6: Build HashMap for O(1) lookup: (manufacturer, model, series) -> aircraft_model
-    let model_map: HashMap<(String, String, String), crate::faa::aircraft_models::AircraftModel> =
-        models
-            .into_iter()
-            .map(|model| {
-                (
-                    (
-                        model.manufacturer_code.clone(),
-                        model.model_code.clone(),
-                        model.series_code.clone(),
-                    ),
-                    model,
-                )
-            })
-            .collect();
-
-    // Step 7: Build enriched results
+    // Build results with latest fix
     info!("Building enriched results");
     let mut enriched = Vec::new();
-    for (aircraft_model, _aircraft_fixes) in aircraft_with_fixes {
-        let aircraft_registration = registration_map.get(&aircraft_model.id).cloned();
-
-        let faa_aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
-            model_map
-                .get(&(
-                    reg.manufacturer_code.clone(),
-                    reg.model_code.clone(),
-                    reg.series_code.clone(),
-                ))
-                .cloned()
-        });
-
+    for (aircraft_model, aircraft_fixes) in aircraft_with_fixes {
         // Convert AircraftModel to AircraftView
-        let aircraft_view = AircraftView::from_device_model(aircraft_model);
-        // Don't include fixes - they will come from WebSocket after page load
+        let mut aircraft_view = AircraftView::from_device_model(aircraft_model);
+
+        // Set current_fix to the latest fix (first one, ordered by timestamp DESC)
+        if let Some(latest_fix) = aircraft_fixes.first()
+            && let Ok(fix_json) = serde_json::to_value(latest_fix)
+        {
+            aircraft_view.current_fix = Some(fix_json);
+        }
 
         enriched.push(Aircraft {
             device: aircraft_view,
-            aircraft_registration,
-            aircraft_model_details: faa_aircraft_model,
         });
     }
 

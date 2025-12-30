@@ -268,17 +268,11 @@ impl From<crate::aircraft::AircraftModel> for AircraftView {
     }
 }
 
-/// Complete aircraft information with device, registration, model, and recent fixes
-/// This is the enriched view used when returning devices with full aircraft data
+/// Complete aircraft information with device and latest fix
+/// Registration and model data are fetched separately when needed (e.g., when viewing details)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Aircraft {
     #[serde(flatten)]
     pub device: AircraftView,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
-    /// Detailed aircraft model information from FAA database
-    /// Renamed from aircraft_model to aircraft_model_details to avoid conflict with AircraftView.aircraft_model string
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub aircraft_model_details: Option<crate::faa::aircraft_models::AircraftModel>,
 }
