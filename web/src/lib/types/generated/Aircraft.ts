@@ -29,6 +29,7 @@ export type Aircraft = {
 	trackerDeviceType: string | null;
 	icaoModelCode: string | null;
 	countryCode: string | null;
+	ownerOperator: string | null;
 	/**
 	 * Latest fix latitude (for quick map linking)
 	 */

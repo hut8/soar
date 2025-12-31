@@ -28,6 +28,17 @@
 	// Fetch aircraft data whenever flights change
 	$effect(() => {
 		async function fetchAircraftData() {
+			// Debug: Log flight IDs and aircraft IDs
+			console.log('[FlightsList] Flights received:', {
+				count: flights.length,
+				firstFlight: flights[0]
+					? {
+							id: flights[0].id,
+							aircraftId: flights[0].aircraftId
+						}
+					: null
+			});
+
 			// Extract unique aircraft IDs from flights
 			const aircraftIds = Array.from(
 				new Set(flights.filter((f) => f.aircraftId).map((f) => f.aircraftId!))
