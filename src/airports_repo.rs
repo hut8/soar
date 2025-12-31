@@ -487,69 +487,89 @@ impl AirportsRepository {
     /// Returns airports within the specified bounding box with their runway information
     pub async fn get_airports_in_bounding_box(
         &self,
-        northwest_lat: f64,
-        northwest_lng: f64,
-        southeast_lat: f64,
-        southeast_lng: f64,
+        north: f64,
+        south: f64,
+        east: f64,
+        west: f64,
         limit: Option<i64>,
     ) -> Result<Vec<Airport>> {
         let search_limit = limit.unwrap_or(100);
 
-        // Validate bounding box coordinates
-        if northwest_lat <= southeast_lat {
-            return Err(anyhow::anyhow!(
-                "Northwest latitude must be greater than southeast latitude"
-            ));
-        }
-
-        if northwest_lng >= southeast_lng {
-            return Err(anyhow::anyhow!(
-                "Northwest longitude must be less than southeast longitude"
-            ));
-        }
-
         // Validate latitude range
-        if !(-90.0..=90.0).contains(&northwest_lat) || !(-90.0..=90.0).contains(&southeast_lat) {
+        if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
             return Err(anyhow::anyhow!(
                 "Latitude values must be between -90 and 90 degrees"
             ));
         }
 
         // Validate longitude range
-        if !(-180.0..=180.0).contains(&northwest_lng) || !(-180.0..=180.0).contains(&southeast_lng)
-        {
+        if !(-180.0..=180.0).contains(&east) || !(-180.0..=180.0).contains(&west) {
             return Err(anyhow::anyhow!(
                 "Longitude values must be between -180 and 180 degrees"
             ));
         }
 
+        if south >= north {
+            return Err(anyhow::anyhow!(
+                "South latitude must be less than north latitude"
+            ));
+        }
+
+        // Note: west can be >= east when crossing the International Date Line
+        // The PostGIS query handles this case by splitting into two bounding boxes
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Query airports within the bounding box using latitude/longitude comparisons
+            // Query airports within the bounding box using PostGIS
+            // Handles International Date Line crossing by splitting into two boxes
             let sql = r#"
-                SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
-                       continent, iso_country, iso_region, municipality, scheduled_service,
-                       icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
-                       location_id, NULL::float8 as distance_meters
-                FROM airports
-                WHERE latitude_deg IS NOT NULL
-                  AND longitude_deg IS NOT NULL
-                  AND latitude_deg <= $1
-                  AND latitude_deg >= $2
-                  AND longitude_deg >= $3
-                  AND longitude_deg <= $4
-                  AND type IN ('small_airport', 'medium_airport', 'large_airport', 'seaplane_base')
-                ORDER BY name, ident
-                LIMIT $5
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::bigint AS search_limit
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        search_limit
+                    FROM params
+                )
+                SELECT a.id, a.ident, a.type as airport_type, a.name, a.latitude_deg, a.longitude_deg,
+                       a.elevation_ft, a.continent, a.iso_country, a.iso_region, a.municipality,
+                       a.scheduled_service, a.icao_code, a.iata_code, a.gps_code, a.local_code,
+                       a.home_link, a.wikipedia_link, a.keywords, a.location_id,
+                       NULL::float8 as distance_meters
+                FROM airports a, parts
+                WHERE a.latitude_deg IS NOT NULL
+                  AND a.longitude_deg IS NOT NULL
+                  AND a.type IN ('small_airport', 'medium_airport', 'large_airport', 'seaplane_base')
+                  AND (
+                      ST_MakePoint(a.longitude_deg, a.latitude_deg) && parts.boxes[1]
+                      OR (array_length(parts.boxes, 1) = 2 AND ST_MakePoint(a.longitude_deg, a.latitude_deg) && parts.boxes[2])
+                  )
+                ORDER BY a.name, a.ident
+                LIMIT (SELECT search_limit FROM parts)
             "#;
 
             let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
-                .bind::<diesel::sql_types::Double, _>(northwest_lat)
-                .bind::<diesel::sql_types::Double, _>(southeast_lat)
-                .bind::<diesel::sql_types::Double, _>(northwest_lng)
-                .bind::<diesel::sql_types::Double, _>(southeast_lng)
+                .bind::<diesel::sql_types::Double, _>(west)
+                .bind::<diesel::sql_types::Double, _>(south)
+                .bind::<diesel::sql_types::Double, _>(east)
+                .bind::<diesel::sql_types::Double, _>(north)
                 .bind::<diesel::sql_types::BigInt, _>(search_limit)
                 .load::<AirportWithDistance>(&mut conn)?;
 

@@ -67,10 +67,10 @@
 		try {
 			const response = await serverCall<DataListResponse<Airport>>('/airports', {
 				params: {
-					nw_lat: bounds.latMax,
-					nw_lng: bounds.lonMin,
-					se_lat: bounds.latMin,
-					se_lng: bounds.lonMax
+					north: bounds.latMax,
+					west: bounds.lonMin,
+					south: bounds.latMin,
+					east: bounds.lonMax
 				}
 			});
 

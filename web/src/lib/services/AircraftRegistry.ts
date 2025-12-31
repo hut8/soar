@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix, DataListResponse } from '$lib/types';
+import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -148,10 +148,34 @@ export class AircraftRegistry {
 		}
 
 		// Get existing fixes if any, or use the ones from the aircraft, or empty array
-		const existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+		let existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+
+		// If this is a new aircraft with a currentFix but no fixes array, use currentFix as the initial fix
+		if (
+			!this.aircraft.has(aircraft.id) &&
+			aircraft.currentFix &&
+			(!aircraft.fixes || aircraft.fixes.length === 0)
+		) {
+			try {
+				// currentFix is already a Fix object (or should be)
+				const fix = aircraft.currentFix as Fix;
+				existingFixes = [fix];
+				console.log('[REGISTRY] Initialized aircraft with currentFix:', {
+					aircraftId: aircraft.id,
+					fixTimestamp: fix.timestamp
+				});
+			} catch (error) {
+				console.warn('[REGISTRY] Failed to parse currentFix:', error);
+			}
+		}
+
+		// Strip out currentFix after we've used it - fixes array is the source of truth
+		const aircraftToStore = { ...aircraft };
+		delete aircraftToStore.currentFix;
+
 		const cached_at = Date.now();
 
-		this.aircraft.set(aircraft.id, { aircraft, fixes: existingFixes, cached_at });
+		this.aircraft.set(aircraft.id, { aircraft: aircraftToStore, fixes: existingFixes, cached_at });
 
 		// Notify subscribers
 		this.notifySubscribers({
@@ -197,10 +221,10 @@ export class AircraftRegistry {
 	// Create or update aircraft from backend API data
 	public async updateAircraftFromAPI(aircraftId: string): Promise<Aircraft | null> {
 		try {
-			const apiAircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			if (!apiAircraft) return null;
+			const response = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
+			if (!response || !response.data) return null;
 
-			this.setAircraft(apiAircraft);
+			this.setAircraft(response.data);
 			return this.getAircraft(aircraftId);
 		} catch (error) {
 			console.warn('Failed to fetch aircraft from API:', aircraftId, error);

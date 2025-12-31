@@ -20,7 +20,8 @@
 		AirspaceFeatureCollection,
 		Fix,
 		Airport,
-		DataListResponse
+		DataListResponse,
+		DataResponse
 	} from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
@@ -791,10 +792,10 @@
 
 		try {
 			const params = new URLSearchParams({
-				nw_lat: nwLat.toString(),
-				nw_lng: nwLng.toString(),
-				se_lat: seLat.toString(),
-				se_lng: seLng.toString(),
+				north: nwLat.toString(),
+				west: nwLng.toString(),
+				south: seLat.toString(),
+				east: seLng.toString(),
 				limit: '100' // Limit to avoid too many markers
 			});
 
@@ -1078,7 +1079,10 @@
 				limit: '500'
 			});
 
-			const data = await serverCall<AirspaceFeatureCollection>(`/airspaces?${params}`);
+			const response = await serverCall<DataResponse<AirspaceFeatureCollection>>(
+				`/airspaces?${params}`
+			);
+			const data = response.data;
 
 			if (data && data.type === 'FeatureCollection' && Array.isArray(data.features)) {
 				displayAirspacesOnMap(data.features);
@@ -2363,70 +2367,56 @@
 		visibility: visible;
 	}
 
-	/* Aircraft limit exceeded overlay */
+	/* Aircraft limit exceeded notification banner */
 	.aircraft-limit-overlay {
 		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.75);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		backdrop-filter: blur(4px);
+		top: 1rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 1000;
+		pointer-events: none;
 	}
 
 	.aircraft-limit-warning {
-		background: white;
-		border-radius: 12px;
-		padding: 2rem;
+		background: rgba(255, 255, 255, 0.95);
+		border: 2px solid #f59e0b;
+		border-radius: 8px;
+		padding: 1rem 1.5rem;
 		max-width: 500px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		text-align: center;
-		animation: slideIn 0.3s ease-out;
+		animation: slideDown 0.3s ease-out;
+		pointer-events: auto;
 	}
 
-	@keyframes slideIn {
+	@keyframes slideDown {
 		from {
-			transform: translateY(-20px);
+			transform: translateX(-50%) translateY(-100%);
 			opacity: 0;
 		}
 		to {
-			transform: translateY(0);
+			transform: translateX(-50%) translateY(0);
 			opacity: 1;
 		}
 	}
 
 	.warning-icon {
-		font-size: 4rem;
-		margin-bottom: 1rem;
-		animation: pulse 2s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.1);
-		}
+		font-size: 1.5rem;
+		margin-bottom: 0.5rem;
 	}
 
 	.warning-title {
-		font-size: 1.75rem;
+		font-size: 1.25rem;
 		font-weight: 700;
 		color: #dc2626;
-		margin-bottom: 1rem;
+		margin-bottom: 0.5rem;
 	}
 
 	.warning-message {
-		font-size: 1.125rem;
+		font-size: 0.95rem;
 		color: #374151;
-		margin-bottom: 0.75rem;
-		line-height: 1.6;
+		margin-bottom: 0.25rem;
+		line-height: 1.5;
 	}
 
 	.warning-message strong {
@@ -2435,9 +2425,9 @@
 	}
 
 	.warning-suggestion {
-		font-size: 1rem;
+		font-size: 0.9rem;
 		color: #6b7280;
 		font-weight: 500;
-		margin-top: 1rem;
+		margin-top: 0.5rem;
 	}
 </style>
