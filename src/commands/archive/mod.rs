@@ -23,7 +23,7 @@ use tracing::info;
 /// 4. RawMessages (parents last - nothing references them anymore)
 ///
 /// All tables archive data from the same date (before_date).
-/// Defaults to 21 days ago if no before date is specified.
+/// Defaults to 45 days ago if no before date is specified.
 pub async fn handle_archive(
     pool: PgPool,
     before: Option<String>,
@@ -44,8 +44,8 @@ pub async fn handle_archive(
             before_str
         ))?
     } else {
-        // Default to 21 days ago
-        Utc::now().date_naive() - chrono::Duration::days(21)
+        // Default to 45 days ago
+        Utc::now().date_naive() - chrono::Duration::days(45)
     };
 
     // Get today's date (UTC)
