@@ -17,8 +17,10 @@
 			: null
 	);
 
-	// Build the flight detail URL from active flight ID
-	let flightUrl = $derived(aircraft.activeFlightId ? `/flights/${aircraft.activeFlightId}` : null);
+	// Build the flight detail URL from current fix flight ID
+	let flightUrl = $derived(
+		aircraft.currentFix?.flightId ? `/flights/${aircraft.currentFix.flightId}` : null
+	);
 
 	// Get country code for flag display
 	const countryCode = $derived(() => {

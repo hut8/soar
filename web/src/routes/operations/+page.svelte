@@ -1299,8 +1299,8 @@
 				climbFpm: undefined,
 				registration: aircraft.registration ?? undefined,
 				model: aircraft.aircraftModel,
-				flightId: aircraft.activeFlightId || undefined,
-				active: aircraft.activeFlightId != null
+				flightId: aircraft.currentFix?.flightId || undefined,
+				active: aircraft.currentFix?.flightId != null
 			};
 
 			updateAircraftMarkerFromDevice(aircraft, pseudoFix);

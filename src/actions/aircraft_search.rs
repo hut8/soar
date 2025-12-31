@@ -354,20 +354,13 @@ async fn search_aircraft_by_bbox(
         }
     } else {
         // Perform bounding box search - get aircraft with all fields from database
+        // Pass limit to database query for efficient filtering
         match aircraft_repo
-            .find_aircraft_in_bounding_box(north, west, south, east, cutoff_time)
+            .find_aircraft_in_bounding_box(north, west, south, east, cutoff_time, limit)
             .await
         {
-            Ok(mut aircraft_models) => {
+            Ok(aircraft_models) => {
                 info!("Found {} aircraft in bounding box", aircraft_models.len());
-
-                // Apply limit if specified
-                if let Some(lim) = limit {
-                    let limit_usize = lim.max(0) as usize;
-                    aircraft_models.truncate(limit_usize);
-                    info!("Limited aircraft to {} results", aircraft_models.len());
-                }
-
                 info!("Converting {} aircraft to views", aircraft_models.len());
 
                 // Convert AircraftModel to AircraftView (this preserves all fields including current_fix)
@@ -551,22 +544,12 @@ async fn get_recent_aircraft_response(
     });
 
     match aircraft_repo
-        .get_recent_aircraft_with_location(10, aircraft_type_filters)
+        .get_recent_aircraft(10, aircraft_type_filters)
         .await
     {
-        Ok(aircraft_with_location) => {
-            let aircraft_views: Vec<AircraftView> = aircraft_with_location
-                .into_iter()
-                .map(
-                    |(aircraft_model, latest_lat, latest_lng, active_flight_id)| {
-                        let mut aircraft_view: AircraftView = aircraft_model.into();
-                        aircraft_view.latitude = latest_lat;
-                        aircraft_view.longitude = latest_lng;
-                        aircraft_view.active_flight_id = active_flight_id;
-                        aircraft_view
-                    },
-                )
-                .collect();
+        Ok(aircraft) => {
+            let aircraft_views: Vec<AircraftView> =
+                aircraft.into_iter().map(|a| a.into()).collect();
             Json(DataListResponse {
                 data: aircraft_views,
             })

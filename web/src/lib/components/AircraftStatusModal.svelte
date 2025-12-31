@@ -101,10 +101,10 @@
 				serverCall<DataResponse<AircraftModel>>(`/aircraft/${selectedAircraft.id}/model`).catch(
 					() => null
 				),
-				selectedAircraft.activeFlightId
-					? serverCall<DataResponse<Flight>>(`/flights/${selectedAircraft.activeFlightId}`).catch(
-							() => null
-						)
+				selectedAircraft.currentFix?.flightId
+					? serverCall<DataResponse<Flight>>(
+							`/flights/${selectedAircraft.currentFix.flightId}`
+						).catch(() => null)
 					: Promise.resolve(null)
 			]);
 
@@ -374,9 +374,9 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					{#if selectedAircraft.activeFlightId}
+					{#if selectedAircraft.currentFix?.flightId}
 						<a
-							href="/flights/{selectedAircraft.activeFlightId}"
+							href="/flights/{selectedAircraft.currentFix.flightId}"
 							target="_blank"
 							rel="noopener noreferrer"
 							class="btn preset-filled-success-500 btn-sm"
