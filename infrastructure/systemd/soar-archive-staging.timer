@@ -1,14 +1,11 @@
 # SOAR Archive Timer (Staging)
 #
 # This systemd timer automatically runs the `soar archive` command once daily at 2:00 AM
-# for the staging environment with 3-day retention.
-# It archives data older than 3 days to compressed CSV files in /var/soar/archive-staging
+# for the staging environment with 45-day retention (same as production).
+# It archives data older than 45 days to compressed CSV files in /var/soar/archive-staging
 # and deletes the archived data from the database.
 #
-# Retention periods (staggered to prevent foreign key violations):
-#   - Flights: 3+ days old
-#   - Fixes and ReceiverStatuses: 4+ days old
-#   - AprsMessages: 5+ days old
+# Retention period: 45+ days old (all tables use the same retention period)
 #
 # Installation:
 #   sudo cp soar-archive-staging.service soar-archive-staging.timer /etc/systemd/system/
@@ -27,7 +24,7 @@
 #   sudo journalctl -u soar-archive-staging.service -f
 
 [Unit]
-Description=SOAR Archive Timer (Staging) - Daily Archival with 3-Day Retention
+Description=SOAR Archive Timer (Staging) - Daily Archival with 45-Day Retention
 Requires=soar-archive-staging.service
 
 [Timer]

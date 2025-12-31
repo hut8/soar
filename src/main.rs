@@ -233,9 +233,14 @@ enum Commands {
     ///
     /// Each day's data is written to files named YYYYMMDD-{table}.csv.zst
     Archive {
+        /// Maximum age of data to keep in days (archives data older than this)
+        /// Defaults to 45 days if not specified.
+        #[arg(long, value_name = "DAYS", conflicts_with = "before")]
+        max_age_days: Option<i64>,
+
         /// Archive data before this date (YYYY-MM-DD format, exclusive, UTC)
         /// Cannot be a future date. All tables archive data before this date.
-        /// Defaults to 45 days ago if not specified.
+        /// DEPRECATED: Use --max-age-days instead.
         #[arg(long, value_name = "BEFORE_DATE")]
         before: Option<String>,
 
@@ -1227,9 +1232,19 @@ async fn main() -> Result<()> {
             soar::web::start_web_server(interface, final_port, diesel_pool).await
         }
         Commands::Archive {
+            max_age_days,
             before,
             archive_path,
-        } => handle_archive(diesel_pool, before, archive_path).await,
+        } => {
+            // Convert max_age_days to before date, or use before directly
+            let before_date = if let Some(days) = max_age_days {
+                let date = chrono::Utc::now().date_naive() - chrono::Duration::days(days);
+                Some(date.format("%Y-%m-%d").to_string())
+            } else {
+                before
+            };
+            handle_archive(diesel_pool, before_date, archive_path).await
+        }
         Commands::Resurrect { date, archive_path } => {
             handle_resurrect(diesel_pool, date, archive_path).await
         }
