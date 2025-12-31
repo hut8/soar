@@ -239,7 +239,7 @@ enum Commands {
         /// Cannot be a future date. Flights are archived before this date,
         /// Fixes/ReceiverStatuses before date+1, AprsMessages before date+2.
         /// Defaults to 21 days ago if not specified.
-        #[arg(value_name = "BEFORE_DATE")]
+        #[arg(long, value_name = "BEFORE_DATE")]
         before: Option<String>,
 
         /// Directory where archive files will be stored
