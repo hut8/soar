@@ -419,11 +419,22 @@
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
 
+	// Clustering state
+	let isClusteredMode = $state(false); // Whether we're currently displaying clusters instead of individual aircraft
+	let clusterRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
 	// Map type state
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
 
 	$effect(() => {
 		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
+			// IMPORTANT: Ignore all aircraft registry events when in clustered mode
+			// In clustered mode, we only show cluster markers, not individual aircraft
+			if (isClusteredMode) {
+				console.log('[CLUSTERED MODE] Ignoring aircraft registry event:', event.type);
+				return;
+			}
+
 			if (event.type === 'aircraft_changed') {
 				activeDevices = event.aircraft;
 			} else if (event.type === 'aircraft_updated') {
@@ -497,6 +508,7 @@
 		return () => {
 			fixFeed.stopLiveFixesFeed();
 			clearAircraftMarkers();
+			stopClusterRefreshTimer();
 		};
 	});
 
@@ -1264,12 +1276,12 @@
 	function updateAircraftMarkerFromAircraft(aircraft: Aircraft): void {
 		if (!map) return;
 
-		// Try to use latestLatitude/latestLongitude from aircraft object
-		if (aircraft.latestLatitude != null && aircraft.latestLongitude != null) {
+		// Try to use latitude/longitude from aircraft object
+		if (aircraft.latitude != null && aircraft.longitude != null) {
 			console.log('[MARKER] Using latest position from aircraft:', {
 				id: aircraft.id,
-				lat: aircraft.latestLatitude,
-				lng: aircraft.latestLongitude
+				lat: aircraft.latitude,
+				lng: aircraft.longitude
 			});
 
 			// Create a pseudo-fix from latest position
@@ -1277,8 +1289,8 @@
 				id: '', // Not needed for marker display
 				aircraftId: aircraft.id,
 				deviceAddressHex: aircraft.address,
-				latitude: aircraft.latestLatitude,
-				longitude: aircraft.latestLongitude,
+				latitude: aircraft.latitude,
+				longitude: aircraft.longitude,
 				timestamp: aircraft.lastFixAt || new Date().toISOString(),
 				altitudeMslFeet: undefined,
 				altitudeAglFeet: undefined,
@@ -1945,6 +1957,10 @@
 			if (clustered) {
 				console.log('[REST] Response is clustered, rendering cluster markers');
 
+				// Enter clustered mode
+				isClusteredMode = true;
+				startClusterRefreshTimer();
+
 				clearAircraftMarkers();
 				clearClusterMarkers();
 
@@ -1959,6 +1975,10 @@
 			} else {
 				console.log('[REST] Response has individual aircraft, rendering aircraft markers');
 
+				// Exit clustered mode
+				isClusteredMode = false;
+				stopClusterRefreshTimer();
+
 				clearClusterMarkers();
 
 				for (const item of items) {
@@ -1971,6 +1991,33 @@
 			}
 		} catch (error) {
 			console.error('[REST] Failed to fetch aircraft in viewport:', error);
+		}
+	}
+
+	// Start the cluster refresh timer (refreshes every 60 seconds when tab is visible)
+	function startClusterRefreshTimer(): void {
+		// Clear any existing timer
+		stopClusterRefreshTimer();
+
+		console.log('[CLUSTER REFRESH] Starting 60-second refresh timer');
+
+		clusterRefreshTimer = setInterval(async () => {
+			// Only refresh if the page is visible (user has the tab active)
+			if (browser && document.visibilityState === 'visible') {
+				console.log('[CLUSTER REFRESH] Tab is visible, refreshing clusters...');
+				await fetchAndDisplayDevicesInViewport();
+			} else {
+				console.log('[CLUSTER REFRESH] Tab is hidden, skipping refresh');
+			}
+		}, 60000); // 60 seconds
+	}
+
+	// Stop the cluster refresh timer
+	function stopClusterRefreshTimer(): void {
+		if (clusterRefreshTimer) {
+			console.log('[CLUSTER REFRESH] Stopping refresh timer');
+			clearInterval(clusterRefreshTimer);
+			clusterRefreshTimer = null;
 		}
 	}
 </script>

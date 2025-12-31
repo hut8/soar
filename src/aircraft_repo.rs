@@ -599,6 +599,65 @@ impl AircraftRepository {
         .await?
     }
 
+    /// Find all aircraft within a bounding box that have recent fixes
+    /// Returns aircraft models with all fields populated from the database
+    pub async fn find_aircraft_in_bounding_box(
+        &self,
+        north: f64,
+        west: f64,
+        south: f64,
+        east: f64,
+        cutoff_time: DateTime<Utc>,
+    ) -> Result<Vec<AircraftModel>> {
+        use diesel::sql_types::{Double, Timestamptz};
+
+        let mut conn = self.get_connection()?;
+
+        let aircraft_sql = r#"
+            WITH params AS (
+                SELECT
+                    $1::double precision AS left_lng,
+                    $2::double precision AS bottom_lat,
+                    $3::double precision AS right_lng,
+                    $4::double precision AS top_lat,
+                    $5::timestamptz AS cutoff_time
+            ),
+            parts AS (
+                SELECT
+                    CASE WHEN left_lng <= right_lng THEN
+                        ARRAY[
+                            ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                        ]
+                    ELSE
+                        ARRAY[
+                            ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                            ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                        ]
+                    END AS boxes,
+                    cutoff_time
+                FROM params
+            )
+            SELECT d.*
+            FROM aircraft d, parts
+            WHERE d.last_fix_at >= parts.cutoff_time
+              AND d.location_geom IS NOT NULL
+              AND (
+                  d.location_geom && parts.boxes[1]
+                  OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+              )
+        "#;
+
+        let aircraft_models = diesel::sql_query(aircraft_sql)
+            .bind::<Double, _>(west)
+            .bind::<Double, _>(south)
+            .bind::<Double, _>(east)
+            .bind::<Double, _>(north)
+            .bind::<Timestamptz, _>(cutoff_time)
+            .load::<AircraftModel>(&mut conn)?;
+
+        Ok(aircraft_models)
+    }
+
     /// Update the club assignment for an aircraft
     pub async fn update_club_id(&self, aircraft_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
         let mut conn = self.get_connection()?;

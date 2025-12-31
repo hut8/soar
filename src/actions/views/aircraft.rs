@@ -148,10 +148,10 @@ pub struct AircraftView {
     pub icao_model_code: Option<String>,
     pub country_code: Option<String>,
     pub owner_operator: Option<String>,
-    /// Latest fix latitude (for quick map linking)
-    pub latest_latitude: Option<f64>,
-    /// Latest fix longitude (for quick map linking)
-    pub latest_longitude: Option<f64>,
+    /// Latitude of aircraft's last known position (stored in database for quick access)
+    pub latitude: Option<f64>,
+    /// Longitude of aircraft's last known position (stored in database for quick access)
+    pub longitude: Option<f64>,
     /// Active flight ID if device is currently on an active flight
     pub active_flight_id: Option<Uuid>,
     /// Current fix (latest position data for this aircraft)
@@ -206,8 +206,8 @@ impl AircraftView {
             icao_model_code: device.icao_model_code,
             country_code: device.country_code,
             owner_operator: device.owner_operator,
-            latest_latitude: None,
-            latest_longitude: None,
+            latitude: None,
+            longitude: None,
             active_flight_id: None,
             current_fix: None,
             fixes: None,
@@ -252,8 +252,8 @@ impl AircraftView {
             icao_model_code: device_model.icao_model_code,
             country_code: device_model.country_code,
             owner_operator: device_model.owner_operator,
-            latest_latitude: device_model.latitude,
-            latest_longitude: device_model.longitude,
+            latitude: device_model.latitude,
+            longitude: device_model.longitude,
             active_flight_id: None,
             current_fix: device_model.current_fix,
             fixes: None,

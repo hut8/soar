@@ -12,8 +12,8 @@
 
 	// Build the operations map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		aircraft.latestLatitude && aircraft.latestLongitude
-			? `/operations?lat=${aircraft.latestLatitude}&lng=${aircraft.latestLongitude}&zoom=13`
+		aircraft.latitude && aircraft.longitude
+			? `/operations?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
 			: null
 	);
 

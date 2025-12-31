@@ -164,23 +164,13 @@
 					{#if $websocketStatus.connected}
 						<div
 							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-							title="Connected - Tracking {$debugStatus.activeWatchlistEntries
-								.length} from watchlist, {$debugStatus.subscribedAircraft
-								.length} aircraft subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
+							title="Live - WebSocket connected{$debugStatus.operationsPageActive
 								? ', Operations page active'
 								: ''}"
 						>
 							<Wifi size={16} />
 							<span class="text-xs font-medium">Live</span>
 							<RadarLoader />
-							{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
-								<span class="text-xs font-medium">
-									({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
-											.activeWatchlistEntries
-											.length}{/if}{#if $debugStatus.activeWatchlistEntries.length > 0 && $debugStatus.activeAreaSubscriptions > 0}+{/if}{#if $debugStatus.activeAreaSubscriptions > 0}{$debugStatus.activeAreaSubscriptions}
-										area{/if})
-								</span>
-							{/if}
 						</div>
 					{:else if $websocketStatus.reconnecting}
 						<div
