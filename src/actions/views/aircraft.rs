@@ -152,8 +152,6 @@ pub struct AircraftView {
     pub latitude: Option<f64>,
     /// Longitude of aircraft's last known position (stored in database for quick access)
     pub longitude: Option<f64>,
-    /// Active flight ID if device is currently on an active flight
-    pub active_flight_id: Option<Uuid>,
     /// Current fix (latest position data for this aircraft)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_fix: Option<serde_json::Value>,
@@ -208,7 +206,6 @@ impl AircraftView {
             owner_operator: device.owner_operator,
             latitude: None,
             longitude: None,
-            active_flight_id: None,
             current_fix: None,
             fixes: None,
         }
@@ -254,7 +251,6 @@ impl AircraftView {
             owner_operator: device_model.owner_operator,
             latitude: device_model.latitude,
             longitude: device_model.longitude,
-            active_flight_id: None,
             current_fix: device_model.current_fix,
             fixes: None,
         }

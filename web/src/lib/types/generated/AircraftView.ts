@@ -27,17 +27,13 @@ export type AircraftView = {
 	countryCode: string | null;
 	ownerOperator: string | null;
 	/**
-	 * Latest fix latitude (for quick map linking)
+	 * Latitude of aircraft's last known position (stored in database for quick access)
 	 */
-	latestLatitude: number | null;
+	latitude: number | null;
 	/**
-	 * Latest fix longitude (for quick map linking)
+	 * Longitude of aircraft's last known position (stored in database for quick access)
 	 */
-	latestLongitude: number | null;
-	/**
-	 * Active flight ID if device is currently on an active flight
-	 */
-	activeFlightId: string | null;
+	longitude: number | null;
 	/**
 	 * Current fix (latest position data for this aircraft)
 	 */
