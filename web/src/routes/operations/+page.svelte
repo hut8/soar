@@ -1867,6 +1867,16 @@
 			// Process each aircraft and add to registry
 			// They will have latestLatitude/latestLongitude but no fixes array
 			for (const a of aircraft) {
+				// Debug logging to check if currentFix is present
+				console.log('[REST] Processing aircraft:', {
+					id: a.id,
+					address: a.address,
+					hasCurrentFix: !!a.currentFix,
+					currentFix: a.currentFix,
+					hasFixes: !!a.fixes,
+					fixesCount: a.fixes?.length || 0
+				});
+
 				// Register the aircraft - markers will be created from latest position
 				await aircraftRegistry.updateAircraftFromAircraftData(a);
 			}
