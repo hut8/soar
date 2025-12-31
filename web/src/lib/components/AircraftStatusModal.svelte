@@ -467,6 +467,28 @@
 									</div>
 								</div>
 
+								{#if selectedAircraft.ownerOperator}
+									<div>
+										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+											Owner / Operator
+										</dt>
+										<dd class="text-sm">
+											{selectedAircraft.ownerOperator}
+										</dd>
+									</div>
+								{/if}
+
+								{#if selectedAircraft.homeBaseAirportIdent}
+									<div>
+										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+											Home Base Airport
+										</dt>
+										<dd class="text-sm">
+											{selectedAircraft.homeBaseAirportIdent}
+										</dd>
+									</div>
+								{/if}
+
 								<div class="grid grid-cols-3 gap-4">
 									<div>
 										<dd class="text-sm">

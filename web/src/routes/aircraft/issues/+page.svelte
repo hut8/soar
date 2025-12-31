@@ -6,11 +6,12 @@
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	interface AircraftIssuesResponse {
-		duplicateDeviceAddresses: Aircraft[];
-		totalCount: number;
-		page: number;
-		perPage: number;
-		totalPages: number;
+		data: Aircraft[];
+		metadata: {
+			page: number;
+			totalPages: number;
+			totalCount: number;
+		};
 	}
 
 	let duplicateDevices = $state<Aircraft[]>([]);
@@ -30,11 +31,10 @@
 				method: 'GET',
 				params: { page, perPage }
 			});
-			duplicateDevices = response.duplicateDeviceAddresses || [];
-			currentPage = response.page;
-			totalPages = response.totalPages;
-			totalCount = response.totalCount;
-			perPage = response.perPage;
+			duplicateDevices = response.data || [];
+			currentPage = response.metadata.page;
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load aircraft issues: ${errorMessage}`;

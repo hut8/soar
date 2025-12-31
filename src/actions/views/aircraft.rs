@@ -147,6 +147,7 @@ pub struct AircraftView {
     pub tracker_device_type: Option<String>,
     pub icao_model_code: Option<String>,
     pub country_code: Option<String>,
+    pub owner_operator: Option<String>,
     /// Latest fix latitude (for quick map linking)
     pub latest_latitude: Option<f64>,
     /// Latest fix longitude (for quick map linking)
@@ -204,6 +205,7 @@ impl AircraftView {
             tracker_device_type: device.tracker_device_type,
             icao_model_code: device.icao_model_code,
             country_code: device.country_code,
+            owner_operator: device.owner_operator,
             latest_latitude: None,
             latest_longitude: None,
             active_flight_id: None,
@@ -249,6 +251,7 @@ impl AircraftView {
             tracker_device_type: device_model.tracker_device_type,
             icao_model_code: device_model.icao_model_code,
             country_code: device_model.country_code,
+            owner_operator: device_model.owner_operator,
             latest_latitude: device_model.latitude,
             latest_longitude: device_model.longitude,
             active_flight_id: None,

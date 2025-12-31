@@ -223,23 +223,25 @@ enum Commands {
     },
     /// Archive old data to compressed CSV files and delete from database
     ///
-    /// Archives data with staggered retention to respect foreign key constraints:
-    /// 1. Flights (before_date + 0 days)
-    /// 2. Fixes and ReceiverStatuses (before_date + 1 day)
-    /// 3. AprsMessages (before_date + 2 days)
+    /// Archives data in correct order to respect foreign key constraints:
+    /// 1. Fixes (children - reference flights and raw_messages)
+    /// 2. ReceiverStatuses (children - reference raw_messages)
+    /// 3. Flights (parents - after fixing self-references)
+    /// 4. RawMessages (parents - archived last)
     ///
-    /// Default: Uses 21 days ago, which archives:
-    /// - Flights: 21+ days old
-    /// - Fixes and ReceiverStatuses: 22+ days old
-    /// - AprsMessages: 23+ days old
+    /// Default: Uses 45 days ago, which archives all data 45+ days old
     ///
     /// Each day's data is written to files named YYYYMMDD-{table}.csv.zst
     Archive {
+        /// Maximum age of data to keep in days (archives data older than this)
+        /// Defaults to 45 days if not specified.
+        #[arg(long, value_name = "DAYS", conflicts_with = "before")]
+        max_age_days: Option<i64>,
+
         /// Archive data before this date (YYYY-MM-DD format, exclusive, UTC)
-        /// Cannot be a future date. Flights are archived before this date,
-        /// Fixes/ReceiverStatuses before date+1, AprsMessages before date+2.
-        /// Defaults to 21 days ago if not specified.
-        #[arg(value_name = "BEFORE_DATE")]
+        /// Cannot be a future date. All tables archive data before this date.
+        /// DEPRECATED: Use --max-age-days instead.
+        #[arg(long, value_name = "BEFORE_DATE")]
         before: Option<String>,
 
         /// Directory where archive files will be stored
@@ -1230,9 +1232,19 @@ async fn main() -> Result<()> {
             soar::web::start_web_server(interface, final_port, diesel_pool).await
         }
         Commands::Archive {
+            max_age_days,
             before,
             archive_path,
-        } => handle_archive(diesel_pool, before, archive_path).await,
+        } => {
+            // Convert max_age_days to before date, or use before directly
+            let before_date = if let Some(days) = max_age_days {
+                let date = chrono::Utc::now().date_naive() - chrono::Duration::days(days);
+                Some(date.format("%Y-%m-%d").to_string())
+            } else {
+                before
+            };
+            handle_archive(diesel_pool, before_date, archive_path).await
+        }
         Commands::Resurrect { date, archive_path } => {
             handle_resurrect(diesel_pool, date, archive_path).await
         }

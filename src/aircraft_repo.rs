@@ -83,13 +83,15 @@ impl AircraftRepository {
                     aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
                         "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
                     )),
+                    aircraft::country_code.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.country_code, aircraft.country_code)"
+                    )),
                     aircraft::updated_at.eq(diesel::dsl::now),
                     // NOTE: We do NOT update the following fields because they come from real-time packets:
                     // - aircraft_type_ogn (from OGN packets)
                     // - icao_model_code (from ADSB packets)
                     // - adsb_emitter_category (from ADSB packets)
                     // - tracker_device_type (from tracker packets)
-                    // - country_code (derived from ICAO address, managed separately)
                     // - last_fix_at (managed by fix processing)
                     // - club_id (managed by club assignment logic)
                 ))

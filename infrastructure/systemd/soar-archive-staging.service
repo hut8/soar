@@ -1,5 +1,5 @@
 [Unit]
-Description=SOAR Archive (Staging) - Archive Old Data (3-day retention)
+Description=SOAR Archive (Staging) - Archive Old Data (45-day retention)
 Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -11,10 +11,9 @@ User=soar
 Group=soar
 WorkingDirectory=/var/soar
 
-# Archive with 3-day retention (vs production's 21-day retention)
-# Calculates date dynamically: 3 days ago
-# Double %% is required in systemd unit files for date command
-ExecStart=/bin/bash -c 'source /etc/soar/env-staging && /usr/local/bin/soar-staging archive --archive-path /var/soar/archive-staging --before $(date -d "3 days ago" +%%Y-%%m-%%d)'
+# Run archive command with 45-day retention (same as production)
+# Archives all data (flights, fixes, receiver_statuses, raw_messages) 45+ days old
+ExecStart=/usr/local/bin/soar-staging archive --max-age-days 45 --archive-path /var/soar/archive-staging
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging

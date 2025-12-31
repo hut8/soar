@@ -833,9 +833,9 @@ impl FixesRepository {
         cutoff_time: DateTime<Utc>,
         fixes_per_aircraft: Option<i64>,
     ) -> Result<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>> {
-        info!("Starting bounding box query");
+        info!("Starting bounding box query (using current_fix from aircraft table)");
         let pool = self.pool.clone();
-        let fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5);
+        // fixes_per_aircraft parameter is ignored - we use current_fix from aircraft table instead
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -927,6 +927,8 @@ impl FixesRepository {
                 latitude: Option<f64>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
                 longitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
+                current_fix: Option<serde_json::Value>,
             }
 
             let aircraft_rows: Vec<AircraftRow> = diesel::sql_query(aircraft_sql)
@@ -942,9 +944,6 @@ impl FixesRepository {
             if aircraft_rows.is_empty() {
                 return Ok(Vec::new());
             }
-
-            // Extract aircraft IDs for the second query
-            let aircraft_ids: Vec<uuid::Uuid> = aircraft_rows.iter().map(|row| row.id).collect();
 
             // Convert rows to AircraftModel
             let aircraft_models: Vec<crate::aircraft::AircraftModel> = aircraft_rows
@@ -982,137 +981,17 @@ impl FixesRepository {
                     faa_ladd: None,                 // Not selected in this query
                     year: None,                     // Not selected in this query
                     is_military: None,              // Not selected in this query
-                    current_fix: None,              // Not selected in this query
+                    current_fix: row.current_fix,
                     images: None,                   // Not selected in this query
                 })
                 .collect();
 
-            info!("Executing second query for fixes with {} aircraft IDs", aircraft_ids.len());
+            info!("Returning {} aircraft with current_fix from aircraft table (no fixes query needed)", aircraft_models.len());
 
-            // Second query: Get recent fixes for the aircraft using the aircraft_id index
-            // This is much faster than repeating the spatial query
-            // Time-based pruning filter reduces rows before windowing for better performance
-            let fixes_sql = r#"
-                WITH ranked AS (
-                    SELECT f.*,
-                           ROW_NUMBER() OVER (PARTITION BY f.aircraft_id ORDER BY f.received_at DESC) AS rn
-                    FROM fixes f
-                    WHERE f.aircraft_id = ANY($1)
-                      AND f.received_at >= $3
-                )
-                SELECT *
-                FROM ranked
-                WHERE rn <= $2
-                ORDER BY aircraft_id, received_at DESC
-            "#;
-
-            // QueryableByName version of FixDslRow for raw SQL query
-            // Note: Excludes location and geom geography/geometry columns
-            #[derive(QueryableByName)]
-            struct FixRow {
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                source: String,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                aprs_type: String,
-                #[diesel(sql_type = diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>)]
-                via: Vec<Option<String>>,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                timestamp: DateTime<Utc>,
-                #[diesel(sql_type = diesel::sql_types::Double)]
-                latitude: f64,
-                #[diesel(sql_type = diesel::sql_types::Double)]
-                longitude: f64,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_msl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                flight_number: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                squawk: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                ground_speed_knots: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                track_degrees: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                climb_fpm: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                turn_rate_rot: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
-                source_metadata: Option<serde_json::Value>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-                flight_id: Option<uuid::Uuid>,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                aircraft_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                received_at: DateTime<Utc>,
-                #[diesel(sql_type = diesel::sql_types::Bool)]
-                is_active: bool,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_agl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                receiver_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                raw_message_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Bool)]
-                altitude_agl_valid: bool,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                time_gap_seconds: Option<i32>,
-            }
-
-            let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
-                .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&aircraft_ids)
-                .bind::<diesel::sql_types::BigInt, _>(fixes_per_aircraft)
-                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
-                .load(&mut conn)?;
-
-            info!("Second query returned {} fix rows", fix_rows.len());
-
-            // Group fixes by aircraft_id
-            let mut fixes_by_aircraft: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
-                std::collections::HashMap::new();
-            for fix_row in fix_rows {
-                let aircraft_id = fix_row.aircraft_id;
-                // Convert FixRow to Fix
-                let fix = Fix {
-                    id: fix_row.id,
-                    source: fix_row.source,
-                    aprs_type: fix_row.aprs_type,
-                    via: fix_row.via,
-                    timestamp: fix_row.timestamp,
-                    received_at: fix_row.received_at,
-                    latitude: fix_row.latitude,
-                    longitude: fix_row.longitude,
-                    altitude_msl_feet: fix_row.altitude_msl_feet,
-                    altitude_agl_feet: fix_row.altitude_agl_feet,
-                    flight_id: fix_row.flight_id,
-                    flight_number: fix_row.flight_number,
-                    squawk: fix_row.squawk,
-                    ground_speed_knots: fix_row.ground_speed_knots,
-                    track_degrees: fix_row.track_degrees,
-                    climb_fpm: fix_row.climb_fpm,
-                    turn_rate_rot: fix_row.turn_rate_rot,
-                    source_metadata: fix_row.source_metadata,
-                    aircraft_id: fix_row.aircraft_id,
-                    is_active: fix_row.is_active,
-                    receiver_id: fix_row.receiver_id,
-                    raw_message_id: fix_row.raw_message_id,
-                    altitude_agl_valid: fix_row.altitude_agl_valid,
-                    time_gap_seconds: fix_row.time_gap_seconds,
-                };
-                fixes_by_aircraft
-                    .entry(aircraft_id)
-                    .or_default()
-                    .push(fix);
-            }
-
-            // Combine aircraft with their fixes
+            // Return aircraft with empty fix arrays - current_fix field contains the latest position
             let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = aircraft_models
                 .into_iter()
-                .map(|aircraft| {
-                    let fixes = fixes_by_aircraft.remove(&aircraft.id).unwrap_or_default();
-                    (aircraft, fixes)
-                })
+                .map(|aircraft| (aircraft, Vec::new()))
                 .collect();
 
             Ok::<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>, anyhow::Error>(results)
