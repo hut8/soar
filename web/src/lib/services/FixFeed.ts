@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment';
-import type { Aircraft, Fix, DataListResponseWithTotal } from '$lib/types';
+import type { Aircraft, Fix, AircraftSearchResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
@@ -432,12 +432,12 @@ export class FixFeed {
 		east: number,
 		afterTimestamp?: string, // Expected in ISO 8601 format
 		limit?: number
-	): Promise<{ data: Aircraft[]; total: number }> {
-		if (!browser) return { data: [], total: 0 };
+	): Promise<AircraftSearchResponse> {
+		if (!browser) return { items: [], total: 0, clustered: false };
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall<DataListResponseWithTotal<Aircraft>>('/aircraft', {
+			const response = await serverCall<AircraftSearchResponse>('/aircraft', {
 				params: {
 					south,
 					north,
@@ -447,10 +447,10 @@ export class FixFeed {
 					...(limit && { limit })
 				}
 			});
-			return { data: response.data, total: response.total };
+			return response;
 		} catch (error) {
 			console.error('Failed to fetch aircraft in bounding box:', error);
-			return { data: [], total: 0 };
+			return { items: [], total: 0, clustered: false };
 		}
 	}
 }

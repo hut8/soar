@@ -190,6 +190,47 @@ export interface Aircraft {
 	fixes?: Fix[];
 }
 
+// Cluster types for aircraft spatial grouping
+export interface ClusterBounds {
+	north: number;
+	south: number;
+	east: number;
+	west: number;
+}
+
+export interface AircraftCluster {
+	id: string;
+	latitude: number;
+	longitude: number;
+	count: number;
+	bounds: ClusterBounds;
+}
+
+// Discriminated union for either individual aircraft or cluster
+export type AircraftOrCluster =
+	| { type: 'aircraft'; data: Aircraft }
+	| { type: 'cluster'; data: AircraftCluster };
+
+// Response from aircraft search endpoint
+export interface AircraftSearchResponse {
+	items: AircraftOrCluster[];
+	total: number;
+	clustered: boolean;
+}
+
+// Type guards for AircraftOrCluster
+export function isAircraftItem(
+	item: AircraftOrCluster
+): item is { type: 'aircraft'; data: Aircraft } {
+	return item.type === 'aircraft';
+}
+
+export function isClusterItem(
+	item: AircraftOrCluster
+): item is { type: 'cluster'; data: AircraftCluster } {
+	return item.type === 'cluster';
+}
+
 // AircraftWithRegistration extends Aircraft with optional aircraft registration and detailed model information
 export interface AircraftWithRegistration extends Aircraft {
 	aircraftRegistration?: AircraftRegistration;

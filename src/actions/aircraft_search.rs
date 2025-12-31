@@ -9,10 +9,12 @@ use std::collections::HashMap;
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::views::{Aircraft, AircraftView, AirportInfo, FlightView};
+use crate::actions::views::{
+    Aircraft, AircraftCluster, AircraftOrCluster, AircraftSearchResponse, AircraftView,
+    AirportInfo, ClusterBounds, FlightView,
+};
 use crate::actions::{
-    DataListResponse, DataListResponseWithTotal, DataResponse, PaginatedDataResponse,
-    PaginationMetadata, json_error,
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
 };
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
@@ -267,43 +269,117 @@ async fn search_aircraft_by_bbox(
 
     info!("Total aircraft in bounding box: {}", total_count);
 
-    // Perform bounding box search - don't fetch fixes, only aircraft with latest position
-    // Fixes will come from WebSocket after page load
-    match fixes_repo
-        .get_aircraft_with_fixes_in_bounding_box(north, west, south, east, cutoff_time, None)
-        .await
-    {
-        Ok(mut aircraft_with_fixes) => {
-            info!(
-                "Found {} aircraft in bounding box",
-                aircraft_with_fixes.len()
-            );
+    // Use clustering if total count exceeds 50 aircraft
+    if total_count > 50 {
+        info!("Total count exceeds 50, using clustering");
 
-            // Apply limit if specified
-            if let Some(lim) = limit {
-                let limit_usize = lim.max(0) as usize;
-                aircraft_with_fixes.truncate(limit_usize);
-                info!("Limited aircraft to {} results", aircraft_with_fixes.len());
-            }
+        let grid_size = 0.1; // 0.1 degrees (~11km)
 
-            // Enrich with aircraft registration and model data
-            let enriched =
-                enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
-
-            info!("Enriched {} aircraft, returning response", enriched.len());
-            Json(DataListResponseWithTotal {
-                data: enriched,
-                total: total_count,
-            })
-            .into_response()
-        }
-        Err(e) => {
-            tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft with fixes in bounding box",
+        match fixes_repo
+            .get_clustered_aircraft_in_bounding_box(
+                north,
+                west,
+                south,
+                east,
+                cutoff_time,
+                grid_size,
             )
-            .into_response()
+            .await
+        {
+            Ok(clusters) => {
+                info!("Generated {} clusters", clusters.len());
+
+                let items: Vec<AircraftOrCluster> = clusters
+                    .into_iter()
+                    .map(|cluster| {
+                        let cluster_id = format!(
+                            "cluster_{}_{}",
+                            (cluster.grid_lat * 1000.0) as i64,
+                            (cluster.grid_lng * 1000.0) as i64
+                        );
+
+                        AircraftOrCluster::Cluster {
+                            data: AircraftCluster {
+                                id: cluster_id,
+                                latitude: cluster.centroid_lat,
+                                longitude: cluster.centroid_lng,
+                                count: cluster.aircraft_count,
+                                bounds: ClusterBounds {
+                                    north: cluster.max_lat,
+                                    south: cluster.min_lat,
+                                    east: cluster.max_lng,
+                                    west: cluster.min_lng,
+                                },
+                            },
+                        }
+                    })
+                    .collect();
+
+                Json(AircraftSearchResponse {
+                    items,
+                    total: total_count,
+                    clustered: true,
+                })
+                .into_response()
+            }
+            Err(e) => {
+                tracing::error!("Failed to get clustered aircraft: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get clustered aircraft",
+                )
+                .into_response()
+            }
+        }
+    } else {
+        // Perform bounding box search - don't fetch fixes, only aircraft with latest position
+        // Fixes will come from WebSocket after page load
+        match fixes_repo
+            .get_aircraft_with_fixes_in_bounding_box(north, west, south, east, cutoff_time, None)
+            .await
+        {
+            Ok(mut aircraft_with_fixes) => {
+                info!(
+                    "Found {} aircraft in bounding box",
+                    aircraft_with_fixes.len()
+                );
+
+                // Apply limit if specified
+                if let Some(lim) = limit {
+                    let limit_usize = lim.max(0) as usize;
+                    aircraft_with_fixes.truncate(limit_usize);
+                    info!("Limited aircraft to {} results", aircraft_with_fixes.len());
+                }
+
+                // Enrich with aircraft registration and model data
+                let enriched =
+                    enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
+
+                info!("Enriched {} aircraft, returning response", enriched.len());
+
+                // Wrap aircraft in AircraftOrCluster enum
+                let items: Vec<AircraftOrCluster> = enriched
+                    .into_iter()
+                    .map(|aircraft| AircraftOrCluster::Aircraft {
+                        data: Box::new(aircraft),
+                    })
+                    .collect();
+
+                Json(AircraftSearchResponse {
+                    items,
+                    total: total_count,
+                    clustered: false,
+                })
+                .into_response()
+            }
+            Err(e) => {
+                tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get aircraft with fixes in bounding box",
+                )
+                .into_response()
+            }
         }
     }
 }
