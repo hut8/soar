@@ -212,7 +212,7 @@ impl ArchiveReport {
         for table in &self.tables {
             let oldest_str = table
                 .oldest_remaining
-                .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
+                .map(|d| d.format("%Y-%m-%d").to_string())
                 .unwrap_or_else(|| "N/A".to_string());
             let relative_str = table
                 .oldest_remaining

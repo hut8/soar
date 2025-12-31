@@ -1300,21 +1300,8 @@ async fn main() -> Result<()> {
                 warn!("Email configuration not available, skipping migration email notification");
             }
 
-            // Send Sentry success event
-            if sentry::Hub::current().client().is_some() {
-                sentry::configure_scope(|scope| {
-                    scope.set_tag("migration", "true");
-                    scope.set_tag("environment", env::var("SOAR_ENV").unwrap_or_default());
-                    scope.set_tag("type", "database_migration");
-                });
-                sentry::capture_message(
-                    &format!(
-                        "Database migration completed successfully for {}",
-                        env::var("SOAR_ENV").unwrap_or_else(|_| "development".to_string())
-                    ),
-                    sentry::Level::Info,
-                );
-            }
+            // Don't send Sentry message for successful migrations - email notification is sufficient
+            // Sentry is for errors and issues, not routine success notifications
 
             Ok(())
         }

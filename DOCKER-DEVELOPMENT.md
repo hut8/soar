@@ -11,7 +11,10 @@ cp .env.docker.example .env.docker
 # 2. Edit .env.docker and add your Google Maps API key (required)
 # GOOGLE_MAPS_API_KEY=your_actual_key_here
 
-# 3. Start the development environment
+# 3. Build the custom PostgreSQL image (first time only, includes H3 extension)
+docker-compose -f docker-compose.dev.yml build db
+
+# 4. Start the development environment
 docker-compose -f docker-compose.dev.yml --env-file .env.docker up
 
 # That's it! The application is now running:
@@ -25,12 +28,12 @@ docker-compose -f docker-compose.dev.yml --env-file .env.docker up
 
 The Docker development environment includes:
 
-- **PostgreSQL 15 + PostGIS 3.4**: Database with spatial extensions
+- **PostgreSQL 17 + PostGIS 3.5 + TimescaleDB + H3**: Custom-built database with all required extensions
 - **NATS JetStream**: Message broker for real-time aircraft tracking
 - **Rust Backend**: API server with hot reload via `cargo-watch`
 - **SvelteKit Frontend**: Web UI with Vite hot module replacement
 
-All services are configured to work together out of the box.
+All services are configured to work together out of the box. The database image is custom-built with H3 (geospatial indexing), TimescaleDB (time-series data), and PostGIS (spatial operations).
 
 ## Services
 
@@ -198,7 +201,24 @@ docker-compose -f docker-compose.dev.yml up frontend
 
 ### Slow Initial Build
 
-The first build downloads Rust dependencies and can take 10-20 minutes. Subsequent builds are faster due to caching.
+The first build takes time because it:
+- Builds custom PostgreSQL image with H3, TimescaleDB extensions (5-10 minutes)
+- Downloads Rust dependencies (10-20 minutes)
+
+Subsequent builds are faster due to Docker layer caching.
+
+### Missing Database Extensions (H3, TimescaleDB)
+
+If you see "extension 'h3' is not available" or similar errors:
+
+```bash
+# Rebuild the database image
+docker-compose -f docker-compose.dev.yml build --no-cache db
+
+# Recreate the database
+docker-compose -f docker-compose.dev.yml down -v
+docker-compose -f docker-compose.dev.yml up db
+```
 
 ## Performance Tips
 
