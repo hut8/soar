@@ -826,6 +826,17 @@
 							</div>
 						{/if}
 
+						<!-- Home Base Airport -->
+						{#if aircraft?.homeBaseAirportIdent}
+							<div class="flex items-start gap-3">
+								<Building2 class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
+									<p>{aircraft.homeBaseAirportIdent}</p>
+								</div>
+							</div>
+						{/if}
+
 						<!-- Registrant Type -->
 						{#if aircraftRegistration.registrantType}
 							<div class="flex items-start gap-3">
