@@ -432,171 +432,79 @@ impl AircraftRepository {
         Ok(models.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Get recent aircraft with latest fix location and active flight ID
-    /// This extended version includes lat/lng and flight_id for quick navigation
-    pub async fn get_recent_aircraft_with_location(
+    /// Find all aircraft within a bounding box that have recent fixes
+    /// Returns aircraft models with all fields populated from the database
+    pub async fn find_aircraft_in_bounding_box(
         &self,
-        limit: i64,
-        aircraft_types: Option<Vec<String>>,
-    ) -> Result<Vec<(AircraftModel, Option<f64>, Option<f64>, Option<Uuid>)>> {
-        let pool = self.pool.clone();
-        let aircraft_types_filter = aircraft_types.clone();
+        north: f64,
+        west: f64,
+        south: f64,
+        east: f64,
+        cutoff_time: DateTime<Utc>,
+        limit: Option<i64>,
+    ) -> Result<Vec<AircraftModel>> {
+        use diesel::sql_types::{BigInt, Double, Timestamptz};
 
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+        let mut conn = self.get_connection()?;
 
-            // Build aircraft type filter condition
-            let aircraft_type_condition = if let Some(types) = aircraft_types_filter
-                && !types.is_empty()
-            {
-                let types_str = types
-                    .iter()
-                    .map(|t| format!("'{}'", t))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                format!("AND d.aircraft_type_ogn::text IN ({})", types_str)
-            } else {
-                String::new()
-            };
+        // Build the SQL query with optional LIMIT clause
+        let limit_clause = if limit.is_some() { "LIMIT $6" } else { "" };
 
-            let query = format!(
-                r#"
+        let aircraft_sql = format!(
+            r#"
+            WITH params AS (
                 SELECT
-                    d.*,
-                    latest_fix.latitude AS latest_latitude,
-                    latest_fix.longitude AS latest_longitude,
-                    active_flight.id AS active_flight_id
-                FROM aircraft d
-                LEFT JOIN LATERAL (
-                    SELECT latitude, longitude
-                    FROM fixes
-                    WHERE aircraft_id = d.id
-                    AND received_at >= NOW() - INTERVAL '24 hours'
-                    ORDER BY received_at DESC
-                    LIMIT 1
-                ) latest_fix ON true
-                LEFT JOIN flights active_flight ON (
-                    active_flight.aircraft_id = d.id
-                    AND active_flight.landing_time IS NULL
-                    AND active_flight.timed_out_at IS NULL
-                )
-                WHERE d.last_fix_at IS NOT NULL
-                {}
-                ORDER BY d.last_fix_at DESC
-                LIMIT $1
-                "#,
-                aircraft_type_condition
-            );
+                    $1::double precision AS left_lng,
+                    $2::double precision AS bottom_lat,
+                    $3::double precision AS right_lng,
+                    $4::double precision AS top_lat,
+                    $5::timestamptz AS cutoff_time
+            ),
+            parts AS (
+                SELECT
+                    CASE WHEN left_lng <= right_lng THEN
+                        ARRAY[
+                            ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                        ]
+                    ELSE
+                        ARRAY[
+                            ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                            ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                        ]
+                    END AS boxes,
+                    cutoff_time
+                FROM params
+            )
+            SELECT d.*
+            FROM aircraft d, parts
+            WHERE d.last_fix_at >= parts.cutoff_time
+              AND d.location_geom IS NOT NULL
+              AND (
+                  d.location_geom && parts.boxes[1]
+                  OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+              )
+            {}
+        "#,
+            limit_clause
+        );
 
-            use diesel::sql_query;
-            use diesel::sql_types::{
-                BigInt, Bool, Float8, Int4, Nullable, Numeric, Text, Timestamptz,
-            };
+        let query = diesel::sql_query(aircraft_sql)
+            .bind::<Double, _>(west)
+            .bind::<Double, _>(south)
+            .bind::<Double, _>(east)
+            .bind::<Double, _>(north)
+            .bind::<Timestamptz, _>(cutoff_time);
 
-            #[derive(diesel::QueryableByName)]
-            struct AircraftWithLocation {
-                #[diesel(sql_type = Int4)]
-                address: i32,
-                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
-                address_type: crate::aircraft::AddressType,
-                #[diesel(sql_type = Text)]
-                aircraft_model: String,
-                #[diesel(sql_type = Nullable<Text>)]
-                registration: Option<String>,
-                #[diesel(sql_type = Text)]
-                competition_number: String,
-                #[diesel(sql_type = Bool)]
-                tracked: bool,
-                #[diesel(sql_type = Bool)]
-                identified: bool,
-                #[diesel(sql_type = Timestamptz)]
-                created_at: chrono::DateTime<chrono::Utc>,
-                #[diesel(sql_type = Timestamptz)]
-                updated_at: chrono::DateTime<chrono::Utc>,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = Bool)]
-                from_ogn_ddb: bool,
-                #[diesel(sql_type = Nullable<Numeric>)]
-                frequency_mhz: Option<bigdecimal::BigDecimal>,
-                #[diesel(sql_type = Nullable<Text>)]
-                pilot_name: Option<String>,
-                #[diesel(sql_type = Nullable<Text>)]
-                home_base_airport_ident: Option<String>,
-                #[diesel(sql_type = Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
-                aircraft_type_ogn: Option<crate::ogn_aprs_aircraft::AircraftType>,
-                #[diesel(sql_type = Nullable<Timestamptz>)]
-                last_fix_at: Option<chrono::DateTime<chrono::Utc>>,
-                #[diesel(sql_type = Nullable<diesel::sql_types::Uuid>)]
-                club_id: Option<uuid::Uuid>,
-                #[diesel(sql_type = Nullable<Text>)]
-                icao_model_code: Option<String>,
-                #[diesel(sql_type = Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
-                adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
-                #[diesel(sql_type = Nullable<Text>)]
-                tracker_device_type: Option<String>,
-                #[diesel(sql_type = Nullable<Text>)]
-                country_code: Option<String>,
-                #[diesel(sql_type = Nullable<Float8>)]
-                latest_latitude: Option<f64>,
-                #[diesel(sql_type = Nullable<Float8>)]
-                latest_longitude: Option<f64>,
-                #[diesel(sql_type = Nullable<diesel::sql_types::Uuid>)]
-                active_flight_id: Option<uuid::Uuid>,
-            }
+        // Bind limit if provided
+        let aircraft_models = if let Some(lim) = limit {
+            query
+                .bind::<BigInt, _>(lim)
+                .load::<AircraftModel>(&mut conn)?
+        } else {
+            query.load::<AircraftModel>(&mut conn)?
+        };
 
-            let results: Vec<AircraftWithLocation> =
-                sql_query(query).bind::<BigInt, _>(limit).load(&mut conn)?;
-
-            Ok(results
-                .into_iter()
-                .map(|row| {
-                    let model = AircraftModel {
-                        id: row.id,
-                        address: row.address,
-                        address_type: row.address_type,
-                        aircraft_model: row.aircraft_model,
-                        registration: row.registration,
-                        competition_number: row.competition_number,
-                        tracked: row.tracked,
-                        identified: row.identified,
-                        created_at: row.created_at,
-                        updated_at: row.updated_at,
-                        from_ogn_ddb: row.from_ogn_ddb,
-                        from_adsbx_ddb: false,
-                        frequency_mhz: row.frequency_mhz,
-                        pilot_name: row.pilot_name,
-                        home_base_airport_ident: row.home_base_airport_ident,
-                        aircraft_type_ogn: row.aircraft_type_ogn,
-                        last_fix_at: row.last_fix_at,
-                        club_id: row.club_id,
-                        icao_model_code: row.icao_model_code,
-                        adsb_emitter_category: row.adsb_emitter_category,
-                        tracker_device_type: row.tracker_device_type,
-                        country_code: row.country_code,
-                        latitude: None,          // Not selected in this query
-                        longitude: None,         // Not selected in this query
-                        owner_operator: None,    // Not selected in this query
-                        aircraft_category: None, // Not selected in this query
-                        engine_count: None,      // Not selected in this query
-                        engine_type: None,       // Not selected in this query
-                        faa_pia: None,           // Not selected in this query
-                        faa_ladd: None,          // Not selected in this query
-                        year: None,
-                        is_military: None,
-                        current_fix: None, // Not selected in this query
-                        images: None,      // Not selected in this query
-                    };
-                    (
-                        model,
-                        row.latest_latitude,
-                        row.latest_longitude,
-                        row.active_flight_id,
-                    )
-                })
-                .collect())
-        })
-        .await?
+        Ok(aircraft_models)
     }
 
     /// Update the club assignment for an aircraft
@@ -654,39 +562,6 @@ impl AircraftRepository {
             warn!("No aircraft found with ID {}", aircraft_id);
             Ok(false)
         }
-    }
-
-    /// Query for aircraft that have duplicate addresses (same address, different address_type)
-    pub async fn get_duplicate_aircraft(&self) -> Result<Vec<AircraftModel>> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Find addresses that appear more than once with different address types
-            // Use a subquery to get addresses where COUNT(DISTINCT address_type) > 1
-            let duplicate_addresses: Vec<i32> = aircraft::table
-                .select(aircraft::address)
-                .group_by(aircraft::address)
-                .having(diesel::dsl::sql::<diesel::sql_types::Bool>(
-                    "COUNT(DISTINCT address_type) > 1",
-                ))
-                .load(&mut conn)?;
-
-            if duplicate_addresses.is_empty() {
-                return Ok(Vec::new());
-            }
-
-            // Now fetch all aircraft rows for those duplicate addresses
-            let duplicate_aircraft = aircraft::table
-                .filter(aircraft::address.eq_any(duplicate_addresses))
-                .order((aircraft::address.asc(), aircraft::address_type.asc()))
-                .select(AircraftModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<AircraftModel>, anyhow::Error>(duplicate_aircraft)
-        })
-        .await?
     }
 
     /// Query for aircraft that have duplicate addresses with pagination

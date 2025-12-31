@@ -55,11 +55,6 @@
 		loadIssues();
 	});
 
-	function formatAddress(address: string): string {
-		// Address is already in hex format, just ensure it's uppercase and padded
-		return address.toUpperCase().padStart(6, '0');
-	}
-
 	function formatDate(dateStr: string | null | undefined): string {
 		if (!dateStr) return '-';
 		const date = new Date(dateStr);
@@ -139,7 +134,7 @@
 						<tbody>
 							{#each duplicateDevices as device (device.id || device.address)}
 								<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
-									<td class="p-3 font-mono font-semibold">{formatAddress(device.address)}</td>
+									<td class="p-3 font-mono font-semibold">{device.address}</td>
 									<td class="p-3">{device.addressType}</td>
 									<td class="p-3">
 										{#if device.id}

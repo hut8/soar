@@ -12,13 +12,15 @@
 
 	// Build the operations map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		aircraft.latestLatitude && aircraft.latestLongitude
-			? `/operations?lat=${aircraft.latestLatitude}&lng=${aircraft.latestLongitude}&zoom=13`
+		aircraft.latitude && aircraft.longitude
+			? `/operations?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
 			: null
 	);
 
-	// Build the flight detail URL from active flight ID
-	let flightUrl = $derived(aircraft.activeFlightId ? `/flights/${aircraft.activeFlightId}` : null);
+	// Build the flight detail URL from current fix flight ID
+	let flightUrl = $derived(
+		aircraft.currentFix?.flightId ? `/flights/${aircraft.currentFix.flightId}` : null
+	);
 
 	// Get country code for flag display
 	const countryCode = $derived(() => {

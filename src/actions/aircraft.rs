@@ -12,7 +12,7 @@ use crate::aircraft_repo::AircraftRepository;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::web::AppState;
 
-use super::views::{AircraftRegistrationView, club::AircraftModelView};
+use super::views::{AircraftRegistrationView, AircraftView, club::AircraftModelView};
 use super::{
     DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
 };
@@ -324,8 +324,14 @@ pub async fn get_aircraft_issues(
         Ok((duplicate_aircraft, total_count)) => {
             let total_pages = (total_count as f64 / per_page as f64).ceil() as i64;
 
+            // Convert AircraftModel to AircraftView to ensure proper address formatting
+            let aircraft_views: Vec<AircraftView> = duplicate_aircraft
+                .into_iter()
+                .map(|model| model.into())
+                .collect();
+
             Json(PaginatedDataResponse {
-                data: duplicate_aircraft,
+                data: aircraft_views,
                 metadata: PaginationMetadata {
                     page,
                     total_pages,

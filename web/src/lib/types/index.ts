@@ -183,8 +183,8 @@ export interface Aircraft {
 	trackerDeviceType?: string | null;
 	icaoModelCode?: string | null;
 	countryCode?: string | null;
-	latestLatitude?: number | null;
-	latestLongitude?: number | null;
+	latitude?: number | null;
+	longitude?: number | null;
 	activeFlightId?: string | null;
 	currentFix?: Fix | null;
 	fixes?: Fix[];

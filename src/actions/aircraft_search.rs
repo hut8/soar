@@ -124,12 +124,32 @@ pub async fn get_aircraft_by_id(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let aircraft_repo = AircraftRepository::new(state.pool);
+    use crate::aircraft::AircraftModel;
+    use crate::schema::aircraft;
+    use diesel::prelude::*;
 
-    // First try to find the aircraft by UUID in the aircraft table
-    match aircraft_repo.get_aircraft_by_id(id).await {
-        Ok(Some(aircraft)) => {
-            let aircraft_view: AircraftView = aircraft.into();
+    let mut conn = match state.pool.get() {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::error!("Failed to get database connection: {}", e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Database connection failed",
+            )
+            .into_response();
+        }
+    };
+
+    // Query aircraft table directly to preserve current_fix field
+    match aircraft::table
+        .filter(aircraft::id.eq(id))
+        .select(AircraftModel::as_select())
+        .first(&mut conn)
+        .optional()
+    {
+        Ok(Some(aircraft_model)) => {
+            // Convert AircraftModel directly to AircraftView to preserve current_fix
+            let aircraft_view: AircraftView = aircraft_model.into();
             Json(DataResponse {
                 data: aircraft_view,
             })
@@ -250,6 +270,7 @@ async fn search_aircraft_by_bbox(
     );
 
     let fixes_repo = FixesRepository::new(pool.clone());
+    let aircraft_repo = AircraftRepository::new(pool.clone());
 
     // First, get the total count of aircraft in the bounding box
     let total_count = match fixes_repo
@@ -332,33 +353,30 @@ async fn search_aircraft_by_bbox(
             }
         }
     } else {
-        // Perform bounding box search - don't fetch fixes, only aircraft with latest position
-        // Fixes will come from WebSocket after page load
-        match fixes_repo
-            .get_aircraft_with_fixes_in_bounding_box(north, west, south, east, cutoff_time, None)
+        // Perform bounding box search - get aircraft with all fields from database
+        // Pass limit to database query for efficient filtering
+        match aircraft_repo
+            .find_aircraft_in_bounding_box(north, west, south, east, cutoff_time, limit)
             .await
         {
-            Ok(mut aircraft_with_fixes) => {
-                info!(
-                    "Found {} aircraft in bounding box",
-                    aircraft_with_fixes.len()
-                );
+            Ok(aircraft_models) => {
+                info!("Found {} aircraft in bounding box", aircraft_models.len());
+                info!("Converting {} aircraft to views", aircraft_models.len());
 
-                // Apply limit if specified
-                if let Some(lim) = limit {
-                    let limit_usize = lim.max(0) as usize;
-                    aircraft_with_fixes.truncate(limit_usize);
-                    info!("Limited aircraft to {} results", aircraft_with_fixes.len());
-                }
+                // Convert AircraftModel to AircraftView (this preserves all fields including current_fix)
+                let aircraft_views: Vec<AircraftView> = aircraft_models
+                    .into_iter()
+                    .map(|model| model.into())
+                    .collect();
 
-                // Enrich with aircraft registration and model data
-                let enriched =
-                    enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
-
-                info!("Enriched {} aircraft, returning response", enriched.len());
+                // Wrap in Aircraft struct (which just contains AircraftView)
+                let aircraft_list: Vec<Aircraft> = aircraft_views
+                    .into_iter()
+                    .map(|view| Aircraft { device: view })
+                    .collect();
 
                 // Wrap aircraft in AircraftOrCluster enum
-                let items: Vec<AircraftOrCluster> = enriched
+                let items: Vec<AircraftOrCluster> = aircraft_list
                     .into_iter()
                     .map(|aircraft| AircraftOrCluster::Aircraft {
                         data: Box::new(aircraft),
@@ -373,10 +391,10 @@ async fn search_aircraft_by_bbox(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
+                tracing::error!("Failed to get aircraft in bounding box: {}", e);
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get aircraft with fixes in bounding box",
+                    "Failed to get aircraft in bounding box",
                 )
                 .into_response()
             }
@@ -526,22 +544,12 @@ async fn get_recent_aircraft_response(
     });
 
     match aircraft_repo
-        .get_recent_aircraft_with_location(10, aircraft_type_filters)
+        .get_recent_aircraft(10, aircraft_type_filters)
         .await
     {
-        Ok(aircraft_with_location) => {
-            let aircraft_views: Vec<AircraftView> = aircraft_with_location
-                .into_iter()
-                .map(
-                    |(aircraft_model, latest_lat, latest_lng, active_flight_id)| {
-                        let mut aircraft_view: AircraftView = aircraft_model.into();
-                        aircraft_view.latest_latitude = latest_lat;
-                        aircraft_view.latest_longitude = latest_lng;
-                        aircraft_view.active_flight_id = active_flight_id;
-                        aircraft_view
-                    },
-                )
-                .collect();
+        Ok(aircraft) => {
+            let aircraft_views: Vec<AircraftView> =
+                aircraft.into_iter().map(|a| a.into()).collect();
             Json(DataListResponse {
                 data: aircraft_views,
             })
@@ -556,38 +564,6 @@ async fn get_recent_aircraft_response(
             .into_response()
         }
     }
-}
-
-/// Helper function to convert aircraft with fixes to Aircraft views with latest fix
-#[instrument(skip(aircraft_with_fixes), fields(aircraft_count = aircraft_with_fixes.len()))]
-pub(crate) async fn enrich_aircraft_with_registration_data(
-    aircraft_with_fixes: Vec<(crate::aircraft::AircraftModel, Vec<crate::fixes::Fix>)>,
-    _pool: crate::web::PgPool,
-) -> Vec<Aircraft> {
-    if aircraft_with_fixes.is_empty() {
-        return Vec::new();
-    }
-
-    // Build results with latest fix
-    info!("Building enriched results");
-    let mut enriched = Vec::new();
-    for (aircraft_model, aircraft_fixes) in aircraft_with_fixes {
-        // Convert AircraftModel to AircraftView
-        let mut aircraft_view = AircraftView::from_device_model(aircraft_model);
-
-        // Set current_fix to the latest fix (first one, ordered by timestamp DESC)
-        if let Some(latest_fix) = aircraft_fixes.first()
-            && let Ok(fix_json) = serde_json::to_value(latest_fix)
-        {
-            aircraft_view.current_fix = Some(fix_json);
-        }
-
-        enriched.push(Aircraft {
-            device: aircraft_view,
-        });
-    }
-
-    enriched
 }
 
 /// Get all devices for a club by club ID

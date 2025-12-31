@@ -3,9 +3,43 @@
 
 	// Reactive subscription to loading state
 	let isLoading = $derived($loading.activeRequests > 0);
+
+	// Debounced visibility state - stays visible for at least 1 second
+	let showRadar = $state(false);
+	let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		if (isLoading) {
+			// Show radar immediately when loading starts
+			showRadar = true;
+
+			// Cancel any pending hide timer
+			if (hideTimer) {
+				clearTimeout(hideTimer);
+				hideTimer = null;
+			}
+		} else {
+			// When loading stops, wait at least 1 second before hiding
+			if (hideTimer) {
+				clearTimeout(hideTimer);
+			}
+
+			hideTimer = setTimeout(() => {
+				showRadar = false;
+				hideTimer = null;
+			}, 1000); // 1 second delay
+		}
+
+		// Cleanup on unmount
+		return () => {
+			if (hideTimer) {
+				clearTimeout(hideTimer);
+			}
+		};
+	});
 </script>
 
-{#if isLoading}
+{#if showRadar}
 	<div class="radar-scope">
 		<svg viewBox="0 0 24 24" class="radar-svg">
 			<!-- Radar circles -->
