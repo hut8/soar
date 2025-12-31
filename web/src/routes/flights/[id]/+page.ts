@@ -7,26 +7,25 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const { id } = params;
 
 	try {
-		// First fetch flight and fixes in parallel
-		const [flightResponse, fixesResponse] = await Promise.all([
-			serverCall<DataResponse<Flight>>(`/flights/${id}`, { fetch }),
-			serverCall<DataListResponse<Fix>>(`/flights/${id}/fixes`, { fetch })
-		]);
+		// Only await flight data (fast) - let components load aircraft and fixes progressively
+		const flightResponse = await serverCall<DataResponse<Flight>>(`/flights/${id}`, { fetch });
 
-		// Then fetch aircraft separately if the flight has one
-		const aircraft = flightResponse.data.aircraftId
-			? await serverCall<DataResponse<Aircraft>>(`/flights/${id}/device`, { fetch })
-					.then((res) => res.data)
-					.catch(() => undefined)
-			: undefined;
+		// Return promises for progressive loading - components can await these individually
+		const aircraftPromise = flightResponse.data.aircraftId
+			? serverCall<DataResponse<Aircraft>>(`/flights/${id}/device`, { fetch }).then(
+					(res) => res.data
+				)
+			: Promise.resolve(undefined);
 
-		const fixes = fixesResponse.data || [];
+		const fixesPromise = serverCall<DataListResponse<Fix>>(`/flights/${id}/fixes`, {
+			fetch
+		}).then((res) => res.data || []);
 
 		return {
 			flight: flightResponse.data,
-			aircraft,
-			fixes,
-			fixesCount: fixes.length
+			// Return promises for progressive loading
+			aircraftPromise,
+			fixesPromise
 		};
 	} catch (err) {
 		console.error('Failed to load flight:', err);
