@@ -4,6 +4,7 @@ use diesel::prelude::*;
 use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ts_rs::TS;
 use uuid::Uuid;
 
 /// Custom serializer for via field to convert Vec to comma-separated string
@@ -38,7 +39,8 @@ where
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[diesel(table_name = crate::schema::fixes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[serde(rename_all = "camelCase")]

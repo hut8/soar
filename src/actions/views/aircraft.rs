@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use super::club::AircraftModelView;
@@ -120,7 +121,8 @@ pub struct AircraftWithDeviceView {
     pub device: Option<AircraftView>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftView {
     pub id: uuid::Uuid,
@@ -270,7 +272,8 @@ impl From<crate::aircraft::AircraftModel> for AircraftView {
 
 /// Complete aircraft information with device and latest fix
 /// Registration and model data are fetched separately when needed (e.g., when viewing details)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct Aircraft {
     #[serde(flatten)]

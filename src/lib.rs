@@ -85,6 +85,9 @@ pub use packet_processors::{
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
 
+#[cfg(test)]
+mod ts_export;
+
 /// Get the NATS client name for a given process based on the environment.
 ///
 /// Environment detection:
