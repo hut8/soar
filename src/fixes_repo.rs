@@ -161,6 +161,20 @@ impl From<FixDslRow> for Fix {
     }
 }
 
+/// Cluster result from grid-based spatial clustering
+#[derive(Debug, Clone)]
+pub struct ClusterResult {
+    pub grid_lat: f64,
+    pub grid_lng: f64,
+    pub aircraft_count: i64,
+    pub centroid_lat: f64,
+    pub centroid_lng: f64,
+    pub min_lat: f64,
+    pub max_lat: f64,
+    pub min_lng: f64,
+    pub max_lng: f64,
+}
+
 #[derive(Clone)]
 pub struct FixesRepository {
     pool: PgPool,
@@ -665,6 +679,142 @@ impl FixesRepository {
                 .get_result(&mut conn)?;
 
             Ok::<i64, anyhow::Error>(count_result.count)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get clustered aircraft in bounding box using PostGIS ST_SnapToGrid
+    #[instrument(skip(self))]
+    pub async fn get_clustered_aircraft_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        cutoff_time: DateTime<Utc>,
+        grid_size: f64,
+    ) -> Result<Vec<ClusterResult>> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let cluster_sql = r#"
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time,
+                        $6::double precision AS grid_size
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        cutoff_time,
+                        grid_size
+                    FROM params
+                ),
+                aircraft_in_bbox AS (
+                    SELECT
+                        d.id,
+                        d.latitude,
+                        d.longitude,
+                        d.location_geom
+                    FROM aircraft d, parts
+                    WHERE d.last_fix_at >= parts.cutoff_time
+                      AND d.location_geom IS NOT NULL
+                      AND (
+                          d.location_geom && parts.boxes[1]
+                          OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                      )
+                ),
+                grid_clusters AS (
+                    SELECT
+                        ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), (SELECT grid_size FROM params)) AS grid_point,
+                        COUNT(*) AS aircraft_count,
+                        AVG(latitude) AS centroid_lat,
+                        AVG(longitude) AS centroid_lng,
+                        MIN(latitude) AS min_lat,
+                        MAX(latitude) AS max_lat,
+                        MIN(longitude) AS min_lng,
+                        MAX(longitude) AS max_lng
+                    FROM aircraft_in_bbox
+                    GROUP BY grid_point
+                )
+                SELECT
+                    ST_X(grid_point) AS grid_lng,
+                    ST_Y(grid_point) AS grid_lat,
+                    aircraft_count,
+                    centroid_lat,
+                    centroid_lng,
+                    min_lat,
+                    max_lat,
+                    min_lng,
+                    max_lng
+                FROM grid_clusters
+                ORDER BY aircraft_count DESC
+            "#;
+
+            #[derive(QueryableByName)]
+            struct ClusterRow {
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                grid_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                grid_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                aircraft_count: i64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                centroid_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                centroid_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                min_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                max_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                min_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                max_lng: f64,
+            }
+
+            let clusters: Vec<ClusterRow> = diesel::sql_query(cluster_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)
+                .bind::<diesel::sql_types::Double, _>(se_lat)
+                .bind::<diesel::sql_types::Double, _>(se_lng)
+                .bind::<diesel::sql_types::Double, _>(nw_lat)
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .bind::<diesel::sql_types::Double, _>(grid_size)
+                .load(&mut conn)?;
+
+            let results: Vec<ClusterResult> = clusters
+                .into_iter()
+                .map(|row| ClusterResult {
+                    grid_lat: row.grid_lat,
+                    grid_lng: row.grid_lng,
+                    aircraft_count: row.aircraft_count,
+                    centroid_lat: row.centroid_lat,
+                    centroid_lng: row.centroid_lng,
+                    min_lat: row.min_lat,
+                    max_lat: row.max_lat,
+                    min_lng: row.min_lng,
+                    max_lng: row.max_lng,
+                })
+                .collect();
+
+            Ok::<Vec<ClusterResult>, anyhow::Error>(results)
         })
         .await??;
 

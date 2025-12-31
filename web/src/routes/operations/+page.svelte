@@ -21,8 +21,10 @@
 		Fix,
 		Airport,
 		DataListResponse,
-		DataResponse
+		DataResponse,
+		AircraftCluster
 	} from '$lib/types';
+	import { isAircraftItem, isClusterItem } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
 	import { browser } from '$app/environment';
@@ -72,6 +74,7 @@
 
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
+	let clusterMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let latestFixes = new SvelteMap<string, Fix>();
 
 	// Aircraft trail variables
@@ -418,10 +421,6 @@
 
 	// Map type state
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
-
-	// Aircraft limit state
-	let aircraftLimitExceeded = $state(false);
-	let totalAircraftInViewport = $state(0);
 
 	$effect(() => {
 		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
@@ -1568,6 +1567,104 @@
 		console.log('[MARKER] All aircraft markers and trails cleared');
 	}
 
+	// Cluster marker functions
+	function createClusterMarker(cluster: AircraftCluster): google.maps.marker.AdvancedMarkerElement {
+		console.log('[CLUSTER] Creating cluster marker:', {
+			id: cluster.id,
+			position: { lat: cluster.latitude, lng: cluster.longitude },
+			count: cluster.count
+		});
+
+		const markerContent = document.createElement('div');
+		markerContent.className = 'cluster-marker';
+
+		const clusterCircle = document.createElement('div');
+		clusterCircle.className = 'cluster-circle';
+
+		// Size based on count: 40px base + log scale
+		const size = Math.min(60, 40 + Math.log10(cluster.count) * 10);
+		clusterCircle.style.width = `${size}px`;
+		clusterCircle.style.height = `${size}px`;
+		clusterCircle.style.borderRadius = '50%';
+		clusterCircle.style.background = 'rgba(59, 130, 246, 0.7)';
+		clusterCircle.style.border = '2px solid rgb(37, 99, 235)';
+		clusterCircle.style.display = 'flex';
+		clusterCircle.style.alignItems = 'center';
+		clusterCircle.style.justifyContent = 'center';
+		clusterCircle.style.flexDirection = 'column';
+		clusterCircle.style.cursor = 'pointer';
+		clusterCircle.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+		clusterCircle.style.transition = 'transform 0.2s, box-shadow 0.2s';
+
+		// Airplane SVG icon
+		const iconDiv = document.createElement('div');
+		iconDiv.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+		</svg>`;
+
+		// Count label
+		const countLabel = document.createElement('div');
+		countLabel.style.color = 'white';
+		countLabel.style.fontWeight = 'bold';
+		countLabel.style.fontSize = '14px';
+		countLabel.style.marginTop = '2px';
+		countLabel.textContent = cluster.count.toString();
+
+		clusterCircle.appendChild(iconDiv);
+		clusterCircle.appendChild(countLabel);
+		markerContent.appendChild(clusterCircle);
+
+		const marker = new google.maps.marker.AdvancedMarkerElement({
+			position: { lat: cluster.latitude, lng: cluster.longitude },
+			map: map,
+			title: `${cluster.count} aircraft in this area`,
+			content: markerContent,
+			zIndex: 500
+		});
+
+		marker.addListener('click', () => {
+			handleClusterClick(cluster);
+		});
+
+		markerContent.addEventListener('mouseenter', () => {
+			clusterCircle.style.transform = 'scale(1.1)';
+			clusterCircle.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+		});
+
+		markerContent.addEventListener('mouseleave', () => {
+			clusterCircle.style.transform = 'scale(1)';
+			clusterCircle.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+		});
+
+		return marker;
+	}
+
+	function handleClusterClick(cluster: AircraftCluster): void {
+		console.log('[CLUSTER] Clicked on cluster:', cluster.id);
+
+		if (!map) return;
+
+		const bounds = new google.maps.LatLngBounds(
+			{ lat: cluster.bounds.south, lng: cluster.bounds.west },
+			{ lat: cluster.bounds.north, lng: cluster.bounds.east }
+		);
+
+		map.fitBounds(bounds);
+
+		// Zoom in slightly more than just fitting bounds
+		const currentZoom = map.getZoom() || 10;
+		map.setZoom(currentZoom + 1);
+	}
+
+	function clearClusterMarkers(): void {
+		console.log('[CLUSTER] Clearing all cluster markers. Count:', clusterMarkers.size);
+		clusterMarkers.forEach((marker) => {
+			marker.map = null;
+		});
+		clusterMarkers.clear();
+		console.log('[CLUSTER] All cluster markers cleared');
+	}
+
 	// Aircraft trail functions
 	function updateAircraftTrail(aircraft: Aircraft): void {
 		if (!map || currentSettings.positionFixWindow === 0) {
@@ -1830,58 +1927,48 @@
 		try {
 			console.log('[REST] Fetching aircraft in viewport...');
 
-			// Fetch aircraft with their latest position only (no fix history)
-			// Fixes will accumulate from WebSocket after this
 			const response = await fixFeed.fetchAircraftInBoundingBox(
 				sw.lat(), // south
 				ne.lat(), // north
 				sw.lng(), // west
 				ne.lng(), // east
-				undefined, // No 'after' parameter - backend doesn't fetch fixes anymore
-				MAX_AIRCRAFT_DISPLAY // Backend returns 'total' field to detect if there are more
+				undefined,
+				MAX_AIRCRAFT_DISPLAY
 			);
 
-			const { data: aircraft, total } = response;
+			const { items, total, clustered } = response;
 
 			console.log(
-				`[REST] Received ${aircraft.length} aircraft with latest positions (total: ${total})`
+				`[REST] Received ${items.length} items (total: ${total}, clustered: ${clustered})`
 			);
 
-			// Store total aircraft count from the backend
-			totalAircraftInViewport = total;
+			if (clustered) {
+				console.log('[REST] Response is clustered, rendering cluster markers');
 
-			// Check if we've exceeded the display limit
-			if (total > MAX_AIRCRAFT_DISPLAY) {
-				console.warn(
-					`[REST] Aircraft count (${total}) exceeds display limit (${MAX_AIRCRAFT_DISPLAY}). Not rendering aircraft.`
-				);
-				aircraftLimitExceeded = true;
-				// Clear any existing aircraft markers
 				clearAircraftMarkers();
-				return;
+				clearClusterMarkers();
+
+				for (const item of items) {
+					if (isClusterItem(item)) {
+						const marker = createClusterMarker(item.data);
+						clusterMarkers.set(item.data.id, marker);
+					}
+				}
+
+				console.log(`[REST] Rendered ${clusterMarkers.size} cluster markers`);
+			} else {
+				console.log('[REST] Response has individual aircraft, rendering aircraft markers');
+
+				clearClusterMarkers();
+
+				for (const item of items) {
+					if (isAircraftItem(item)) {
+						await aircraftRegistry.updateAircraftFromAircraftData(item.data);
+					}
+				}
+
+				console.log('[REST] Aircraft loaded, markers created from latest positions');
 			}
-
-			// Within limits - render aircraft normally
-			aircraftLimitExceeded = false;
-
-			// Process each aircraft and add to registry
-			// They will have latestLatitude/latestLongitude but no fixes array
-			for (const a of aircraft) {
-				// Debug logging to check if currentFix is present
-				console.log('[REST] Processing aircraft:', {
-					id: a.id,
-					address: a.address,
-					hasCurrentFix: !!a.currentFix,
-					currentFix: a.currentFix,
-					hasFixes: !!a.fixes,
-					fixesCount: a.fixes?.length || 0
-				});
-
-				// Register the aircraft - markers will be created from latest position
-				await aircraftRegistry.updateAircraftFromAircraftData(a);
-			}
-
-			console.log('[REST] Aircraft loaded, markers created from latest positions');
 		} catch (error) {
 			console.error('[REST] Failed to fetch aircraft in viewport:', error);
 		}
@@ -2073,21 +2160,6 @@
 				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
 			>
 				{displayHeading}°
-			</div>
-		</div>
-	{/if}
-
-	<!-- Aircraft Limit Exceeded Overlay -->
-	{#if aircraftLimitExceeded}
-		<div class="aircraft-limit-overlay">
-			<div class="aircraft-limit-warning">
-				<div class="warning-icon">⚠️</div>
-				<h2 class="warning-title">Too Many Aircraft</h2>
-				<p class="warning-message">
-					The current view contains <strong>{totalAircraftInViewport}</strong> aircraft, which
-					exceeds the display limit of <strong>{MAX_AIRCRAFT_DISPLAY}</strong>.
-				</p>
-				<p class="warning-suggestion">Please zoom in to a smaller area to view aircraft.</p>
 			</div>
 		</div>
 	{/if}
@@ -2375,69 +2447,5 @@
 	:global(.receiver-marker:hover .receiver-label) {
 		opacity: 1;
 		visibility: visible;
-	}
-
-	/* Aircraft limit exceeded notification banner */
-	.aircraft-limit-overlay {
-		position: absolute;
-		top: 1rem;
-		left: 50%;
-		transform: translateX(-50%);
-		z-index: 1000;
-		pointer-events: none;
-	}
-
-	.aircraft-limit-warning {
-		background: rgba(255, 255, 255, 0.95);
-		border: 2px solid #f59e0b;
-		border-radius: 8px;
-		padding: 1rem 1.5rem;
-		max-width: 500px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-		text-align: center;
-		animation: slideDown 0.3s ease-out;
-		pointer-events: auto;
-	}
-
-	@keyframes slideDown {
-		from {
-			transform: translateX(-50%) translateY(-100%);
-			opacity: 0;
-		}
-		to {
-			transform: translateX(-50%) translateY(0);
-			opacity: 1;
-		}
-	}
-
-	.warning-icon {
-		font-size: 1.5rem;
-		margin-bottom: 0.5rem;
-	}
-
-	.warning-title {
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: #dc2626;
-		margin-bottom: 0.5rem;
-	}
-
-	.warning-message {
-		font-size: 0.95rem;
-		color: #374151;
-		margin-bottom: 0.25rem;
-		line-height: 1.5;
-	}
-
-	.warning-message strong {
-		color: #dc2626;
-		font-weight: 700;
-	}
-
-	.warning-suggestion {
-		font-size: 0.9rem;
-		color: #6b7280;
-		font-weight: 500;
-		margin-top: 0.5rem;
 	}
 </style>

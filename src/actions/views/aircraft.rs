@@ -282,3 +282,45 @@ pub struct Aircraft {
     #[serde(flatten)]
     pub device: AircraftView,
 }
+
+/// Bounds of a cluster of aircraft
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterBounds {
+    pub north: f64,
+    pub south: f64,
+    pub east: f64,
+    pub west: f64,
+}
+
+/// A cluster of aircraft grouped by spatial proximity
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftCluster {
+    pub id: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub count: i64,
+    pub bounds: ClusterBounds,
+}
+
+/// Discriminated union for either an individual aircraft or a cluster
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AircraftOrCluster {
+    Aircraft { data: Box<Aircraft> },
+    Cluster { data: AircraftCluster },
+}
+
+/// Response from aircraft search endpoint
+#[derive(Debug, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftSearchResponse {
+    pub items: Vec<AircraftOrCluster>,
+    pub total: i64,
+    pub clustered: bool,
+}
