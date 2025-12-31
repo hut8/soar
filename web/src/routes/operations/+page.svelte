@@ -1276,34 +1276,10 @@
 	function updateAircraftMarkerFromAircraft(aircraft: Aircraft): void {
 		if (!map) return;
 
-		// Try to use latitude/longitude from aircraft object
-		if (aircraft.latitude != null && aircraft.longitude != null) {
-			console.log('[MARKER] Using latest position from aircraft:', {
-				id: aircraft.id,
-				lat: aircraft.latitude,
-				lng: aircraft.longitude
-			});
-
-			// Create a pseudo-fix from latest position
-			const pseudoFix: Fix = {
-				id: '', // Not needed for marker display
-				aircraftId: aircraft.id,
-				deviceAddressHex: aircraft.address,
-				latitude: aircraft.latitude,
-				longitude: aircraft.longitude,
-				timestamp: aircraft.lastFixAt || new Date().toISOString(),
-				altitudeMslFeet: undefined,
-				altitudeAglFeet: undefined,
-				trackDegrees: undefined,
-				groundSpeedKnots: undefined,
-				climbFpm: undefined,
-				registration: aircraft.registration ?? undefined,
-				model: aircraft.aircraftModel,
-				flightId: aircraft.currentFix?.flightId || undefined,
-				active: aircraft.currentFix?.flightId != null
-			};
-
-			updateAircraftMarkerFromDevice(aircraft, pseudoFix);
+		// Use currentFix if available (it's a full Fix object stored as JSONB)
+		if (aircraft.currentFix) {
+			const currentFix = aircraft.currentFix as unknown as Fix;
+			updateAircraftMarkerFromDevice(aircraft, currentFix);
 		} else {
 			// Fallback to using fixes array if present
 			const fixes = aircraft.fixes || [];
