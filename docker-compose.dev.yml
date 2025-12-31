@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS extension
+  db:
+    image: postgis/postgis:15-3.4
+    container_name: soar-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: soar_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d soar_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # NATS JetStream for messaging
+  nats:
+    image: nats:2.10-alpine
+    container_name: soar-dev-nats
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"  # NATS client connections
+      - "8222:8222"  # NATS monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Rust backend (development mode with hot reload)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: soar-dev-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/soar_dev
+      NATS_URL: nats://nats:4222
+      RUST_LOG: info,soar=debug
+      RUST_BACKTRACE: 1
+    ports:
+      - "3000:3000"  # API server
+    volumes:
+      - .:/app
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/app/target
+    command: cargo watch -x 'run -- run'
+
+  # SvelteKit frontend (development mode with hot reload)
+  frontend:
+    image: node:20-alpine
+    container_name: soar-dev-frontend
+    restart: unless-stopped
+    working_dir: /app/web
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:5173"  # Vite dev server
+    volumes:
+      - ./web:/app/web
+      - node_modules:/app/web/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  postgres_data:
+    name: soar_dev_postgres_data
+  cargo_cache:
+    name: soar_dev_cargo_cache
+  target_cache:
+    name: soar_dev_target_cache
+  node_modules:
+    name: soar_dev_node_modules

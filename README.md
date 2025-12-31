@@ -382,6 +382,38 @@ soar ingest-adsb --server localhost --port 30005
    pre-commit run --all-files
    ```
 
+### Docker Development Environment (Recommended)
+
+For the easiest setup, use Docker Compose to run the entire development environment:
+
+```bash
+# 1. Copy Docker environment file
+cp .env.docker.example .env.docker
+
+# 2. Add your Google Maps API key (required for operations map)
+# Edit .env.docker and set: GOOGLE_MAPS_API_KEY=your_key_here
+
+# 3. Start everything with one command
+docker-compose -f docker-compose.dev.yml --env-file .env.docker up
+
+# That's it! Access:
+# - Frontend: http://localhost:5173
+# - Backend API: http://localhost:3000
+# - Database: localhost:5432
+# - NATS: localhost:4222
+```
+
+**What you get:**
+- ✅ PostgreSQL + PostGIS (no manual install)
+- ✅ NATS JetStream (no manual install)
+- ✅ Rust backend with hot reload
+- ✅ SvelteKit frontend with hot reload
+- ✅ All services configured and connected
+- ✅ Migrations run automatically
+- ✅ Works the same on every machine
+
+See [DOCKER-DEVELOPMENT.md](DOCKER-DEVELOPMENT.md) for complete documentation, troubleshooting, and advanced usage.
+
 ### Development Tools
 
 This project uses **pre-commit hooks** that run the same checks as our CI pipeline:
