@@ -304,6 +304,18 @@ impl AprsClient {
                             retry_count += 1;
                         }
                         ConnectionResult::OperationFailed(e) => {
+                            // Check if shutdown was requested - if so, exit silently
+                            // (the raw message queue closes during shutdown, which is expected)
+                            if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                                info!("Shutdown signal received, stopping APRS connection");
+                                // Mark as disconnected in health state
+                                {
+                                    let mut health = health_for_connection.write().await;
+                                    health.aprs_connected = false;
+                                }
+                                return; // Exit immediately without logging errors or retrying
+                            }
+
                             warn!("Connection operation failed: {}", e);
 
                             // Report operation failure to Sentry (connection was established but dropped)
@@ -316,6 +328,17 @@ impl AprsClient {
                             }
                             retry_count += 1;
                         }
+                    }
+
+                    // Check if shutdown was requested before attempting retry
+                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                        info!("Shutdown signal received, stopping APRS connection");
+                        // Mark as disconnected in health state
+                        {
+                            let mut health = health_for_connection.write().await;
+                            health.aprs_connected = false;
+                        }
+                        return; // Exit immediately without retry delay
                     }
 
                     // Always retry indefinitely with exponential backoff
@@ -645,7 +668,7 @@ impl AprsClient {
                                         }
                                     }
                                     Ok(Err(flume::SendError(_))) => {
-                                        error!("Raw message queue is closed - stopping connection");
+                                        info!("Raw message queue is closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Raw message queue closed"
                                         ));

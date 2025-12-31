@@ -207,6 +207,34 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
+# Update SENTRY_RELEASE in environment file from VERSION file
+if [ -f "$DEPLOY_DIR/VERSION" ]; then
+    VERSION=$(cat "$DEPLOY_DIR/VERSION" | tr -d '\n' | tr -d '\r')
+    log_info "Setting SENTRY_RELEASE=$VERSION in $ENV_FILE..."
+
+    # Create environment file if it doesn't exist
+    if [ ! -f "$ENV_FILE" ]; then
+        log_warn "Environment file $ENV_FILE not found, creating it..."
+        touch "$ENV_FILE"
+        chown soar:soar "$ENV_FILE"
+        chmod 640 "$ENV_FILE"
+    fi
+
+    # Update or add SENTRY_RELEASE line
+    if grep -q "^SENTRY_RELEASE=" "$ENV_FILE"; then
+        # Replace existing SENTRY_RELEASE line
+        sed -i "s|^SENTRY_RELEASE=.*|SENTRY_RELEASE=$VERSION|" "$ENV_FILE"
+        log_info "Updated existing SENTRY_RELEASE to $VERSION"
+    else
+        # Add new SENTRY_RELEASE line
+        echo "SENTRY_RELEASE=$VERSION" >> "$ENV_FILE"
+        log_info "Added SENTRY_RELEASE=$VERSION to environment file"
+    fi
+else
+    log_warn "VERSION file not found in deployment directory, skipping SENTRY_RELEASE configuration"
+    log_warn "Sentry release tracking may not work correctly"
+fi
+
 # Install migration service template early (needed before running migrations)
 log_info "Installing migration service template..."
 for service in "${TEMPLATE_SERVICES[@]}"; do
