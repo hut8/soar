@@ -1,9 +1,11 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with PostGIS extension
+  # PostgreSQL with PostGIS, TimescaleDB, and H3 extensions
   db:
-    image: postgis/postgis:15-3.4
+    build:
+      context: .
+      dockerfile: .github/postgis-timescaledb.Dockerfile
     container_name: soar-dev-db
     restart: unless-stopped
     environment:
