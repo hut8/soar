@@ -1584,6 +1584,17 @@
 		});
 
 		// Create polygon outline for the cluster bounds
+		// DEBUG: Using bright red outline to visualize grid cells
+		console.log('[CLUSTER DEBUG] Bounds:', {
+			id: cluster.id,
+			north: cluster.bounds.north,
+			south: cluster.bounds.south,
+			east: cluster.bounds.east,
+			west: cluster.bounds.west,
+			width: cluster.bounds.east - cluster.bounds.west,
+			height: cluster.bounds.north - cluster.bounds.south
+		});
+
 		const polygon = new google.maps.Polygon({
 			paths: [
 				{ lat: cluster.bounds.north, lng: cluster.bounds.west },
@@ -1591,10 +1602,10 @@
 				{ lat: cluster.bounds.south, lng: cluster.bounds.east },
 				{ lat: cluster.bounds.south, lng: cluster.bounds.west }
 			],
-			strokeColor: '#3B82F6',
-			strokeOpacity: 0.8,
-			strokeWeight: 2,
-			fillColor: '#3B82F6',
+			strokeColor: '#FF0000', // DEBUG: Bright red
+			strokeOpacity: 1.0, // DEBUG: Fully opaque
+			strokeWeight: 4, // DEBUG: Thick outline
+			fillColor: '#FF0000', // DEBUG: Red fill
 			fillOpacity: 0.1,
 			map: map,
 			zIndex: 400
