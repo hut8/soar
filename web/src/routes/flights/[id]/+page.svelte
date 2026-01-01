@@ -27,7 +27,7 @@
 		Globe
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight, Receiver } from '$lib/types';
+	import type { Flight, Receiver, DataResponse } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import durationPlugin from 'dayjs/plugin/duration';
@@ -1340,8 +1340,10 @@
 
 		isLoadingGaps = true;
 		try {
-			const response = await serverCall<FlightGapsResponse>(`/flights/${data.flight.id}/gaps`);
-			flightGaps = response.gaps;
+			const response = await serverCall<DataResponse<FlightGapsResponse>>(
+				`/flights/${data.flight.id}/gaps`
+			);
+			flightGaps = response.data.gaps;
 			showGaps = true;
 		} catch (err) {
 			console.error('Failed to fetch flight gaps:', err);
