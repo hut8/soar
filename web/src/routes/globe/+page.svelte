@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { Ion, Viewer, Cartesian3, Math as CesiumMath } from 'cesium';
 	import { CESIUM_ION_TOKEN } from '$lib/config';
 	import AircraftLayer from '$lib/components/cesium/AircraftLayer.svelte';
 	import FlightPathLayer from '$lib/components/cesium/FlightPathLayer.svelte';
@@ -11,9 +10,12 @@
 	import TimelineController from '$lib/components/cesium/TimelineController.svelte';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
 
-	let cesiumContainer: HTMLDivElement;
-	let viewer = $state<Viewer | null>(null);
+	let cesiumContainer: HTMLDivElement | undefined = $state();
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let viewer = $state<any>(null);
 	let viewerReady = $state(false);
+	let cesiumLoading = $state(true);
+	let cesiumError = $state<string | null>(null);
 
 	// Layer visibility state
 	let showAirports = $state(true);
@@ -26,93 +28,154 @@
 	// Timeline playback state - read from URL parameter if present
 	let playbackFlightId = $state<string | null>(page.url.searchParams.get('flight'));
 
-	onMount(() => {
-		// Set Cesium Ion access token
-		Ion.defaultAccessToken = CESIUM_ION_TOKEN;
-
-		// Create Cesium Viewer with ion imagery and terrain
-		viewer = new Viewer(cesiumContainer, {
-			timeline: false, // Disable timeline for now
-			animation: false, // Disable animation widget for now
-			baseLayerPicker: true, // Allow switching base layers
-			geocoder: true, // Enable location search
-			homeButton: true, // Enable home button
-			sceneModePicker: true, // Enable 2D/3D/Columbus view switcher
-			navigationHelpButton: true, // Show navigation help
-			fullscreenButton: true // Enable fullscreen
-		});
-
-		// Enable Cesium World Terrain for 3D terrain (async)
-		import('cesium').then(({ createWorldTerrainAsync }) => {
-			createWorldTerrainAsync()
-				.then((terrainProvider) => {
-					if (viewer) {
-						viewer.terrainProvider = terrainProvider;
-					}
-				})
-				.catch((error) => {
-					console.warn('Failed to load Cesium World Terrain, using default ellipsoid:', error);
-				});
-		});
-
-		// Set initial camera position to CONUS center
-		viewer.camera.setView({
-			destination: Cartesian3.fromDegrees(-98.5795, 39.8283, 5000000), // CONUS center, 5000km altitude
-			orientation: {
-				heading: 0.0,
-				pitch: -CesiumMath.PI_OVER_TWO, // Looking straight down
-				roll: 0.0
+	// Function to dynamically load Cesium script
+	function loadCesiumScript(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			// Check if Cesium is already loaded
+			if (window.Cesium) {
+				resolve();
+				return;
 			}
+
+			const script = document.createElement('script');
+			script.src = '/cesium/Cesium.js';
+			script.async = true;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error('Failed to load Cesium.js'));
+			document.head.appendChild(script);
 		});
+	}
 
-		// Enable depth testing against terrain (once terrain is enabled)
-		viewer.scene.globe.depthTestAgainstTerrain = true;
+	onMount(() => {
+		let observer: MutationObserver | null = null;
 
-		// Enable atmospheric fog for better depth perception
-		viewer.scene.fog.enabled = true;
-		viewer.scene.fog.density = 0.0002;
+		const initCesium = async () => {
+			try {
+				// Dynamically load Cesium
+				await loadCesiumScript();
+				cesiumLoading = false;
 
-		// Apply dark/light mode styles to InfoBox iframe content
-		function applyInfoBoxStyles() {
-			const infoBoxFrame = document.querySelector('.cesium-infoBox-iframe') as HTMLIFrameElement;
-			if (infoBoxFrame && infoBoxFrame.contentDocument) {
-				const isDark = document.documentElement.classList.contains('dark');
-				const frameDoc = infoBoxFrame.contentDocument;
+				// Wait for DOM to update and container to be rendered
+				// Using requestAnimationFrame twice ensures the DOM has updated
+				await new Promise((resolve) => {
+					requestAnimationFrame(() => {
+						requestAnimationFrame(resolve);
+					});
+				});
 
-				// Inject or update style tag in iframe
-				let styleTag = frameDoc.getElementById('theme-styles') as HTMLStyleElement;
-				if (!styleTag) {
-					styleTag = frameDoc.createElement('style');
-					styleTag.id = 'theme-styles';
-					frameDoc.head.appendChild(styleTag);
+				if (!cesiumContainer) {
+					throw new Error('Cesium container not found');
 				}
 
-				styleTag.textContent = isDark
-					? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; }'
-					: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; }';
+				const {
+					Ion,
+					Viewer,
+					Cartesian3,
+					Math: CesiumMath,
+					createWorldTerrainAsync
+				} = window.Cesium;
+
+				// Set Cesium Ion access token
+				Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+
+				// Create Cesium Viewer with ion imagery and terrain
+				viewer = new Viewer(cesiumContainer, {
+					timeline: false, // Disable timeline for now
+					animation: false, // Disable animation widget for now
+					baseLayerPicker: true, // Allow switching base layers
+					geocoder: true, // Enable location search
+					homeButton: true, // Enable home button
+					sceneModePicker: true, // Enable 2D/3D/Columbus view switcher
+					navigationHelpButton: true, // Show navigation help
+					fullscreenButton: true // Enable fullscreen
+				});
+
+				// Enable Cesium World Terrain for 3D terrain (async)
+				createWorldTerrainAsync()
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					.then((terrainProvider: any) => {
+						if (viewer) {
+							viewer.terrainProvider = terrainProvider;
+						}
+					})
+					.catch((error: Error) => {
+						console.warn('Failed to load Cesium World Terrain, using default ellipsoid:', error);
+					});
+
+				// Set initial camera position to CONUS center
+				viewer.camera.setView({
+					destination: Cartesian3.fromDegrees(-98.5795, 39.8283, 5000000), // CONUS center, 5000km altitude
+					orientation: {
+						heading: 0.0,
+						pitch: -CesiumMath.PI_OVER_TWO, // Looking straight down
+						roll: 0.0
+					}
+				});
+
+				// Enable depth testing against terrain (once terrain is enabled)
+				viewer.scene.globe.depthTestAgainstTerrain = true;
+
+				// Enable atmospheric fog for better depth perception
+				viewer.scene.fog.enabled = true;
+				viewer.scene.fog.density = 0.0002;
+
+				// Apply dark/light mode styles to InfoBox iframe content
+				function applyInfoBoxStyles() {
+					const infoBoxFrame = document.querySelector(
+						'.cesium-infoBox-iframe'
+					) as HTMLIFrameElement;
+					if (infoBoxFrame && infoBoxFrame.contentDocument) {
+						const isDark = document.documentElement.classList.contains('dark');
+						const frameDoc = infoBoxFrame.contentDocument;
+
+						// Inject or update style tag in iframe
+						let styleTag = frameDoc.getElementById('theme-styles') as HTMLStyleElement;
+						if (!styleTag) {
+							styleTag = frameDoc.createElement('style');
+							styleTag.id = 'theme-styles';
+							frameDoc.head.appendChild(styleTag);
+						}
+
+						styleTag.textContent = isDark
+							? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; }'
+							: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; }';
+					}
+				}
+
+				// Watch for InfoBox changes and theme changes
+				observer = new MutationObserver(() => {
+					applyInfoBoxStyles();
+				});
+
+				// Observe InfoBox visibility changes
+				const infoBox = document.querySelector('.cesium-infoBox');
+				if (infoBox) {
+					observer.observe(infoBox, { attributes: true, childList: true, subtree: true });
+				}
+
+				// Observe theme changes on document root
+				observer.observe(document.documentElement, {
+					attributes: true,
+					attributeFilter: ['class']
+				});
+
+				// Mark viewer as ready for child components
+				viewerReady = true;
+			} catch (error) {
+				console.error('Failed to load Cesium:', error);
+				cesiumLoading = false;
+				cesiumError = error instanceof Error ? error.message : 'Failed to load 3D globe library';
 			}
-		}
+		};
 
-		// Watch for InfoBox changes and theme changes
-		const observer = new MutationObserver(() => {
-			applyInfoBoxStyles();
-		});
-
-		// Observe InfoBox visibility changes
-		const infoBox = document.querySelector('.cesium-infoBox');
-		if (infoBox) {
-			observer.observe(infoBox, { attributes: true, childList: true, subtree: true });
-		}
-
-		// Observe theme changes on document root
-		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-		// Mark viewer as ready for child components
-		viewerReady = true;
+		// Initialize Cesium
+		initCesium();
 
 		// Cleanup on component destroy
 		return () => {
-			observer.disconnect();
+			if (observer) {
+				observer.disconnect();
+			}
 			if (viewer && !viewer.isDestroyed()) {
 				viewer.destroy();
 			}
@@ -125,34 +188,56 @@
 </svelte:head>
 
 <div class="globe-page">
-	<div bind:this={cesiumContainer} class="cesium-container"></div>
+	{#if cesiumError}
+		<!-- Error state -->
+		<div class="loading-container">
+			<div class="error-message">
+				<h2>Failed to Load Globe</h2>
+				<p>{cesiumError}</p>
+				<button onclick={() => window.location.reload()} class="variant-filled-primary btn">
+					Retry
+				</button>
+			</div>
+		</div>
+	{:else if cesiumLoading}
+		<!-- Loading state -->
+		<div class="loading-container">
+			<div class="loading-spinner">
+				<div class="spinner"></div>
+				<p>Loading 3D Globe...</p>
+			</div>
+		</div>
+	{:else}
+		<!-- Globe loaded successfully -->
+		<div bind:this={cesiumContainer} class="cesium-container"></div>
 
-	<!-- Layers - render when viewer is ready -->
-	{#if viewerReady && viewer}
-		<AircraftLayer {viewer} />
-		<FlightPathLayer
-			{viewer}
-			bind:flightIds={selectedFlightIds}
-			bind:colorScheme={flightColorScheme}
-		/>
-		<AirportLayer {viewer} bind:enabled={showAirports} />
-		<ReceiverLayer {viewer} bind:enabled={showReceivers} />
+		<!-- Layers - render when viewer is ready -->
+		{#if viewerReady && viewer}
+			<AircraftLayer {viewer} />
+			<FlightPathLayer
+				{viewer}
+				bind:flightIds={selectedFlightIds}
+				bind:colorScheme={flightColorScheme}
+			/>
+			<AirportLayer {viewer} bind:enabled={showAirports} />
+			<ReceiverLayer {viewer} bind:enabled={showReceivers} />
 
-		<!-- UI Controls -->
-		<GlobeControls
-			{viewer}
-			bind:showAirports
-			bind:showReceivers
-			bind:flightColorScheme
-			bind:playbackFlightId
-		/>
+			<!-- UI Controls -->
+			<GlobeControls
+				{viewer}
+				bind:showAirports
+				bind:showReceivers
+				bind:flightColorScheme
+				bind:playbackFlightId
+			/>
 
-		<!-- Timeline Controller for flight playback -->
-		<TimelineController
-			{viewer}
-			bind:flightId={playbackFlightId}
-			onClose={() => (playbackFlightId = null)}
-		/>
+			<!-- Timeline Controller for flight playback -->
+			<TimelineController
+				{viewer}
+				bind:flightId={playbackFlightId}
+				onClose={() => (playbackFlightId = null)}
+			/>
+		{/if}
 	{/if}
 </div>
 
@@ -171,6 +256,72 @@
 	.cesium-container {
 		width: 100%;
 		height: 100%;
+	}
+
+	/* Loading and error states */
+	.loading-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		background: var(--color-surface-50);
+	}
+
+	:global(html.dark) .loading-container {
+		background: var(--color-surface-900);
+	}
+
+	.loading-spinner {
+		text-align: center;
+	}
+
+	.loading-spinner p {
+		margin-top: 1rem;
+		font-size: 1.125rem;
+		color: var(--color-surface-700);
+	}
+
+	:global(html.dark) .loading-spinner p {
+		color: var(--color-surface-300);
+	}
+
+	.spinner {
+		border: 4px solid rgba(0, 0, 0, 0.1);
+		border-left-color: var(--color-primary-500);
+		border-radius: 50%;
+		width: 48px;
+		height: 48px;
+		animation: spin 1s linear infinite;
+		margin: 0 auto;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.error-message {
+		text-align: center;
+		padding: 2rem;
+		max-width: 400px;
+	}
+
+	.error-message h2 {
+		font-size: 1.5rem;
+		font-weight: 600;
+		margin-bottom: 1rem;
+		color: var(--color-error-500);
+	}
+
+	.error-message p {
+		margin-bottom: 1.5rem;
+		color: var(--color-surface-700);
+	}
+
+	:global(html.dark) .error-message p {
+		color: var(--color-surface-300);
 	}
 
 	/* Ensure Cesium widgets are visible and styled */

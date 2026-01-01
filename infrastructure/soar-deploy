@@ -101,7 +101,7 @@ if [ "$ENVIRONMENT" = "staging" ]; then
     BACKUP_DIR="/home/soar/backups/staging"
 else
     SERVICE_SUFFIX=""
-    ENV_FILE="/etc/soar/env"
+    ENV_FILE="/etc/soar/env-production"
     BINARY_PATH="/usr/local/bin/soar"
     BACKUP_DIR="/home/soar/backups/production"
 fi
@@ -133,37 +133,42 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
-        "partman-maintenance${SERVICE_SUFFIX}.service"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
-        "partman-maintenance${SERVICE_SUFFIX}.timer"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
     )
 else
     TIMER_SERVICES=(
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
-        "partman-maintenance${SERVICE_SUFFIX}.service"
         "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
+        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
         "soar-backup-base${SERVICE_SUFFIX}.timer"
         "soar-backup-verify${SERVICE_SUFFIX}.timer"
-        "partman-maintenance${SERVICE_SUFFIX}.timer"
     )
 fi
 
+# Template services (no environment suffix, used with systemd @instance syntax)
+TEMPLATE_SERVICES=(
+    "soar-migrate@.service"
+)
+
 # All services (for stopping and installing)
-ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}")
+ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}" "${TEMPLATE_SERVICES[@]}")
 
 # Create temporary binary directory with timestamp
 TIMESTAMP=$(date +%s)
@@ -174,10 +179,77 @@ log_info "Creating temporary binary directory: $TEMP_BIN_DIR"
 mkdir -p "$TEMP_BIN_DIR"
 chown soar:soar "$TEMP_BIN_DIR"
 
-# Deploy new binary to temporary location first (avoids "text file busy")
+# Deploy new binary to temporary location first
 log_info "Deploying new binary to temporary location: $TEMP_BIN_PATH"
 install -m 755 -o soar -g soar "$DEPLOY_DIR/soar" "$TEMP_BIN_PATH"
 log_info "Binary deployed to temporary location"
+
+# Backup current binary and install new binary IMMEDIATELY
+# This ensures migrations run with the NEW binary, not the old one
+# (Running processes keep using the old inode, new processes get the new binary)
+mkdir -p "$BACKUP_DIR"
+chown soar:soar "$BACKUP_DIR"
+
+if [ -f "$BINARY_PATH" ]; then
+    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
+    log_info "Backing up current binary to $BACKUP_FILE..."
+    cp "$BINARY_PATH" "$BACKUP_FILE"
+    chown soar:soar "$BACKUP_FILE"
+else
+    log_warn "No existing binary to backup at $BINARY_PATH"
+fi
+
+log_info "Installing new binary to $BINARY_PATH..."
+install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
+log_info "Binary installed successfully at $BINARY_PATH"
+
+# Clean up temporary binary
+log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+rm -f "$TEMP_BIN_PATH"
+
+# Update SENTRY_RELEASE in environment file from VERSION file
+if [ -f "$DEPLOY_DIR/VERSION" ]; then
+    VERSION=$(cat "$DEPLOY_DIR/VERSION" | tr -d '\n' | tr -d '\r')
+    log_info "Setting SENTRY_RELEASE=$VERSION in $ENV_FILE..."
+
+    # Create environment file if it doesn't exist
+    if [ ! -f "$ENV_FILE" ]; then
+        log_warn "Environment file $ENV_FILE not found, creating it..."
+        touch "$ENV_FILE"
+        chown soar:soar "$ENV_FILE"
+        chmod 640 "$ENV_FILE"
+    fi
+
+    # Update or add SENTRY_RELEASE line
+    if grep -q "^SENTRY_RELEASE=" "$ENV_FILE"; then
+        # Replace existing SENTRY_RELEASE line
+        sed -i "s|^SENTRY_RELEASE=.*|SENTRY_RELEASE=$VERSION|" "$ENV_FILE"
+        log_info "Updated existing SENTRY_RELEASE to $VERSION"
+    else
+        # Add new SENTRY_RELEASE line
+        echo "SENTRY_RELEASE=$VERSION" >> "$ENV_FILE"
+        log_info "Added SENTRY_RELEASE=$VERSION to environment file"
+    fi
+else
+    log_warn "VERSION file not found in deployment directory, skipping SENTRY_RELEASE configuration"
+    log_warn "Sentry release tracking may not work correctly"
+fi
+
+# Install migration service template early (needed before running migrations)
+log_info "Installing migration service template..."
+for service in "${TEMPLATE_SERVICES[@]}"; do
+    if [ -f "$DEPLOY_DIR/$service" ]; then
+        log_info "Installing $service..."
+        cp "$DEPLOY_DIR/$service" /etc/systemd/system/
+        chmod 644 "/etc/systemd/system/$service"
+    else
+        log_warn "$service not found in deployment directory, skipping"
+    fi
+done
+
+# Reload systemd daemon to pick up new migration service
+log_info "Reloading systemd daemon..."
+systemctl daemon-reload
 
 # Stop soar-run service only (for migrations, keep others running)
 log_info "Stopping soar-run${SERVICE_SUFFIX} service for migrations..."
@@ -195,21 +267,82 @@ sleep 2
 log_info "Checking current database migration status..."
 sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
 
-# Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
-log_info "Running database migrations from temporary binary..."
-if sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; exec '$TEMP_BIN_PATH' migrate"; then
-    log_info "Database migrations completed successfully"
-else
-    log_error "Database migrations failed"
-    log_error "Database may be in a partially migrated state"
-    log_error "DO NOT restart services - manual intervention required"
+# Run database migrations via systemd service (async, survives SSH disconnect)
+log_info "Starting database migrations via systemd service..."
+log_info "This allows migrations to continue if SSH connection is lost"
+
+# Reset the migration service to clear any previous state
+systemctl reset-failed "soar-migrate@${ENVIRONMENT}.service" 2>/dev/null || true
+
+# Start the migration service (runs asynchronously)
+if ! systemctl start "soar-migrate@${ENVIRONMENT}.service"; then
+    log_error "Failed to start migration service"
+    log_error "Check: systemctl status soar-migrate@${ENVIRONMENT}.service"
     log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
     rm -f "$TEMP_BIN_PATH"
-    log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
-    log_info "To investigate:"
-    log_info "  1. Check migration logs above"
-    log_info "  2. Verify database state manually"
-    log_info "  3. Fix any issues before attempting to restart services"
+    exit 1
+fi
+
+log_info "Migration service started successfully"
+log_info "Monitoring migration progress..."
+
+# Poll for migration completion (check every 5 seconds, timeout after 2 hours)
+MAX_WAIT=7200  # 2 hours
+ELAPSED=0
+POLL_INTERVAL=5
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+    # Check systemd service status
+    if systemctl is-active --quiet "soar-migrate@${ENVIRONMENT}.service"; then
+        # Still running
+        echo -n "."
+        sleep $POLL_INTERVAL
+        ELAPSED=$((ELAPSED + POLL_INTERVAL))
+
+        # Show progress every 30 seconds
+        if [ $((ELAPSED % 30)) -eq 0 ]; then
+            log_info "Migration still running... (${ELAPSED}s elapsed)"
+            # Show last few log lines
+            journalctl -u "soar-migrate@${ENVIRONMENT}.service" -n 3 --no-pager 2>/dev/null || true
+        fi
+    elif systemctl is-failed --quiet "soar-migrate@${ENVIRONMENT}.service"; then
+        # Migration failed
+        echo ""
+        log_error "Database migration FAILED"
+        log_error "Migration service exited with error"
+        log_error "Database may be in a partially migrated state"
+        log_error "DO NOT restart services - manual intervention required"
+        echo ""
+        log_error "Last 50 lines of migration logs:"
+        journalctl -u "soar-migrate@${ENVIRONMENT}.service" -n 50 --no-pager
+        echo ""
+        log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+        rm -f "$TEMP_BIN_PATH"
+        log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
+        log_info "To investigate:"
+        log_info "  1. Check migration logs: journalctl -u soar-migrate@${ENVIRONMENT} -n 200"
+        log_info "  2. Check systemctl status: systemctl status soar-migrate@${ENVIRONMENT}"
+        log_info "  3. Verify database state manually"
+        log_info "  4. Fix any issues before attempting to restart services"
+        log_error "NOTE: Email and Sentry notifications were sent automatically by soar migrate"
+        exit 1
+    else
+        # Migration completed successfully
+        echo ""
+        log_info "Database migrations completed successfully (${ELAPSED}s)"
+        log_info "Email notification sent by soar migrate command"
+
+        break
+    fi
+done
+
+# Check if we timed out
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+    log_error "Migration timed out after ${MAX_WAIT} seconds"
+    log_error "Migration may still be running in background"
+    log_error "Check: systemctl status soar-migrate@${ENVIRONMENT}.service"
+    log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+    rm -f "$TEMP_BIN_PATH"
     exit 1
 fi
 
@@ -238,28 +371,7 @@ log_info "Skipping timer stop (timers will continue on their schedule)"
 log_info "Waiting for services to fully terminate..."
 sleep 3
 
-# Backup current binary
-mkdir -p "$BACKUP_DIR"
-chown soar:soar "$BACKUP_DIR"
-
-if [ -f "$BINARY_PATH" ]; then
-    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
-    log_info "Backing up current binary to $BACKUP_FILE..."
-    cp "$BINARY_PATH" "$BACKUP_FILE"
-    chown soar:soar "$BACKUP_FILE"
-else
-    log_warn "No existing binary to backup at $BINARY_PATH"
-fi
-
-# Install new binary
-log_info "Installing new binary to $BINARY_PATH..."
-install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
-log_info "Binary installed successfully at $BINARY_PATH"
-
-# Clean up temporary binary
-log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
-rm -f "$TEMP_BIN_PATH"
-
+# Binary was already installed earlier (before migrations)
 # Check for obsolete systemd files that should be cleaned up
 log_info "Checking for obsolete systemd service and timer files..."
 OBSOLETE_FILES_FOUND=0
@@ -326,9 +438,23 @@ else
     log_info "No obsolete systemd files found"
 fi
 
-# Install service files
+# Install service files (skip template services, they were installed earlier)
 log_info "Installing service files..."
 for service in "${ALL_SERVICES[@]}"; do
+    # Skip template services (already installed before migrations)
+    skip=false
+    for template_service in "${TEMPLATE_SERVICES[@]}"; do
+        if [ "$service" = "$template_service" ]; then
+            skip=true
+            break
+        fi
+    done
+
+    if [ "$skip" = true ]; then
+        log_info "$service already installed (template service)"
+        continue
+    fi
+
     if [ -f "$DEPLOY_DIR/$service" ]; then
         log_info "Installing $service..."
         cp "$DEPLOY_DIR/$service" /etc/systemd/system/
@@ -415,6 +541,41 @@ else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
 fi
 
+# Install Prometheus scrape-configs files (backward compatibility for old prometheus.yml)
+if [ -d "$DEPLOY_DIR/prometheus-scrape-configs" ]; then
+    log_info "Installing Prometheus scrape-configs files (legacy file_sd_configs)..."
+    mkdir -p /etc/prometheus/scrape-configs
+
+    # Remove old SOAR scrape-config files that aren't in the deployment
+    if [ -d "/etc/prometheus/scrape-configs" ]; then
+        log_info "Cleaning up old scrape-config files..."
+        for old_config in /etc/prometheus/scrape-configs/soar-*.yml; do
+            if [ -f "$old_config" ]; then
+                config_basename=$(basename "$old_config")
+                if [ ! -f "$DEPLOY_DIR/prometheus-scrape-configs/$config_basename" ]; then
+                    log_info "Removing obsolete scrape-config: $config_basename"
+                    rm -f "$old_config"
+                fi
+            fi
+        done
+    fi
+
+    cp "$DEPLOY_DIR/prometheus-scrape-configs"/*.yml /etc/prometheus/scrape-configs/
+    chmod 644 /etc/prometheus/scrape-configs/*.yml
+
+    # Set ownership to prometheus user if it exists
+    if id "prometheus" &>/dev/null; then
+        chown -R prometheus:prometheus /etc/prometheus/scrape-configs
+        log_info "Prometheus scrape-config files installed and ownership set"
+        PROMETHEUS_NEEDS_RELOAD=true
+    else
+        log_warn "prometheus user not found, skipping ownership change"
+        log_info "Prometheus scrape-config files installed"
+    fi
+else
+    log_warn "prometheus-scrape-configs directory not found in deployment, skipping legacy Prometheus configuration"
+fi
+
 # Reload Prometheus if job configurations were updated
 if [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
     if systemctl is-active --quiet prometheus; then
@@ -431,6 +592,35 @@ GRAFANA_NEEDS_RESTART=false
 
 if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
     log_info "Installing Grafana provisioning configuration..."
+
+    # Install datasource provisioning
+    if [ -d "$DEPLOY_DIR/grafana-provisioning/datasources" ]; then
+        log_info "Installing Grafana datasource configuration..."
+        mkdir -p /etc/grafana/provisioning/datasources
+
+        # Copy both .yml and .yaml files (Grafana datasources require .yaml extension)
+        for datasource_file in "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yml "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yaml; do
+            if [ -f "$datasource_file" ]; then
+                filename=$(basename "$datasource_file")
+                cp "$datasource_file" /etc/grafana/provisioning/datasources/
+                chmod 640 "/etc/grafana/provisioning/datasources/$filename"
+                log_info "Installed datasource config: $filename"
+            fi
+        done
+
+        # Set ownership to grafana user
+        if id "grafana" &>/dev/null; then
+            chown -R grafana:grafana /etc/grafana/provisioning/datasources
+            log_info "Grafana datasource configuration installed successfully"
+            GRAFANA_NEEDS_RESTART=true
+        else
+            log_warn "grafana user not found, skipping ownership change"
+        fi
+    else
+        log_info "No datasource configuration found in deployment, skipping"
+    fi
+
+    # Install dashboard provisioning
     mkdir -p /etc/grafana/provisioning/dashboards
     cp -r "$DEPLOY_DIR/grafana-provisioning/dashboards"/*.yml /etc/grafana/provisioning/dashboards/
     chmod 644 /etc/grafana/provisioning/dashboards/*.yml
@@ -442,6 +632,95 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
         GRAFANA_NEEDS_RESTART=true
     else
         log_warn "grafana user not found, skipping ownership change"
+    fi
+
+    # Install Grafana alerting configuration with SMTP credentials substitution
+    if [ -d "$DEPLOY_DIR/grafana-provisioning/alerting" ]; then
+        log_info "Installing Grafana alerting configuration..."
+        mkdir -p /etc/grafana/provisioning/alerting
+
+        # Source environment file to get SMTP config and alert email
+        if [ -f "$ENV_FILE" ]; then
+            set -a
+            source "$ENV_FILE"
+            set +a
+
+            # Extract variables with defaults
+            ALERT_EMAIL="${EMAIL_TO:-ops@example.com}"
+            SMTP_HOST="${SMTP_SERVER:-smtp.example.com}"
+            SMTP_PORT_VAL="${SMTP_PORT:-587}"
+            SMTP_USER="${SMTP_USERNAME:-noreply}"
+            SMTP_PASS="${SMTP_PASSWORD:-}"
+            FROM_ADDR="${FROM_EMAIL:-noreply@example.com}"
+            FROM_NAME_VAL="${FROM_NAME:-SOAR System}"
+
+            # Process contact-points.yml.template if it exists
+            if [ -f "$DEPLOY_DIR/grafana-provisioning/alerting/contact-points.yml.template" ]; then
+                log_info "Processing contact-points.yml.template with SMTP config from $ENV_FILE..."
+                sed -e "s|{{ALERT_EMAIL}}|$ALERT_EMAIL|g" \
+                    "$DEPLOY_DIR/grafana-provisioning/alerting/contact-points.yml.template" \
+                    > /etc/grafana/provisioning/alerting/contact-points.yml
+                chmod 640 /etc/grafana/provisioning/alerting/contact-points.yml
+                log_info "Alert contact point configured for: $ALERT_EMAIL"
+            fi
+
+            # Copy other alerting config files as-is (no template processing needed)
+            for alerting_file in "$DEPLOY_DIR/grafana-provisioning/alerting"/*.yml; do
+                if [ -f "$alerting_file" ]; then
+                    filename=$(basename "$alerting_file")
+                    # Skip template files
+                    if [[ "$filename" != *.template ]]; then
+                        # Skip environment-specific alert rules that don't match current environment
+                        if [[ "$filename" == "alert-rules-production.yml" && "$ENVIRONMENT" == "staging" ]]; then
+                            log_info "Skipping $filename (production-only alerts)"
+                            continue
+                        fi
+                        if [[ "$filename" == "alert-rules-staging.yml" && "$ENVIRONMENT" == "production" ]]; then
+                            log_info "Skipping $filename (staging-only alerts)"
+                            continue
+                        fi
+
+                        cp "$alerting_file" /etc/grafana/provisioning/alerting/
+                        chmod 644 "/etc/grafana/provisioning/alerting/$filename"
+                        log_info "Installed alerting config: $filename"
+                    fi
+                fi
+            done
+
+            # Process Grafana SMTP configuration via systemd drop-in
+            if [ -f "$DEPLOY_DIR/systemd/grafana-server.service.d-smtp.conf.template" ]; then
+                log_info "Configuring Grafana SMTP settings..."
+                mkdir -p /etc/systemd/system/grafana-server.service.d
+
+                sed -e "s|{{SMTP_SERVER}}|$SMTP_HOST|g" \
+                    -e "s|{{SMTP_PORT}}|$SMTP_PORT_VAL|g" \
+                    -e "s|{{SMTP_USERNAME}}|$SMTP_USER|g" \
+                    -e "s|{{SMTP_PASSWORD}}|$SMTP_PASS|g" \
+                    -e "s|{{FROM_EMAIL}}|$FROM_ADDR|g" \
+                    -e "s|{{FROM_NAME}}|$FROM_NAME_VAL|g" \
+                    "$DEPLOY_DIR/systemd/grafana-server.service.d-smtp.conf.template" \
+                    > /etc/systemd/system/grafana-server.service.d/smtp.conf
+                chmod 640 /etc/systemd/system/grafana-server.service.d/smtp.conf
+                log_info "Grafana SMTP configured: $SMTP_HOST:$SMTP_PORT_VAL as $FROM_ADDR"
+
+                # Need to reload systemd and restart Grafana for environment changes
+                systemctl daemon-reload
+                GRAFANA_NEEDS_RESTART=true
+            fi
+
+            # Set ownership to grafana user
+            if id "grafana" &>/dev/null; then
+                chown -R grafana:grafana /etc/grafana/provisioning/alerting
+                log_info "Grafana alerting configuration installed successfully"
+                GRAFANA_NEEDS_RESTART=true
+            else
+                log_warn "grafana user not found, skipping ownership change"
+            fi
+        else
+            log_warn "Environment file $ENV_FILE not found, skipping alerting configuration"
+        fi
+    else
+        log_info "No alerting configuration found in deployment, skipping"
     fi
 fi
 
@@ -484,17 +763,165 @@ fi
 # Restart Grafana if dashboards or provisioning was updated
 if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
     if systemctl is-active --quiet grafana-server; then
+        # Clean up datasources that will be provisioned to prevent UID conflicts
+        log_info "Cleaning up datasources that will be re-provisioned..."
+        if [ -f /var/lib/grafana/grafana.db ]; then
+            # Extract UIDs and NAMEs from provisioning files
+            declare -A DATASOURCES_TO_REMOVE  # associative array: uid -> name
+            if [ -d /etc/grafana/provisioning/datasources ]; then
+                for datasource_file in /etc/grafana/provisioning/datasources/*.yml /etc/grafana/provisioning/datasources/*.yaml; do
+                    if [ -f "$datasource_file" ]; then
+                        # Parse YAML to extract datasource entries (simple approach for our known structure)
+                        # Extract UID and NAME pairs from the provisioning file
+                        current_uid=""
+                        current_name=""
+
+                        while IFS= read -r line; do
+                            # Check for UID line
+                            if echo "$line" | grep -qE '^\s*uid:\s*\S+'; then
+                                current_uid=$(echo "$line" | awk '{print $2}' | tr -d '"' | tr -d "'")
+                            fi
+                            # Check for NAME line (with optional list item dash)
+                            if echo "$line" | grep -qE '^\s*-?\s*name:\s*.+'; then
+                                # Extract name, handling quoted and unquoted values, and list item dash
+                                current_name=$(echo "$line" | sed 's/^\s*-\?\s*name:\s*//' | sed 's/^["'\'']//' | sed 's/["'\'']$//')
+                            fi
+                            # When we have both uid and name, store them
+                            if [ -n "$current_uid" ] && [ -n "$current_name" ]; then
+                                DATASOURCES_TO_REMOVE["$current_uid"]="$current_name"
+                                log_info "  Found provisioned datasource: uid='$current_uid', name='$current_name'"
+                                current_uid=""
+                                current_name=""
+                            fi
+                        done < "$datasource_file"
+                    fi
+                done
+            fi
+
+            # Remove datasources with matching UIDs or NAMEs from database
+            if [ ${#DATASOURCES_TO_REMOVE[@]} -gt 0 ]; then
+                for uid in "${!DATASOURCES_TO_REMOVE[@]}"; do
+                    name="${DATASOURCES_TO_REMOVE[$uid]}"
+
+                    # Delete by UID (exact match)
+                    EXISTING_DS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT name FROM data_source WHERE uid='$uid';" 2>/dev/null || true)
+                    if [ -n "$EXISTING_DS" ]; then
+                        log_info "  Removing datasource with uid='$uid' (name='$EXISTING_DS')..."
+                        sudo sqlite3 /var/lib/grafana/grafana.db "DELETE FROM data_source WHERE uid='$uid';" 2>/dev/null || log_warn "Failed to delete datasource uid='$uid'"
+                    fi
+
+                    # Also delete by NAME (case-insensitive) to catch manually created datasources
+                    EXISTING_DS_BY_NAME=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid, name FROM data_source WHERE LOWER(name)=LOWER('$name');" 2>/dev/null || true)
+                    if [ -n "$EXISTING_DS_BY_NAME" ]; then
+                        log_info "  Removing datasource(s) with name='$name': $EXISTING_DS_BY_NAME"
+                        sudo sqlite3 /var/lib/grafana/grafana.db "DELETE FROM data_source WHERE LOWER(name)=LOWER('$name');" 2>/dev/null || log_warn "Failed to delete datasource name='$name'"
+                    fi
+                done
+
+                log_info "Datasource cleanup complete - provisioning will recreate them with correct UIDs"
+            else
+                log_info "  No datasources found in provisioning files"
+            fi
+        else
+            log_warn "Grafana database not found at /var/lib/grafana/grafana.db, skipping datasource cleanup"
+        fi
+
         log_info "Restarting Grafana to load new dashboards..."
         systemctl restart grafana-server || log_warn "Failed to restart Grafana"
         log_info "Grafana restarted successfully"
+
+        # Wait for Grafana to fully start
+        sleep 3
+
+        # Validate required datasources exist
+        log_info "Validating Grafana datasources..."
+        DATASOURCE_VALIDATION_FAILED=false
+
+        # Check for prometheus datasource (required for alerts and dashboards)
+        # First check by exact UID match (provisioned as uid='prometheus')
+        PROM_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='prometheus';" 2>/dev/null || true)
+
+        if [ -n "$PROM_UID_EXISTS" ]; then
+            log_info "Datasource 'prometheus': ${GREEN}FOUND (by UID)${NC}"
+        else
+            # Check if datasource exists with different UID but matching name (case-insensitive)
+            PROM_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid, name FROM data_source WHERE LOWER(name)='prometheus';" 2>/dev/null || true)
+
+            if [ -n "$PROM_NAME_EXISTS" ]; then
+                log_warn "Prometheus datasource found by name but with different UID: $PROM_NAME_EXISTS"
+                log_warn "Expected uid='prometheus' per provisioning config at infrastructure/grafana-provisioning/datasources/prometheus.yaml"
+                log_warn "This may indicate Grafana provisioning didn't run or was overridden manually"
+                log_warn "Alerts and dashboards reference uid='prometheus' and may not work correctly"
+                DATASOURCE_VALIDATION_FAILED=true
+            else
+                log_warn "Prometheus datasource not found in Grafana database"
+                log_warn "Expected datasource with uid='prometheus' per provisioning config"
+                log_warn "Alerts and dashboards will not work without this datasource"
+                log_warn "Grafana should auto-provision this datasource on next restart if config is present"
+                DATASOURCE_VALIDATION_FAILED=true
+            fi
+        fi
+
+        # Check for PostgreSQL datasource (required for flight analysis dashboard)
+        # Check by both UID and name for flexibility
+        if [ "$ENVIRONMENT" = "staging" ]; then
+            POSTGRES_DATASOURCE_UID="soar-postgres-staging"
+            POSTGRES_DATASOURCE_NAME="soar-postgres-staging"
+        else
+            POSTGRES_DATASOURCE_UID="soar-postgres"
+            POSTGRES_DATASOURCE_NAME="soar-postgres"
+        fi
+
+        # Check if datasource exists by UID or name
+        POSTGRES_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='$POSTGRES_DATASOURCE_UID';" 2>/dev/null || true)
+        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME' OR name='soar-postgres';" 2>/dev/null || true)
+
+        if [ -n "$POSTGRES_UID_EXISTS" ]; then
+            log_info "Datasource '$POSTGRES_DATASOURCE_UID': ${GREEN}FOUND (by UID)${NC}"
+        elif [ -n "$POSTGRES_NAME_EXISTS" ]; then
+            log_info "Datasource 'soar-postgres': ${GREEN}FOUND (by name)${NC}"
+            log_warn "PostgreSQL datasource found but UID doesn't match expected '$POSTGRES_DATASOURCE_UID'"
+            log_warn "Flight analysis dashboard queries may need to reference the correct datasource"
+        else
+            log_warn "Datasource 'soar-postgres' or '$POSTGRES_DATASOURCE_UID' not found in Grafana"
+            log_warn "Flight analysis dashboard will not work without this datasource"
+            log_warn "To fix: Add PostgreSQL datasource in Grafana UI"
+        fi
+
+        if [ "$DATASOURCE_VALIDATION_FAILED" = true ]; then
+            log_warn "${YELLOW}Datasource validation warnings detected - Grafana alerts may not work${NC}"
+            log_warn "Review datasource configuration in Grafana UI or check provisioning logs"
+            log_warn "Continuing with deployment..."
+        fi
     else
-        log_warn "Grafana is not running, skipping restart"
+        log_warn "Grafana is not running, skipping restart and datasource validation"
     fi
 fi
 
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
+
+# Remove obsolete partman systemd files (pg_partman replaced by TimescaleDB)
+log_info "Removing obsolete partman systemd files..."
+PARTMAN_FILES_REMOVED=0
+for partman_file in "partman-maintenance${SERVICE_SUFFIX}.service" "partman-maintenance${SERVICE_SUFFIX}.timer"; do
+    if [ -f "/etc/systemd/system/$partman_file" ]; then
+        log_info "Stopping and disabling $partman_file..."
+        systemctl stop "$partman_file" 2>/dev/null || true
+        systemctl disable "$partman_file" 2>/dev/null || true
+        log_info "Removing $partman_file..."
+        rm -f "/etc/systemd/system/$partman_file"
+        ((PARTMAN_FILES_REMOVED++)) || true
+    fi
+done
+
+if [ $PARTMAN_FILES_REMOVED -gt 0 ]; then
+    log_info "Removed $PARTMAN_FILES_REMOVED partman systemd file(s)"
+    systemctl daemon-reload
+else
+    log_info "No partman systemd files found (already removed or not present)"
+fi
 
 # Enable target file
 if [ -f "/etc/systemd/system/$TARGET_FILE" ]; then

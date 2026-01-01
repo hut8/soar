@@ -1,5 +1,5 @@
 use anyhow::Result;
-use diesel::PgConnection;
+use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use std::time::Instant;
@@ -71,4 +71,72 @@ pub async fn load_aircraft_registrations_with_metrics(
         info!("Skipping aircraft registrations - no path provided");
         None
     }
+}
+
+/// Copy owner data and year from aircraft_registrations to aircraft
+/// Owner data: Only updates aircraft records where owner_operator is NULL or empty
+/// Year data: Always updates (FAA data is canonical)
+pub async fn copy_owners_to_aircraft(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<usize> {
+    info!("Copying owner and year data from aircraft_registrations to aircraft...");
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = diesel_pool.get()?;
+
+        // Update aircraft.owner_operator and aircraft.year from aircraft_registrations
+        // owner_operator: Only update if current value is NULL or empty string
+        // year: Always update from FAA data (canonical source)
+        let query = r#"
+            UPDATE aircraft
+            SET owner_operator = CASE
+                    WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
+                         AND ar.registrant_name IS NOT NULL
+                         AND ar.registrant_name != ''
+                    THEN ar.registrant_name
+                    ELSE aircraft.owner_operator
+                END,
+                year = ar.year_mfr,
+                updated_at = CURRENT_TIMESTAMP
+            FROM aircraft_registrations ar
+            WHERE aircraft.id = ar.aircraft_id
+              AND (
+                  (ar.registrant_name IS NOT NULL AND ar.registrant_name != ''
+                   AND (aircraft.owner_operator IS NULL OR aircraft.owner_operator = ''))
+                  OR ar.year_mfr IS NOT NULL
+              )
+        "#;
+
+        let updated_count = diesel::sql_query(query).execute(&mut conn)?;
+
+        info!(
+            "Successfully copied owner and year data to {} aircraft records",
+            updated_count
+        );
+
+        Ok::<usize, anyhow::Error>(updated_count)
+    })
+    .await?
+}
+
+pub async fn copy_owners_to_aircraft_with_metrics(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> EntityMetrics {
+    let start = Instant::now();
+    let mut metrics = EntityMetrics::new("Copy Owners to Aircraft");
+
+    match copy_owners_to_aircraft(diesel_pool).await {
+        Ok(updated) => {
+            metrics.records_loaded = updated;
+            metrics.success = true;
+        }
+        Err(e) => {
+            error!("Failed to copy owners to aircraft: {}", e);
+            metrics.success = false;
+            metrics.error_message = Some(e.to_string());
+        }
+    }
+
+    metrics.duration_secs = start.elapsed().as_secs_f64();
+    metrics
 }

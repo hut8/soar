@@ -104,9 +104,16 @@ impl AprsClient {
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
-        let (internal_shutdown_tx, mut internal_shutdown_rx) =
-            tokio::sync::oneshot::channel::<()>();
-        self.shutdown_tx = Some(internal_shutdown_tx);
+        // Convert oneshot receiver to a shared Arc<AtomicBool> that both tasks can check
+        let shutdown_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let shutdown_flag_for_publisher = shutdown_flag.clone();
+        let shutdown_flag_for_connection = shutdown_flag.clone();
+
+        // Spawn a task to watch the oneshot and set the flag
+        tokio::spawn(async move {
+            let _ = shutdown_rx.await;
+            shutdown_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
 
         let config = self.config.clone();
 
@@ -119,7 +126,6 @@ impl AprsClient {
 
         // Spawn message publishing task
         let publisher = nats_publisher.clone();
-        let mut shutdown_rx_for_publisher = shutdown_rx;
         let publisher_handle = tokio::spawn(
             async move {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
@@ -130,6 +136,39 @@ impl AprsClient {
                 let mut last_receive_time = std::time::Instant::now();
 
                 loop {
+                    // Check shutdown flag at the start of each loop iteration
+                    if shutdown_flag_for_publisher.load(std::sync::atomic::Ordering::SeqCst) {
+                        info!("Shutdown signal received by publisher, flushing queue...");
+
+                        // Start graceful shutdown - flush remaining messages with timeout
+                        let queue_depth = raw_message_rx.len();
+                        info!("Flushing {} remaining messages from queue...", queue_depth);
+                        metrics::counter!("aprs.shutdown.queue_depth_at_shutdown_total").increment(queue_depth as u64);
+
+                        let flush_start = std::time::Instant::now();
+                        let flush_timeout = Duration::from_secs(10);
+                        let mut flushed_count = 0u64;
+
+                        while let Ok(Ok(message)) = tokio::time::timeout(
+                            flush_timeout.saturating_sub(flush_start.elapsed()),
+                            raw_message_rx.recv_async()
+                        ).await {
+                            let _ = publisher.publish(&message).await;
+                            flushed_count += 1;
+                        }
+
+                        let flush_duration = flush_start.elapsed();
+                        info!(
+                            "Queue flush complete: {} messages published in {:.2}s",
+                            flushed_count,
+                            flush_duration.as_secs_f64()
+                        );
+                        metrics::counter!("aprs.shutdown.messages_flushed").increment(flushed_count);
+                        metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(flush_duration.as_secs_f64());
+
+                        break;
+                    }
+
                     tokio::select! {
                         Ok(message) = raw_message_rx.recv_async() => {
                             last_receive_time = std::time::Instant::now();
@@ -182,37 +221,6 @@ impl AprsClient {
                                 );
                             }
                         }
-                        Ok(_) = &mut shutdown_rx_for_publisher => {
-                            info!("Shutdown signal received by publisher, flushing queue...");
-
-                            // Start graceful shutdown - flush remaining messages with timeout
-                            let queue_depth = raw_message_rx.len();
-                            info!("Flushing {} remaining messages from queue...", queue_depth);
-                            metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").increment(queue_depth as u64);
-
-                            let flush_start = std::time::Instant::now();
-                            let flush_timeout = Duration::from_secs(10);
-                            let mut flushed_count = 0u64;
-
-                            while let Ok(Ok(message)) = tokio::time::timeout(
-                                flush_timeout.saturating_sub(flush_start.elapsed()),
-                                raw_message_rx.recv_async()
-                            ).await {
-                                let _ = publisher.publish(&message).await;
-                                flushed_count += 1;
-                            }
-
-                            let flush_duration = flush_start.elapsed();
-                            info!(
-                                "Queue flush complete: {} messages published in {:.2}s",
-                                flushed_count,
-                                flush_duration.as_secs_f64()
-                            );
-                            metrics::counter!("aprs.shutdown.messages_flushed").increment(flushed_count);
-                            metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(flush_duration.as_secs_f64());
-
-                            break;
-                        }
                     }
                 }
 
@@ -230,7 +238,7 @@ impl AprsClient {
 
                 loop {
                     // Check if shutdown was requested
-                    if internal_shutdown_rx.try_recv().is_ok() {
+                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
                         info!("Shutdown requested, stopping APRS NATS ingestion");
                         // Mark as disconnected in health state
                         {
@@ -296,6 +304,18 @@ impl AprsClient {
                             retry_count += 1;
                         }
                         ConnectionResult::OperationFailed(e) => {
+                            // Check if shutdown was requested - if so, exit silently
+                            // (the raw message queue closes during shutdown, which is expected)
+                            if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                                info!("Shutdown signal received, stopping APRS connection");
+                                // Mark as disconnected in health state
+                                {
+                                    let mut health = health_for_connection.write().await;
+                                    health.aprs_connected = false;
+                                }
+                                return; // Exit immediately without logging errors or retrying
+                            }
+
                             warn!("Connection operation failed: {}", e);
 
                             // Report operation failure to Sentry (connection was established but dropped)
@@ -310,6 +330,17 @@ impl AprsClient {
                         }
                     }
 
+                    // Check if shutdown was requested before attempting retry
+                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                        info!("Shutdown signal received, stopping APRS connection");
+                        // Mark as disconnected in health state
+                        {
+                            let mut health = health_for_connection.write().await;
+                            health.aprs_connected = false;
+                        }
+                        return; // Exit immediately without retry delay
+                    }
+
                     // Always retry indefinitely with exponential backoff
                     // Wait before retrying if we had a failure
                     if retry_count > 0 {
@@ -320,7 +351,32 @@ impl AprsClient {
                             "Waiting {} seconds before reconnecting... (retry attempt {})",
                             delay, retry_count
                         );
-                        sleep(Duration::from_secs(delay)).await;
+
+                        // Use tokio::select! to make sleep interruptible by shutdown signal
+                        // Poll the shutdown flag every 100ms to allow fast shutdown
+                        let sleep_future = sleep(Duration::from_secs(delay));
+                        tokio::pin!(sleep_future);
+
+                        loop {
+                            tokio::select! {
+                                _ = &mut sleep_future => {
+                                    // Sleep completed normally
+                                    break;
+                                }
+                                _ = sleep(Duration::from_millis(100)) => {
+                                    // Check shutdown flag every 100ms
+                                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                                        info!("Shutdown signal received during retry delay, exiting immediately");
+                                        // Mark as disconnected in health state
+                                        {
+                                            let mut health = health_for_connection.write().await;
+                                            health.aprs_connected = false;
+                                        }
+                                        return; // Exit the task immediately
+                                    }
+                                }
+                            }
+                        }
 
                         // Exponential backoff: start at 1 second, double each time, cap at 60 seconds
                         if current_delay == 0 {
@@ -405,7 +461,7 @@ impl AprsClient {
             match TcpStream::connect(addr).await {
                 Ok(stream) => {
                     info!("Connected to APRS server at {}", addr);
-                    metrics::counter!("aprs.connection.established").increment(1);
+                    metrics::counter!("aprs.connection.established_total").increment(1);
                     metrics::gauge!("aprs.connection.connected").set(1.0);
 
                     // Mark as connected in health state
@@ -520,7 +576,7 @@ impl AprsClient {
                     ));
                 }
                 trace!("Sent keepalive to APRS server");
-                metrics::counter!("aprs.keepalive.sent").increment(1);
+                metrics::counter!("aprs.keepalive.sent_total").increment(1);
                 last_keepalive = tokio::time::Instant::now();
             }
 
@@ -561,10 +617,10 @@ impl AprsClient {
                                 // Track message types for debugging
                                 let is_server_message = trimmed_line.starts_with('#');
                                 if is_server_message {
-                                    metrics::counter!("aprs.raw_message.received.server")
+                                    metrics::counter!("aprs.raw_message.received.server_total")
                                         .increment(1);
                                 } else {
-                                    metrics::counter!("aprs.raw_message.received.aprs")
+                                    metrics::counter!("aprs.raw_message.received.aprs_total")
                                         .increment(1);
                                 }
 
@@ -594,11 +650,13 @@ impl AprsClient {
                                     Ok(Ok(())) => {
                                         if is_server_message {
                                             trace!("Queued server message for JetStream");
-                                            metrics::counter!("aprs.raw_message.queued.server")
-                                                .increment(1);
+                                            metrics::counter!(
+                                                "aprs.raw_message.queued.server_total"
+                                            )
+                                            .increment(1);
                                         } else {
                                             trace!("Queued APRS message for JetStream");
-                                            metrics::counter!("aprs.raw_message.queued.aprs")
+                                            metrics::counter!("aprs.raw_message.queued.aprs_total")
                                                 .increment(1);
 
                                             // Update last message time in health state for APRS messages (not server messages)
@@ -610,7 +668,7 @@ impl AprsClient {
                                         }
                                     }
                                     Ok(Err(flume::SendError(_))) => {
-                                        error!("Raw message queue is closed - stopping connection");
+                                        info!("Raw message queue is closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Raw message queue closed"
                                         ));
@@ -623,7 +681,8 @@ impl AprsClient {
                                             "Queue send blocked for 10+ seconds after {:.1}s - JetStream publisher stuck, reconnecting",
                                             duration.as_secs_f64()
                                         );
-                                        metrics::counter!("aprs.queue_send_timeout").increment(1);
+                                        metrics::counter!("aprs.queue_send_timeout_total")
+                                            .increment(1);
 
                                         sentry::capture_message(
                                             "APRS queue send timed out - JetStream publisher stuck",

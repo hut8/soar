@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::json_error;
+use crate::actions::{DataResponse, PaginatedDataResponse, PaginationMetadata, json_error};
 use crate::receiver_repo::ReceiverRepository;
-use crate::receivers::ReceiverModel;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -24,15 +23,13 @@ pub struct ReceiverSearchQuery {
     /// Radius in miles (default 100)
     pub radius_miles: Option<f64>,
     /// Bounding box search parameters
-    pub latitude_min: Option<f64>,
-    pub latitude_max: Option<f64>,
-    pub longitude_min: Option<f64>,
-    pub longitude_max: Option<f64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReceiverSearchResponse {
-    pub receivers: Vec<ReceiverModel>,
+    pub south: Option<f64>,
+    pub north: Option<f64>,
+    pub west: Option<f64>,
+    pub east: Option<f64>,
+    /// Pagination parameters
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
 }
 
 /// Get a receiver by its ID
@@ -43,7 +40,7 @@ pub async fn get_receiver_by_id(
     let receiver_repo = ReceiverRepository::new(state.pool);
 
     match receiver_repo.get_receiver_view_by_id(id).await {
-        Ok(Some(receiver)) => Json(receiver).into_response(),
+        Ok(Some(receiver)) => Json(DataResponse { data: receiver }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get receiver by ID {}: {}", id, e);
@@ -56,7 +53,7 @@ pub async fn get_receiver_by_id(
 #[instrument(skip(state), fields(
     has_query = query.query.is_some(),
     has_location = query.latitude.is_some() && query.longitude.is_some(),
-    has_bbox = query.latitude_max.is_some(),
+    has_bbox = query.north.is_some(),
     has_callsign = query.callsign.is_some()
 ))]
 pub async fn search_receivers(
@@ -65,13 +62,34 @@ pub async fn search_receivers(
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
 
+    // Extract pagination parameters
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
+
     // Priority 1: General text query search
     if let Some(search_query) = query.query {
         info!("Performing query search: {}", search_query);
-        match receiver_repo.search_by_query(&search_query).await {
-            Ok(receivers) => {
-                info!("Found {} receivers matching query", receivers.len());
-                return Json(ReceiverSearchResponse { receivers }).into_response();
+        match receiver_repo
+            .search_by_query_paginated(&search_query, page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers matching query (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                return Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
+                })
+                .into_response();
             }
             Err(e) => {
                 tracing::error!(
@@ -115,12 +133,26 @@ pub async fn search_receivers(
         );
 
         match receiver_repo
-            .get_receivers_within_radius(lat, lon, radius)
+            .get_receivers_within_radius_paginated(lat, lon, radius, page, per_page)
             .await
         {
-            Ok(receivers) => {
-                info!("Found {} receivers within radius", receivers.len());
-                return Json(ReceiverSearchResponse { receivers }).into_response();
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers within radius (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                return Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
+                })
+                .into_response();
             }
             Err(e) => {
                 tracing::error!("Failed to search receivers by location: {}", e);
@@ -134,21 +166,16 @@ pub async fn search_receivers(
     }
 
     // Priority 3: Bounding box search
-    let has_bounding_box = query.latitude_max.is_some()
-        || query.latitude_min.is_some()
-        || query.longitude_max.is_some()
-        || query.longitude_min.is_some();
+    let has_bounding_box = query.north.is_some()
+        || query.south.is_some()
+        || query.east.is_some()
+        || query.west.is_some();
 
     if has_bounding_box {
-        match (
-            query.latitude_max,
-            query.latitude_min,
-            query.longitude_max,
-            query.longitude_min,
-        ) {
-            (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
+        match (query.north, query.south, query.east, query.west) {
+            (Some(north), Some(south), Some(east), Some(west)) => {
                 // Validate coordinates
-                if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
+                if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Latitude must be between -90 and 90 degrees",
@@ -156,7 +183,7 @@ pub async fn search_receivers(
                     .into_response();
                 }
 
-                if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
+                if !(-180.0..=180.0).contains(&east) || !(-180.0..=180.0).contains(&west) {
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Longitude must be between -180 and 180 degrees",
@@ -164,35 +191,43 @@ pub async fn search_receivers(
                     .into_response();
                 }
 
-                if lat_min >= lat_max {
+                if south >= north {
                     return json_error(
                         StatusCode::BAD_REQUEST,
-                        "latitude_min must be less than latitude_max",
+                        "south must be less than north",
                     )
                     .into_response();
                 }
 
-                if lon_min >= lon_max {
+                if west >= east {
                     return json_error(
                         StatusCode::BAD_REQUEST,
-                        "longitude_min must be less than longitude_max",
+                        "west must be less than east",
                     )
                     .into_response();
                 }
 
                 info!(
                     "Performing bounding box search for receivers: lat=[{}, {}], lon=[{}, {}]",
-                    lat_min, lat_max, lon_min, lon_max
+                    south, north, west, east
                 );
 
                 // Perform bounding box search
                 match receiver_repo
-                    .get_receivers_in_bounding_box(lat_max, lon_min, lat_min, lon_max)
+                    .get_receivers_in_bounding_box_paginated(north, west, south, east, page, per_page)
                     .await
                 {
-                    Ok(receivers) => {
-                        info!("Found {} receivers in bounding box", receivers.len());
-                        Json(ReceiverSearchResponse { receivers }).into_response()
+                    Ok((receivers, total_count)) => {
+                        info!("Found {} receivers in bounding box (page {} of {})", receivers.len(), page, ((total_count as f64) / (per_page as f64)).ceil() as i64);
+                        let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                        Json(PaginatedDataResponse {
+                            data: receivers,
+                            metadata: PaginationMetadata {
+                                page,
+                                total_pages,
+                                total_count,
+                            },
+                        }).into_response()
                     }
                     Err(e) => {
                         tracing::error!("Failed to get receivers in bounding box: {}", e);
@@ -206,18 +241,31 @@ pub async fn search_receivers(
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
-                "When using bounding box search, all four parameters must be provided: latitude_max, latitude_min, longitude_max, longitude_min",
+                "When using bounding box search, all four parameters must be provided: north, south, east, west",
             )
             .into_response(),
         }
     } else if let Some(callsign) = query.callsign {
         // Search by callsign
-        match receiver_repo.search_by_callsign(&callsign).await {
-            Ok(receivers) => {
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
+        match receiver_repo
+            .search_by_callsign_paginated(&callsign, page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Found {} receivers matching callsign (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -231,20 +279,33 @@ pub async fn search_receivers(
             }
         }
     } else {
-        // No search parameters provided - return recently updated receivers
-        info!("No search parameters provided, returning recently updated receivers");
-        match receiver_repo.get_recently_updated_receivers(10).await {
-            Ok(receivers) => {
-                info!("Returning {} recently updated receivers", receivers.len());
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
+        // No search parameters provided - return all receivers with valid coordinates
+        // This is useful for map displays where we want to show all receiver locations
+        info!("No search parameters provided, returning all receivers with coordinates");
+        match receiver_repo
+            .get_receivers_with_coordinates_paginated(page, per_page)
+            .await
+        {
+            Ok((receivers, total_count)) => {
+                info!(
+                    "Returning {} receivers with coordinates (page {} of {})",
+                    receivers.len(),
+                    page,
+                    ((total_count as f64) / (per_page as f64)).ceil() as i64
+                );
+                let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: receivers,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get recently updated receivers: {}", e);
+                tracing::error!("Failed to get receivers with coordinates: {}", e);
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receivers")
                     .into_response()
             }
@@ -284,10 +345,13 @@ pub async fn get_receiver_fixes(
     {
         Ok((fixes, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverFixesResponse {
-                fixes,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: fixes,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -334,10 +398,13 @@ pub async fn get_receiver_statuses(
     {
         Ok((statuses, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverStatusesResponse {
-                statuses,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: statuses,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -358,24 +425,10 @@ pub struct ReceiverFixesQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ReceiverFixesResponse {
-    pub fixes: Vec<crate::fixes::Fix>,
-    pub page: i64,
-    pub total_pages: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ReceiverStatusesQuery {
     pub page: Option<i64>,
     pub per_page: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReceiverStatusesResponse {
-    pub statuses: Vec<crate::receiver_statuses::ReceiverStatusWithRaw>,
-    pub page: i64,
-    pub total_pages: i64,
 }
 
 /// Get raw messages for a specific receiver (last 24 hours only)
@@ -410,10 +463,13 @@ pub async fn get_receiver_raw_messages(
     {
         Ok((messages, total_count)) => {
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
-            Json(ReceiverRawMessagesResponse {
-                messages,
-                page,
-                total_pages,
+            Json(PaginatedDataResponse {
+                data: messages,
+                metadata: PaginationMetadata {
+                    page,
+                    total_pages,
+                    total_count,
+                },
             })
             .into_response()
         }
@@ -435,6 +491,7 @@ pub struct ReceiverStatisticsQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverStatisticsResponse {
     pub average_update_interval_seconds: Option<f64>,
     pub total_status_count: i64,
@@ -448,19 +505,14 @@ pub struct ReceiverRawMessagesQuery {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReceiverRawMessagesResponse {
-    pub messages: Vec<crate::raw_messages_repo::AprsMessage>,
-    pub page: i64,
-    pub total_pages: i64,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AprsTypeCount {
     pub aprs_type: String,
     pub count: i64,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftFixCount {
     pub aircraft_id: uuid::Uuid,
     pub count: i64,
@@ -598,13 +650,14 @@ pub async fn get_receiver_aggregate_stats(
 
     Json(ReceiverAggregateStatsResponse {
         fix_counts_by_aprs_type: fix_counts,
-        fix_counts_by_device: device_fix_counts,
+        fix_counts_by_aircraft: device_fix_counts,
     })
     .into_response()
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverAggregateStatsResponse {
     pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
-    pub fix_counts_by_device: Vec<AircraftFixCount>,
+    pub fix_counts_by_aircraft: Vec<AircraftFixCount>,
 }

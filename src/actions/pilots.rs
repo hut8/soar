@@ -6,34 +6,20 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::actions::json_error;
+use crate::actions::{DataListResponse, DataResponse, json_error};
 use crate::auth::AuthUser;
 use crate::users::User;
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Serialize)]
-pub struct PilotResponse {
-    pub pilot: User,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PilotsListResponse {
-    pub pilots: Vec<User>,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightPilotInfo {
     pub pilot: User,
     pub role: String,
     pub is_tow_pilot: bool,
     pub is_student: bool,
     pub is_instructor: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightPilotsResponse {
-    pub pilots: Vec<FlightPilotInfo>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +49,7 @@ pub async fn get_pilot_by_id(
     let users_repo = UsersRepository::new(state.pool.clone());
 
     match users_repo.get_by_id(id).await {
-        Ok(Some(pilot)) => Json(PilotResponse { pilot }).into_response(),
+        Ok(Some(pilot)) => Json(DataResponse { data: pilot }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get pilot by ID {}: {}", id, e);
@@ -91,7 +77,7 @@ pub async fn get_pilots_by_club(
     let users_repo = UsersRepository::new(state.pool.clone());
 
     match users_repo.get_pilots_by_club(club_id).await {
-        Ok(pilots) => Json(PilotsListResponse { pilots }).into_response(),
+        Ok(pilots) => Json(DataListResponse { data: pilots }).into_response(),
         Err(e) => {
             tracing::error!("Failed to get pilots for club {}: {}", club_id, e);
             json_error(
@@ -121,7 +107,7 @@ pub async fn create_pilot(
     );
 
     match users_repo.create_pilot(pilot.clone()).await {
-        Ok(_) => Json(PilotResponse { pilot }).into_response(),
+        Ok(_) => Json(DataResponse { data: pilot }).into_response(),
         Err(e) => {
             tracing::error!("Failed to create pilot: {}", e);
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pilot").into_response()
@@ -151,8 +137,8 @@ pub async fn get_pilots_for_flight(
                 })
                 .collect();
 
-            Json(FlightPilotsResponse {
-                pilots: flight_pilot_infos,
+            Json(DataListResponse {
+                data: flight_pilot_infos,
             })
             .into_response()
         }

@@ -154,12 +154,12 @@ impl BeastClient {
                                             "Slow JetStream publish: {}ms",
                                             publish_duration.as_millis()
                                         );
-                                        metrics::counter!("beast.nats.slow_publish").increment(1);
+                                        metrics::counter!("beast.nats.slow_publish_total").increment(1);
                                     }
                                 }
                                 Err(_) => {
                                     error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
-                                    metrics::counter!("beast.nats.publish_timeout").increment(1);
+                                    metrics::counter!("beast.nats.publish_timeout_total").increment(1);
 
                                     // Report timeout to Sentry (throttled)
                                     sentry::capture_message(
@@ -251,7 +251,7 @@ impl BeastClient {
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("Beast connection failed: {}", e);
-                            metrics::counter!("beast.connection.failed").increment(1);
+                            metrics::counter!("beast.connection.failed_total").increment(1);
 
                             // Mark as disconnected in health state
                             {
@@ -290,7 +290,7 @@ impl BeastClient {
                         }
                         ConnectionResult::OperationFailed(e) => {
                             error!("Beast operation failed: {}", e);
-                            metrics::counter!("beast.operation.failed").increment(1);
+                            metrics::counter!("beast.operation.failed_total").increment(1);
 
                             // Mark as disconnected in health state
                             {
@@ -384,7 +384,7 @@ impl BeastClient {
             match TcpStream::connect(addr).await {
                 Ok(stream) => {
                     info!("Connected to Beast server at {}", addr);
-                    metrics::counter!("beast.connection.established").increment(1);
+                    metrics::counter!("beast.connection.established_total").increment(1);
                     metrics::gauge!("beast.connection.connected").set(1.0);
 
                     // Mark as connected in health state
@@ -477,7 +477,7 @@ impl BeastClient {
                 Ok(Ok(n)) => {
                     // Data received
                     trace!("Received {} bytes from Beast server", n);
-                    metrics::counter!("beast.bytes.received").increment(n as u64);
+                    metrics::counter!("beast.bytes.received_total").increment(n as u64);
 
                     // Process Beast frames
                     // Beast format: <1A> <message_type> <data...>
@@ -539,7 +539,7 @@ impl BeastClient {
                         message_timeout.as_secs(),
                         duration.as_secs_f64()
                     );
-                    metrics::counter!("beast.timeout").increment(1);
+                    metrics::counter!("beast.timeout_total").increment(1);
                     metrics::gauge!("beast.connection.connected").set(0.0);
 
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
@@ -571,11 +571,11 @@ impl BeastClient {
         match raw_message_tx.send_async(message).await {
             Ok(_) => {
                 trace!("Published Beast frame ({} bytes)", frame.len());
-                metrics::counter!("beast.frames.published").increment(1);
+                metrics::counter!("beast.frames.published_total").increment(1);
             }
             Err(e) => {
                 error!("Failed to send Beast frame to queue: {}", e);
-                metrics::counter!("beast.frames.dropped").increment(1);
+                metrics::counter!("beast.frames.dropped_total").increment(1);
             }
         }
     }

@@ -1,0 +1,11 @@
+# Nextest configuration for SOAR project
+#
+# Tests use isolated per-test databases created from the soar_test_template
+# template database, enabling full parallel execution without interference.
+#
+# Each test gets its own isolated database via the TestDatabase helper
+# (see tests/common/mod.rs), which is automatically created and cleaned up.
+
+[profile.default]
+# Full parallel execution enabled
+# No thread limit needed - tests use isolated databases

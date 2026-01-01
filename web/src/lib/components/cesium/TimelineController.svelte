@@ -11,7 +11,7 @@
 	import { Play, Pause, RotateCcw, Camera } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
-	import type { Flight, Fix } from '$lib/types';
+	import type { Flight, Fix, DataListResponse } from '$lib/types';
 
 	// Props
 	let {
@@ -63,11 +63,8 @@
 			flight = flightResponse;
 
 			// Load all fixes for the flight
-			interface FixesResponse {
-				fixes: Fix[];
-			}
-			const fixesResponse = await serverCall<FixesResponse>(`/flights/${flightId}/fixes`);
-			fixes = fixesResponse.fixes;
+			const fixesResponse = await serverCall<DataListResponse<Fix>>(`/flights/${flightId}/fixes`);
+			fixes = fixesResponse.data || [];
 
 			if (fixes.length === 0) {
 				console.warn('No fixes found for flight');
@@ -161,17 +158,17 @@
 			{
 				...flight,
 				id: `playback-${flight.id}`,
-				registration: flight.registration || flight.device_address,
-				device_address: flight.device_address,
-				address_type: '',
+				registration: flight.registration || flight.deviceAddress,
+				addressType: '',
 				address: '',
-				aircraft_model: flight.aircraft_model || '',
-				competition_number: '',
+				aircraftModel: flight.aircraftModel || '',
+				competitionNumber: '',
 				tracked: false,
 				identified: false,
-				created_at: flight.created_at || '',
-				updated_at: flight.updated_at || '',
-				from_ddb: false
+				createdAt: flight.createdAt || '',
+				updatedAt: flight.updatedAt || '',
+				fromOgnDdb: false,
+				fromAdsbxDdb: false
 			},
 			fix
 		);
@@ -180,7 +177,7 @@
 
 		// Follow camera if enabled
 		if (followCamera) {
-			const altitude = fix.altitude_msl_feet || 0;
+			const altitude = fix.altitudeMslFeet || 0;
 			const altitudeMeters = altitude * 0.3048;
 
 			viewer.camera.flyTo({
@@ -298,7 +295,7 @@
 				<div>
 					<h3 class="h5 font-bold">Flight Playback</h3>
 					<p class="text-sm opacity-75">
-						{flight.registration || flight.device_address}
+						{flight.registration || flight.deviceAddress}
 						{#if currentTime}
 							• {currentTime.toLocaleTimeString()}
 						{/if}
@@ -390,15 +387,15 @@
 				<div class="space-y-1 text-sm opacity-75">
 					<p>
 						<strong>Duration:</strong>
-						{flight.duration_seconds ? Math.round(flight.duration_seconds / 60) : '---'} min
+						{flight.durationSeconds ? Math.round(flight.durationSeconds / 60) : '---'} min
 					</p>
 					<p>
 						<strong>Takeoff:</strong>
-						{flight.takeoff_time ? new Date(flight.takeoff_time).toLocaleString() : 'Unknown'}
+						{flight.takeoffTime ? new Date(flight.takeoffTime).toLocaleString() : 'Unknown'}
 					</p>
 					<p>
 						<strong>Landing:</strong>
-						{flight.landing_time ? new Date(flight.landing_time).toLocaleString() : 'In Progress'}
+						{flight.landingTime ? new Date(flight.landingTime).toLocaleString() : 'In Progress'}
 					</p>
 				</div>
 			{:else}

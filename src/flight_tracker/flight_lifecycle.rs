@@ -174,21 +174,6 @@ pub(crate) async fn timeout_flight(
 
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
-    // Fetch the flight to get the last_fix_at timestamp
-    let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await? {
-        Some(f) => f,
-        None => {
-            error!("Flight {} not found when timing out", flight_id);
-            // Remove from active flights even if flight doesn't exist
-            let mut flights = active_flights.write().await;
-            flights.remove(&aircraft_id);
-            return Ok(());
-        }
-    };
-
-    // Use last_fix_at as the timeout time
-    let timeout_time = flight.last_fix_at;
-
     // Fetch last fix to get coordinates for reverse geocoding
     let last_fix = ctx
         .fixes_repo
@@ -215,9 +200,10 @@ pub(crate) async fn timeout_flight(
     };
 
     // Mark flight as timed out in database WITH phase information and end location
+    // The timeout timestamp will be set to the current last_fix_at value atomically
     match ctx
         .flights_repo
-        .timeout_flight_with_phase(flight_id, timeout_time, timeout_phase, end_location_id)
+        .timeout_flight_with_phase(flight_id, timeout_phase, end_location_id)
         .await
     {
         Ok(true) => {
@@ -230,14 +216,15 @@ pub(crate) async fn timeout_flight(
             let mut flights = active_flights.write().await;
             flights.remove(&aircraft_id);
 
-            metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
+            metrics::counter!("flight_tracker.flight_ended.timed_out_total").increment(1);
             let phase_label = match timeout_phase {
                 TimeoutPhase::Climbing => "climbing",
                 TimeoutPhase::Cruising => "cruising",
                 TimeoutPhase::Descending => "descending",
                 TimeoutPhase::Unknown => "unknown",
             };
-            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_label).increment(1);
+            metrics::counter!("flight_tracker.timeout.phase_total", "phase" => phase_label)
+                .increment(1);
 
             Ok(())
         }
@@ -564,7 +551,7 @@ pub(crate) async fn complete_flight(
                     Ok(Some(d)) => d,
                     _ => {
                         tracing::error!("Failed to get aircraft for KML generation");
-                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        metrics::counter!("watchlist.emails.failed_total").increment(1);
                         return;
                     }
                 };
@@ -574,7 +561,7 @@ pub(crate) async fn complete_flight(
                     Ok(Some(f)) => f,
                     _ => {
                         tracing::error!("Failed to get flight for KML generation");
-                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        metrics::counter!("watchlist.emails.failed_total").increment(1);
                         return;
                     }
                 };
@@ -584,7 +571,7 @@ pub(crate) async fn complete_flight(
                     Ok(kml) => kml,
                     Err(e) => {
                         tracing::error!("Failed to generate KML: {}", e);
-                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        metrics::counter!("watchlist.emails.failed_total").increment(1);
                         return;
                     }
                 };
@@ -608,7 +595,7 @@ pub(crate) async fn complete_flight(
                             ),
                             sentry::Level::Error,
                         );
-                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        metrics::counter!("watchlist.emails.failed_total").increment(1);
                         return;
                     }
                 };
@@ -632,7 +619,8 @@ pub(crate) async fn complete_flight(
                                 {
                                     Ok(_) => {
                                         tracing::info!("Sent flight completion email to {}", email);
-                                        metrics::counter!("watchlist.emails.sent").increment(1);
+                                        metrics::counter!("watchlist.emails.sent_total")
+                                            .increment(1);
                                     }
                                     Err(e) => {
                                         tracing::error!("Failed to send email to {}: {}", email, e);
@@ -643,7 +631,8 @@ pub(crate) async fn complete_flight(
                                             ),
                                             sentry::Level::Error,
                                         );
-                                        metrics::counter!("watchlist.emails.failed").increment(1);
+                                        metrics::counter!("watchlist.emails.failed_total")
+                                            .increment(1);
                                     }
                                 }
                             }
@@ -653,7 +642,7 @@ pub(crate) async fn complete_flight(
                                 "Failed to get user {} for email notification",
                                 user_id
                             );
-                            metrics::counter!("watchlist.emails.failed").increment(1);
+                            metrics::counter!("watchlist.emails.failed_total").increment(1);
                         }
                     }
                 }
@@ -671,12 +660,12 @@ pub(crate) async fn complete_flight(
                     ),
                     sentry::Level::Error,
                 );
-                metrics::counter!("watchlist.emails.failed").increment(1);
+                metrics::counter!("watchlist.emails.failed_total").increment(1);
             }
         }
     });
 
-    metrics::counter!("flight_tracker.flight_ended.landed").increment(1);
+    metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
 
     Ok(true) // Return true to indicate flight was completed normally
 }

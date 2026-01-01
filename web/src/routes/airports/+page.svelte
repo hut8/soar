@@ -3,25 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { formatSnakeCase } from '$lib/formatters';
-
-	interface Airport {
-		id: number;
-		ident: string;
-		airport_type: string;
-		name: string;
-		latitude_deg: string | null;
-		longitude_deg: string | null;
-		elevation_ft: number | null;
-		continent: string | null;
-		iso_country: string | null;
-		iso_region: string | null;
-		municipality: string | null;
-		scheduled_service: boolean;
-		icao_code: string | null;
-		iata_code: string | null;
-		gps_code: string | null;
-		local_code: string | null;
-	}
+	import type { Airport, DataListResponse } from '$lib/types';
 
 	let airports: Airport[] = [];
 	let loading = false;
@@ -40,7 +22,8 @@
 
 		try {
 			const endpoint = `/airports?q=${encodeURIComponent(searchQuery.trim())}`;
-			airports = await serverCall<Airport[]>(endpoint);
+			const response = await serverCall<DataListResponse<Airport>>(endpoint);
+			airports = response.data;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search airports: ${errorMessage}`;
@@ -84,21 +67,21 @@
 			parts.push(airport.municipality);
 		}
 
-		if (airport.iso_region) {
+		if (airport.isoRegion) {
 			// Extract state/province from iso_region (format: US-CA -> CA)
-			const region = airport.iso_region.split('-').pop() || airport.iso_region;
+			const region = airport.isoRegion.split('-').pop() || airport.isoRegion;
 			parts.push(region);
 		}
 
-		if (airport.iso_country) {
-			parts.push(airport.iso_country);
+		if (airport.isoCountry) {
+			parts.push(airport.isoCountry);
 		}
 
 		return parts.length > 0 ? parts.join(', ') : '—';
 	}
 
 	function getAirportCode(airport: Airport): string {
-		return airport.icao_code || airport.iata_code || airport.gps_code || airport.local_code || '—';
+		return airport.icaoCode || airport.iataCode || airport.gpsCode || airport.localCode || '—';
 	}
 </script>
 
@@ -183,7 +166,7 @@
 									<td class="font-semibold">{airport.name}</td>
 									<td>
 										<span class="badge preset-tonal">
-											{formatSnakeCase(airport.airport_type)}
+											{formatSnakeCase(airport.airportType)}
 										</span>
 									</td>
 									<td>
@@ -194,17 +177,17 @@
 									</td>
 									<td class="font-mono text-sm">
 										<a
-											href={getGoogleMapsUrl(airport.latitude_deg, airport.longitude_deg)}
+											href={getGoogleMapsUrl(airport.latitudeDeg, airport.longitudeDeg)}
 											target="_blank"
 											rel="noopener noreferrer"
 											class="text-primary-500 underline hover:text-primary-700"
 										>
-											{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+											{formatCoordinates(airport.latitudeDeg, airport.longitudeDeg)}
 										</a>
 									</td>
 									<td>
-										{#if airport.elevation_ft !== null}
-											<span>{airport.elevation_ft} ft</span>
+										{#if airport.elevationFt !== null}
+											<span>{airport.elevationFt} ft</span>
 										{:else}
 											<span class="text-surface-500">—</span>
 										{/if}
@@ -229,7 +212,7 @@
 								<div class="font-semibold">{airport.name}</div>
 							</div>
 							<span class="badge preset-tonal text-xs">
-								{formatSnakeCase(airport.airport_type)}
+								{formatSnakeCase(airport.airportType)}
 							</span>
 						</div>
 
@@ -239,11 +222,11 @@
 								<span class="text-surface-600-300-token">{formatLocation(airport)}</span>
 							</div>
 							<div class="text-surface-600-300-token font-mono text-xs">
-								{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+								{formatCoordinates(airport.latitudeDeg, airport.longitudeDeg)}
 							</div>
-							{#if airport.elevation_ft !== null}
+							{#if airport.elevationFt !== null}
 								<div class="text-surface-600-300-token text-xs">
-									Elevation: {airport.elevation_ft} ft
+									Elevation: {airport.elevationFt} ft
 								</div>
 							{/if}
 						</dl>

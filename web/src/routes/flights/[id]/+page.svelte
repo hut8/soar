@@ -1,6 +1,6 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount, onDestroy, untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import {
@@ -27,9 +27,10 @@
 		Globe
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight, Receiver } from '$lib/types';
+	import type { Flight, Receiver, DataResponse } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import durationPlugin from 'dayjs/plugin/duration';
 	import {
 		getAircraftTypeOgnDescription,
 		formatAircraftAddress,
@@ -47,8 +48,51 @@
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
 
 	dayjs.extend(relativeTime);
+	dayjs.extend(durationPlugin);
 
 	let { data }: { data: PageData } = $props();
+
+	// Progressive loading state - await promises from page load
+	import type { Aircraft, Fix } from '$lib/types';
+	let aircraft = $state<Aircraft | undefined>(undefined);
+	let fixes = $state<Fix[]>([]);
+	let isLoadingAircraft = $state(true);
+	let isLoadingFixes = $state(true);
+
+	// Load aircraft and fixes progressively
+	$effect(() => {
+		isLoadingAircraft = true;
+		data.aircraftPromise.then((result) => {
+			aircraft = result;
+			isLoadingAircraft = false;
+		});
+
+		isLoadingFixes = true;
+		data.fixesPromise.then((result) => {
+			fixes = result;
+			isLoadingFixes = false;
+		});
+	});
+
+	interface FlightGap {
+		gapStart: string;
+		gapEnd: string;
+		durationSeconds: number;
+		distanceMeters: number;
+		callsignBefore: string | null;
+		callsignAfter: string | null;
+		squawkBefore: string | null;
+		squawkAfter: string | null;
+		climbRateBefore: number | null;
+		climbRateAfter: number | null;
+		avgClimbRate10Before: number | null;
+		avgClimbRate10After: number | null;
+	}
+
+	interface FlightGapsResponse {
+		gaps: FlightGap[];
+		count: number;
+	}
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
@@ -76,7 +120,7 @@
 
 	// Nearby flights data - shared between map and section
 	let nearbyFlights = $state<Flight[]>([]);
-	let nearbyFlightsFixes = $state<Map<string, typeof data.fixes>>(new Map());
+	let nearbyFlightsFixes = $state<Map<string, typeof fixes>>(new Map());
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
 	let showNearbyFlightsSection = $state(false);
@@ -86,8 +130,13 @@
 	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
 	let isLoadingReceivers = $state(false);
 
+	// Fix gaps data
+	let flightGaps = $state<FlightGap[]>([]);
+	let isLoadingGaps = $state(false);
+	let showGaps = $state(false);
+
 	// Reverse fixes to show chronologically (earliest first, landing last)
-	const reversedFixes = $derived([...data.fixes].reverse());
+	const reversedFixes = $derived(fixes.length > 0 ? [...fixes].reverse() : []);
 	const totalPages = $derived(Math.ceil(reversedFixes.length / pageSize));
 	const paginatedFixes = $derived(
 		reversedFixes.slice((currentPage - 1) * pageSize, currentPage * pageSize)
@@ -95,11 +144,11 @@
 
 	// Calculate flight duration
 	const duration = $derived.by(() => {
-		if (!data.flight.takeoff_time || !data.flight.landing_time) {
+		if (!data.flight.takeoffTime || !data.flight.landingTime) {
 			return null;
 		}
-		const start = new Date(data.flight.takeoff_time);
-		const end = new Date(data.flight.landing_time);
+		const start = new Date(data.flight.takeoffTime);
+		const end = new Date(data.flight.landingTime);
 		const diffMs = end.getTime() - start.getTime();
 		const hours = Math.floor(diffMs / (1000 * 60 * 60));
 		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -108,28 +157,28 @@
 
 	// Calculate fixes per second rate
 	const fixesPerSecond = $derived.by(() => {
-		if (!data.flight.takeoff_time || !data.flight.landing_time || data.fixesCount === 0) {
+		if (!data.flight.takeoffTime || !data.flight.landingTime || fixes.length === 0) {
 			return null;
 		}
-		const start = new Date(data.flight.takeoff_time);
-		const end = new Date(data.flight.landing_time);
+		const start = new Date(data.flight.takeoffTime);
+		const end = new Date(data.flight.landingTime);
 		const durationSeconds = (end.getTime() - start.getTime()) / 1000;
 		if (durationSeconds <= 0) return null;
-		return (data.fixesCount / durationSeconds).toFixed(2);
+		return (fixes.length / durationSeconds).toFixed(2);
 	});
 
 	// Calculate maximum altitude from fixes
 	const maxAltitude = $derived.by(() => {
-		if (data.fixes.length === 0) return null;
-		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
+		if (fixes.length === 0) return null;
+		const maxMsl = Math.max(...fixes.map((f) => f.altitudeMslFeet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
 	// Calculate minimum altitude from fixes
 	const minAltitude = $derived.by(() => {
-		if (data.fixes.length === 0) return null;
-		const validAltitudes = data.fixes
-			.map((f) => f.altitude_msl_feet)
+		if (fixes.length === 0) return null;
+		const validAltitudes = fixes
+			.map((f) => f.altitudeMslFeet)
 			.filter((alt): alt is number => alt !== null && alt !== undefined);
 		if (validAltitudes.length === 0) return null;
 		return Math.min(...validAltitudes);
@@ -150,7 +199,7 @@
 
 	// Helper function to determine which fixes should display arrow markers
 	// Returns a Set of indices for fixes that should show arrows
-	function getArrowFixIndices(fixesInOrder: typeof data.fixes): SvelteSet<number> {
+	function getArrowFixIndices(fixesInOrder: Fix[]): SvelteSet<number> {
 		const indices = new SvelteSet<number>();
 
 		if (fixesInOrder.length === 0) return indices;
@@ -257,17 +306,17 @@
 		let lastArrowTime: Date | null = null;
 		const TEN_MINUTES_MS = 10 * 60 * 1000;
 
-		const fixes = [...data.fixes].reverse();
-		const totalFixes = fixes.length;
+		const reversedFixesForArrows = [...fixes].reverse();
+		const totalFixes = reversedFixesForArrows.length;
 
 		flightPathSegments.forEach((segment, index) => {
 			const path = segment.getPath();
 			if (path.getLength() < 2) return;
 
 			// Get color based on segment index
-			if (index >= fixes.length) return;
-			const fix = fixes[index];
-			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			if (index >= reversedFixesForArrows.length) return;
+			const fix = reversedFixesForArrows[index];
+			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fixTime = new Date(fix.timestamp);
@@ -301,7 +350,7 @@
 
 	// Helper function to create gradient polyline segments
 	function createGradientPolylines(
-		fixesInOrder: typeof data.fixes,
+		fixesInOrder: Fix[],
 		targetMap: google.maps.Map
 	): google.maps.Polyline[] {
 		const minAlt = minAltitude ?? 0;
@@ -321,7 +370,7 @@
 			const fix2 = fixesInOrder[i + 1];
 
 			// Use the starting fix's color for the segment
-			const color = getFixColor(i, fix1.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(i, fix1.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fix1Time = new Date(fix1.timestamp);
@@ -368,26 +417,24 @@
 
 	// Calculate maximum AGL altitude from fixes
 	const maxAglAltitude = $derived.by(() => {
-		if (data.fixes.length === 0) return null;
-		const maxAgl = Math.max(...data.fixes.map((f) => f.altitude_agl_feet || 0));
+		if (fixes.length === 0) return null;
+		const maxAgl = Math.max(...fixes.map((f) => f.altitudeAglFeet || 0));
 		return maxAgl > 0 ? maxAgl : null;
 	});
 
 	// Check if this is an outlanding (flight complete with known departure but no arrival airport)
 	const isOutlanding = $derived(
-		data.flight.landing_time !== null &&
-			data.flight.landing_time !== undefined &&
-			data.flight.departure_airport &&
-			!data.flight.arrival_airport
+		data.flight.landingTime !== null &&
+			data.flight.landingTime !== undefined &&
+			data.flight.departureAirport &&
+			!data.flight.arrivalAirport
 	);
 
 	// Check if any fix has AGL data available
 	const hasAglData = $derived(
-		data.fixes.some(
+		fixes.some(
 			(fix) =>
-				fix.altitude_agl_feet !== null &&
-				fix.altitude_agl_feet !== undefined &&
-				fix.altitude_agl_feet > 0
+				fix.altitudeAglFeet !== null && fix.altitudeAglFeet !== undefined && fix.altitudeAglFeet > 0
 		)
 	);
 
@@ -481,10 +528,7 @@
 	}
 
 	// Helper function to filter fixes to only those in viewport (with padding)
-	function filterFixesToViewport(
-		fixes: typeof data.fixes,
-		bounds: google.maps.LatLngBounds
-	): typeof data.fixes {
+	function filterFixesToViewport(fixes: Fix[], bounds: google.maps.LatLngBounds): typeof fixes {
 		// Expand bounds by ~20% in each direction to include slightly off-screen fixes
 		const ne = bounds.getNorthEast();
 		const sw = bounds.getSouthWest();
@@ -503,10 +547,7 @@
 	}
 
 	// Helper function to simplify polyline by reducing point density
-	function simplifyPath(
-		fixes: typeof data.fixes,
-		maxPoints: number = 500
-	): { lat: number; lng: number }[] {
+	function simplifyPath(fixes: Fix[], maxPoints: number = 500): { lat: number; lng: number }[] {
 		if (fixes.length <= maxPoints) {
 			// No simplification needed
 			return fixes.map((fix) => ({ lat: fix.latitude, lng: fix.longitude }));
@@ -597,7 +638,7 @@
 				// Fetch all fixes in parallel for better performance
 				const fixesPromises = nearbyFlights.map((nearbyFlight) =>
 					serverCall<{
-						fixes: typeof data.fixes;
+						fixes: Fix[];
 						count: number;
 					}>(`/flights/${nearbyFlight.id}/fixes`)
 						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
@@ -744,7 +785,7 @@
 	async function pollForUpdates() {
 		try {
 			// Get the timestamp of the most recent fix (fixes are in DESC order, so first element is newest)
-			const latestFixTimestamp = data.fixes.length > 0 ? data.fixes[0].timestamp : null;
+			const latestFixTimestamp = fixes.length > 0 ? fixes[0].timestamp : null;
 
 			// Build URL with 'after' parameter if we have fixes
 			const fixesUrl = latestFixTimestamp
@@ -756,7 +797,7 @@
 					flight: typeof data.flight;
 				}>(`/flights/${data.flight.id}`),
 				serverCall<{
-					fixes: typeof data.fixes;
+					fixes: Fix[];
 					count: number;
 				}>(fixesUrl)
 			]);
@@ -767,8 +808,8 @@
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
 			if (fixesResponse.fixes.length > 0) {
-				data.fixes = [...fixesResponse.fixes, ...data.fixes];
-				data.fixesCount = data.fixes.length;
+				fixes = [...fixesResponse.fixes, ...fixes];
+				fixes.length = fixes.length;
 			}
 
 			// If flight has landed or timed out, stop polling
@@ -802,9 +843,9 @@
 
 	// Update map with new data (chart updates automatically via FlightProfile component)
 	function updateMap() {
-		if (data.fixes.length === 0 || !map || flightPathSegments.length === 0) return;
+		if (fixes.length === 0 || !map || flightPathSegments.length === 0) return;
 
-		const fixesInOrder = [...data.fixes].reverse();
+		const fixesInOrder = [...fixes].reverse();
 
 		// Clear existing flight path segments
 		flightPathSegments.forEach((segment) => {
@@ -855,7 +896,7 @@
 				}
 
 				// Get color based on current scheme
-				const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+				const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 				// Create SVG arrow element (12x12 pixels, twice the original size)
 				const arrowSvg = document.createElement('div');
@@ -872,18 +913,15 @@
 				});
 
 				marker.addListener('click', () => {
-					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+					const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
+					const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
 					const heading =
-						fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+						fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
 					const turnRate =
-						fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
-					const climbRate =
-						fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+						fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
+					const climbRate = fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 					const groundSpeed =
-						fix.ground_speed_knots !== undefined
-							? Math.round(fix.ground_speed_knots) + ' kt'
-							: 'N/A';
+						fix.groundSpeedKnots !== undefined ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
 					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 					const content = `
@@ -927,7 +965,7 @@
 			});
 
 			// Add landing marker if flight is complete
-			if (data.flight.landing_time && fixesInOrder.length > 0) {
+			if (data.flight.landingTime && fixesInOrder.length > 0) {
 				const last = fixesInOrder[fixesInOrder.length - 1];
 				const landingPin = document.createElement('div');
 				landingPin.innerHTML = `
@@ -950,186 +988,190 @@
 	}
 
 	// Initialize map
-	onMount(async () => {
-		if (data.fixes.length === 0 || !mapContainer) return;
+	// Initialize map when fixes are loaded (uses $effect to re-run when fixes change)
+	$effect(() => {
+		if (fixes.length === 0 || !mapContainer || isLoadingFixes) return;
 
-		try {
-			setOptions({
-				key: GOOGLE_MAPS_API_KEY,
-				v: 'weekly'
-			});
+		// Use untrack to avoid creating reactive dependencies on map state
+		untrack(async () => {
+			try {
+				setOptions({
+					key: GOOGLE_MAPS_API_KEY,
+					v: 'weekly'
+				});
 
-			await importLibrary('maps');
-			await importLibrary('marker');
+				await importLibrary('maps');
+				await importLibrary('marker');
 
-			// Use reversed fixes for chronological order (earliest to latest)
-			const fixesInOrder = [...data.fixes].reverse();
+				// Use reversed fixes for chronological order (earliest to latest)
+				const fixesInOrder = [...fixes].reverse();
 
-			// Calculate center and bounds
-			const bounds = new google.maps.LatLngBounds();
-			fixesInOrder.forEach((fix) => {
-				bounds.extend({ lat: fix.latitude, lng: fix.longitude });
-			});
+				// Calculate center and bounds
+				const bounds = new google.maps.LatLngBounds();
+				fixesInOrder.forEach((fix) => {
+					bounds.extend({ lat: fix.latitude, lng: fix.longitude });
+				});
 
-			const center = bounds.getCenter();
+				const center = bounds.getCenter();
 
-			// Create map with satellite view by default
-			map = new google.maps.Map(mapContainer, {
-				center: { lat: center.lat(), lng: center.lng() },
-				zoom: 12,
-				mapId: 'FLIGHT_MAP',
-				mapTypeId: google.maps.MapTypeId.SATELLITE,
-				streetViewControl: false,
-				fullscreenControl: false
-			});
+				// Create map with satellite view by default
+				if (!mapContainer) return;
+				map = new google.maps.Map(mapContainer, {
+					center: { lat: center.lat(), lng: center.lng() },
+					zoom: 12,
+					mapId: 'FLIGHT_MAP',
+					mapTypeId: google.maps.MapTypeId.SATELLITE,
+					streetViewControl: false,
+					fullscreenControl: false
+				});
 
-			// Fit bounds with tighter padding
-			fitMapToBounds();
+				// Fit bounds with tighter padding
+				fitMapToBounds();
 
-			// Create gradient polyline segments
-			flightPathSegments = createGradientPolylines(fixesInOrder, map);
+				// Create gradient polyline segments
+				flightPathSegments = createGradientPolylines(fixesInOrder, map);
 
-			// Track user interaction with map
-			let isDragging = false;
+				// Track user interaction with map
+				let isDragging = false;
 
-			map.addListener('dragstart', () => {
-				isDragging = true;
-			});
+				map.addListener('dragstart', () => {
+					isDragging = true;
+				});
 
-			map.addListener('dragend', () => {
-				if (isDragging) {
-					hasUserInteracted = true;
-					isDragging = false;
-				}
-			});
-
-			// Add zoom listener to update arrow scales and track user interaction
-			map.addListener('zoom_changed', () => {
-				updateArrowScales();
-
-				// If zoom wasn't automated, mark as user interaction
-				if (!isAutomatedZoom) {
-					hasUserInteracted = true;
-				}
-				isAutomatedZoom = false;
-			});
-
-			// Add bounds_changed listener to update nearby flights when panning/zooming
-			// Use debouncing to avoid excessive re-renders
-			let boundsChangedTimeout: ReturnType<typeof setTimeout> | null = null;
-			map.addListener('bounds_changed', () => {
-				if (boundsChangedTimeout) {
-					clearTimeout(boundsChangedTimeout);
-				}
-				boundsChangedTimeout = setTimeout(() => {
-					// Only update if nearby flights are enabled
-					if (includeNearbyFlights && nearbyFlightsFixes.size > 0) {
-						updateNearbyFlightPaths();
+				map.addListener('dragend', () => {
+					if (isDragging) {
+						hasUserInteracted = true;
+						isDragging = false;
 					}
-				}, 300); // 300ms debounce
-			});
+				});
 
-			// Create info window for altitude display
-			altitudeInfoWindow = new google.maps.InfoWindow();
+				// Add zoom listener to update arrow scales and track user interaction
+				map.addListener('zoom_changed', () => {
+					updateArrowScales();
 
-			// Wait for map to be fully initialized before adding advanced markers
-			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Add takeoff marker (green) - first fix chronologically
-				if (fixesInOrder.length > 0) {
-					const first = fixesInOrder[0];
-					const takeoffPin = document.createElement('div');
-					takeoffPin.innerHTML = `
+					// If zoom wasn't automated, mark as user interaction
+					if (!isAutomatedZoom) {
+						hasUserInteracted = true;
+					}
+					isAutomatedZoom = false;
+				});
+
+				// Add bounds_changed listener to update nearby flights when panning/zooming
+				// Use debouncing to avoid excessive re-renders
+				let boundsChangedTimeout: ReturnType<typeof setTimeout> | null = null;
+				map.addListener('bounds_changed', () => {
+					if (boundsChangedTimeout) {
+						clearTimeout(boundsChangedTimeout);
+					}
+					boundsChangedTimeout = setTimeout(() => {
+						// Only update if nearby flights are enabled
+						if (includeNearbyFlights && nearbyFlightsFixes.size > 0) {
+							updateNearbyFlightPaths();
+						}
+					}, 300); // 300ms debounce
+				});
+
+				// Create info window for altitude display
+				altitudeInfoWindow = new google.maps.InfoWindow();
+
+				// Wait for map to be fully initialized before adding advanced markers
+				google.maps.event.addListenerOnce(map, 'idle', () => {
+					// Add takeoff marker (green) - first fix chronologically
+					if (fixesInOrder.length > 0) {
+						const first = fixesInOrder[0];
+						const takeoffPin = document.createElement('div');
+						takeoffPin.innerHTML = `
 						<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
 					`;
 
-					new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: first.latitude, lng: first.longitude },
-						content: takeoffPin,
-						title: 'Takeoff'
-					});
-				}
+						new google.maps.marker.AdvancedMarkerElement({
+							map,
+							position: { lat: first.latitude, lng: first.longitude },
+							content: takeoffPin,
+							title: 'Takeoff'
+						});
+					}
 
-				// Add landing marker (red) if flight is complete - last fix chronologically
-				if (data.flight.landing_time && fixesInOrder.length > 0) {
-					const last = fixesInOrder[fixesInOrder.length - 1];
-					const landingPin = document.createElement('div');
-					landingPin.innerHTML = `
+					// Add landing marker (red) if flight is complete - last fix chronologically
+					if (data.flight.landingTime && fixesInOrder.length > 0) {
+						const last = fixesInOrder[fixesInOrder.length - 1];
+						const landingPin = document.createElement('div');
+						landingPin.innerHTML = `
 						<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
 					`;
 
-					new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: last.latitude, lng: last.longitude },
-						content: landingPin,
-						title: 'Landing'
-					});
-				}
-
-				// Add directional arrow markers at selected intervals
-				const minAlt = minAltitude ?? 0;
-				const maxAlt = maxAltitude ?? 1000;
-				const arrowIndices = getArrowFixIndices(fixesInOrder);
-				const totalFixes = fixesInOrder.length;
-
-				fixesInOrder.forEach((fix, index) => {
-					// Only create arrow markers for selected indices
-					if (!arrowIndices.has(index)) return;
-
-					// Calculate bearing to next fix (or use previous bearing for last fix)
-					let bearing = 0;
-					if (index < fixesInOrder.length - 1) {
-						const nextFix = fixesInOrder[index + 1];
-						bearing = calculateBearing(
-							fix.latitude,
-							fix.longitude,
-							nextFix.latitude,
-							nextFix.longitude
-						);
-					} else if (index > 0) {
-						// For last fix, use bearing from previous fix
-						const prevFix = fixesInOrder[index - 1];
-						bearing = calculateBearing(
-							prevFix.latitude,
-							prevFix.longitude,
-							fix.latitude,
-							fix.longitude
-						);
+						new google.maps.marker.AdvancedMarkerElement({
+							map,
+							position: { lat: last.latitude, lng: last.longitude },
+							content: landingPin,
+							title: 'Landing'
+						});
 					}
 
-					// Get color based on current scheme
-					const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+					// Add directional arrow markers at selected intervals
+					const minAlt = minAltitude ?? 0;
+					const maxAlt = maxAltitude ?? 1000;
+					const arrowIndices = getArrowFixIndices(fixesInOrder);
+					const totalFixes = fixesInOrder.length;
 
-					// Create SVG arrow element (12x12 pixels, twice the original size)
-					const arrowSvg = document.createElement('div');
-					arrowSvg.innerHTML = `
+					fixesInOrder.forEach((fix, index) => {
+						// Only create arrow markers for selected indices
+						if (!arrowIndices.has(index)) return;
+
+						// Calculate bearing to next fix (or use previous bearing for last fix)
+						let bearing = 0;
+						if (index < fixesInOrder.length - 1) {
+							const nextFix = fixesInOrder[index + 1];
+							bearing = calculateBearing(
+								fix.latitude,
+								fix.longitude,
+								nextFix.latitude,
+								nextFix.longitude
+							);
+						} else if (index > 0) {
+							// For last fix, use bearing from previous fix
+							const prevFix = fixesInOrder[index - 1];
+							bearing = calculateBearing(
+								prevFix.latitude,
+								prevFix.longitude,
+								fix.latitude,
+								fix.longitude
+							);
+						}
+
+						// Get color based on current scheme
+						const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
+
+						// Create SVG arrow element (12x12 pixels, twice the original size)
+						const arrowSvg = document.createElement('div');
+						arrowSvg.innerHTML = `
 						<svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
 							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
 						</svg>
 					`;
 
-					const marker = new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: fix.latitude, lng: fix.longitude },
-						content: arrowSvg
-					});
+						const marker = new google.maps.marker.AdvancedMarkerElement({
+							map,
+							position: { lat: fix.latitude, lng: fix.longitude },
+							content: arrowSvg
+						});
 
-					marker.addListener('click', () => {
-						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-						const heading =
-							fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
-						const turnRate =
-							fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
-						const climbRate =
-							fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
-						const groundSpeed =
-							fix.ground_speed_knots !== undefined
-								? Math.round(fix.ground_speed_knots) + ' kt'
-								: 'N/A';
-						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+						marker.addListener('click', () => {
+							const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
+							const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
+							const heading =
+								fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
+							const turnRate =
+								fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
+							const climbRate =
+								fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
+							const groundSpeed =
+								fix.groundSpeedKnots !== undefined
+									? Math.round(fix.groundSpeedKnots) + ' kt'
+									: 'N/A';
+							const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
-						const content = `
+							const content = `
 							<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
 								<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">${timestamp}</div>
 								<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
@@ -1161,24 +1203,25 @@
 							</div>
 						`;
 
-						altitudeInfoWindow?.setContent(content);
-						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-						altitudeInfoWindow?.open(map);
+							altitudeInfoWindow?.setContent(content);
+							altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+							altitudeInfoWindow?.open(map);
+						});
+
+						fixMarkers.push(marker);
 					});
-
-					fixMarkers.push(marker);
 				});
-			});
-		} catch (error) {
-			console.error('Failed to load Google Maps:', error);
-		}
+			} catch (error) {
+				console.error('Failed to load Google Maps:', error);
+			}
 
-		// Start polling if flight is in progress
-		startPolling();
-	});
+			// Start polling if flight is in progress
+			startPolling();
+		}); // end untrack
+	}); // end $effect
 
 	// Callbacks for chart hover interaction with map
-	function handleChartHover(fix: (typeof data.fixes)[0]) {
+	function handleChartHover(fix: (typeof fixes)[0]) {
 		if (!map) return;
 
 		// Create or update hover marker
@@ -1208,7 +1251,7 @@
 		}
 	}
 
-	function handleChartClick(fix: (typeof data.fixes)[0]) {
+	function handleChartClick(fix: (typeof fixes)[0]) {
 		if (!map) return;
 
 		// Create or update hover marker (reuse the same marker for clicks)
@@ -1238,7 +1281,7 @@
 
 		// Untrack the rest to avoid infinite loop when updateMap modifies state
 		untrack(() => {
-			if (map && data.fixes.length > 0 && flightPathSegments.length > 0) {
+			if (map && fixes.length > 0 && flightPathSegments.length > 0) {
 				updateMap();
 			}
 		});
@@ -1251,9 +1294,9 @@
 
 	// Fit bounds with better padding to reduce wasted space
 	function fitMapToBounds() {
-		if (!map || data.fixes.length === 0) return;
+		if (!map || fixes.length === 0) return;
 
-		const fixesInOrder = [...data.fixes].reverse();
+		const fixesInOrder = [...fixes].reverse();
 		const bounds = new google.maps.LatLngBounds();
 		fixesInOrder.forEach((fix) => {
 			bounds.extend({ lat: fix.latitude, lng: fix.longitude });
@@ -1286,10 +1329,68 @@
 			document.getElementById('fixes-table')?.scrollIntoView({ behavior: 'smooth' });
 		}
 	}
+
+	// Fetch flight gaps
+	async function fetchFlightGaps() {
+		if (flightGaps.length > 0) {
+			// Already loaded
+			showGaps = true;
+			return;
+		}
+
+		isLoadingGaps = true;
+		try {
+			const response = await serverCall<DataResponse<FlightGapsResponse>>(
+				`/flights/${data.flight.id}/gaps`
+			);
+			flightGaps = response.data.gaps;
+			showGaps = true;
+		} catch (err) {
+			console.error('Failed to fetch flight gaps:', err);
+		} finally {
+			isLoadingGaps = false;
+		}
+	}
+
+	// Format duration from seconds to human-readable format
+	function formatDuration(seconds: number): string {
+		const d = dayjs.duration(seconds, 'seconds');
+		const hours = Math.floor(d.asHours());
+		const minutes = d.minutes();
+		const secs = d.seconds();
+
+		if (hours > 0) {
+			return `${hours}h ${minutes}m ${secs}s`;
+		} else if (minutes > 0) {
+			return `${minutes}m ${secs}s`;
+		} else {
+			return `${secs}s`;
+		}
+	}
+
+	// Format distance in meters to human-readable format
+	function formatDistanceMeters(meters: number): string {
+		const nm = meters / 1852;
+		const km = meters / 1000;
+
+		if (nm >= 1) {
+			return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`;
+		} else if (km >= 0.1) {
+			return `${km.toFixed(2)} km`;
+		} else {
+			return `${meters.toFixed(0)} m`;
+		}
+	}
+
+	// Format climb rate in fpm
+	function formatClimbRate(fpm: number | null | undefined): string {
+		if (fpm === null || fpm === undefined) return 'N/A';
+		return `${fpm.toFixed(0)} fpm`;
+	}
 </script>
 
 <svelte:head>
-	<title>Flight {data.flight.device_address} | SOAR</title>
+	<title>Flight {data.flight.deviceAddress} | SOAR</title>
 </svelte:head>
 
 <div class="container mx-auto space-y-4 p-4">
@@ -1314,14 +1415,20 @@
 						{/if}
 					</div>
 				</div>
-				{#if data.device}
+				{#if isLoadingAircraft}
+					<!-- Aircraft loading skeleton -->
+					<div class="flex flex-wrap items-center gap-2">
+						<div class="h-5 placeholder w-32 animate-pulse"></div>
+						<span class="text-surface-400-500-token">•</span>
+						<div class="h-5 placeholder w-24 animate-pulse"></div>
+					</div>
+				{:else if aircraft}
 					<div class="flex flex-wrap items-center gap-2 text-sm">
-						{#if data.device.registration}
+						{#if aircraft.registration}
 							<span class="font-mono font-semibold">
-								{data.device.registration}
-								{#if data.device.competition_number}
-									<span class="text-surface-500-400-token ml-1"
-										>({data.device.competition_number})</span
+								{aircraft.registration}
+								{#if aircraft.competitionNumber}
+									<span class="text-surface-500-400-token ml-1">({aircraft.competitionNumber})</span
 									>
 								{/if}
 							</span>
@@ -1333,40 +1440,35 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraft_model}
-							<span class="font-semibold">{data.device.aircraft_model}</span>
+						{#if aircraft.aircraftModel}
+							<span class="font-semibold">{aircraft.aircraftModel}</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.device.aircraft_type_ogn}
+						{#if aircraft.aircraftTypeOgn}
 							<span
-								class="chip {getAircraftTypeColor(
-									data.device.aircraft_type_ogn
-								)} text-xs font-semibold"
+								class="chip {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs font-semibold"
 							>
-								{getAircraftTypeOgnDescription(data.device.aircraft_type_ogn)}
+								{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.flight.aircraft_id && data.flight.device_address && data.flight.device_address_type}
-							{#if data.flight.aircraft_country_code}
+						{#if data.flight.aircraftId && data.flight.deviceAddress && data.flight.deviceAddressType}
+							{#if data.flight.aircraftCountryCode}
 								<img
-									src={getFlagPath(data.flight.aircraft_country_code)}
-									alt={getCountryName(data.flight.aircraft_country_code) || ''}
-									title={getCountryName(data.flight.aircraft_country_code) || ''}
+									src={getFlagPath(data.flight.aircraftCountryCode)}
+									alt={getCountryName(data.flight.aircraftCountryCode) || ''}
+									title={getCountryName(data.flight.aircraftCountryCode) || ''}
 									class="h-4 rounded-sm"
 								/>
 							{/if}
 							<a
-								href="/aircraft/{data.flight.aircraft_id}"
+								href="/aircraft/{data.flight.aircraftId}"
 								target="_blank"
 								rel="noopener noreferrer"
 								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
 							>
 								<span class="font-mono text-xs">
-									{formatAircraftAddress(
-										data.flight.device_address_type,
-										data.flight.device_address
-									)}
+									{formatAircraftAddress(data.flight.deviceAddressType, data.flight.deviceAddress)}
 								</span>
 								<ExternalLink class="h-3 w-3" />
 							</a>
@@ -1375,11 +1477,11 @@
 				{/if}
 			</div>
 			<div class="flex items-center gap-2">
-				{#if data.flight.previous_flight_id || data.flight.next_flight_id}
+				{#if data.flight.previousFlightId || data.flight.nextFlightId}
 					<div class="flex items-center gap-1">
-						{#if data.flight.previous_flight_id}
+						{#if data.flight.previousFlightId}
 							<a
-								href="/flights/{data.flight.previous_flight_id}"
+								href="/flights/{data.flight.previousFlightId}"
 								class="btn preset-tonal btn-sm"
 								title="Previous flight for this device"
 							>
@@ -1392,9 +1494,9 @@
 								Previous
 							</button>
 						{/if}
-						{#if data.flight.next_flight_id}
+						{#if data.flight.nextFlightId}
 							<a
-								href="/flights/{data.flight.next_flight_id}"
+								href="/flights/{data.flight.nextFlightId}"
 								class="btn preset-tonal btn-sm"
 								title="Next flight for this device"
 							>
@@ -1427,44 +1529,44 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Takeoff</div>
 					<div class="font-semibold">
-						{#if data.flight.takeoff_time}
+						{#if data.flight.takeoffTime}
 							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoffTime)}</span>
 							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
+							<span class="hidden md:inline">{formatDateTime(data.flight.takeoffTime)}</span>
 						{:else}
 							Unknown
 						{/if}
 					</div>
 					<div class="text-surface-600-300-token text-sm">
-						{#if data.flight.departure_airport && data.flight.departure_airport_id}
-							{#if data.flight.departure_airport_country}
+						{#if data.flight.departureAirport && data.flight.departureAirportId}
+							{#if data.flight.departureAirportCountry}
 								<img
-									src={getFlagPath(data.flight.departure_airport_country)}
+									src={getFlagPath(data.flight.departureAirportCountry)}
 									alt=""
 									class="mr-1 inline-block h-3.5 rounded-sm"
 								/>
 							{/if}
-							<a href="/airports/{data.flight.departure_airport_id}" class="anchor">
-								{data.flight.departure_airport}
+							<a href="/airports/{data.flight.departureAirportId}" class="anchor">
+								{data.flight.departureAirport}
 							</a>
-						{:else if data.flight.departure_airport}
-							{#if data.flight.departure_airport_country}
+						{:else if data.flight.departureAirport}
+							{#if data.flight.departureAirportCountry}
 								<img
-									src={getFlagPath(data.flight.departure_airport_country)}
+									src={getFlagPath(data.flight.departureAirportCountry)}
 									alt=""
 									class="mr-1 inline-block h-3.5 rounded-sm"
 								/>
 							{/if}
-							{data.flight.departure_airport}
+							{data.flight.departureAirport}
 						{:else}
 							Unknown
 						{/if}
 					</div>
-					{#if data.flight.takeoff_runway_ident}
+					{#if data.flight.takeoffRunwayIdent}
 						<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-							<span>Runway {data.flight.takeoff_runway_ident}</span>
-							{#if data.flight.runways_inferred === true}
+							<span>Runway {data.flight.takeoffRunwayIdent}</span>
+							{#if data.flight.runwaysInferred === true}
 								<span
 									class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
 									title="This runway was inferred from the aircraft's heading during takeoff, not matched to airport runway data"
@@ -1474,14 +1576,14 @@
 								</span>
 							{/if}
 						</div>
-					{:else if data.flight.departure_airport}
+					{:else if data.flight.departureAirport}
 						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
 					{/if}
 				</div>
 			</div>
 
 			<!-- Landing / Timeout (hidden for active flights) -->
-			{#if data.flight.state === 'timed_out' || data.flight.landing_time}
+			{#if data.flight.state === 'timed_out' || data.flight.landingTime}
 				<div class="flex items-start gap-3">
 					<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
@@ -1489,52 +1591,52 @@
 							{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
 						</div>
 						<div class="font-semibold">
-							{#if data.flight.state === 'timed_out' && data.flight.timed_out_at}
+							{#if data.flight.state === 'timed_out' && data.flight.timedOutAt}
 								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.timed_out_at)}</span>
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.timedOutAt)}</span>
 								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.timed_out_at)}</span>
-							{:else if data.flight.landing_time}
+								<span class="hidden md:inline">{formatDateTime(data.flight.timedOutAt)}</span>
+							{:else if data.flight.landingTime}
 								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.landingTime)}</span>
 								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
+								<span class="hidden md:inline">{formatDateTime(data.flight.landingTime)}</span>
 							{/if}
 						</div>
 						<div class="text-surface-600-300-token text-sm">
 							{#if data.flight.state === 'timed_out'}
 								No beacons received for 5+ minutes
-							{:else if data.flight.landing_time}
-								{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
-									{#if data.flight.arrival_airport_country}
+							{:else if data.flight.landingTime}
+								{#if data.flight.arrivalAirport && data.flight.arrivalAirportId}
+									{#if data.flight.arrivalAirportCountry}
 										<img
-											src={getFlagPath(data.flight.arrival_airport_country)}
+											src={getFlagPath(data.flight.arrivalAirportCountry)}
 											alt=""
 											class="mr-1 inline-block h-3.5 rounded-sm"
 										/>
 									{/if}
-									<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
-										{data.flight.arrival_airport}
+									<a href="/airports/{data.flight.arrivalAirportId}" class="anchor">
+										{data.flight.arrivalAirport}
 									</a>
-								{:else if data.flight.arrival_airport}
-									{#if data.flight.arrival_airport_country}
+								{:else if data.flight.arrivalAirport}
+									{#if data.flight.arrivalAirportCountry}
 										<img
-											src={getFlagPath(data.flight.arrival_airport_country)}
+											src={getFlagPath(data.flight.arrivalAirportCountry)}
 											alt=""
 											class="mr-1 inline-block h-3.5 rounded-sm"
 										/>
 									{/if}
-									{data.flight.arrival_airport}
+									{data.flight.arrivalAirport}
 								{:else}
 									Unknown
 								{/if}
 							{/if}
 						</div>
-						{#if data.flight.landing_time && data.flight.arrival_airport}
-							{#if data.flight.landing_runway_ident}
+						{#if data.flight.landingTime && data.flight.arrivalAirport}
+							{#if data.flight.landingRunwayIdent}
 								<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-									<span>Runway {data.flight.landing_runway_ident}</span>
-									{#if data.flight.runways_inferred === true}
+									<span>Runway {data.flight.landingRunwayIdent}</span>
+									{#if data.flight.runwaysInferred === true}
 										<span
 											class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
 											title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
@@ -1582,40 +1684,40 @@
 			{/if}
 
 			<!-- Total Distance -->
-			{#if data.flight.total_distance_meters}
+			{#if data.flight.totalDistanceMeters}
 				<div class="flex items-start gap-3">
 					<Route class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Total Distance</div>
-						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
+						<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Maximum Displacement -->
-			{#if data.flight.maximum_displacement_meters}
+			{#if data.flight.maximumDisplacementMeters}
 				<div class="flex items-start gap-3">
 					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
 						<div class="font-semibold">
-							{formatDistance(data.flight.maximum_displacement_meters)}
+							{formatDistance(data.flight.maximumDisplacementMeters)}
 						</div>
 						<div class="text-surface-600-300-token text-sm">
-							from {data.flight.departure_airport}
+							from {data.flight.departureAirport}
 						</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Tow Aircraft -->
-			{#if data.flight.towed_by_aircraft_id}
+			{#if data.flight.towedByAircraftId}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
 						<div class="font-semibold">
-							<TowAircraftLink aircraftId={data.flight.towed_by_aircraft_id} size="md" />
+							<TowAircraftLink aircraftId={data.flight.towedByAircraftId} size="md" />
 						</div>
 					</div>
 				</div>
@@ -1628,25 +1730,25 @@
 					<div class="text-surface-600-300-token text-sm">Recognized at</div>
 					<div class="font-semibold">
 						<!-- Mobile: relative time only -->
-						<span class="md:hidden">{formatDateTimeMobile(data.flight.created_at)}</span>
+						<span class="md:hidden">{formatDateTimeMobile(data.flight.createdAt)}</span>
 						<!-- Desktop: relative time with full datetime -->
-						<span class="hidden md:inline">{formatDateTime(data.flight.created_at)}</span>
+						<span class="hidden md:inline">{formatDateTime(data.flight.createdAt)}</span>
 					</div>
 					<div class="text-surface-600-300-token text-sm">When flight was first detected</div>
 				</div>
 			</div>
 
 			<!-- Latest fix (for active flights) -->
-			{#if data.flight.state === 'active' && data.fixes.length > 0}
+			{#if data.flight.state === 'active' && fixes.length > 0}
 				<div class="flex items-start gap-3">
 					<Clock class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Latest fix</div>
 						<div class="font-semibold">
 							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.fixes[0].timestamp)}</span>
+							<span class="md:hidden">{formatDateTimeMobile(fixes[0].timestamp)}</span>
 							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.fixes[0].timestamp)}</span>
+							<span class="hidden md:inline">{formatDateTime(fixes[0].timestamp)}</span>
 						</div>
 						<div class="text-surface-600-300-token text-sm">
 							Most recent position update
@@ -1663,7 +1765,15 @@
 	</div>
 
 	<!-- Map -->
-	{#if data.fixes.length > 0}
+	{#if isLoadingFixes}
+		<!-- Map loading skeleton -->
+		<div class="card p-4">
+			<div class="mb-3">
+				<div class="h-8 placeholder w-48 animate-pulse"></div>
+			</div>
+			<div class="h-96 placeholder w-full animate-pulse rounded-lg"></div>
+		</div>
+	{:else if fixes.length > 0}
 		<div class="card p-4">
 			<div class="mb-3 flex flex-col gap-3">
 				<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1763,7 +1873,7 @@
 			<h2 class="mb-3 h3">Flight Profile</h2>
 			<div class="h-80 w-full">
 				<FlightProfile
-					fixes={data.fixes}
+					{fixes}
 					{hasAglData}
 					onHover={handleChartHover}
 					onUnhover={handleChartUnhover}
@@ -1809,8 +1919,8 @@
 	<div class="card p-6" id="fixes-table">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="h2">
-				Position Fixes ({data.fixesCount})
-				{#if fixesPerSecond}
+				Position Fixes {#if !isLoadingFixes}({fixes.length}){/if}
+				{#if fixesPerSecond && !isLoadingFixes}
 					<span class="text-surface-600-300-token ml-2 text-lg">
 						({fixesPerSecond} fixes/sec)
 					</span>
@@ -1818,7 +1928,16 @@
 			</h2>
 		</div>
 
-		{#if data.fixes.length === 0}
+		{#if isLoadingFixes}
+			<!-- Fixes loading skeleton -->
+			<div class="space-y-2">
+				<div class="h-12 placeholder w-full animate-pulse"></div>
+				<div class="h-12 placeholder w-full animate-pulse"></div>
+				<div class="h-12 placeholder w-full animate-pulse"></div>
+				<div class="h-12 placeholder w-full animate-pulse"></div>
+				<div class="h-12 placeholder w-full animate-pulse"></div>
+			</div>
+		{:else if fixes.length === 0}
 			<div class="text-surface-600-300-token py-8 text-center">
 				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 				<p>No position data available for this flight.</p>
@@ -1829,6 +1948,7 @@
 				showHideInactive={false}
 				showRaw={true}
 				useRelativeTimes={true}
+				showIntervals={true}
 				showClimb={true}
 				emptyMessage="No position data available for this flight."
 			/>
@@ -1881,6 +2001,129 @@
 					</div>
 				</div>
 			{/if}
+		{/if}
+	</div>
+
+	<!-- Fix Gaps Section -->
+	<div class="card p-6">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="h2">Fix Gaps</h2>
+		</div>
+
+		{#if !showGaps}
+			<button onclick={fetchFlightGaps} class="btn preset-filled-primary-500" type="button">
+				Show fix gaps (5+ minute intervals)
+			</button>
+		{:else if isLoadingGaps}
+			<div class="flex items-center justify-center py-8">
+				<div
+					class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+				></div>
+				<span class="ml-2">Loading fix gaps...</span>
+			</div>
+		{:else if flightGaps.length === 0}
+			<div class="text-surface-600-300-token py-8 text-center">
+				<Info class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+				<p>No significant gaps found (all fixes within 5 minutes of each other).</p>
+			</div>
+		{:else}
+			<div class="space-y-4">
+				<div class="text-surface-600-300-token text-sm">
+					Found {flightGaps.length} gap{flightGaps.length !== 1 ? 's' : ''} of 5+ minutes between fixes
+				</div>
+
+				{#each flightGaps as gap, index (gap.gapStart)}
+					<div class="preset-tonal-surface-500 card p-4">
+						<div class="mb-3 flex items-center gap-2">
+							<span class="chip preset-filled-warning-500 text-sm font-semibold">
+								Gap #{index + 1}
+							</span>
+							<span class="text-lg font-semibold">{formatDuration(gap.durationSeconds)}</span>
+						</div>
+
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							<!-- Time Information -->
+							<div>
+								<div class="text-surface-600-300-token text-sm">Start Time</div>
+								<div class="font-semibold">{dayjs(gap.gapStart).format('h:mm:ss A')}</div>
+								<div class="text-surface-500-400-token text-xs">
+									{dayjs(gap.gapStart).format('MMM D, YYYY')}
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">End Time</div>
+								<div class="font-semibold">{dayjs(gap.gapEnd).format('h:mm:ss A')}</div>
+								<div class="text-surface-500-400-token text-xs">
+									{dayjs(gap.gapEnd).format('MMM D, YYYY')}
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">Distance Covered</div>
+								<div class="font-semibold">{formatDistanceMeters(gap.distanceMeters)}</div>
+							</div>
+
+							<!-- Callsign and Squawk -->
+							{#if gap.callsignBefore || gap.callsignAfter}
+								<div>
+									<div class="text-surface-600-300-token text-sm">Callsign</div>
+									<div class="font-mono text-sm">
+										{#if gap.callsignBefore === gap.callsignAfter}
+											{gap.callsignBefore || 'N/A'}
+										{:else}
+											<span>{gap.callsignBefore || 'N/A'}</span>
+											<span class="text-surface-500-400-token mx-1">→</span>
+											<span>{gap.callsignAfter || 'N/A'}</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							{#if gap.squawkBefore || gap.squawkAfter}
+								<div>
+									<div class="text-surface-600-300-token text-sm">Squawk Code</div>
+									<div class="font-mono text-sm">
+										{#if gap.squawkBefore === gap.squawkAfter}
+											{gap.squawkBefore || 'N/A'}
+										{:else}
+											<span>{gap.squawkBefore || 'N/A'}</span>
+											<span class="text-surface-500-400-token mx-1">→</span>
+											<span>{gap.squawkAfter || 'N/A'}</span>
+										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Climb Rates -->
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Climb Rate (immediately before/after)
+								</div>
+								<div class="text-sm">
+									<span>{formatClimbRate(gap.climbRateBefore)}</span>
+									<span class="text-surface-500-400-token mx-1">→</span>
+									<span>{formatClimbRate(gap.climbRateAfter)}</span>
+								</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Avg Climb Rate (10 fixes before)
+								</div>
+								<div class="text-sm">{formatClimbRate(gap.avgClimbRate10Before)}</div>
+							</div>
+
+							<div>
+								<div class="text-surface-600-300-token text-sm">
+									Avg Climb Rate (10 fixes after)
+								</div>
+								<div class="text-sm">{formatClimbRate(gap.avgClimbRate10After)}</div>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
 		{/if}
 	</div>
 </div>

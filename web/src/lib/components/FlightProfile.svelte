@@ -87,9 +87,40 @@
 			}
 
 			const fixesInOrder = [...fixes].reverse();
-			const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
-			const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-			const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
+
+			// Define large gap threshold (5 minutes in milliseconds)
+			const LARGE_GAP_THRESHOLD_MS = 5 * 60 * 1000;
+
+			// Process fixes to insert nulls for large time gaps and null values
+			const timestamps: (Date | null)[] = [];
+			const altitudesMsl: (number | null)[] = [];
+			const altitudesAgl: (number | null)[] = [];
+			const groundSpeeds: (number | null)[] = [];
+
+			for (let i = 0; i < fixesInOrder.length; i++) {
+				const fix = fixesInOrder[i];
+				const timestamp = new Date(fix.timestamp);
+
+				// Check for large time gap (except for first fix)
+				if (i > 0) {
+					const prevTimestamp = new Date(fixesInOrder[i - 1].timestamp);
+					const timeDiff = timestamp.getTime() - prevTimestamp.getTime();
+
+					if (timeDiff > LARGE_GAP_THRESHOLD_MS) {
+						// Insert null point to create gap in the line
+						timestamps.push(null);
+						altitudesMsl.push(null);
+						altitudesAgl.push(null);
+						groundSpeeds.push(null);
+					}
+				}
+
+				// Add current fix data - use null instead of 0 for missing values
+				timestamps.push(timestamp);
+				altitudesMsl.push(fix.altitudeMslFeet ?? null);
+				altitudesAgl.push(fix.altitudeAglFeet ?? null);
+				groundSpeeds.push(fix.groundSpeedKnots ?? null);
+			}
 
 			const traces = [
 				{
@@ -99,12 +130,12 @@
 					mode: 'lines' as const,
 					name: 'MSL Altitude (ft)',
 					line: { color: '#3b82f6', width: 2 },
+					connectgaps: false,
 					hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 				}
 			];
 
 			if (hasAglData) {
-				const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
 				traces.push({
 					x: timestamps,
 					y: altitudesAgl,
@@ -112,6 +143,7 @@
 					mode: 'lines' as const,
 					name: 'AGL Altitude (ft)',
 					line: { color: '#10b981', width: 2 },
+					connectgaps: false,
 					hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 				});
 			}
@@ -125,6 +157,7 @@
 				mode: 'lines' as const,
 				name: 'Ground Speed (kt, Right Y Axis)',
 				line: { color: '#f59e0b', width: 2 },
+				connectgaps: false,
 				yaxis: 'y2',
 				hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
 			};

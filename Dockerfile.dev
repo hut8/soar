@@ -1,0 +1,40 @@
+# Development Dockerfile for SOAR backend with hot reload
+FROM rust:1.83-bookworm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    libpq-dev \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cargo-watch for hot reloading
+RUN cargo install cargo-watch
+
+# Install diesel CLI for migrations
+RUN cargo install diesel_cli --no-default-features --features postgres
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency manifests first for better caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs to build dependencies
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# Copy the rest of the source code
+COPY . .
+
+# Build the project
+RUN cargo build --release
+
+# Expose API port
+EXPOSE 3000
+
+# Default command (can be overridden in docker-compose)
+CMD ["cargo", "run", "--", "run"]

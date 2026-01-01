@@ -470,14 +470,21 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     response
 }
 
-// Handler for robots.txt - serves embedded content
+// Handler for robots.txt - serves environment-specific content
 async fn robots_txt() -> impl IntoResponse {
     let mut headers = HeaderMap::new();
     headers.insert("content-type", "text/plain".parse().unwrap());
     // Cache robots.txt for 24 hours
     headers.insert("cache-control", "public, max-age=86400".parse().unwrap());
 
-    (StatusCode::OK, headers, ROBOTS_TXT)
+    // For staging environment, block all crawling
+    let content = if std::env::var("SOAR_ENV").as_deref() == Ok("staging") {
+        "User-agent: *\nDisallow: /\n"
+    } else {
+        ROBOTS_TXT
+    };
+
+    (StatusCode::OK, headers, content)
 }
 
 // Handler for Prometheus metrics endpoint
@@ -552,19 +559,25 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     metrics::gauge!("websocket_connections").set(0.0);
     metrics::gauge!("websocket_active_subscriptions").set(0.0);
     metrics::gauge!("websocket_queue_depth").set(0.0);
-    metrics::counter!("websocket_messages_sent").absolute(0);
-    metrics::counter!("websocket_send_errors").absolute(0);
-    metrics::counter!("websocket_serialization_errors").absolute(0);
-    metrics::counter!("websocket_aircraft_subscribes").absolute(0);
-    metrics::counter!("websocket_aircraft_unsubscribes").absolute(0);
-    metrics::counter!("websocket_area_subscribes").absolute(0);
-    metrics::counter!("websocket_area_unsubscribes").absolute(0);
+    metrics::counter!("websocket_messages_sent_total").absolute(0);
+    metrics::counter!("websocket_send_errors_total").absolute(0);
+    metrics::counter!("websocket_serialization_errors_total").absolute(0);
+    metrics::counter!("websocket_aircraft_subscribes_total").absolute(0);
+    metrics::counter!("websocket_aircraft_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_subscribes_total").absolute(0);
+    metrics::counter!("websocket_area_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_subscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_unsubscribes_total").absolute(0);
+    metrics::counter!("websocket_area_bulk_validation_errors_total").absolute(0);
 
     // Initialize analytics metrics
     crate::metrics::initialize_analytics_metrics();
 
     // Initialize airspace metrics
     crate::metrics::initialize_airspace_metrics();
+
+    // Initialize coverage metrics
+    crate::metrics::initialize_coverage_metrics();
 
     // Start process metrics background task
     tokio::spawn(crate::metrics::process_metrics_task());
@@ -616,6 +629,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs", get(actions::search_clubs))
         .route("/clubs/{id}", get(actions::get_club_by_id))
         .route("/clubs/{id}/flights", get(actions::get_club_flights))
+        .route(
+            "/coverage/hexes",
+            get(actions::coverage::get_coverage_hexes),
+        )
         .route("/fixes", get(actions::search_fixes))
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))
@@ -623,6 +640,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/flights/{id}/device", get(actions::get_flight_device))
         .route("/flights/{id}/kml", get(actions::get_flight_kml))
         .route("/flights/{id}/fixes", get(actions::get_flight_fixes))
+        .route("/flights/{id}/gaps", get(actions::get_flight_gaps))
         .route(
             "/flights/{id}/spline-path",
             get(actions::get_flight_spline_path),
@@ -662,13 +680,14 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/aircraft/{id}", get(actions::get_aircraft_by_id))
         .route("/aircraft/{id}/fixes", get(actions::get_aircraft_fixes))
         .route("/aircraft/{id}/flights", get(actions::get_aircraft_flights))
+        .route("/aircraft/{id}/images", get(actions::get_aircraft_images))
         .route("/aircraft/{id}/club", put(actions::update_aircraft_club))
         .route(
-            "/aircraft/{id}/aircraft/registration",
+            "/aircraft/{id}/registration",
             get(actions::aircraft::get_device_aircraft_registration),
         )
         .route(
-            "/aircraft/{id}/aircraft/model",
+            "/aircraft/{id}/model",
             get(actions::aircraft::get_device_aircraft_model),
         )
         // Receiver routes
@@ -691,9 +710,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/aggregate-stats",
             get(actions::get_receiver_aggregate_stats),
         )
-        // APRS messages routes
-        .route("/aprs-messages", post(actions::get_aprs_messages_bulk))
-        .route("/aprs-messages/{id}", get(actions::get_aprs_message))
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))

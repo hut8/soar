@@ -1,0 +1,22 @@
+# Grafana Alerting Contact Points Configuration (Template)
+# This file is processed by soar-deploy to substitute alert email from /etc/soar/env
+# DO NOT commit actual email addresses to this file - use placeholders only
+#
+# Placeholders:
+#   {{ALERT_EMAIL}} - Alert recipient email address (extracted from EMAIL_TO or ALERT_EMAIL in env file)
+#
+# Note: SMTP server configuration is handled separately via Grafana environment variables
+# or grafana.ini. See the soar-deploy script for how SMTP settings are configured.
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: soar-ops-email
+    receivers:
+      - uid: soar-email-1
+        type: email
+        settings:
+          addresses: {{ALERT_EMAIL}}
+          singleEmail: false
+        disableResolveMessage: false

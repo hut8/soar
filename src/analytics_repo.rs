@@ -414,8 +414,6 @@ impl AnalyticsRepository {
                 active_devices_7d: i32,
                 #[diesel(sql_type = Integer)]
                 outlier_devices_count: i32,
-                #[diesel(sql_type = Nullable<Double>)]
-                data_quality_score: Option<f64>,
             }
 
             let result = diesel::sql_query(
@@ -424,8 +422,7 @@ impl AnalyticsRepository {
                     COALESCE((SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7), 0) as flights_7d,
                     COALESCE((SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30), 0) as flights_30d,
                     COALESCE((SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0), 0) as active_devices_7d,
-                    COALESCE((SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0), 0) as outlier_devices_count,
-                    (SELECT quality_score FROM data_quality_metrics_daily ORDER BY metric_date DESC LIMIT 1) as data_quality_score
+                    COALESCE((SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0), 0) as outlier_devices_count
                 ",
             )
             .get_result::<Row>(&mut conn)?;
@@ -436,7 +433,6 @@ impl AnalyticsRepository {
                 flights_30d: result.flights_30d,
                 active_devices_7d: result.active_devices_7d,
                 outlier_devices_count: result.outlier_devices_count,
-                data_quality_score: result.data_quality_score,
             })
         })
         .await?

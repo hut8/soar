@@ -34,7 +34,7 @@ async fn update_flight_timestamp(
 
 /// Determine if aircraft should be active based on fix data
 /// This checks ground speed first, then altitude (if available)
-pub(crate) fn should_be_active(fix: &Fix) -> bool {
+pub fn should_be_active(fix: &Fix) -> bool {
     // Special case: If no altitude data and speed < 80 knots, consider inactive
     // This handles cases where altitude data is missing but we can still infer ground state from speed
     if fix.altitude_agl_feet.is_none() && fix.altitude_msl_feet.is_none() {
@@ -182,6 +182,72 @@ pub(crate) async fn process_state_transition(
                     (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
                 fix.time_gap_seconds = Some(time_gap_seconds);
 
+                // Check for large gap that indicates landing + new takeoff
+                let gap_hours = time_gap_seconds as f64 / 3600.0;
+                let large_gap = gap_hours >= 4.0; // 4+ hours suggests aircraft landed
+                let currently_climbing = fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
+
+                if large_gap && currently_climbing {
+                    // Large gap + climbing = likely landed and took off again
+                    info!(
+                        "Aircraft {} has {:.1}h gap and is climbing - ending flight {} and creating new flight",
+                        fix.aircraft_id, gap_hours, state.flight_id
+                    );
+                    metrics::counter!("flight_tracker.coalesce.rejected.gap_hours_total")
+                        .increment(1);
+
+                    // End the current flight
+                    if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
+                        error!(
+                            "Failed to complete flight {} due to large gap: {}",
+                            state.flight_id, e
+                        );
+                    }
+
+                    // Remove from active flights
+                    {
+                        let mut flights = ctx.active_flights.write().await;
+                        flights.remove(&fix.aircraft_id);
+                    }
+
+                    // Create a new flight for this fix
+                    let new_flight_id = Uuid::new_v4();
+                    match create_flight(ctx, &fix, new_flight_id, false).await {
+                        Ok(flight_id) => {
+                            info!(
+                                "Created new flight {} for device {} after {:.1}h gap",
+                                flight_id, fix.aircraft_id, gap_hours
+                            );
+
+                            // Assign the new flight_id to this fix
+                            fix.flight_id = Some(flight_id);
+
+                            // Create new active flight state
+                            let mut new_state =
+                                CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                            new_state.last_altitude_msl_ft = fix.altitude_msl_feet;
+                            new_state.last_climb_fpm = fix.climb_fpm;
+                            new_state.last_position = (fix.latitude, fix.longitude);
+
+                            // Add to active flights
+                            let mut flights = ctx.active_flights.write().await;
+                            flights.insert(fix.aircraft_id, new_state);
+
+                            metrics::counter!("flight_tracker.flight_created.gap_split_total")
+                                .increment(1);
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to create new flight for device {} after gap: {}",
+                                fix.aircraft_id, e
+                            );
+                        }
+                    }
+
+                    // Early return - don't continue with normal flow
+                    return Ok(fix);
+                }
+
                 // Update last_fix_at in database
                 update_flight_timestamp(ctx.flights_repo, state.flight_id, fix.timestamp).await;
 
@@ -263,7 +329,8 @@ pub(crate) async fn process_state_transition(
                             "Aircraft {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
                             fix.aircraft_id, prev_callsign, new_callsign
                         );
-                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch").increment(1);
+                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
+                            .increment(1);
                         false
                     }
                     _ => true, // Coalesce if either has no callsign, or callsigns match
@@ -290,10 +357,14 @@ pub(crate) async fn process_state_transition(
                     };
 
                     // Check 3: Phase-based validation - determine if this looks like a landing + new takeoff
+                    // Calculate the gap duration for time-based detection
+                    let gap_hours = (fix.timestamp - timed_out_flight.last_fix_at).num_hours();
+
                     let looks_like_landing = match timed_out_flight.timeout_phase {
                         Some(TimeoutPhase::Descending) => {
                             // Aircraft was descending when it timed out
-                            // Check if new fix is at low altitude climbing (indicates new takeoff)
+                            // This is the canonical "descended out of range while landing" case
+
                             let new_fix_low_altitude =
                                 fix.altitude_agl_feet.map(|agl| agl < 1000).unwrap_or(false);
 
@@ -301,9 +372,20 @@ pub(crate) async fn process_state_transition(
                                 fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
 
                             let far_apart = distance_km > 100.0; // More than 100km away
+                            let very_long_gap = gap_hours >= 4; // More than 4 hours suggests landing
 
-                            // If at low altitude, climbing, and far from timeout position → landed
-                            new_fix_low_altitude && new_fix_climbing && far_apart
+                            // Detect landing + new takeoff if:
+                            // 1. Classic case: Low altitude, climbing, far away (long cross-country)
+                            // 2. NEW: Long gap with climbing - even if nearby (landed, stayed on ground, took off again)
+                            //    Example: Descended out of range at 17:28, reappeared climbing at 04:46 (11h gap, 32km away)
+                            if very_long_gap && new_fix_climbing {
+                                // Very long gap + climbing = almost certainly landed and took off again
+                                // Even if distance is small (aircraft stayed at nearby airport)
+                                true
+                            } else {
+                                // Standard case: requires all three conditions
+                                new_fix_low_altitude && new_fix_climbing && far_apart
+                            }
                         }
                         Some(TimeoutPhase::Cruising) => {
                             // Aircraft was cruising - only reject if VERY far apart
@@ -326,50 +408,51 @@ pub(crate) async fn process_state_transition(
                     if !should_resume {
                         info!(
                             "Aircraft {} NOT coalescing - probable landing detected. \
-                             Phase: {:?}, Distance: {:.1}km, New alt AGL: {:?}ft, New climb: {:?}fpm",
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h, New alt AGL: {:?}ft, New climb: {:?}fpm",
                             fix.aircraft_id,
                             timed_out_flight.timeout_phase,
                             distance_km,
+                            gap_hours as f64,
                             fix.altitude_agl_feet,
                             fix.climb_fpm
                         );
-                        metrics::counter!("flight_tracker.coalesce.rejected.probable_landing")
-                            .increment(1);
+                        metrics::counter!(
+                            "flight_tracker.coalesce.rejected.probable_landing_total"
+                        )
+                        .increment(1);
                         metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
                             .record(distance_km);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours_total")
+                            .record(gap_hours as f64);
                         // Don't resume - fall through to create new flight
                     } else {
                         // Resume the timed-out flight
                         let flight_id = timed_out_flight.id;
                         info!(
                             "Aircraft {} resuming flight {} after timeout. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {}s",
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h",
                             fix.aircraft_id,
                             flight_id,
                             timed_out_flight.timeout_phase,
                             distance_km,
-                            (fix.timestamp - timed_out_flight.last_fix_at).num_seconds()
+                            gap_hours as f64
                         );
 
-                        metrics::counter!("flight_tracker.coalesce.resumed").increment(1);
+                        metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
                         metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
                             .record(distance_km);
 
-                        // Clear the timeout in the database
-                        if let Err(e) = ctx.flights_repo.clear_timeout(flight_id).await {
-                            warn!("Failed to clear timeout for flight {}: {}", flight_id, e);
-                        }
-
-                        // Update last_fix_at to current fix timestamp
+                        // Atomically clear the timeout and update last_fix_at in a single database operation
+                        // This prevents violating the check_timeout_after_last_fix constraint
                         if let Err(e) = ctx
                             .flights_repo
-                            .update_last_fix_at(flight_id, fix.timestamp)
+                            .resume_timed_out_flight(flight_id, fix.timestamp)
                             .await
                         {
-                            warn!(
-                                "Failed to update last_fix_at for resumed flight {}: {}",
-                                flight_id, e
-                            );
+                            error!("Failed to resume timed-out flight {}: {}", flight_id, e);
+                            // If we can't resume the flight, don't continue processing this fix
+                            // Return the fix unmodified so it can be processed again later
+                            return Ok(fix);
                         }
 
                         // Add flight back to ctx.active_flights map with updated position/altitude
@@ -401,7 +484,7 @@ pub(crate) async fn process_state_transition(
             // No recent timed-out flight to resume, so create a new flight
             // Check if this is a takeoff or mid-flight appearance
             // We need to query recent fixes to determine this
-            metrics::counter!("flight_tracker.coalesce.no_timeout_flight").increment(1);
+            metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
             let recent_fixes = ctx
                 .fixes_repo
                 .get_fixes_for_aircraft(fix.aircraft_id, Some(3), None)
@@ -456,7 +539,8 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
-                        metrics::counter!("flight_tracker.flight_created.takeoff").increment(1);
+                        metrics::counter!("flight_tracker.flight_created.takeoff_total")
+                            .increment(1);
 
                         // If this is a towplane taking off, spawn towing detection task
                         if is_towtug {
@@ -470,6 +554,7 @@ pub(crate) async fn process_state_transition(
                                 ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
                                 ctx.aircraft_repo.clone(),
+                                Arc::clone(ctx.active_flights),
                                 Arc::clone(ctx.aircraft_trackers),
                             );
                         }
@@ -509,7 +594,8 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
-                        metrics::counter!("flight_tracker.flight_created.airborne").increment(1);
+                        metrics::counter!("flight_tracker.flight_created.airborne_total")
+                            .increment(1);
                         // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {

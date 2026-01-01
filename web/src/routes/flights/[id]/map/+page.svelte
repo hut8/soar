@@ -38,12 +38,12 @@
 	let isLoadingReceivers = $state(false);
 
 	// Check if fixes have AGL data
-	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
+	const hasAglData = $derived(data.fixes.some((f) => f.altitudeAglFeet !== null));
 
 	// Calculate maximum altitude from fixes
 	const maxAltitude = $derived(() => {
 		if (data.fixes.length === 0) return null;
-		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
+		const maxMsl = Math.max(...data.fixes.map((f) => f.altitudeMslFeet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
@@ -51,7 +51,7 @@
 	const minAltitude = $derived(() => {
 		if (data.fixes.length === 0) return null;
 		const validAltitudes = data.fixes
-			.map((f) => f.altitude_msl_feet)
+			.map((f) => f.altitudeMslFeet)
 			.filter((alt): alt is number => alt !== null && alt !== undefined);
 		if (validAltitudes.length === 0) return null;
 		return Math.min(...validAltitudes);
@@ -187,7 +187,7 @@
 			// Get color based on segment index
 			if (index >= fixes.length) return;
 			const fix = fixes[index];
-			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fixTime = new Date(fix.timestamp);
@@ -239,7 +239,7 @@
 			const fix1 = fixesInOrder[i];
 			const fix2 = fixesInOrder[i + 1];
 
-			const color = getFixColor(i, fix1.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(i, fix1.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fix1Time = new Date(fix1.timestamp);
@@ -405,7 +405,7 @@
 				);
 			}
 
-			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Create SVG arrow element (12x12 pixels, twice the original size)
 			const arrowSvg = document.createElement('div');
@@ -422,15 +422,14 @@
 			});
 
 			marker.addListener('click', () => {
-				const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-				const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-				const heading =
-					fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+				const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
+				const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
+				const heading = fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
 				const turnRate =
-					fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
-				const climbRate = fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+					fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
+				const climbRate = fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 				const groundSpeed =
-					fix.ground_speed_knots !== undefined ? Math.round(fix.ground_speed_knots) + ' kt' : 'N/A';
+					fix.groundSpeedKnots !== undefined ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
 				const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 				const content = `
@@ -474,7 +473,7 @@
 		});
 
 		// Add landing marker if flight is complete
-		if (data.flight.landing_time && fixesInOrder.length > 0) {
+		if (data.flight.landingTime && fixesInOrder.length > 0) {
 			const last = fixesInOrder[fixesInOrder.length - 1];
 			const landingPin = document.createElement('div');
 			landingPin.innerHTML = `
@@ -562,7 +561,7 @@
 				}
 
 				// Add landing marker if flight is complete
-				if (data.flight.landing_time && fixesInOrder.length > 0) {
+				if (data.flight.landingTime && fixesInOrder.length > 0) {
 					const last = fixesInOrder[fixesInOrder.length - 1];
 					const landingPin = document.createElement('div');
 					landingPin.innerHTML = `

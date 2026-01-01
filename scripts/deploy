@@ -204,16 +204,33 @@ else
     log_warn "infrastructure/soar-deploy not found"
 fi
 
-# Copy service files
-cp *.service "$DEPLOY_PKG/" 2>/dev/null || log_warn "No service files found in root"
+# Copy service files from infrastructure/systemd
+if [ -d "infrastructure/systemd" ]; then
+    cp infrastructure/systemd/*.service "$DEPLOY_PKG/" 2>/dev/null || log_warn "No service files found in infrastructure/systemd"
+    cp infrastructure/systemd/*.timer "$DEPLOY_PKG/" 2>/dev/null || log_warn "No timer files found in infrastructure/systemd"
+    cp infrastructure/systemd/*.target "$DEPLOY_PKG/" 2>/dev/null || log_warn "No target files found in infrastructure/systemd"
 
-# Copy timer files
-cp *.timer "$DEPLOY_PKG/" 2>/dev/null || log_warn "No timer files found in root"
+    # Copy systemd template files (used for Grafana SMTP configuration)
+    if ls infrastructure/systemd/*.template 1> /dev/null 2>&1; then
+        mkdir -p "$DEPLOY_PKG/systemd"
+        cp infrastructure/systemd/*.template "$DEPLOY_PKG/systemd/" 2>/dev/null || true
+        log_info "Systemd template files included"
+    fi
+    log_info "Systemd service/timer/target files included"
+else
+    log_warn "infrastructure/systemd directory not found"
+fi
 
 # Copy Prometheus job configuration files
 if [ -d "infrastructure/prometheus-jobs" ]; then
     cp -r infrastructure/prometheus-jobs "$DEPLOY_PKG/"
     log_info "Prometheus job files included"
+fi
+
+# Copy Prometheus scrape-configs files (backward compatibility)
+if [ -d "infrastructure/prometheus-scrape-configs" ]; then
+    cp -r infrastructure/prometheus-scrape-configs "$DEPLOY_PKG/"
+    log_info "Prometheus scrape-configs files included (legacy support)"
 fi
 
 # Copy Grafana provisioning configuration

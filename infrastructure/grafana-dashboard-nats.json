@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -115,10 +115,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_published{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
+          "expr": "rate(aprs_nats_published_total{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
           "legendFormat": "Raw APRS Messages Published",
           "range": true,
           "refId": "A"
@@ -126,10 +126,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_fixes_published{component=\"run\",environment=\"$environment\"}[1m])",
+          "expr": "rate(nats_publisher_fixes_published_total{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Processed Fixes Published",
           "range": true,
           "refId": "B"
@@ -141,7 +141,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -223,10 +223,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_publish_error{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
+          "expr": "rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
           "legendFormat": "Ingest-OGN Publish Errors",
           "range": true,
           "refId": "A"
@@ -234,10 +234,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[1m])",
+          "expr": "rate(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Run Publisher Errors",
           "range": true,
           "refId": "B"
@@ -249,7 +249,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -303,7 +303,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "nats_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
@@ -318,7 +318,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -404,7 +404,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.5\"}",
@@ -415,7 +415,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.95\"}",
@@ -426,7 +426,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.99\"}",
@@ -454,7 +454,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -502,10 +502,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(aprs_nats_published{component=\"ingest-ogn\",environment=\"$environment\"}[1h]))",
+          "expr": "sum(increase(aprs_nats_published_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h]))",
           "legendFormat": "Last Hour",
           "range": true,
           "refId": "A"
@@ -517,7 +517,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -565,10 +565,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(nats_publisher_fixes_published{component=\"run\",environment=\"$environment\"}[1h]))",
+          "expr": "sum(increase(nats_publisher_fixes_published_total{component=\"run\",environment=\"$environment\"}[1h]))",
           "legendFormat": "Last Hour",
           "range": true,
           "refId": "A"
@@ -580,7 +580,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -643,10 +643,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(aprs_nats_publish_error{component=\"ingest-ogn\",environment=\"$environment\"}[1h])) + sum(increase(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[1h]))",
+          "expr": "sum(increase(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h])) + sum(increase(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1h]))",
           "legendFormat": "Total Errors",
           "range": true,
           "refId": "A"
@@ -658,7 +658,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "description": "Topics published by SOAR:\n- aircraft.fix.{aircraft_id} - Individual aircraft position fixes (production)\n- aircraft.area.{lat}.{lon} - Position fixes by geographic area (production)\n- staging.aircraft.fix.{aircraft_id} - Individual aircraft (staging)\n- staging.aircraft.area.{lat}.{lon} - Geographic area (staging)\n- aprs.raw - Raw APRS messages from APRS-IS (all environments)",
       "gridPos": {
@@ -723,7 +723,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "SOAR NATS Performance",
+  "title": "SOAR - NATS Infrastructure",
   "uid": "soar-nats",
   "version": 1
 }

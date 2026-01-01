@@ -75,6 +75,24 @@ pub fn init_metrics() -> PrometheusHandle {
             ],
         )
         .expect("failed to set buckets for http_request_duration_seconds")
+        // Configure NATS publish duration histograms with millisecond buckets
+        // Buckets: 0.5ms, 1ms, 2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1000ms
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full("aprs_nats_publish_duration_ms".to_string()),
+            &[
+                0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0,
+            ],
+        )
+        .expect("failed to set buckets for aprs_nats_publish_duration_ms")
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "beast_nats_publish_duration_ms".to_string(),
+            ),
+            &[
+                0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0,
+            ],
+        )
+        .expect("failed to set buckets for beast_nats_publish_duration_ms")
         .install_recorder()
         .expect("failed to install Prometheus recorder")
 }
@@ -236,9 +254,6 @@ pub async fn analytics_metrics_task(pool: crate::web::PgPool) {
             metrics::gauge!("analytics.aircraft.active_7d").set(summary.active_devices_7d as f64);
             metrics::gauge!("analytics.aircraft.outliers")
                 .set(summary.outlier_devices_count as f64);
-            if let Some(score) = summary.data_quality_score {
-                metrics::gauge!("analytics.data_quality_score").set(score);
-            }
         }
     }
 }
@@ -247,187 +262,167 @@ pub async fn analytics_metrics_task(pool: crate::web::PgPool) {
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_aprs_ingest_metrics() {
     // APRS connection metrics
-    metrics::counter!("aprs.connection.established").absolute(0);
-    metrics::counter!("aprs.connection.ended").absolute(0);
-    metrics::counter!("aprs.connection.failed").absolute(0);
-    metrics::counter!("aprs.connection.operation_failed").absolute(0);
+    metrics::counter!("aprs.connection.established_total").absolute(0);
+    metrics::counter!("aprs.connection.ended_total").absolute(0);
+    metrics::counter!("aprs.connection.failed_total").absolute(0);
+    metrics::counter!("aprs.connection.operation_failed_total").absolute(0);
     metrics::gauge!("aprs.connection.connected").set(0.0);
 
     // APRS keepalive metrics
-    metrics::counter!("aprs.keepalive.sent").absolute(0);
-
-    // APRS raw message metrics
-    metrics::counter!("aprs.raw_message.processed").absolute(0);
-    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
-    metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
+    metrics::counter!("aprs.keepalive.sent_total").absolute(0);
 
     // Message type tracking (received from APRS-IS)
-    metrics::counter!("aprs.raw_message.received.server").absolute(0);
-    metrics::counter!("aprs.raw_message.received.aprs").absolute(0);
-    metrics::counter!("aprs.raw_message.queued.server").absolute(0);
-    metrics::counter!("aprs.raw_message.queued.aprs").absolute(0);
+    metrics::counter!("aprs.raw_message.received.server_total").absolute(0);
+    metrics::counter!("aprs.raw_message.received.aprs_total").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.server_total").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.aprs_total").absolute(0);
 
-    // NATS publishing metrics (ingest-ogn publishes to NATS)
-    metrics::counter!("aprs.nats.published").absolute(0);
-    metrics::counter!("aprs.nats.publish_error").absolute(0);
-    metrics::counter!("aprs.nats.slow_publish").absolute(0);
-    metrics::counter!("aprs.nats.publish_timeout").absolute(0);
-    metrics::gauge!("aprs.nats.queue_depth").set(0.0);
-    metrics::gauge!("aprs.nats.in_flight").set(0.0);
+    // NATS publishing metrics (ingest-ogn publishes to NATS with fire-and-forget)
+    metrics::counter!("aprs.nats.published_total").absolute(0);
+    metrics::counter!("aprs.nats.publish_error_total").absolute(0);
+    metrics::counter!("aprs.nats.slow_publish_total").absolute(0);
     metrics::histogram!("aprs.nats.publish_duration_ms").record(0.0);
 
     // Connection timeout metric
-    metrics::counter!("aprs.connection.timeout").absolute(0);
-
-    // Shutdown metrics
-    metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").absolute(0);
-    metrics::counter!("aprs.shutdown.messages_flushed").absolute(0);
-    metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(0.0);
+    metrics::counter!("aprs.connection.timeout_total").absolute(0);
 }
 
 /// Initialize Beast ingest metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_beast_ingest_metrics() {
     // Beast connection metrics
-    metrics::counter!("beast.connection.established").absolute(0);
-    metrics::counter!("beast.connection.failed").absolute(0);
-    metrics::counter!("beast.operation.failed").absolute(0);
-    metrics::counter!("beast.timeout").absolute(0);
+    metrics::counter!("beast.connection.established_total").absolute(0);
+    metrics::counter!("beast.connection.failed_total").absolute(0);
+    metrics::counter!("beast.operation.failed_total").absolute(0);
+    metrics::counter!("beast.timeout_total").absolute(0);
     metrics::gauge!("beast.connection.connected").set(0.0);
 
     // Beast data metrics
-    metrics::counter!("beast.bytes.received").absolute(0);
-    metrics::counter!("beast.frames.published").absolute(0);
-    metrics::counter!("beast.frames.dropped").absolute(0);
+    metrics::counter!("beast.bytes.received_total").absolute(0);
+    metrics::counter!("beast.frames.published_total").absolute(0);
+    metrics::counter!("beast.frames.dropped_total").absolute(0);
     metrics::gauge!("beast.message_rate").set(0.0);
 
     // NATS publishing metrics (ingest-adsb publishes to NATS)
-    metrics::counter!("beast.nats.published").absolute(0);
-    metrics::counter!("beast.nats.publish_error").absolute(0);
-    metrics::counter!("beast.nats.slow_publish").absolute(0);
-    metrics::counter!("beast.nats.publish_timeout").absolute(0);
-    metrics::counter!("beast.nats.connection_failed").absolute(0);
-    metrics::counter!("beast.nats.stream_setup_failed").absolute(0);
+    metrics::counter!("beast.nats.published_total").absolute(0);
+    metrics::counter!("beast.nats.publish_error_total").absolute(0);
+    metrics::counter!("beast.nats.slow_publish_total").absolute(0);
+    metrics::counter!("beast.nats.publish_timeout_total").absolute(0);
+    metrics::counter!("beast.nats.connection_failed_total").absolute(0);
+    metrics::counter!("beast.nats.stream_setup_failed_total").absolute(0);
     metrics::gauge!("beast.nats.queue_depth").set(0.0);
     metrics::gauge!("beast.nats.in_flight").set(0.0);
     metrics::histogram!("beast.nats.publish_duration_ms").record(0.0);
 
     // General ingestion metrics
-    metrics::counter!("beast.ingest_failed").absolute(0);
+    metrics::counter!("beast.ingest_failed_total").absolute(0);
 }
 
 /// Initialize Beast consumer metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_beast_consumer_metrics() {
     // NATS consumer metrics (consume-beast consumes from NATS)
-    metrics::counter!("beast.nats.consumed").absolute(0);
-    metrics::counter!("beast.nats.receive_error").absolute(0);
-    metrics::counter!("beast.nats.ack_error").absolute(0);
-    metrics::counter!("beast.nats.invalid_message").absolute(0);
-    metrics::counter!("beast.nats.connection_failed").absolute(0);
-    metrics::counter!("beast.nats.consumer_setup_failed").absolute(0);
+    metrics::counter!("beast.nats.consumed_total").absolute(0);
+    metrics::counter!("beast.nats.receive_error_total").absolute(0);
+    metrics::counter!("beast.nats.ack_error_total").absolute(0);
+    metrics::counter!("beast.nats.invalid_message_total").absolute(0);
+    metrics::counter!("beast.nats.connection_failed_total").absolute(0);
+    metrics::counter!("beast.nats.consumer_setup_failed_total").absolute(0);
 
     // Beast consumer processing metrics
-    metrics::counter!("beast.consumer.received").absolute(0);
-    metrics::counter!("beast.consumer.invalid_message").absolute(0);
-    metrics::counter!("beast.consumer.send_errors").absolute(0);
-    metrics::counter!("beast.consumer.messages_stored").absolute(0);
-    metrics::counter!("beast.consumer.write_errors").absolute(0);
+    metrics::counter!("beast.consumer.received_total").absolute(0);
+    metrics::counter!("beast.consumer.invalid_message_total").absolute(0);
+    metrics::counter!("beast.consumer.send_errors_total").absolute(0);
+    metrics::counter!("beast.consumer.messages_stored_total").absolute(0);
+    metrics::counter!("beast.consumer.write_errors_total").absolute(0);
     metrics::histogram!("beast.consumer.batch_write_ms").record(0.0);
 
     // Beast decoding metrics
-    metrics::counter!("beast.consumer.decoded").absolute(0);
-    metrics::counter!("beast.consumer.decode_error").absolute(0);
-    metrics::counter!("beast.consumer.json_error").absolute(0);
+    metrics::counter!("beast.consumer.decoded_total").absolute(0);
+    metrics::counter!("beast.consumer.decode_error_total").absolute(0);
+    metrics::counter!("beast.consumer.json_error_total").absolute(0);
 
     // General consumption metrics
-    metrics::counter!("beast.consume_failed").absolute(0);
+    metrics::counter!("beast.consume_failed_total").absolute(0);
 }
 
 /// Initialize SOAR run metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_run_metrics() {
     // Flight tracker metrics
-    metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
+    metrics::counter!("flight_tracker_timeouts_detected_total").absolute(0);
     metrics::gauge!("flight_tracker_active_aircraft").set(0.0);
 
     // Flight coalescing metrics
-    metrics::counter!("flight_tracker.coalesce.resumed").absolute(0);
-    metrics::counter!("flight_tracker.coalesce.callsign_mismatch").absolute(0);
-    metrics::counter!("flight_tracker.coalesce.no_timeout_flight").absolute(0);
-    metrics::counter!("flight_tracker.coalesce.rejected.callsign").absolute(0);
-    metrics::counter!("flight_tracker.coalesce.rejected.probable_landing").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.resumed_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.callsign_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.probable_landing_total").absolute(0);
     metrics::histogram!("flight_tracker.coalesce.rejected.distance_km").record(0.0);
     metrics::histogram!("flight_tracker.coalesce.resumed.distance_km").record(0.0);
 
     // Flight timeout phase tracking
-    metrics::counter!("flight_tracker.timeout.phase", "phase" => "climbing").absolute(0);
-    metrics::counter!("flight_tracker.timeout.phase", "phase" => "cruising").absolute(0);
-    metrics::counter!("flight_tracker.timeout.phase", "phase" => "descending").absolute(0);
-    metrics::counter!("flight_tracker.timeout.phase", "phase" => "unknown").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase_total", "phase" => "climbing").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase_total", "phase" => "cruising").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase_total", "phase" => "descending").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase_total", "phase" => "unknown").absolute(0);
 
     // Flight creation metrics
-    metrics::counter!("flight_tracker.flight_created.takeoff").absolute(0);
-    metrics::counter!("flight_tracker.flight_created.airborne").absolute(0);
+    metrics::counter!("flight_tracker.flight_created.takeoff_total").absolute(0);
+    metrics::counter!("flight_tracker.flight_created.airborne_total").absolute(0);
 
     // Flight end metrics
-    metrics::counter!("flight_tracker.flight_ended.landed").absolute(0);
-    metrics::counter!("flight_tracker.flight_ended.timed_out").absolute(0);
+    metrics::counter!("flight_tracker.flight_ended.landed_total").absolute(0);
+    metrics::counter!("flight_tracker.flight_ended.timed_out_total").absolute(0);
 
     // Receiver status metrics
     metrics::counter!("receiver_status_updates_total").absolute(0);
 
-    // AGL backfill metrics
-    metrics::counter!("agl_backfill_altitudes_computed_total").absolute(0);
-    metrics::counter!("agl_backfill_fixes_processed_total").absolute(0);
-    metrics::counter!("agl_backfill_no_elevation_data_total").absolute(0);
-    metrics::counter!("agl_backfill_fetch_errors_total").absolute(0);
-    metrics::gauge!("agl_backfill_pending_fixes").set(0.0);
-
     // Elevation cache metrics
-    metrics::counter!("elevation_cache_hits").absolute(0);
-    metrics::counter!("elevation_cache_misses").absolute(0);
+    metrics::counter!("elevation_cache_hits_total").absolute(0);
+    metrics::counter!("elevation_cache_misses_total").absolute(0);
     metrics::gauge!("elevation_cache_entries").set(0.0);
-    metrics::counter!("elevation_tile_cache_hits").absolute(0);
-    metrics::counter!("elevation_tile_cache_misses").absolute(0);
+    metrics::counter!("elevation_tile_cache_hits_total").absolute(0);
+    metrics::counter!("elevation_tile_cache_misses_total").absolute(0);
     metrics::gauge!("elevation_tile_cache_entries").set(0.0);
 
     // Receiver cache metrics
-    metrics::counter!("generic_processor.receiver_cache.hit").absolute(0);
-    metrics::counter!("generic_processor.receiver_cache.miss").absolute(0);
+    metrics::counter!("generic_processor.receiver_cache.hit_total").absolute(0);
+    metrics::counter!("generic_processor.receiver_cache.miss_total").absolute(0);
 
     // NATS publisher metrics
-    metrics::counter!("nats_publisher_fixes_published").absolute(0);
+    metrics::counter!("nats_publisher_fixes_published_total").absolute(0);
     metrics::gauge!("nats_publisher_queue_depth").set(0.0);
-    metrics::counter!("nats_publisher_errors").absolute(0);
+    metrics::counter!("nats_publisher_errors_total").absolute(0);
 
     // Queue drop/close counters
-    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
-    metrics::counter!("aprs.aircraft_queue.full").absolute(0);
-    metrics::counter!("aprs.aircraft_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.full").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.full").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.closed").absolute(0);
-    metrics::counter!("aprs.server_status_queue.full").absolute(0);
-    metrics::counter!("aprs.server_status_queue.closed").absolute(0);
+    metrics::counter!("aprs.raw_message_queue.full_total").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.full_total").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.closed_total").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.full_total").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.closed_total").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.full_total").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.closed_total").absolute(0);
+    metrics::counter!("aprs.server_status_queue.full_total").absolute(0);
+    metrics::counter!("aprs.server_status_queue.closed_total").absolute(0);
 
     // NATS consumer metrics (soar-run consumes from NATS, doesn't publish)
     metrics::gauge!("aprs.nats.intake_queue_depth").set(0.0);
-    metrics::counter!("aprs.nats.consumed").absolute(0);
-    metrics::counter!("aprs.nats.process_error").absolute(0);
-    metrics::counter!("aprs.nats.decode_error").absolute(0);
-    metrics::counter!("aprs.nats.ack_error").absolute(0);
-    metrics::counter!("aprs.nats.receive_error").absolute(0);
-    metrics::counter!("aprs.nats.acked_immediately").absolute(0);
-    metrics::counter!("aprs.nats.intake_queue_full").absolute(0);
+    metrics::counter!("aprs.nats.consumed_total").absolute(0);
+    metrics::counter!("aprs.nats.process_error_total").absolute(0);
+    metrics::counter!("aprs.nats.decode_error_total").absolute(0);
+    metrics::counter!("aprs.nats.ack_error_total").absolute(0);
+    metrics::counter!("aprs.nats.receive_error_total").absolute(0);
+    metrics::counter!("aprs.nats.acked_immediately_total").absolute(0);
+    metrics::counter!("aprs.nats.intake_queue_full_total").absolute(0);
 
     // Message processing counters by type
-    metrics::counter!("aprs.messages.processed.aircraft").absolute(0);
-    metrics::counter!("aprs.messages.processed.receiver_status").absolute(0);
-    metrics::counter!("aprs.messages.processed.receiver_position").absolute(0);
-    metrics::counter!("aprs.messages.processed.server").absolute(0);
-    metrics::counter!("aprs.messages.processed.total").absolute(0);
+    metrics::counter!("aprs.messages.processed.aircraft_total").absolute(0);
+    metrics::counter!("aprs.messages.processed.receiver_status_total").absolute(0);
+    metrics::counter!("aprs.messages.processed.receiver_position_total").absolute(0);
+    metrics::counter!("aprs.messages.processed.server_total").absolute(0);
+    metrics::counter!("aprs.messages.processed.total_total").absolute(0);
 
     // Aircraft position processing latency metrics
     metrics::histogram!("aprs.aircraft.lookup_ms").record(0.0);
@@ -446,37 +441,41 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms").record(0.0);
 
     // Photon reverse geocoding metrics
-    metrics::counter!("flight_tracker.location.photon.success").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.failure").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.no_structured_data").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.success_total").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.failure_total").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.no_structured_data_total").absolute(0);
     metrics::histogram!("flight_tracker.location.photon.latency_ms").record(0.0);
-    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "exact").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "1").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "5").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "10").absolute(0);
-    metrics::counter!("flight_tracker.location.created", "type" => "start_takeoff").absolute(0);
-    metrics::counter!("flight_tracker.location.created", "type" => "start_airborne").absolute(0);
-    metrics::counter!("flight_tracker.location.created", "type" => "end_landing").absolute(0);
-    metrics::counter!("flight_tracker.location.created", "type" => "end_timeout").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "exact")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "1").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "5").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "10")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "start_takeoff")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "start_airborne")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "end_landing").absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "end_timeout").absolute(0);
 
     // Beast (ADS-B) processing metrics
-    metrics::counter!("beast.run.process_beast_message.called").absolute(0);
-    metrics::counter!("beast.run.invalid_message").absolute(0);
-    metrics::counter!("beast.run.decode.success").absolute(0);
-    metrics::counter!("beast.run.decode.failed").absolute(0);
-    metrics::counter!("beast.run.icao_extraction_failed").absolute(0);
-    metrics::counter!("beast.run.aircraft_lookup_failed").absolute(0);
-    metrics::counter!("beast.run.raw_message_stored").absolute(0);
-    metrics::counter!("beast.run.raw_message_store_failed").absolute(0);
-    metrics::counter!("beast.run.adsb_to_fix_failed").absolute(0);
-    metrics::counter!("beast.run.fixes_processed").absolute(0);
-    metrics::counter!("beast.run.fix_processing_failed").absolute(0);
-    metrics::counter!("beast.run.no_fix_created").absolute(0);
-    metrics::counter!("beast.run.intake.processed").absolute(0);
-    metrics::counter!("beast.run.nats.consumed").absolute(0);
-    metrics::counter!("beast.run.nats.connection_failed").absolute(0);
-    metrics::counter!("beast.run.nats.subscription_failed").absolute(0);
-    metrics::counter!("beast.run.nats.subscription_ended").absolute(0);
+    metrics::counter!("beast.run.process_beast_message.called_total").absolute(0);
+    metrics::counter!("beast.run.invalid_message_total").absolute(0);
+    metrics::counter!("beast.run.decode.success_total").absolute(0);
+    metrics::counter!("beast.run.decode.failed_total").absolute(0);
+    metrics::counter!("beast.run.icao_extraction_failed_total").absolute(0);
+    metrics::counter!("beast.run.aircraft_lookup_failed_total").absolute(0);
+    metrics::counter!("beast.run.raw_message_stored_total").absolute(0);
+    metrics::counter!("beast.run.raw_message_store_failed_total").absolute(0);
+    metrics::counter!("beast.run.adsb_to_fix_failed_total").absolute(0);
+    metrics::counter!("beast.run.fixes_processed_total").absolute(0);
+    metrics::counter!("beast.run.fix_processing_failed_total").absolute(0);
+    metrics::counter!("beast.run.no_fix_created_total").absolute(0);
+    metrics::counter!("beast.run.intake.processed_total").absolute(0);
+    metrics::counter!("beast.run.nats.consumed_total").absolute(0);
+    metrics::counter!("beast.run.nats.connection_failed_total").absolute(0);
+    metrics::counter!("beast.run.nats.subscription_failed_total").absolute(0);
+    metrics::counter!("beast.run.nats.subscription_ended_total").absolute(0);
     metrics::gauge!("beast.run.nats.lag_seconds").set(0.0);
     metrics::gauge!("beast.run.nats.intake_queue_depth").set(0.0);
     metrics::histogram!("beast.run.message_processing_latency_ms").record(0.0);
@@ -486,8 +485,8 @@ pub fn initialize_run_metrics() {
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_analytics_metrics() {
     // Analytics cache hit/miss metrics
-    metrics::counter!("analytics.cache.hit").absolute(0);
-    metrics::counter!("analytics.cache.miss").absolute(0);
+    metrics::counter!("analytics.cache.hit_total").absolute(0);
+    metrics::counter!("analytics.cache.miss_total").absolute(0);
     metrics::gauge!("analytics.cache.size").set(0.0);
 
     // Analytics query duration metrics (in milliseconds)
@@ -501,17 +500,17 @@ pub fn initialize_analytics_metrics() {
     metrics::histogram!("analytics.query.summary_ms").record(0.0);
 
     // Analytics API endpoint request counters
-    metrics::counter!("analytics.api.daily_flights.requests").absolute(0);
-    metrics::counter!("analytics.api.hourly_flights.requests").absolute(0);
-    metrics::counter!("analytics.api.duration_distribution.requests").absolute(0);
-    metrics::counter!("analytics.api.aircraft_outliers.requests").absolute(0);
-    metrics::counter!("analytics.api.top_aircraft.requests").absolute(0);
-    metrics::counter!("analytics.api.club_analytics.requests").absolute(0);
-    metrics::counter!("analytics.api.airport_activity.requests").absolute(0);
-    metrics::counter!("analytics.api.summary.requests").absolute(0);
+    metrics::counter!("analytics.api.daily_flights.requests_total").absolute(0);
+    metrics::counter!("analytics.api.hourly_flights.requests_total").absolute(0);
+    metrics::counter!("analytics.api.duration_distribution.requests_total").absolute(0);
+    metrics::counter!("analytics.api.aircraft_outliers.requests_total").absolute(0);
+    metrics::counter!("analytics.api.top_aircraft.requests_total").absolute(0);
+    metrics::counter!("analytics.api.club_analytics.requests_total").absolute(0);
+    metrics::counter!("analytics.api.airport_activity.requests_total").absolute(0);
+    metrics::counter!("analytics.api.summary.requests_total").absolute(0);
 
     // Analytics API error counters
-    metrics::counter!("analytics.api.errors").absolute(0);
+    metrics::counter!("analytics.api.errors_total").absolute(0);
 
     // Analytics data metrics (updated periodically by background task)
     metrics::gauge!("analytics.flights.today").set(0.0);
@@ -519,22 +518,32 @@ pub fn initialize_analytics_metrics() {
     metrics::gauge!("analytics.flights.last_30d").set(0.0);
     metrics::gauge!("analytics.aircraft.active_7d").set(0.0);
     metrics::gauge!("analytics.aircraft.outliers").set(0.0);
-    metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 
 /// Initialize airspace-related metrics
 pub fn initialize_airspace_metrics() {
     // Airspace sync metrics (for pull-airspaces command)
-    metrics::counter!("airspace_sync.total_fetched").absolute(0);
-    metrics::counter!("airspace_sync.total_inserted").absolute(0);
+    metrics::counter!("airspace_sync.total_fetched_total").absolute(0);
+    metrics::counter!("airspace_sync.total_inserted_total").absolute(0);
     metrics::gauge!("airspace_sync.last_run_timestamp").set(0.0);
     metrics::gauge!("airspace_sync.success").set(0.0);
 
     // Airspace API endpoint metrics
-    metrics::counter!("api.airspaces.requests").absolute(0);
-    metrics::counter!("api.airspaces.errors").absolute(0);
+    metrics::counter!("api.airspaces.requests_total").absolute(0);
+    metrics::counter!("api.airspaces.errors_total").absolute(0);
     metrics::histogram!("api.airspaces.duration_ms").record(0.0);
     metrics::gauge!("api.airspaces.results_count").set(0.0);
+}
+
+pub fn initialize_coverage_metrics() {
+    // Coverage API metrics
+    metrics::counter!("coverage.api.hexes.requests_total").absolute(0);
+    metrics::counter!("coverage.api.hexes.success_total").absolute(0);
+    metrics::counter!("coverage.api.errors_total").absolute(0);
+    metrics::histogram!("coverage.api.hexes.count").record(0.0);
+    metrics::histogram!("coverage.query.hexes_ms").record(0.0);
+    metrics::counter!("coverage.cache.hit_total").absolute(0);
+    metrics::counter!("coverage.cache.miss_total").absolute(0);
 }
 
 /// Health check handler for APRS ingestion service

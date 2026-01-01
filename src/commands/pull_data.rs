@@ -232,11 +232,38 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     let flarmnet_path = format!("{}/united.fln", temp_dir);
     download_text_file_atomically(&client, flarmnet_url, &flarmnet_path, max_retries).await?;
 
+    // Download ADS-B Exchange basic aircraft database
+    let adsb_url = "https://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz";
+    let adsb_gz_path = format!("{}/basic-ac-db.json.gz", temp_dir);
+    let adsb_json_path = format!("{}/basic-ac-db.json", temp_dir);
+
+    // Download the gzipped file
+    download_file_atomically(&client, adsb_url, &adsb_gz_path, max_retries).await?;
+
+    // Decompress the file if it doesn't already exist
+    if !std::path::Path::new(&adsb_json_path).exists() {
+        info!("Decompressing ADS-B Exchange data...");
+        use flate2::read::GzDecoder;
+        let gz_file = fs::File::open(&adsb_gz_path)?;
+        let mut decoder = GzDecoder::new(gz_file);
+        let mut decompressed_content = String::new();
+        use std::io::Read;
+        decoder.read_to_string(&mut decompressed_content)?;
+        fs::write(&adsb_json_path, decompressed_content)?;
+        info!("ADS-B Exchange data decompressed to: {}", adsb_json_path);
+    } else {
+        info!(
+            "ADS-B Exchange JSON already exists, skipping decompression: {}",
+            adsb_json_path
+        );
+    }
+
     // Display the temporary directory
     info!("Data directory located at: {}", temp_dir);
 
     // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
+
     super::load_data::handle_load_data(
         diesel_pool.clone(),
         Some(acftref_path), // aircraft_models
@@ -245,6 +272,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
         Some(runways_path),
         Some(receivers_path),
         Some(flarmnet_path),
+        Some(adsb_json_path), // adsb_exchange
         true,
         true,
     )

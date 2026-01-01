@@ -1,6 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use diesel::dsl::sql;
 use diesel::prelude::*;
+use diesel::sql_types::Timestamp;
 use uuid::Uuid;
 
 use crate::flights::{Flight, FlightModel, TimeoutPhase};
@@ -132,7 +134,7 @@ impl FlightsRepository {
 
             let flight_models: Vec<FlightModel> = flights
                 .filter(aircraft_id.eq(device_id_val))
-                .order(takeoff_time.desc())
+                .order(sql::<Timestamp>("COALESCE(takeoff_time, created_at)").desc())
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
 
@@ -167,7 +169,7 @@ impl FlightsRepository {
             let offset = (page - 1) * per_page;
             let flight_models: Vec<FlightModel> = flights
                 .filter(aircraft_id.eq(device_id_val))
-                .order(takeoff_time.desc())
+                .order(sql::<Timestamp>("COALESCE(takeoff_time, created_at)").desc())
                 .limit(per_page)
                 .offset(offset)
                 .select(FlightModel::as_select())
@@ -664,25 +666,20 @@ impl FlightsRepository {
 
     /// Mark a flight as timed out (no beacons received for the timeout duration, currently 1 hour)
     /// Does NOT set landing fields - this is a timeout, not a landing
-    /// The timeout_time should be set to the last_fix_at value
-    pub async fn timeout_flight(
-        &self,
-        flight_id: Uuid,
-        timeout_time: DateTime<Utc>,
-    ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
+    /// Sets timed_out_at to the current last_fix_at value atomically to prevent constraint violations
+    pub async fn timeout_flight(&self, flight_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    timed_out_at.eq(Some(timeout_time)),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
+            // Use raw SQL to set timed_out_at = last_fix_at atomically
+            // This prevents race conditions where last_fix_at changes between read and update
+            let rows = diesel::sql_query(
+                "UPDATE flights SET timed_out_at = last_fix_at, updated_at = NOW() WHERE id = $1",
+            )
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })
@@ -693,15 +690,13 @@ impl FlightsRepository {
 
     /// Timeout a flight and record the flight phase when timeout occurred
     /// This helps determine coalescing behavior when aircraft reappears
+    /// Sets timed_out_at to the current last_fix_at value atomically to prevent constraint violations
     pub async fn timeout_flight_with_phase(
         &self,
         flight_id: Uuid,
-        timeout_time: DateTime<Utc>,
         phase: TimeoutPhase,
         end_location: Option<Uuid>,
     ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
         let pool = self.pool.clone();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
@@ -709,17 +704,21 @@ impl FlightsRepository {
 
             // Only timeout flights that haven't already landed
             // This prevents violating the check_timed_out_or_landed constraint
-            let rows = diesel::update(
-                flights
-                    .filter(id.eq(flight_id))
-                    .filter(landing_time.is_null()),
+            // Use raw SQL to set timed_out_at = last_fix_at atomically
+            // This prevents race conditions where last_fix_at changes between read and update
+            let rows = diesel::sql_query(
+                "UPDATE flights \
+                 SET timed_out_at = last_fix_at, \
+                     timeout_phase = $2, \
+                     end_location_id = $3, \
+                     updated_at = NOW() \
+                 WHERE id = $1 AND landing_time IS NULL",
             )
-            .set((
-                timed_out_at.eq(Some(timeout_time)),
-                timeout_phase.eq(Some(phase)),
-                end_location_id.eq(end_location),
-                updated_at.eq(Utc::now()),
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .bind::<diesel::sql_types::Nullable<crate::schema::sql_types::TimeoutPhase>, _>(Some(
+                phase,
             ))
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(end_location)
             .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
@@ -755,7 +754,49 @@ impl FlightsRepository {
 
     /// Update the last_fix_at timestamp for a flight
     /// This should be called whenever a new fix is assigned to a flight
+    ///
+    /// Handles out-of-order fixes by:
+    /// - Setting created_at to the EARLIEST fix timestamp (LEAST)
+    /// - Setting last_fix_at to the LATEST fix timestamp (GREATEST)
+    ///
+    /// This ensures the check_last_fix_after_created constraint is always satisfied
+    /// even when fixes arrive out of order.
     pub async fn update_last_fix_at(
+        &self,
+        flight_id: Uuid,
+        fix_timestamp: DateTime<Utc>,
+    ) -> Result<bool> {
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use LEAST/GREATEST to handle out-of-order fixes:
+            // - created_at should be the earliest fix timestamp
+            // - last_fix_at should be the latest fix timestamp
+            // This ensures last_fix_at >= created_at is always true
+            let rows = diesel::sql_query(
+                "UPDATE flights
+                 SET created_at = LEAST(created_at, $1),
+                     last_fix_at = GREATEST(last_fix_at, $1),
+                     updated_at = NOW()
+                 WHERE id = $2",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(fix_timestamp)
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Resume a timed-out flight by clearing the timeout and updating last_fix_at atomically
+    /// This ensures the check_timeout_after_last_fix constraint is not violated
+    /// Used when flight coalescing resumes tracking of a timed-out flight
+    pub async fn resume_timed_out_flight(
         &self,
         flight_id: Uuid,
         fix_timestamp: DateTime<Utc>,
@@ -767,8 +808,14 @@ impl FlightsRepository {
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
+            // Atomically clear timeout and update last_fix_at in a single UPDATE
+            // This prevents violating check_timeout_after_last_fix constraint
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((last_fix_at.eq(fix_timestamp), updated_at.eq(Utc::now())))
+                .set((
+                    timed_out_at.eq(None::<DateTime<Utc>>),
+                    last_fix_at.eq(fix_timestamp),
+                    updated_at.eq(Utc::now()),
+                ))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)

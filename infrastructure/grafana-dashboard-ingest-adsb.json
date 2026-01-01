@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -95,7 +95,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_uptime_seconds{component=\"ingest-adsb\"}",
@@ -110,7 +110,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -180,7 +180,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_is_up{component=\"ingest-adsb\"}",
@@ -195,7 +195,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -253,7 +253,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"ingest-adsb\"}",
@@ -281,7 +281,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -351,7 +351,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "beast_connection_connected{component=\"ingest-adsb\"}",
@@ -366,7 +366,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -448,10 +448,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_established{component=\"ingest-adsb\"}",
+          "expr": "beast_connection_established_total{component=\"ingest-adsb\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -459,10 +459,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_failed{component=\"ingest-adsb\"}",
+          "expr": "beast_connection_failed_total{component=\"ingest-adsb\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -470,10 +470,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_timeout{component=\"ingest-adsb\"}",
+          "expr": "beast_timeout_total{component=\"ingest-adsb\"}",
           "legendFormat": "Timeout",
           "range": true,
           "refId": "C"
@@ -485,7 +485,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -568,10 +568,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_bytes_received{component=\"ingest-adsb\"}[1m])",
+          "expr": "rate(beast_bytes_received_total{component=\"ingest-adsb\"}[1m])",
           "legendFormat": "Bytes/sec",
           "range": true,
           "refId": "A"
@@ -583,7 +583,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -665,7 +665,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "beast_message_rate{component=\"ingest-adsb\"}",
@@ -680,7 +680,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -762,10 +762,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_published{component=\"ingest-adsb\"}",
+          "expr": "beast_frames_published_total{component=\"ingest-adsb\"}",
           "legendFormat": "Published",
           "range": true,
           "refId": "A"
@@ -773,10 +773,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_dropped{component=\"ingest-adsb\"}",
+          "expr": "beast_frames_dropped_total{component=\"ingest-adsb\"}",
           "legendFormat": "Dropped",
           "range": true,
           "refId": "B"
@@ -834,7 +834,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SOAR BEAST Ingest",
+  "title": "SOAR Ingest ADS-B",
   "uid": "soar-beast-ingest",
   "version": 1
 }

@@ -1,0 +1,547 @@
+#!/bin/bash
+#
+# fix-partitioned-table - Fix partitioned tables with data in DEFAULT partition
+#
+# Performance: Use -j flag to run multiple day migrations in parallel
+# Example: ./fix-partitioned-table soar fixes received_at -j 4
+#
+# ==============================================================================
+# WHAT HAPPENED (Historical Context)
+# ==============================================================================
+#
+# Dates: December 18-21, 2025
+# Tables Affected: fixes, raw_messages
+# Data Volume: 54M rows in fixes_default, 94M rows in raw_messages_default
+#
+# Timeline:
+# - Dec 18, 2025 01:00: partman-maintenance.timer failed with "too many clients already"
+# - Dec 18-20: Without maintenance, new daily partitions were not created
+# - Dec 18-21: Incoming data fell through to DEFAULT partitions (fixes_default, raw_messages_default)
+# - Dec 20: Partman attempted to create partitions but failed with:
+#   "ERROR: partition 'fixes_p20251218' would overlap partition 'fixes_p20251217'"
+#   PostgreSQL cannot create a partition when DEFAULT already contains data for that date range
+#
+# ==============================================================================
+# ROOT CAUSE
+# ==============================================================================
+#
+# 1. Database connection pool exhaustion ("too many clients already")
+#    - PostgreSQL max_connections: 200
+#    - Application pool size: 50 per instance (reduced to 20 in Dec 2025)
+#    - Multiple service instances caused connection exhaustion
+#
+# 2. Partman maintenance couldn't run
+#    - Timer job: partman-maintenance.timer (runs every 4 hours)
+#    - When partman fails, new partitions aren't pre-created
+#    - This is the ONLY mechanism that creates partitions (no triggers)
+#
+# 3. Data routed to DEFAULT partition
+#    - PostgreSQL automatically routes data to DEFAULT when no partition matches
+#    - Both tables configured with ignore_default_data = true (DEFAULT should not exist)
+#    - DEFAULT partition accumulated millions of rows
+#
+# 4. PostgreSQL limitation: Cannot create partition overlapping DEFAULT
+#    - Once DEFAULT has data for a date range, partman cannot create partition for that range
+#    - Attempting to do so results in "would overlap" error
+#
+# ==============================================================================
+# WHAT THIS SCRIPT FIXES
+# ==============================================================================
+#
+# This script resolves the DEFAULT partition problem by:
+# 1. Creating missing date-based partitions (while DEFAULT is still attached)
+# 2. Moving data from DEFAULT into proper partitions (while still attached)
+# 3. Verifying DEFAULT is empty
+# 4. Detaching the empty DEFAULT partition from the parent table
+# 5. Dropping the empty DEFAULT partition
+# 6. Allowing partman maintenance to resume normal operation
+#
+# IMPORTANT: Data is migrated BEFORE detaching DEFAULT. This is critical
+# because foreign key constraints from other tables may reference data in
+# DEFAULT. By keeping DEFAULT attached during migration, PostgreSQL can
+# maintain FK integrity as data moves between partitions.
+#
+# ==============================================================================
+# WHEN TO USE THIS SCRIPT
+# ==============================================================================
+#
+# Run this script whenever:
+# - Partman maintenance fails with "would overlap partition" errors
+# - You discover data in a DEFAULT partition (*_default tables)
+# - Partitions are missing for recent dates
+# - Connection exhaustion or other issues prevented partman from running
+#
+# NOTE - Tables with Foreign Keys:
+# - This script can handle tables with FK relationships in ANY order
+# - The script migrates data BEFORE detaching, which avoids FK constraint violations
+# - Example: 'raw_messages' can be migrated even if 'fixes' partitions reference it
+# - PostgreSQL maintains FK integrity as data moves between partitions within the same table
+#
+# ==============================================================================
+# PREREQUISITES
+# ==============================================================================
+#
+# 1. Verify DEFAULT partition exists and has data:
+#    SELECT COUNT(*), MIN(received_at), MAX(received_at) FROM fixes_default;
+#
+# 2. Check which partitions are missing:
+#    SELECT tablename FROM pg_tables WHERE tablename LIKE 'fixes_p202512%' ORDER BY tablename DESC;
+#
+# 3. Ensure you have sufficient disk space (migration creates temporary data)
+#
+# 4. Run during low-traffic period if possible (brief locks during detachment)
+#
+# ==============================================================================
+# USAGE
+# ==============================================================================
+#
+# ./fix-partitioned-table <database> <table_name> <partition_key> [-j <jobs>]
+#
+# Examples:
+#   ./fix-partitioned-table soar fixes received_at
+#   ./fix-partitioned-table soar raw_messages received_at -j 4
+#
+# Parameters:
+#   database      - PostgreSQL database name
+#   table_name    - Parent table name (e.g., "fixes", "raw_messages")
+#   partition_key - Column used for partitioning (e.g., "received_at")
+#   -j N          - (Optional) Run N day migrations in parallel (default: 1)
+#
+# Performance Tips:
+#   - Use -j 2-4 for modest speedup with manageable DB load
+#   - Use -j 8+ for maximum speed if your DB can handle it
+#   - Monitor: watch -n 1 'psql -U soar -d soar -c "SELECT * FROM pg_stat_activity WHERE state = '\''active'\'';"'
+#
+# NOTE: This script assumes UTC timezone. PostgreSQL must be configured with timezone = 'UTC'
+#
+# ==============================================================================
+
+set -euo pipefail
+
+# Default parallelism
+PARALLEL_JOBS=1
+
+# Parse arguments
+if [ $# -lt 3 ] || [ $# -gt 5 ]; then
+    echo "Usage: $0 <database> <table_name> <partition_key> [-j <parallel_jobs>]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 soar fixes received_at"
+    echo "  $0 soar raw_messages received_at -j 4"
+    echo ""
+    echo "Options:"
+    echo "  -j N    Run N day migrations in parallel (default: 1)"
+    echo ""
+    echo "NOTE: PostgreSQL must be configured with timezone = 'UTC'"
+    exit 1
+fi
+
+DATABASE="$1"
+TABLE_NAME="$2"
+PARTITION_KEY="$3"
+
+# Parse optional -j flag
+if [ $# -ge 4 ] && [ "$4" = "-j" ]; then
+    if [ $# -eq 5 ]; then
+        PARALLEL_JOBS="$5"
+        if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_JOBS" -lt 1 ]; then
+            echo "ERROR: -j must be followed by a positive integer"
+            exit 1
+        fi
+    else
+        echo "ERROR: -j requires a number argument"
+        exit 1
+    fi
+fi
+
+DEFAULT_PARTITION="${TABLE_NAME}_default"
+
+echo "================================================================================"
+echo "Fixing DEFAULT partition for table: ${TABLE_NAME}"
+echo "Database: ${DATABASE}"
+echo "Partition key: ${PARTITION_KEY}"
+echo "Parallel jobs: ${PARALLEL_JOBS}"
+echo "================================================================================"
+echo ""
+
+# Step 1: Check if DEFAULT partition exists and get date range
+echo "Step 1: Checking DEFAULT partition..."
+READ_RESULT=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT EXISTS (
+        SELECT 1 FROM pg_tables WHERE tablename = '${DEFAULT_PARTITION}'
+    );
+")
+
+if [ "$READ_RESULT" != "t" ]; then
+    echo "ERROR: DEFAULT partition '${DEFAULT_PARTITION}' does not exist."
+    echo "Nothing to fix. Exiting."
+    exit 0
+fi
+
+# Get min and max dates from DEFAULT partition
+echo "Analyzing date range in ${DEFAULT_PARTITION}..."
+DATE_RANGE=$(psql -U soar -d "${DATABASE}" -t -A -F'|' -c "
+    SELECT
+        DATE(MIN(${PARTITION_KEY})) as min_date,
+        DATE(MAX(${PARTITION_KEY})) as max_date,
+        COUNT(*) as row_count
+    FROM ${DEFAULT_PARTITION};
+")
+
+MIN_DATE=$(echo "$DATE_RANGE" | cut -d'|' -f1)
+MAX_DATE=$(echo "$DATE_RANGE" | cut -d'|' -f2)
+ROW_COUNT=$(echo "$DATE_RANGE" | cut -d'|' -f3)
+
+if [ -z "$MIN_DATE" ] || [ "$MIN_DATE" = "" ]; then
+    echo "DEFAULT partition is empty."
+
+    # Check if it's still attached before trying to detach
+    IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
+        SELECT EXISTS (
+            SELECT 1 FROM pg_inherits i
+            JOIN pg_class c ON c.oid = i.inhrelid
+            JOIN pg_class p ON p.oid = i.inhparent
+            WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
+        );
+    ")
+
+    if [ "$IS_ATTACHED" = "t" ]; then
+        echo "Detaching empty DEFAULT partition..."
+        psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    else
+        echo "DEFAULT partition is already detached."
+    fi
+
+    echo "Dropping empty ${DEFAULT_PARTITION}..."
+    psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
+    echo "Empty DEFAULT partition dropped successfully."
+    exit 0
+fi
+
+echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
+echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
+echo ""
+
+# Step 2: Temporarily drop FK constraints pointing to DEFAULT partition or parent table
+echo "Step 2: Checking for foreign key constraints to ${DEFAULT_PARTITION}..."
+
+# First, find FK constraints pointing to the parent table (not DEFAULT)
+# These are the base constraints we need to drop
+PARENT_TABLE=$(echo "${DEFAULT_PARTITION}" | sed 's/_default$//')
+
+echo "  Looking for base FK constraints on parent table: ${PARENT_TABLE}"
+BASE_FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT DISTINCT
+        c.conname || '|' || c.conrelid::regclass::text
+    FROM pg_constraint c
+    WHERE c.confrelid = '${PARENT_TABLE}'::regclass
+      AND c.contype = 'f'
+      AND c.conislocal = true;
+")
+
+# Also find constraints pointing directly to DEFAULT (for non-partitioned tables)
+echo "  Looking for FK constraints directly to DEFAULT: ${DEFAULT_PARTITION}"
+DEFAULT_FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT DISTINCT
+        c.conname || '|' || c.conrelid::regclass::text
+    FROM pg_constraint c
+    WHERE c.confrelid = '${DEFAULT_PARTITION}'::regclass
+      AND c.contype = 'f'
+      AND c.conislocal = true;
+")
+
+# Combine both sets
+FK_CONSTRAINTS="${BASE_FK_CONSTRAINTS}"
+if [ -n "$DEFAULT_FK_CONSTRAINTS" ]; then
+    if [ -n "$FK_CONSTRAINTS" ]; then
+        FK_CONSTRAINTS="${FK_CONSTRAINTS}"$'\n'"${DEFAULT_FK_CONSTRAINTS}"
+    else
+        FK_CONSTRAINTS="${DEFAULT_FK_CONSTRAINTS}"
+    fi
+fi
+
+if [ -n "$FK_CONSTRAINTS" ] && [ "$FK_CONSTRAINTS" != "" ]; then
+    echo "Found foreign key constraints to ${DEFAULT_PARTITION}:"
+
+    # Save FK definitions for recreation later
+    FK_DEFINITIONS_FILE="/tmp/fk_constraints_${TABLE_NAME}_$$.sql"
+
+    while IFS='|' read -r FK_NAME FK_TABLE; do
+        # Skip empty lines
+        if [ -z "$FK_NAME" ] || [ -z "$FK_TABLE" ]; then
+            continue
+        fi
+
+        echo "  - ${FK_TABLE}.${FK_NAME}"
+
+        # Get the full FK definition for recreation
+        psql -U soar -d "${DATABASE}" -t -A -c "
+            SELECT 'ALTER TABLE ' || conrelid::regclass || ' ADD CONSTRAINT ' || conname || ' ' ||
+                   pg_get_constraintdef(oid) || ';'
+            FROM pg_constraint
+            WHERE conname = '${FK_NAME}' AND conrelid = '${FK_TABLE}'::regclass;
+        " >> "$FK_DEFINITIONS_FILE"
+
+        # Drop the FK constraint (this will also drop child constraints automatically)
+        echo "  Dropping ${FK_TABLE}.${FK_NAME}..."
+        psql -U soar -d "${DATABASE}" -c "
+            ALTER TABLE ${FK_TABLE} DROP CONSTRAINT ${FK_NAME};
+        "
+    done <<< "$FK_CONSTRAINTS"
+
+    echo ""
+    echo "FK constraints dropped. Definitions saved to: $FK_DEFINITIONS_FILE"
+    echo "These will be recreated after data migration."
+else
+    echo "No foreign key constraints found pointing to ${DEFAULT_PARTITION}"
+    FK_DEFINITIONS_FILE=""
+fi
+
+echo ""
+
+# Step 3: Create missing partitions as STANDALONE tables
+# We cannot create them as partitions directly because DEFAULT has data for those dates.
+# Instead, we create standalone tables, migrate data, then attach them as partitions.
+echo "Step 3: Creating missing daily partitions (as standalone tables)..."
+echo ""
+
+# Get the table structure (excluding constraints that reference the parent)
+STANDALONE_TABLES=()
+
+# Generate list of dates between MIN_DATE and MAX_DATE (inclusive)
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
+    PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
+    STANDALONE_TABLES+=("$PARTITION_NAME")
+
+    echo "Creating standalone table ${PARTITION_NAME} for ${CURRENT_DATE}..."
+
+    # Create standalone table with same structure as parent (LIKE includes columns, but not constraints)
+    psql -U soar -d "${DATABASE}" -c "
+        CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} (LIKE ${TABLE_NAME} INCLUDING ALL);
+    " || echo "Table ${PARTITION_NAME} may already exist, continuing..."
+
+    CURRENT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+done
+
+echo ""
+echo "Standalone tables created successfully."
+echo ""
+
+# Step 4: Get column list (excluding generated columns)
+echo "Step 4: Preparing data migration (excluding generated columns)..."
+
+COLUMNS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = '${TABLE_NAME}'
+      AND is_generated = 'NEVER'
+      AND column_name != 'tableoid';
+")
+
+# Verify we got column names
+if [ -z "$COLUMNS" ]; then
+    echo "ERROR: Failed to retrieve column list for table ${TABLE_NAME}"
+    echo "Please check that the table exists in the public schema."
+    exit 1
+fi
+
+echo "Columns to migrate: ${COLUMNS}"
+echo ""
+
+# Step 5: Migrate data day by day to STANDALONE tables
+echo "Step 5: Migrating data from ${DEFAULT_PARTITION} to standalone partition tables..."
+echo "This may take a while for large datasets..."
+echo "NOTE: Migrating to standalone tables, not parent - this avoids routing back to DEFAULT."
+echo ""
+
+# Function to migrate a single day
+migrate_day() {
+    local MIGRATE_DATE="$1"
+    local MIGRATE_COLUMNS="$2"
+    local TARGET_TABLE="${TABLE_NAME}_p$(date -d "$MIGRATE_DATE" +%Y%m%d)"
+    local NEXT_DATE=$(date -d "$MIGRATE_DATE + 1 day" +%Y-%m-%d)
+    local START_TS="${MIGRATE_DATE} 00:00:00+00"
+    local END_TS="${NEXT_DATE} 00:00:00+00"
+
+    echo "[$(date +%H:%M:%S)] Migrating data for ${MIGRATE_DATE} to ${TARGET_TABLE}..."
+
+    # Use DELETE...RETURNING + INSERT pattern to move data
+    # CRITICAL: Insert into the STANDALONE table, not the parent!
+    if psql -U soar -d "${DATABASE}" << EOF
+        WITH moved_rows AS (
+            DELETE FROM ${DEFAULT_PARTITION}
+            WHERE ${PARTITION_KEY} >= '${START_TS}'
+              AND ${PARTITION_KEY} < '${END_TS}'
+            RETURNING *
+        )
+        INSERT INTO ${TARGET_TABLE} (${MIGRATE_COLUMNS})
+        SELECT ${MIGRATE_COLUMNS} FROM moved_rows;
+EOF
+    then
+        echo "[$(date +%H:%M:%S)] ✓ Completed ${MIGRATE_DATE}"
+        return 0
+    else
+        echo "[$(date +%H:%M:%S)] ✗ Failed ${MIGRATE_DATE}" >&2
+        return 1
+    fi
+}
+
+# Export function and variables for parallel execution
+export -f migrate_day
+export DATABASE TABLE_NAME DEFAULT_PARTITION PARTITION_KEY COLUMNS
+
+# Build array of all dates to migrate
+DATES_TO_MIGRATE=()
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
+    DATES_TO_MIGRATE+=("$CURRENT_DATE")
+    CURRENT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+done
+
+echo "Migrating ${#DATES_TO_MIGRATE[@]} days with ${PARALLEL_JOBS} parallel job(s)..."
+echo ""
+
+# Migrate dates in parallel batches
+FAILED_DATES=()
+for i in "${!DATES_TO_MIGRATE[@]}"; do
+    MIGRATE_DATE="${DATES_TO_MIGRATE[$i]}"
+
+    # Launch migration as background job
+    migrate_day "$MIGRATE_DATE" "$COLUMNS" &
+
+    # If we've reached the parallel limit or the last date, wait for jobs to complete
+    if (( (i + 1) % PARALLEL_JOBS == 0 )) || (( i == ${#DATES_TO_MIGRATE[@]} - 1 )); then
+        # Wait for all background jobs and check exit codes
+        for job in $(jobs -p); do
+            if ! wait "$job"; then
+                FAILED_DATES+=("${DATES_TO_MIGRATE[$i]}")
+            fi
+        done
+    fi
+done
+
+# Check if any migrations failed
+if [ ${#FAILED_DATES[@]} -gt 0 ]; then
+    echo ""
+    echo "ERROR: Migration failed for ${#FAILED_DATES[@]} date(s):"
+    printf '  - %s\n' "${FAILED_DATES[@]}"
+    exit 1
+fi
+
+echo ""
+echo "Data migration completed."
+echo ""
+
+# Step 6: Verify DEFAULT partition is empty
+echo "Step 6: Verifying migration..."
+
+REMAINING=$(psql -U soar -d "${DATABASE}" -t -A -c "SELECT COUNT(*) FROM ${DEFAULT_PARTITION};")
+
+if [ "$REMAINING" -ne 0 ]; then
+    echo "WARNING: ${DEFAULT_PARTITION} still has ${REMAINING} rows!"
+    echo "This may indicate data outside the expected date range."
+    echo "Check the data before dropping:"
+    echo "  SELECT ${PARTITION_KEY}, COUNT(*) FROM ${DEFAULT_PARTITION} GROUP BY ${PARTITION_KEY} ORDER BY ${PARTITION_KEY};"
+    exit 1
+fi
+
+echo "${DEFAULT_PARTITION} is empty (verified)."
+echo ""
+
+# Step 7: Attach standalone tables as partitions
+echo "Step 7: Attaching standalone tables as partitions..."
+echo ""
+
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
+    PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
+    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+    START_TS="${CURRENT_DATE} 00:00:00+00"
+    END_TS="${NEXT_DATE} 00:00:00+00"
+
+    echo "Attaching ${PARTITION_NAME} for ${CURRENT_DATE}..."
+
+    # Attach the standalone table as a partition
+    # PostgreSQL will validate that all rows satisfy the partition constraint
+    psql -U soar -d "${DATABASE}" -c "
+        ALTER TABLE ${TABLE_NAME}
+        ATTACH PARTITION ${PARTITION_NAME}
+        FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
+    "
+
+    CURRENT_DATE="$NEXT_DATE"
+done
+
+echo ""
+echo "Standalone tables attached as partitions successfully."
+echo ""
+
+# Step 8: Recreate FK constraints
+if [ -n "$FK_DEFINITIONS_FILE" ] && [ -f "$FK_DEFINITIONS_FILE" ]; then
+    echo "Step 8: Recreating foreign key constraints..."
+    echo ""
+
+    while IFS= read -r fk_def; do
+        if [ -n "$fk_def" ]; then
+            echo "  Recreating: $fk_def"
+            psql -U soar -d "${DATABASE}" -c "$fk_def"
+        fi
+    done < "$FK_DEFINITIONS_FILE"
+
+    echo ""
+    echo "FK constraints recreated successfully."
+    rm -f "$FK_DEFINITIONS_FILE"
+else
+    echo "Step 8: No FK constraints to recreate (skipping)."
+fi
+
+echo ""
+
+# Step 9: Detach DEFAULT partition (now that it's empty)
+echo "Step 9: Detaching empty ${DEFAULT_PARTITION}..."
+
+IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT EXISTS (
+        SELECT 1 FROM pg_inherits i
+        JOIN pg_class c ON c.oid = i.inhrelid
+        JOIN pg_class p ON p.oid = i.inhparent
+        WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
+    );
+")
+
+if [ "$IS_ATTACHED" = "t" ]; then
+    echo "DEFAULT partition is still attached. Detaching now that it's empty..."
+    # Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    echo "Successfully detached ${DEFAULT_PARTITION}"
+else
+    echo "DEFAULT partition is already detached."
+fi
+
+echo ""
+
+# Step 10: Drop the detached DEFAULT partition
+echo "Step 10: Dropping empty ${DEFAULT_PARTITION}..."
+psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
+
+echo "Successfully dropped ${DEFAULT_PARTITION}."
+echo ""
+
+# Step 11: Show final state
+echo "================================================================================"
+echo "Migration completed successfully!"
+echo "================================================================================"
+echo ""
+echo "Next steps:"
+echo "1. Verify partitions were created:"
+echo "   SELECT tablename FROM pg_tables WHERE tablename LIKE '${TABLE_NAME}_p%' ORDER BY tablename DESC;"
+echo ""
+echo "2. Run partman maintenance to ensure future partitions are created:"
+echo "   CALL partman.run_maintenance_proc();"
+echo ""
+echo "3. Monitor partman logs:"
+echo "   journalctl -u partman-maintenance -f"
+echo ""
+echo "================================================================================"

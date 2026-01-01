@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { Search, MapPin, Radio, Navigation } from '@lucide/svelte';
+	import {
+		Search,
+		MapPin,
+		Radio,
+		Navigation,
+		Map,
+		ExternalLink,
+		ChevronLeft,
+		ChevronRight
+	} from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -7,25 +16,9 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import type { Receiver, PaginatedDataResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
-
-	interface Receiver {
-		id: string;
-		callsign: string;
-		description: string | null;
-		contact: string | null;
-		email: string | null;
-		country: string | null;
-		latitude: number | null;
-		longitude: number | null;
-		created_at: string;
-		updated_at: string;
-	}
-
-	interface ReceiverSearchResponse {
-		receivers: Receiver[];
-	}
 
 	interface PlaceLocation {
 		lat(): number;
@@ -44,6 +37,12 @@
 	let loading = $state(false);
 	let error = $state('');
 	let searchMode = $state<'query' | 'location' | 'nearme'>('query');
+
+	// Pagination state
+	let currentPage = $state(1);
+	let totalPages = $state(1);
+	let totalCount = $state(0);
+	let perPage = 50;
 
 	// Query search
 	let searchQuery = $state('');
@@ -90,9 +89,13 @@
 		}
 	}
 
-	async function searchReceivers() {
+	async function searchReceivers(resetPage = true) {
 		loading = true;
 		error = '';
+
+		if (resetPage) {
+			currentPage = 1;
+		}
 
 		try {
 			let endpoint = '/receivers';
@@ -120,11 +123,17 @@
 				queryParams.push(`radius_miles=${radiusMiles}`);
 			}
 
+			// Add pagination parameters
+			queryParams.push(`page=${currentPage}`);
+			queryParams.push(`per_page=${perPage}`);
+
 			if (queryParams.length > 0) {
 				endpoint += `?${queryParams.join('&')}`;
 			}
-			const response = await serverCall<ReceiverSearchResponse>(endpoint);
-			receivers = response.receivers || [];
+			const response = await serverCall<PaginatedDataResponse<Receiver>>(endpoint);
+			receivers = response.data || [];
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search receivers: ${errorMessage}`;
@@ -188,12 +197,16 @@
 		}
 	}
 
-	function formatCoordinates(
-		lat: number | null | undefined,
-		lng: number | null | undefined
-	): string {
-		if (lat == null || lng == null) return '—';
-		return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+	function formatAddress(receiver: Receiver): string {
+		const parts: string[] = [];
+
+		if (receiver.streetAddress) parts.push(receiver.streetAddress);
+		if (receiver.city) parts.push(receiver.city);
+		if (receiver.region) parts.push(receiver.region);
+		if (receiver.country) parts.push(receiver.country);
+		if (receiver.postalCode) parts.push(receiver.postalCode);
+
+		return parts.length > 0 ? parts.join(', ') : '—';
 	}
 
 	function getLastHeard(updatedAt: string): string {
@@ -215,9 +228,13 @@
 		error = '';
 
 		try {
-			// Call API without any query parameters to get recently updated receivers
-			const response = await serverCall<ReceiverSearchResponse>('/receivers');
-			receivers = response.receivers || [];
+			// Call API with pagination to get recently updated receivers
+			const response = await serverCall<PaginatedDataResponse<Receiver>>(
+				`/receivers?page=${currentPage}&per_page=${perPage}`
+			);
+			receivers = response.data || [];
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receivers: ${errorMessage}`;
@@ -225,6 +242,28 @@
 			receivers = [];
 		} finally {
 			loading = false;
+		}
+	}
+
+	function goToPage(page: number) {
+		currentPage = page;
+		// Re-run the current search with the new page
+		if (searchQuery || selectedLatitude !== null) {
+			searchReceivers(false);
+		} else {
+			loadRecentReceivers();
+		}
+	}
+
+	function nextPage() {
+		if (currentPage < totalPages) {
+			goToPage(currentPage + 1);
+		}
+	}
+
+	function previousPage() {
+		if (currentPage > 1) {
+			goToPage(currentPage - 1);
 		}
 	}
 
@@ -247,6 +286,12 @@
 			<Radio class="h-8 w-8" />
 			Receiver Search
 		</h1>
+		<div class="flex justify-center">
+			<a href={resolve('/receivers/coverage')} class="btn gap-2 preset-outlined">
+				<Map class="h-4 w-4" />
+				View Coverage Map
+			</a>
+		</div>
 	</header>
 
 	<!-- Search Section -->
@@ -303,7 +348,7 @@
 
 				<button
 					class="btn w-full preset-filled-primary-500"
-					onclick={searchReceivers}
+					onclick={() => searchReceivers()}
 					disabled={loading}
 				>
 					{#if loading}
@@ -334,7 +379,7 @@
 
 				<button
 					class="btn w-full preset-filled-primary-500"
-					onclick={searchReceivers}
+					onclick={() => searchReceivers()}
 					disabled={loading}
 				>
 					{#if loading}
@@ -386,14 +431,41 @@
 	<!-- Results Section -->
 	{#if receivers.length > 0}
 		<section class="space-y-4">
-			<h2 class="h3">
-				{#if !searchQuery && selectedLatitude === null}
-					Recently Updated Receivers
-				{:else}
-					Results
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<h2 class="h3">
+					{#if !searchQuery && selectedLatitude === null}
+						Recently Updated Receivers
+					{:else}
+						Results
+					{/if}
+					<span class="text-surface-500-400-token">({totalCount} total)</span>
+				</h2>
+
+				<!-- Pagination Controls -->
+				{#if totalPages > 1}
+					<div class="flex items-center gap-2">
+						<button
+							class="btn preset-outlined btn-sm"
+							onclick={previousPage}
+							disabled={currentPage === 1 || loading}
+						>
+							<ChevronLeft class="h-4 w-4" />
+							Previous
+						</button>
+						<span class="text-sm text-surface-600 dark:text-surface-400">
+							Page {currentPage} of {totalPages}
+						</span>
+						<button
+							class="btn preset-outlined btn-sm"
+							onclick={nextPage}
+							disabled={currentPage === totalPages || loading}
+						>
+							Next
+							<ChevronRight class="h-4 w-4" />
+						</button>
+					</div>
 				{/if}
-				<span class="text-surface-500-400-token">({receivers.length})</span>
-			</h2>
+			</div>
 
 			<!-- Mobile: Card Layout -->
 			<div class="grid gap-4 md:hidden">
@@ -417,21 +489,31 @@
 							<div
 								class="space-y-2 border-t border-surface-200 pt-3 text-sm dark:border-surface-700"
 							>
-								{#if receiver.country}
+								{#if formatAddress(receiver) !== '—'}
 									<div class="flex items-center gap-2 text-surface-600 dark:text-surface-400">
 										<MapPin class="h-4 w-4 flex-shrink-0" />
-										<span>{receiver.country}</span>
+										<span>{formatAddress(receiver)}</span>
 									</div>
 								{/if}
 
-								{#if receiver.latitude != null && receiver.longitude != null}
-									<div class="font-mono text-xs text-surface-500 dark:text-surface-400">
-										{formatCoordinates(receiver.latitude, receiver.longitude)}
+								{#if receiver.fromOgnDb}
+									<div class="text-xs text-surface-600 dark:text-surface-400">
+										In OGN Database:
+										<button
+											onclick={(e) => {
+												e.stopPropagation();
+												window.open('http://wiki.glidernet.org/list-of-receivers', '_blank');
+											}}
+											class="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
+										>
+											Yes
+											<ExternalLink class="h-3 w-3" />
+										</button>
 									</div>
 								{/if}
 
 								<div class="text-xs text-surface-500 dark:text-surface-400">
-									Last heard: <span class="font-medium">{getLastHeard(receiver.updated_at)}</span>
+									Last heard: <span class="font-medium">{getLastHeard(receiver.updatedAt)}</span>
 								</div>
 							</div>
 						</div>
@@ -447,8 +529,8 @@
 							<tr>
 								<th>Callsign</th>
 								<th>Description</th>
-								<th>Country</th>
-								<th>Coordinates</th>
+								<th>Address</th>
+								<th>In OGN Database</th>
 								<th>Last Heard</th>
 							</tr>
 						</thead>
@@ -462,12 +544,27 @@
 									<td class="text-surface-600-300-token">
 										{receiver.description || '—'}
 									</td>
-									<td>{receiver.country || '—'}</td>
-									<td class="text-surface-500-400-token text-sm">
-										{formatCoordinates(receiver.latitude, receiver.longitude)}
+									<td class="text-surface-600-300-token text-sm">
+										{formatAddress(receiver)}
+									</td>
+									<td class="text-center">
+										{#if receiver.fromOgnDb}
+											<a
+												href="http://wiki.glidernet.org/list-of-receivers"
+												target="_blank"
+												rel="noopener noreferrer"
+												class="inline-flex items-center gap-1 text-primary-500 hover:text-primary-600 dark:text-primary-400 dark:hover:text-primary-300"
+												onclick={(e) => e.stopPropagation()}
+											>
+												Yes
+												<ExternalLink class="h-3 w-3" />
+											</a>
+										{:else}
+											<span class="text-surface-500-400-token">No</span>
+										{/if}
 									</td>
 									<td class="text-surface-500-400-token text-sm">
-										{getLastHeard(receiver.updated_at)}
+										{getLastHeard(receiver.updatedAt)}
 									</td>
 								</tr>
 							{/each}
@@ -475,6 +572,31 @@
 					</table>
 				</div>
 			</div>
+
+			<!-- Bottom Pagination Controls -->
+			{#if totalPages > 1}
+				<div class="flex items-center justify-center gap-2 pt-4">
+					<button
+						class="btn preset-outlined btn-sm"
+						onclick={previousPage}
+						disabled={currentPage === 1 || loading}
+					>
+						<ChevronLeft class="h-4 w-4" />
+						Previous
+					</button>
+					<span class="text-sm text-surface-600 dark:text-surface-400">
+						Page {currentPage} of {totalPages}
+					</span>
+					<button
+						class="btn preset-outlined btn-sm"
+						onclick={nextPage}
+						disabled={currentPage === totalPages || loading}
+					>
+						Next
+						<ChevronRight class="h-4 w-4" />
+					</button>
+				</div>
+			{/if}
 		</section>
 	{:else if !loading && receivers.length === 0 && (searchQuery || selectedLatitude !== null)}
 		<div class="text-surface-500-400-token card p-6 text-center">

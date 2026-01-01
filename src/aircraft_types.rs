@@ -81,3 +81,78 @@ impl AircraftType {
         }
     }
 }
+
+/// ICAO Aircraft Category (1st character of ICAO description from ICAO Doc 8643)
+/// ICAO standard values: Landplane, Seaplane, Amphibian, Gyroplane, Helicopter, Tiltrotor
+/// Extended values for non-standard types: Balloon, Drone, PoweredParachute, Rotorcraft, Vtol, Electric
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftCategory")]
+pub enum AircraftCategory {
+    Landplane,        // L (ICAO Doc 8643)
+    Helicopter,       // H (ICAO Doc 8643)
+    Balloon,          // B (extended)
+    Amphibian,        // A (ICAO Doc 8643)
+    Gyroplane,        // G (ICAO Doc 8643 - gyrocopter)
+    Drone,            // D (extended)
+    PoweredParachute, // P (extended)
+    Rotorcraft,       // R (extended)
+    Seaplane,         // S (ICAO Doc 8643)
+    Tiltrotor,        // T (ICAO Doc 8643)
+    Vtol,             // V (extended)
+    Electric,         // E (extended)
+    Unknown,          // - (unknown/unspecified)
+}
+
+impl AircraftCategory {
+    /// Parse from ICAO description first character (ICAO Doc 8643)
+    pub fn from_short_type_char(c: char) -> Option<Self> {
+        match c {
+            'L' => Some(AircraftCategory::Landplane),
+            'H' => Some(AircraftCategory::Helicopter),
+            'B' => Some(AircraftCategory::Balloon),
+            'A' => Some(AircraftCategory::Amphibian),
+            'G' => Some(AircraftCategory::Gyroplane),
+            'D' => Some(AircraftCategory::Drone),
+            'P' => Some(AircraftCategory::PoweredParachute),
+            'R' => Some(AircraftCategory::Rotorcraft),
+            'S' => Some(AircraftCategory::Seaplane),
+            'T' => Some(AircraftCategory::Tiltrotor),
+            'V' => Some(AircraftCategory::Vtol),
+            'E' => Some(AircraftCategory::Electric),
+            '-' => Some(AircraftCategory::Unknown),
+            _ => None,
+        }
+    }
+}
+
+/// ICAO Engine Type (3rd character of ICAO description from ICAO Doc 8643)
+/// ICAO standard values: Piston, Jet, Turbine (turboprop/turboshaft), Electric, Rocket
+/// Extended values: Special, None (for gliders/balloons)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::EngineType")]
+pub enum EngineType {
+    Piston,   // P (ICAO Doc 8643)
+    Jet,      // J (ICAO Doc 8643)
+    Turbine,  // T (ICAO Doc 8643 - turboprop/turboshaft)
+    Electric, // E (ICAO Doc 8643)
+    Rocket,   // R (ICAO Doc 8643)
+    Special,  // S (extended)
+    None,     // - (extended - no engine: glider, balloon, ground vehicle)
+    Unknown,  // unknown/unspecified
+}
+
+impl EngineType {
+    /// Parse from ICAO description third character (ICAO Doc 8643)
+    pub fn from_short_type_char(c: char) -> Option<Self> {
+        match c {
+            'P' => Some(EngineType::Piston),
+            'J' => Some(EngineType::Jet),
+            'T' => Some(EngineType::Turbine),
+            'E' => Some(EngineType::Electric),
+            'R' => Some(EngineType::Rocket),
+            'S' => Some(EngineType::Special),
+            '-' => Some(EngineType::None),
+            _ => None,
+        }
+    }
+}

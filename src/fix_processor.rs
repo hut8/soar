@@ -4,7 +4,7 @@ use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
 use crate::aircraft_repo::{AircraftPacketFields, AircraftRepository};
-use crate::elevation::{ElevationService, ElevationTask};
+use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
@@ -18,11 +18,7 @@ use ogn_parser::AprsPacket;
 #[derive(Clone)]
 pub enum ElevationMode {
     /// Synchronous: Calculate elevation inline before database insert
-    Sync { elevation_db: ElevationService },
-    /// Asynchronous: Queue elevation tasks for processing by dedicated workers
-    Async {
-        channel: flume::Sender<ElevationTask>,
-    },
+    Sync { elevation_db: Box<ElevationService> },
 }
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
@@ -57,14 +53,8 @@ impl FixProcessor {
 
     /// Configure synchronous elevation processing
     pub fn with_sync_elevation(mut self, elevation_db: ElevationService) -> Self {
-        self.elevation_mode = Some(ElevationMode::Sync { elevation_db });
-        self
-    }
-
-    /// Configure asynchronous elevation processing (legacy mode)
-    pub fn with_async_elevation(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
-        self.elevation_mode = Some(ElevationMode::Async {
-            channel: elevation_tx,
+        self.elevation_mode = Some(ElevationMode::Sync {
+            elevation_db: Box::new(elevation_db),
         });
         self
     }
@@ -199,7 +189,7 @@ impl FixProcessor {
                 let tracker_device_type = packet.to.to_string();
 
                 // Track APRS type before filtering
-                metrics::counter!("aprs.type.received", "type" => tracker_device_type.clone())
+                metrics::counter!("aprs.type.received_total", "type" => tracker_device_type.clone())
                     .increment(1);
 
                 // Check if this APRS type is suppressed
@@ -209,7 +199,7 @@ impl FixProcessor {
                     .any(|t| t == &tracker_device_type)
                 {
                     trace!("Suppressing fix from APRS type: {}", tracker_device_type);
-                    metrics::counter!("aprs.fixes.suppressed").increment(1);
+                    metrics::counter!("aprs.fixes.suppressed_total").increment(1);
                     return;
                 }
 
@@ -221,7 +211,7 @@ impl FixProcessor {
                         .any(|t| t == ac_type)
                 {
                     trace!("Skipping fix from OGN aircraft type: {:?}", ac_type);
-                    metrics::counter!("aprs.fixes.skipped_aircraft_type", "aircraft_type" => ac_type.to_string())
+                    metrics::counter!("aprs.fixes.skipped_aircraft_type_total", "aircraft_type" => ac_type.to_string())
                         .increment(1);
                     return;
                 }
@@ -233,11 +223,18 @@ impl FixProcessor {
                 };
 
                 // Extract all available fields from packet for device creation/update
-                let icao_model_code: Option<String> = pos_packet
-                    .comment
-                    .model
-                    .as_ref()
-                    .map(|model| model.to_string());
+                // The model field can be either a 3-4 character ICAO code or a full model name
+                let model_string = pos_packet.comment.model.as_ref().map(|m| m.to_string());
+
+                // Use as aircraft_model unconditionally
+                let aircraft_model = model_string.clone();
+
+                // Only use as icao_model_code if it's exactly 3 or 4 characters (per ICAO Doc 8643)
+                let icao_model_code = model_string.filter(|model| {
+                    let len = model.len();
+                    len == 3 || len == 4
+                });
+
                 let adsb_emitter_category = pos_packet
                     .comment
                     .adsb_emitter_category
@@ -250,7 +247,8 @@ impl FixProcessor {
 
                 let packet_fields = AircraftPacketFields {
                     aircraft_type,
-                    icao_model_code: icao_model_code.clone(),
+                    aircraft_model,
+                    icao_model_code,
                     adsb_emitter_category,
                     tracker_device_type: Some(tracker_device_type.clone()),
                     registration: registration.clone(),
@@ -349,9 +347,14 @@ impl FixProcessor {
             fix.altitude_agl_feet = agl;
             fix.altitude_agl_valid = true; // Mark as valid even if agl is None (no elevation data available)
 
+            // IMPORTANT: Recalculate is_active now that we have AGL data
+            // This must match the logic in should_be_active() to ensure database field matches
+            // the logic used for flight state transitions
+            fix.is_active = crate::flight_tracker::should_be_active(&fix);
+
             metrics::histogram!("aprs.elevation.sync_duration_ms")
                 .record(elevation_start.elapsed().as_micros() as f64 / 1000.0);
-            metrics::counter!("aprs.elevation.sync_processed").increment(1);
+            metrics::counter!("aprs.elevation.sync_processed_total").increment(1);
         }
 
         // Step 1: Process through flight detection AND save to database
@@ -438,33 +441,7 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 4: Calculate and update altitude_agl via dedicated elevation channel (async mode only)
-        // In sync mode, elevation was already calculated before database insert (Step 0)
-        // This prevents slow elevation lookups from blocking the main processing queue in async mode
-        if let Some(ElevationMode::Async { channel }) = &self.elevation_mode {
-            let elevation_queue_start = std::time::Instant::now();
-            let task = ElevationTask {
-                fix_id: updated_fix.id,
-                fix: updated_fix.clone(),
-            };
-
-            // Send to elevation queue with blocking send_async
-            // Never drops elevation tasks - applies backpressure if queue fills
-            // Large queue (100K) prevents backpressure under normal conditions
-            match channel.send_async(task).await {
-                Ok(_) => {
-                    metrics::counter!("aprs.elevation.queued").increment(1);
-                }
-                Err(_) => {
-                    error!("Elevation processing channel is closed");
-                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
-                }
-            }
-            metrics::histogram!("aprs.aircraft.elevation_queue_ms")
-                .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);
-        }
-
-        // Step 5: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 4: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
             // Look up flight information if this fix is part of a flight

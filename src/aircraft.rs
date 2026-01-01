@@ -11,6 +11,7 @@ use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
 // Import AircraftType and AdsbEmitterCategory for the cached fields
+use crate::aircraft_types::{AircraftCategory, EngineType};
 use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
@@ -135,7 +136,7 @@ pub struct Aircraft {
     )]
     pub address: u32,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     #[serde(rename(deserialize = "cn", serialize = "cn"))]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
@@ -162,6 +163,30 @@ pub struct Aircraft {
     pub tracker_device_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_operator: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_category: Option<AircraftCategory>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_count: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine_type: Option<EngineType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub faa_pia: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub faa_ladd: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_military: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_ogn_ddb: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_adsbx_ddb: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl Aircraft {
@@ -189,14 +214,15 @@ pub struct AircraftModel {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub id: uuid::Uuid,
-    pub from_ddb: bool,
+    pub from_ogn_ddb: bool,
+    pub from_adsbx_ddb: bool,
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
@@ -209,6 +235,16 @@ pub struct AircraftModel {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub owner_operator: Option<String>,
+    pub aircraft_category: Option<AircraftCategory>,
+    pub engine_count: Option<i16>,
+    pub engine_type: Option<EngineType>,
+    pub faa_pia: Option<bool>,
+    pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
+    pub current_fix: Option<serde_json::Value>,
+    pub images: Option<serde_json::Value>,
 }
 
 impl AircraftModel {
@@ -225,11 +261,12 @@ pub struct NewAircraft {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
-    pub registration: String,
+    pub registration: Option<String>,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
-    pub from_ddb: bool,
+    pub from_ogn_ddb: bool,
+    pub from_adsbx_ddb: bool,
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
@@ -242,14 +279,34 @@ pub struct NewAircraft {
     pub country_code: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub owner_operator: Option<String>,
+    pub aircraft_category: Option<AircraftCategory>,
+    pub engine_count: Option<i16>,
+    pub engine_type: Option<EngineType>,
+    pub faa_pia: Option<bool>,
+    pub faa_ladd: Option<bool>,
+    pub year: Option<i16>,
+    pub is_military: Option<bool>,
+    pub current_fix: Option<serde_json::Value>,
+    pub images: Option<serde_json::Value>,
 }
 
 impl From<Aircraft> for NewAircraft {
     fn from(device: Aircraft) -> Self {
-        // Extract country code from ICAO address if not already present
-        let country_code = device.country_code.or_else(|| {
-            Aircraft::extract_country_code_from_icao(device.address, device.address_type)
-        });
+        // Extract country code from ICAO address or registration if not already present
+        let country_code = device
+            .country_code
+            .or_else(|| {
+                // Try ICAO address first
+                Aircraft::extract_country_code_from_icao(device.address, device.address_type)
+            })
+            .or_else(|| {
+                // Fall back to extracting from registration if available
+                device
+                    .registration
+                    .as_ref()
+                    .and_then(|reg| Aircraft::extract_country_code_from_registration(reg))
+            });
 
         Self {
             address: device.address as i32,
@@ -259,7 +316,8 @@ impl From<Aircraft> for NewAircraft {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
-            from_ddb: true,
+            from_ogn_ddb: device.from_ogn_ddb.unwrap_or(true),
+            from_adsbx_ddb: device.from_adsbx_ddb.unwrap_or(false),
             frequency_mhz: device
                 .frequency_mhz
                 .and_then(|f| f.to_string().parse().ok()),
@@ -274,6 +332,16 @@ impl From<Aircraft> for NewAircraft {
             country_code,
             latitude: None,  // Not provided by DDB
             longitude: None, // Not provided by DDB
+            owner_operator: device.owner_operator,
+            aircraft_category: device.aircraft_category,
+            engine_count: device.engine_count,
+            engine_type: device.engine_type,
+            faa_pia: device.faa_pia,
+            faa_ladd: device.faa_ladd,
+            year: device.year,
+            is_military: device.is_military,
+            current_fix: None, // Will be populated when fixes are processed
+            images: None,      // Not provided by DDB
         }
     }
 }
@@ -301,6 +369,18 @@ impl From<AircraftModel> for Aircraft {
             adsb_emitter_category: model.adsb_emitter_category,
             tracker_device_type: model.tracker_device_type,
             country_code: model.country_code,
+            owner_operator: model.owner_operator,
+            aircraft_category: model.aircraft_category,
+            engine_count: model.engine_count,
+            engine_type: model.engine_type,
+            faa_pia: model.faa_pia,
+            faa_ladd: model.faa_ladd,
+            year: model.year,
+            is_military: model.is_military,
+            from_ogn_ddb: Some(model.from_ogn_ddb),
+            from_adsbx_ddb: Some(model.from_adsbx_ddb),
+            created_at: Some(model.created_at),
+            updated_at: Some(model.updated_at),
         }
     }
 }
@@ -322,6 +402,21 @@ pub struct AircraftWithSource {
 pub struct AircraftFetcher;
 
 impl Aircraft {
+    /// Extracts the two-letter country code from a registration string
+    /// Returns Some(country_code) if the registration can be parsed and a country identified
+    /// Returns None if parsing fails or the registration belongs to an organization
+    pub fn extract_country_code_from_registration(registration: &str) -> Option<String> {
+        // Parse using flydent with icao24bit=false (since this is a registration, not ICAO address)
+        let parser = flydent::Parser::new();
+        parser.parse(registration, false, false).and_then(|entity| {
+            // Extract ISO2 country code from the entity
+            match entity {
+                flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                flydent::EntityResult::Organization { .. } => None,
+            }
+        })
+    }
+
     /// Extracts the two-letter country code from an ICAO address
     /// Returns Some(country_code) if the address is ICAO and a country can be identified
     /// Returns None for non-ICAO addresses (FLARM, OGN) or if parsing fails
@@ -370,11 +465,12 @@ impl Aircraft {
     /// Determines the registration country based on the registration format
     /// Returns UnitedStates if the registration follows U.S. N-number format, otherwise Other
     pub fn registration_country(&self) -> RegistrationCountry {
-        if self.is_us_n_number(&self.registration) {
-            RegistrationCountry::UnitedStates
-        } else {
-            RegistrationCountry::Other
+        if let Some(ref reg) = self.registration
+            && self.is_us_n_number(reg)
+        {
+            return RegistrationCountry::UnitedStates;
         }
+        RegistrationCountry::Other
     }
 
     /// Checks if a registration follows U.S. N-number format
@@ -496,14 +592,33 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                             // Parse FLARM ID as hex address
                             let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                            // Normalize registration using thread-local parser
-                            let registration = PARSER.with(|parser| {
+                            // Normalize registration and extract country code using thread-local parser
+                            let (registration, country_code) = PARSER.with(|parser| {
                                 match parser.borrow().parse(&record.registration, false, false) {
-                                    Some(r) => r.canonical_callsign().to_string(),
+                                    Some(entity) => {
+                                        let normalized = entity.canonical_callsign().to_string();
+                                        let country = match entity {
+                                            flydent::EntityResult::Country { iso2, .. } => {
+                                                Some(iso2)
+                                            }
+                                            flydent::EntityResult::Organization { .. } => None,
+                                        };
+                                        let reg = if normalized.is_empty() {
+                                            None
+                                        } else {
+                                            Some(normalized)
+                                        };
+                                        (reg, country)
+                                    }
                                     None => {
                                         // If flydent can't parse it, return the original
                                         // This handles edge cases where the registration format is unusual
-                                        record.registration.clone()
+                                        let reg = if record.registration.is_empty() {
+                                            None
+                                        } else {
+                                            Some(record.registration.clone())
+                                        };
+                                        (reg, None)
                                     }
                                 }
                             });
@@ -534,7 +649,19 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 icao_model_code: None,
                                 adsb_emitter_category: None,
                                 tracker_device_type: None,
-                                country_code: None, // Not extracted from FLARM addresses
+                                country_code, // Extracted from registration
+                                owner_operator: None,
+                                aircraft_category: None,
+                                engine_count: None,
+                                engine_type: None,
+                                faa_pia: None,
+                                faa_ladd: None,
+                                year: None,
+                                is_military: None,
+                                from_ogn_ddb: Some(true),
+                                from_adsbx_ddb: Some(false),
+                                created_at: None,
+                                updated_at: None,
                             })
                         }
                         Err(e) => {
@@ -679,15 +806,35 @@ impl AircraftFetcher {
                                 // Parse FLARM ID as hex address
                                 let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                                // Normalize registration using thread-local parser
-                                let registration = PARSER.with(|parser| {
+                                // Normalize registration and extract country code using thread-local parser
+                                let (registration, country_code) = PARSER.with(|parser| {
                                     match parser.borrow().parse(&record.registration, false, false)
                                     {
-                                        Some(r) => r.canonical_callsign().to_string(),
+                                        Some(entity) => {
+                                            let normalized =
+                                                entity.canonical_callsign().to_string();
+                                            let country = match entity {
+                                                flydent::EntityResult::Country { iso2, .. } => {
+                                                    Some(iso2)
+                                                }
+                                                flydent::EntityResult::Organization { .. } => None,
+                                            };
+                                            let reg = if normalized.is_empty() {
+                                                None
+                                            } else {
+                                                Some(normalized)
+                                            };
+                                            (reg, country)
+                                        }
                                         None => {
                                             // If flydent can't parse it, return the original
                                             // This handles edge cases where the registration format is unusual
-                                            record.registration.clone()
+                                            let reg = if record.registration.is_empty() {
+                                                None
+                                            } else {
+                                                Some(record.registration.clone())
+                                            };
+                                            (reg, None)
                                         }
                                     }
                                 });
@@ -718,7 +865,19 @@ impl AircraftFetcher {
                                     icao_model_code: None,
                                     adsb_emitter_category: None,
                                     tracker_device_type: None,
-                                    country_code: None, // Not extracted from FLARM addresses
+                                    country_code, // Extracted from registration
+                                    owner_operator: None,
+                                    aircraft_category: None,
+                                    engine_count: None,
+                                    engine_type: None,
+                                    faa_pia: None,
+                                    faa_ladd: None,
+                                    year: None,
+                                    is_military: None,
+                                    from_ogn_ddb: Some(true),
+                                    from_adsbx_ddb: Some(false),
+                                    created_at: None,
+                                    updated_at: None,
                                 })
                             }
                             Err(e) => {
@@ -775,17 +934,19 @@ impl AircraftFetcher {
         let reg_parser = flydent::Parser::new();
 
         let device_normalizer = |mut d: Aircraft| {
-            let reg = reg_parser.parse(&d.registration, false, false);
-            match reg {
+            let reg = reg_parser.parse(d.registration.as_deref().unwrap_or(""), false, false);
+            d.registration = match reg {
                 Some(r) => {
-                    d.registration = r.canonical_callsign().to_string();
-                    d
+                    let canonical = r.canonical_callsign().to_string();
+                    if canonical.is_empty() {
+                        None
+                    } else {
+                        Some(canonical)
+                    }
                 }
-                None => {
-                    d.registration = "".into();
-                    d
-                }
-            }
+                None => None,
+            };
+            d
         };
 
         // Canonicalize registrations using "flydent" crate
@@ -822,18 +983,12 @@ impl AircraftFetcher {
                 // Only log a warning if the devices actually have different data
                 if glidernet_device != flarmnet_device {
                     let (registration, source) = match (
-                        glidernet_device.registration.is_empty(),
-                        flarmnet_device.registration.is_empty(),
+                        &glidernet_device.registration,
+                        &flarmnet_device.registration,
                     ) {
-                        (true, true) => ("".to_string(), AircraftSource::Glidernet),
-                        (true, false) => (
-                            flarmnet_device.registration.clone(),
-                            AircraftSource::Flarmnet,
-                        ),
-                        (false, _) => (
-                            glidernet_device.registration.clone(),
-                            AircraftSource::Glidernet,
-                        ),
+                        (None, None) => (None, AircraftSource::Glidernet),
+                        (None, Some(f)) => (Some(f.clone()), AircraftSource::Flarmnet),
+                        (Some(g), _) => (Some(g.clone()), AircraftSource::Glidernet),
                     };
 
                     conflicts += 1;
@@ -845,11 +1000,11 @@ impl AircraftFetcher {
                         "Aircraft conflict for ID {}: using {} data: {} (over {})",
                         glidernet_device.address,
                         better_label,
-                        registration,
+                        registration.as_deref().unwrap_or("(none)"),
                         if source == AircraftSource::Glidernet {
-                            &flarmnet_device.registration
+                            flarmnet_device.registration.as_deref().unwrap_or("(none)")
                         } else {
-                            &glidernet_device.registration
+                            glidernet_device.registration.as_deref().unwrap_or("(none)")
                         }
                     );
                     let merged_device = Aircraft {
@@ -881,6 +1036,18 @@ impl AircraftFetcher {
                         country_code: glidernet_device
                             .country_code
                             .or(flarmnet_device.country_code),
+                        owner_operator: None,
+                        aircraft_category: None,
+                        engine_count: None,
+                        engine_type: None,
+                        faa_pia: None,
+                        faa_ladd: None,
+                        year: None,
+                        is_military: None,
+                        from_ogn_ddb: Some(true),
+                        from_adsbx_ddb: Some(false),
+                        created_at: None,
+                        updated_at: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -954,7 +1121,7 @@ mod tests {
             address_type: AddressType::Flarm,
             address: 0x000000,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
-            registration: "HA-4403".to_string(),
+            registration: Some("HA-4403".to_string()),
             competition_number: "J".to_string(),
             tracked: true,
             identified: false,
@@ -968,6 +1135,18 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
+            from_ogn_ddb: Some(true),
+            from_adsbx_ddb: Some(false),
+            created_at: None,
+            updated_at: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1284,7 +1463,7 @@ mod tests {
             address_type: AddressType::Flarm,
             address: 0x123456,
             aircraft_model: "Test Aircraft".to_string(),
-            registration: registration.to_string(),
+            registration: Some(registration.to_string()),
             competition_number: "T".to_string(),
             tracked: true,
             identified: true,
@@ -1298,6 +1477,18 @@ mod tests {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
+            from_ogn_ddb: Some(true),
+            from_adsbx_ddb: Some(false),
+            created_at: None,
+            updated_at: None,
         }
     }
 
@@ -1323,5 +1514,55 @@ mod tests {
                 canonical
             );
         }
+    }
+
+    #[test]
+    fn test_extract_country_code_from_registration() {
+        // Test Australian registration
+        let au_code = Aircraft::extract_country_code_from_registration("VH-XJJ");
+        assert_eq!(
+            au_code,
+            Some("AU".to_string()),
+            "VH-XJJ should be Australia"
+        );
+
+        // Test US registration
+        let us_code = Aircraft::extract_country_code_from_registration("N841X");
+        assert_eq!(
+            us_code,
+            Some("US".to_string()),
+            "N841X should be United States"
+        );
+
+        // Test German registration
+        let de_code = Aircraft::extract_country_code_from_registration("D-ABCD");
+        assert_eq!(de_code, Some("DE".to_string()), "D-ABCD should be Germany");
+
+        // Test UK registration
+        let gb_code = Aircraft::extract_country_code_from_registration("G-ABCD");
+        assert_eq!(
+            gb_code,
+            Some("GB".to_string()),
+            "G-ABCD should be United Kingdom"
+        );
+
+        // Test French registration
+        let fr_code = Aircraft::extract_country_code_from_registration("F-JJIJ");
+        assert_eq!(fr_code, Some("FR".to_string()), "F-JJIJ should be France");
+
+        // Test Canadian registration
+        let ca_code = Aircraft::extract_country_code_from_registration("C-GABC");
+        assert_eq!(ca_code, Some("CA".to_string()), "C-GABC should be Canada");
+
+        // Test invalid registration
+        let invalid_code = Aircraft::extract_country_code_from_registration("INVALID");
+        assert_eq!(
+            invalid_code, None,
+            "Invalid registration should return None"
+        );
+
+        // Test empty string
+        let empty_code = Aircraft::extract_country_code_from_registration("");
+        assert_eq!(empty_code, None, "Empty registration should return None");
     }
 }

@@ -8,6 +8,9 @@ mod state_transitions;
 mod towing;
 pub(crate) mod utils;
 
+// Re-export should_be_active for use in fix_processor
+pub use state_transitions::should_be_active;
+
 use crate::Fix;
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
@@ -432,7 +435,7 @@ impl FlightTracker {
                 // Clean up the device lock after successful timeout
                 self.cleanup_device_lock(aircraft_id).await;
                 // Increment timeout counter
-                metrics::counter!("flight_tracker_timeouts_detected").increment(1);
+                metrics::counter!("flight_tracker_timeouts_detected_total").increment(1);
             }
         }
 

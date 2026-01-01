@@ -7,7 +7,7 @@
 		createTakeoffMarker,
 		createLandingMarker
 	} from '$lib/cesium/entities';
-	import type { Flight, Fix } from '$lib/types';
+	import type { Flight, Fix, DataListResponse } from '$lib/types';
 
 	// Props
 	let {
@@ -34,18 +34,13 @@
 				flight: Flight;
 			}
 
-			interface FlightFixesResponse {
-				fixes: Fix[];
-				count: number;
-			}
-
 			const [flightResponse, fixesResponse] = await Promise.all([
 				serverCall<FlightResponse>(`/flights/${flightId}`),
-				serverCall<FlightFixesResponse>(`/flights/${flightId}/fixes`)
+				serverCall<DataListResponse<Fix>>(`/flights/${flightId}/fixes`)
 			]);
 
 			const flight = flightResponse.flight;
-			const fixes = fixesResponse.fixes;
+			const fixes = fixesResponse.data || [];
 
 			// Store flight data
 			flightData.set(flightId, { flight, fixes });
@@ -91,19 +86,19 @@
 			const takeoffMarker = createTakeoffMarker(
 				firstFix.latitude,
 				firstFix.longitude,
-				firstFix.altitude_msl_feet || 0
+				firstFix.altitudeMslFeet || 0
 			);
 			viewer.entities.add(takeoffMarker);
 			entities.push(takeoffMarker);
 		}
 
 		// Create landing marker (last fix, if flight is complete)
-		if (flight.landing_time && fixes.length > 0) {
+		if (flight.landingTime && fixes.length > 0) {
 			const lastFix = fixes[fixes.length - 1];
 			const landingMarker = createLandingMarker(
 				lastFix.latitude,
 				lastFix.longitude,
-				lastFix.altitude_msl_feet || 0
+				lastFix.altitudeMslFeet || 0
 			);
 			viewer.entities.add(landingMarker);
 			entities.push(landingMarker);

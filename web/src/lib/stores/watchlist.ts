@@ -1,7 +1,13 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { WatchlistEntry, WatchlistEntryWithAircraft, Aircraft } from '$lib/types';
+import type {
+	WatchlistEntry,
+	WatchlistEntryWithAircraft,
+	Aircraft,
+	DataListResponse,
+	DataResponse
+} from '$lib/types';
 import { FixFeed } from '$lib/services/FixFeed';
 
 interface WatchlistState {
@@ -30,18 +36,22 @@ export const watchlist = {
 		watchlistStore.update((state) => ({ ...state, loading: true, error: null }));
 
 		try {
-			const entries = await serverCall<WatchlistEntry[]>('/watchlist', {
+			const response = await serverCall<DataListResponse<WatchlistEntry>>('/watchlist', {
 				method: 'GET'
 			});
+			const entries = response.data;
 
 			// Fetch aircraft details for each entry
 			const entriesWithAircraft = await Promise.all(
 				entries.map(async (entry) => {
 					try {
-						const aircraft = await serverCall<Aircraft>(`/aircraft/${entry.aircraft_id}`, {
-							method: 'GET'
-						});
-						return { ...entry, aircraft };
+						const aircraftResponse = await serverCall<DataResponse<Aircraft>>(
+							`/aircraft/${entry.aircraftId}`,
+							{
+								method: 'GET'
+							}
+						);
+						return { ...entry, aircraft: aircraftResponse.data };
 					} catch {
 						return { ...entry, aircraft: undefined };
 					}
@@ -73,9 +83,9 @@ export const watchlist = {
 		if (!browser) return;
 
 		try {
-			await serverCall<WatchlistEntry>('/watchlist', {
+			await serverCall<DataResponse<WatchlistEntry>>('/watchlist', {
 				method: 'POST',
-				body: JSON.stringify({ aircraft_id: aircraftId, send_email: sendEmail })
+				body: JSON.stringify({ aircraftId: aircraftId, sendEmail: sendEmail })
 			});
 
 			// Reload watchlist
@@ -100,7 +110,7 @@ export const watchlist = {
 
 			// Remove from local state immediately
 			watchlistStore.update((state) => {
-				const entries = state.entries.filter((e) => e.aircraft_id !== aircraftId);
+				const entries = state.entries.filter((e) => e.aircraftId !== aircraftId);
 				notifyWatchlistChange(entries);
 				return { ...state, entries };
 			});
@@ -120,13 +130,13 @@ export const watchlist = {
 		try {
 			await serverCall(`/watchlist/${aircraftId}`, {
 				method: 'PUT',
-				body: JSON.stringify({ send_email: sendEmail })
+				body: JSON.stringify({ sendEmail: sendEmail })
 			});
 
 			// Update local state
 			watchlistStore.update((state) => {
 				const entries = state.entries.map((e) =>
-					e.aircraft_id === aircraftId ? { ...e, send_email: sendEmail } : e
+					e.aircraftId === aircraftId ? { ...e, sendEmail: sendEmail } : e
 				);
 				return { ...state, entries };
 			});
@@ -167,7 +177,7 @@ export const watchlist = {
 	 */
 	has(aircraftId: string): boolean {
 		const state = get(watchlistStore);
-		return state.entries.some((e) => e.aircraft_id === aircraftId);
+		return state.entries.some((e) => e.aircraftId === aircraftId);
 	},
 
 	/**
@@ -175,7 +185,7 @@ export const watchlist = {
 	 */
 	getActiveAircraftIds(): string[] {
 		const state = get(watchlistStore);
-		return state.entries.map((e) => e.aircraft_id);
+		return state.entries.map((e) => e.aircraftId);
 	}
 };
 
@@ -183,7 +193,7 @@ export const watchlist = {
  * Notify FixFeed about watchlist changes for WebSocket subscriptions
  */
 function notifyWatchlistChange(entries: WatchlistEntryWithAircraft[]) {
-	const aircraftIds = entries.map((e) => e.aircraft_id);
+	const aircraftIds = entries.map((e) => e.aircraftId);
 	const fixFeedInstance = FixFeed.getInstance();
 	fixFeedInstance.subscribeToWatchlist(aircraftIds);
 }

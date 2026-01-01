@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 /// Response struct that includes raw APRS message data
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverStatusWithRaw {
     #[serde(flatten)]
     pub status: ReceiverStatus,
@@ -28,6 +29,7 @@ pub struct ReceiverStatusWithRaw {
 )]
 #[diesel(table_name = crate::schema::receiver_statuses)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverStatus {
     pub id: Uuid,
     pub received_at: DateTime<Utc>,

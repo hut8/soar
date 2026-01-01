@@ -17,6 +17,13 @@ SOAR is an application under active development that will automate many duty-man
   - Interactive polygons with detailed information
   - Incremental sync support for efficient updates
   - See [OpenAIP Setup Guide](docs/OPENAIP_SETUP.md) for configuration
+- **Receiver Coverage Map**: Interactive H3 hexagonal coverage visualization
+  - MapLibre-based map at `/receivers/coverage` showing receiver coverage areas
+  - Multi-resolution H3 spatial indexing (resolutions 6, 7, 8 for different zoom levels)
+  - Pre-aggregated coverage statistics including fix counts, coverage hours, and altitude ranges
+  - Filterable by time range, altitude, and receiver
+  - Daily batch aggregation via `soar aggregate-coverage` command
+  - Persistent historical coverage data independent of fix retention policies
 
 ## Data Processing Flow
 
@@ -375,6 +382,38 @@ soar ingest-adsb --server localhost --port 30005
    pre-commit run --all-files
    ```
 
+### Docker Development Environment (Recommended)
+
+For the easiest setup, use Docker Compose to run the entire development environment:
+
+```bash
+# 1. Copy Docker environment file
+cp .env.docker.example .env.docker
+
+# 2. Add your Google Maps API key (required for operations map)
+# Edit .env.docker and set: GOOGLE_MAPS_API_KEY=your_key_here
+
+# 3. Start everything with one command
+docker-compose -f docker-compose.dev.yml --env-file .env.docker up
+
+# That's it! Access:
+# - Frontend: http://localhost:5173
+# - Backend API: http://localhost:3000
+# - Database: localhost:5432
+# - NATS: localhost:4222
+```
+
+**What you get:**
+- ✅ PostgreSQL + PostGIS (no manual install)
+- ✅ NATS JetStream (no manual install)
+- ✅ Rust backend with hot reload
+- ✅ SvelteKit frontend with hot reload
+- ✅ All services configured and connected
+- ✅ Migrations run automatically
+- ✅ Works the same on every machine
+
+See [DOCKER-DEVELOPMENT.md](DOCKER-DEVELOPMENT.md) for complete documentation, troubleshooting, and advanced usage.
+
 ### Development Tools
 
 This project uses **pre-commit hooks** that run the same checks as our CI pipeline:
@@ -387,6 +426,51 @@ The hooks run automatically on every commit. To run manually:
 ```bash
 pre-commit run --all-files
 ```
+
+### Running Tests
+
+Integration tests use isolated per-test databases for fast, parallel execution.
+
+**First time setup:**
+```bash
+# Create the test template database (one-time setup)
+./scripts/setup-test-template.sh
+```
+
+**Running tests:**
+```bash
+# Run all tests in parallel
+cargo nextest run
+
+# Run specific test file
+cargo nextest run --test flight_detection_test
+
+# Run with output
+cargo nextest run --nocapture
+```
+
+**After adding migrations:**
+```bash
+# Recreate template with latest schema
+./scripts/setup-test-template.sh
+```
+
+For detailed information about the test infrastructure and writing new tests, see [`tests/README.md`](tests/README.md).
+
+### Flight Detection Testing
+
+SOAR includes a comprehensive testing framework for debugging and validating flight detection logic using real APRS message sequences from the database.
+
+**Quick start:**
+```bash
+# Extract messages from a problematic flight and generate test case
+scripts/dump-flight-messages production <flight-id>
+
+# Enter description when prompted (e.g., "timeout resurrection creates new flight")
+# Script generates test data file and test case automatically
+```
+
+For complete documentation, see [Flight Detection Testing Guide](docs/FLIGHT-DETECTION-TESTING.md).
 
 ### Database Migrations
 

@@ -1,15 +1,10 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { serverCall } from '$lib/api/server';
-import type { Flight, Aircraft, Fix } from '$lib/types';
+import type { Flight, Aircraft, Fix, DataListResponse } from '$lib/types';
 
 interface FlightResponse {
 	flight: Flight;
-}
-
-interface FlightFixesResponse {
-	fixes: Fix[];
-	count: number;
 }
 
 export const load: PageLoad = async ({ params, fetch }) => {
@@ -19,19 +14,21 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		// First fetch flight and fixes in parallel
 		const [flightResponse, fixesResponse] = await Promise.all([
 			serverCall<FlightResponse>(`/flights/${id}`, { fetch }),
-			serverCall<FlightFixesResponse>(`/flights/${id}/fixes`, { fetch })
+			serverCall<DataListResponse<Fix>>(`/flights/${id}/fixes`, { fetch })
 		]);
 
 		// Then fetch device separately if the flight has one
-		const device = flightResponse.flight.aircraft_id
+		const device = flightResponse.flight.aircraftId
 			? await serverCall<Aircraft>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
 			: undefined;
+
+		const fixes = fixesResponse.data || [];
 
 		return {
 			flight: flightResponse.flight,
 			device,
-			fixes: fixesResponse.fixes,
-			fixesCount: fixesResponse.count
+			fixes,
+			fixesCount: fixes.length
 		};
 	} catch (err) {
 		console.error('Failed to load flight:', err);

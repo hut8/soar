@@ -1,3 +1,4 @@
+pub mod aggregate_coverage;
 pub mod archive;
 pub mod dump_unified_ddb;
 pub mod ingest_adsb;
@@ -9,6 +10,7 @@ pub mod run;
 pub mod seed_test_data;
 pub mod sitemap;
 
+pub use aggregate_coverage::aggregate_coverage;
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_unified_ddb::handle_dump_unified_ddb;
 pub use ingest_adsb::handle_ingest_adsb;

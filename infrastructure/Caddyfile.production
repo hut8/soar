@@ -4,6 +4,9 @@
 
 # Main SOAR application (production)
 glider.flights {
+	# Enable compression for all responses
+	encode gzip zstd
+
 	reverse_proxy localhost:61225
 	log {
 		output file /var/log/caddy/glider.flights.log
@@ -12,6 +15,9 @@ glider.flights {
 
 # Grafana monitoring dashboard
 grafana.glider.flights {
+	# Enable compression for all responses
+	encode gzip zstd
+
 	reverse_proxy localhost:3000
 	log {
 		output file /var/log/caddy/grafana.glider.flights.log
@@ -20,6 +26,9 @@ grafana.glider.flights {
 
 # Photon geocoding service
 photon.glider.flights {
+	# Enable compression for all responses
+	encode gzip zstd
+
 	reverse_proxy localhost:2322
 	log {
 		output file /var/log/caddy/photon.glider.flights.log

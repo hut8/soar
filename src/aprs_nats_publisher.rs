@@ -37,16 +37,17 @@ impl NatsPublisher {
                 Ok(()) => {
                     let duration_ms = start.elapsed().as_millis() as f64;
                     metrics::histogram!("aprs.nats.publish_duration_ms").record(duration_ms);
-                    metrics::counter!("aprs.nats.published").increment(1);
+                    metrics::counter!("aprs.nats.published_total").increment(1);
 
-                    // Log slow publishes
+                    // Track slow publishes (>100ms is considered slow for fire-and-forget)
                     if duration_ms > 100.0 {
                         warn!("Slow NATS publish: {:.1}ms", duration_ms);
+                        metrics::counter!("aprs.nats.slow_publish_total").increment(1);
                     }
                 }
                 Err(e) => {
                     error!("Failed to publish message to NATS: {}", e);
-                    metrics::counter!("aprs.nats.publish_error").increment(1);
+                    metrics::counter!("aprs.nats.publish_error_total").increment(1);
                 }
             }
         });
@@ -61,7 +62,7 @@ impl NatsPublisher {
             .await
             .context("Failed to publish message to NATS")?;
 
-        metrics::counter!("aprs.nats.published").increment(1);
+        metrics::counter!("aprs.nats.published_total").increment(1);
 
         Ok(())
     }

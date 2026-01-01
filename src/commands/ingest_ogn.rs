@@ -163,7 +163,7 @@ pub async fn handle_ingest_ogn(
             }
             Err(e) => {
                 error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("aprs.nats.connection_failed").increment(1);
+                metrics::counter!("aprs.nats.connection_failed_total").increment(1);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
@@ -196,7 +196,7 @@ pub async fn handle_ingest_ogn(
             }
             Err(e) => {
                 error!("OGN ingestion failed: {} - retrying in 1s", e);
-                metrics::counter!("aprs.ingest_failed").increment(1);
+                metrics::counter!("aprs.ingest_failed_total").increment(1);
 
                 // Mark NATS as disconnected
                 {

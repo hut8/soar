@@ -99,11 +99,11 @@
 			const newAircraftIds = new Set<string>();
 
 			for (const aircraft of aircraftList) {
-				// Skip if no recent fixes
-				if (!aircraft.fixes || aircraft.fixes.length === 0) continue;
+				// Get latest fix from currentFix or fall back to fixes array
+				const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
 
-				// Get latest fix
-				const latestFix = aircraft.fixes[0]; // API returns fixes sorted by timestamp DESC
+				// Skip if no fix data available
+				if (!latestFix) continue;
 
 				// Update or create entity
 				const existingEntity = aircraftEntities.get(aircraft.id);
@@ -177,35 +177,27 @@
 	 * Update area subscriptions based on visible viewport
 	 */
 	function updateAreaSubscriptions(): void {
+		const bounds = getVisibleBounds();
+		if (!bounds) return;
+
+		const geoBounds = {
+			north: bounds.latMax,
+			south: bounds.latMin,
+			east: bounds.lonMax,
+			west: bounds.lonMin
+		};
+
+		fixFeed.sendWebSocketMessage({
+			action: 'subscribe',
+			type: 'area_bulk',
+			bounds: geoBounds
+		});
+
+		// Update subscribed areas for tracking
 		const visibleSquares = getVisibleLatLonSquares();
-		const newSquares = new Set(visibleSquares.map((s) => `${s.lat},${s.lon}`));
-
-		// Unsubscribe from areas no longer visible
-		for (const areaKey of subscribedAreas) {
-			if (!newSquares.has(areaKey)) {
-				const [lat, lon] = areaKey.split(',').map(Number);
-				fixFeed.sendWebSocketMessage({
-					action: 'unsubscribe',
-					type: 'area',
-					latitude: lat,
-					longitude: lon
-				});
-				subscribedAreas.delete(areaKey);
-			}
-		}
-
-		// Subscribe to new visible areas
+		subscribedAreas.clear();
 		for (const square of visibleSquares) {
-			const areaKey = `${square.lat},${square.lon}`;
-			if (!subscribedAreas.has(areaKey)) {
-				fixFeed.sendWebSocketMessage({
-					action: 'subscribe',
-					type: 'area',
-					latitude: square.lat,
-					longitude: square.lon
-				});
-				subscribedAreas.add(areaKey);
-			}
+			subscribedAreas.add(`${square.lat},${square.lon}`);
 		}
 	}
 
@@ -216,7 +208,7 @@
 		if (event.type === 'fix_received') {
 			// Update aircraft position from real-time fix
 			const fix = event.fix;
-			const aircraftId = fix.aircraft_id;
+			const aircraftId = fix.aircraftId;
 
 			if (!aircraftId) return;
 
@@ -226,20 +218,33 @@
 				// Create minimal aircraft data from fix
 				aircraft = {
 					id: aircraftId,
-					device_address: fix.device_address_hex || '',
-					address_type: '',
-					address: '',
-					aircraft_model: fix.model || '',
-					registration: fix.registration || '',
-					competition_number: '',
+					addressType: '',
+					address: fix.deviceAddressHex || '',
+					aircraftModel: fix.model || '',
+					registration: fix.registration || null,
+					competitionNumber: '',
 					tracked: false,
 					identified: false,
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-					from_ddb: false,
-					fixes: [fix]
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					fromOgnDdb: false,
+					fromAdsbxDdb: false,
+					currentFix: fix,
+					fixes: []
 				};
 				aircraftData.set(aircraftId, aircraft);
+			} else {
+				// Push old currentFix to fixes array if it exists
+				if (aircraft.currentFix) {
+					aircraft.fixes = aircraft.fixes || [];
+					aircraft.fixes.unshift(aircraft.currentFix);
+					// Limit to 100 fixes
+					if (aircraft.fixes.length > 100) {
+						aircraft.fixes = aircraft.fixes.slice(0, 100);
+					}
+				}
+				// Set new currentFix
+				aircraft.currentFix = fix;
 			}
 
 			// Update aircraft entity
@@ -249,9 +254,9 @@
 			const aircraft = event.aircraft;
 			aircraftData.set(aircraft.id, aircraft);
 
-			// Update entity if aircraft has fixes
-			if (aircraft.fixes && aircraft.fixes.length > 0) {
-				const latestFix = aircraft.fixes[0];
+			// Update entity if aircraft has currentFix or fixes
+			const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
+			if (latestFix) {
 				updateAircraftPosition(aircraft, latestFix);
 			}
 		} else if (event.type === 'connection_opened') {
@@ -315,15 +320,16 @@
 
 	onDestroy(() => {
 		// Unsubscribe from all areas
-		for (const areaKey of subscribedAreas) {
-			const [lat, lon] = areaKey.split(',').map(Number);
-			fixFeed.sendWebSocketMessage({
-				action: 'unsubscribe',
-				type: 'area',
-				latitude: lat,
-				longitude: lon
-			});
-		}
+		fixFeed.sendWebSocketMessage({
+			action: 'unsubscribe',
+			type: 'area_bulk',
+			bounds: {
+				north: 0,
+				south: 0,
+				east: 0,
+				west: 0
+			}
+		});
 		subscribedAreas.clear();
 
 		// Remove all aircraft entities

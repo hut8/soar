@@ -1,6 +1,9 @@
+import { browser } from '$app/environment';
 import { dev } from '$app/environment';
 import { loading } from '$lib/stores/loading';
 import { backendMode } from '$lib/stores/backend';
+import { auth } from '$lib/stores/auth';
+import { toaster } from '$lib/toaster';
 import { get } from 'svelte/store';
 
 // Get the API base URL based on environment and backend mode
@@ -12,7 +15,7 @@ export function getApiBase(): string {
 
 	// In development, check the backend mode setting
 	const mode = get(backendMode);
-	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://glider.flights/data';
+	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://staging.glider.flights/data';
 }
 
 // Legacy export for compatibility - but prefer using getApiBase()
@@ -57,16 +60,48 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 	// Use provided fetch (from SvelteKit load function) or fall back to global fetch
 	const fetchFn = customFetch || fetch;
 
+	// Get auth token from localStorage and add to headers if available
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		...(requestOptions.headers as Record<string, string>)
+	};
+
+	// Add Authorization header if token is available in browser environment
+	if (browser) {
+		const token = localStorage.getItem('auth_token');
+		if (token) {
+			// Only add Authorization header if one wasn't explicitly provided
+			if (!headers['Authorization'] && !headers['authorization']) {
+				headers['Authorization'] = `Bearer ${token}`;
+			}
+		}
+	}
+
 	try {
 		const response = await fetchFn(url, {
 			...requestOptions,
-			headers: {
-				'Content-Type': 'application/json',
-				...requestOptions.headers
-			}
+			headers
 		});
 
 		if (!response.ok) {
+			// Handle 401 Unauthorized - invalid/expired token
+			if (response.status === 401 && browser) {
+				// Clear the token from localStorage
+				localStorage.removeItem('auth_token');
+
+				// Log the user out
+				auth.logout();
+
+				// Show a toast notification
+				toaster.error({
+					title: 'Session Expired',
+					description: 'Your session has expired. Please log in again.'
+				});
+
+				// Throw error with a user-friendly message
+				throw new ServerError('Session expired', response.status);
+			}
+
 			// Try to parse error as JSON first (standard format: {"errors": "message"})
 			const errorText = await response.text();
 			let errorMessage = errorText || 'Request failed';

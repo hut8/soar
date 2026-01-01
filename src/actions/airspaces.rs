@@ -9,7 +9,7 @@ use tracing::error;
 use crate::airspaces_repo::AirspacesRepository;
 use crate::web::AppState;
 
-use super::json_error;
+use super::{DataResponse, json_error};
 
 #[derive(Debug, Deserialize)]
 pub struct AirspaceSearchParams {
@@ -59,7 +59,7 @@ pub async fn get_airspaces(
     let repo = AirspacesRepository::new(state.pool.clone());
 
     // Record metrics
-    metrics::counter!("api.airspaces.requests").increment(1);
+    metrics::counter!("api.airspaces.requests_total").increment(1);
     let start = std::time::Instant::now();
 
     match repo
@@ -71,17 +71,20 @@ pub async fn get_airspaces(
             metrics::histogram!("api.airspaces.duration_ms").record(duration_ms);
             metrics::gauge!("api.airspaces.results_count").set(airspaces.len() as f64);
 
-            // Return GeoJSON FeatureCollection
+            // Return GeoJSON FeatureCollection wrapped in DataResponse
             let feature_collection = serde_json::json!({
                 "type": "FeatureCollection",
                 "features": airspaces,
             });
 
-            Json(feature_collection).into_response()
+            Json(DataResponse {
+                data: feature_collection,
+            })
+            .into_response()
         }
         Err(e) => {
             error!("Failed to fetch airspaces: {}", e);
-            metrics::counter!("api.airspaces.errors").increment(1);
+            metrics::counter!("api.airspaces.errors_total").increment(1);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &format!("Failed to fetch airspaces: {}", e),

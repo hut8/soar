@@ -4,8 +4,9 @@
 //! and optionally archive all incoming messages to daily log files.
 
 pub mod actions;
-pub mod agl_batch_writer;
 pub mod aircraft;
+pub mod aircraft_images;
+pub mod aircraft_images_client;
 pub mod aircraft_registrations;
 pub mod aircraft_registrations_repo;
 pub mod aircraft_repo;
@@ -28,6 +29,9 @@ pub mod beast_consumer_task;
 pub mod beast_nats_publisher;
 pub mod clubs;
 pub mod clubs_repo;
+pub mod coverage;
+pub mod coverage_cache;
+pub mod coverage_repo;
 pub mod elevation;
 pub mod email;
 pub mod email_reporter;
@@ -46,6 +50,7 @@ pub mod instance_lock;
 pub mod live_fixes;
 pub mod locations;
 pub mod locations_repo;
+pub mod message_sources;
 pub mod metrics;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
@@ -79,6 +84,9 @@ pub use packet_processors::{
     AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
+
+#[cfg(test)]
+mod ts_export;
 
 /// Get the NATS client name for a given process based on the environment.
 ///

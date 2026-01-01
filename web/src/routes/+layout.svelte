@@ -12,7 +12,7 @@
 	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
-	import { dev } from '$app/environment';
+	import { dev, browser } from '$app/environment';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
@@ -59,15 +59,30 @@
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
-		$auth.user?.club_id ? resolve(`/clubs/${$auth.user.club_id}/operations`) : ''
+		$auth.user?.clubId ? resolve(`/clubs/${$auth.user.clubId}/operations`) : ''
 	);
-	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.club_id);
+	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
 
 	// Initialize auth, theme, and backend mode from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
 		theme.init();
 		backendMode.init();
+
+		// Load Google Analytics only on production domain
+		if (browser && window.location.hostname === 'glider.flights') {
+			const script = document.createElement('script');
+			script.async = true;
+			script.src = 'https://www.googletagmanager.com/gtag/js?id=G-DW6KXT6VG1';
+			document.head.appendChild(script);
+
+			window.dataLayer = window.dataLayer || [];
+			function gtag(...args: unknown[]) {
+				window.dataLayer.push(args);
+			}
+			gtag('js', new Date());
+			gtag('config', 'G-DW6KXT6VG1');
+		}
 
 		// Add click outside listener
 		document.addEventListener('click', handleClickOutside);
@@ -127,6 +142,8 @@
 	<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 	<meta name="apple-mobile-web-app-title" content="SOAR" />
 	<meta name="theme-color" content="#0ea5e9" />
+
+	<!-- Google Analytics is loaded dynamically in onMount for production only -->
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
@@ -147,23 +164,13 @@
 					{#if $websocketStatus.connected}
 						<div
 							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-							title="Connected - Tracking {$debugStatus.activeWatchlistEntries
-								.length} from watchlist, {$debugStatus.subscribedAircraft
-								.length} aircraft subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
+							title="Live - WebSocket connected{$debugStatus.operationsPageActive
 								? ', Operations page active'
 								: ''}"
 						>
 							<Wifi size={16} />
 							<span class="text-xs font-medium">Live</span>
 							<RadarLoader />
-							{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
-								<span class="text-xs font-medium">
-									({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
-											.activeWatchlistEntries
-											.length}{/if}{#if $debugStatus.activeWatchlistEntries.length > 0 && $debugStatus.activeAreaSubscriptions > 0}+{/if}{#if $debugStatus.activeAreaSubscriptions > 0}{$debugStatus.activeAreaSubscriptions}
-										area{/if})
-								</span>
-							{/if}
 						</div>
 					{:else if $websocketStatus.reconnecting}
 						<div
@@ -269,7 +276,7 @@
 									onclick={() => (showUserMenu = !showUserMenu)}
 								>
 									<User size={16} />
-									{$auth.user.first_name}
+									{$auth.user.firstName}
 								</button>
 
 								{#if showUserMenu}
@@ -279,8 +286,8 @@
 										<div class="space-y-1">
 											<div class="px-3 py-2 text-sm">
 												<div class="font-medium">
-													{$auth.user.first_name}
-													{$auth.user.last_name}
+													{$auth.user.firstName}
+													{$auth.user.lastName}
 												</div>
 												<div class="text-surface-600-300-token">{$auth.user.email}</div>
 											</div>

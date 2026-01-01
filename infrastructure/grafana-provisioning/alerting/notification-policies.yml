@@ -1,0 +1,28 @@
+# Grafana Alerting Notification Policies Configuration
+# This defines how alerts are routed to contact points and how often they repeat
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: soar-ops-email
+    group_by: ['alertname', 'service']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h  # Re-send alert every hour while active
+    routes:
+      # Critical alerts - send immediately and repeat every 12 hours
+      - receiver: soar-ops-email
+        matchers:
+          - severity = critical
+        group_wait: 10s
+        repeat_interval: 12h
+        continue: false
+
+      # Warning alerts - normal handling, repeat every 24 hours
+      - receiver: soar-ops-email
+        matchers:
+          - severity = warning
+        group_wait: 30s
+        repeat_interval: 24h
+        continue: false

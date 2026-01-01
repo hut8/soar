@@ -59,21 +59,21 @@ impl AircraftRegistrationsRepository {
         let mut club_cache: HashMap<String, Uuid> = HashMap::new();
 
         // Collect unique clubs
-        let mut unique_clubs: Vec<(String, crate::clubs_repo::LocationParams)> = Vec::new();
+        let mut unique_clubs: Vec<(String, crate::locations_repo::LocationParams)> = Vec::new();
         let mut club_set: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for aircraft_reg in &aircraft_vec {
             if let Some(club_name) = aircraft_reg.club_name()
                 && club_set.insert(club_name.clone())
             {
-                let location_params = crate::clubs_repo::LocationParams {
+                let location_params = crate::locations_repo::LocationParams {
                     street1: aircraft_reg.street1.clone(),
                     street2: aircraft_reg.street2.clone(),
                     city: aircraft_reg.city.clone(),
                     state: aircraft_reg.state.clone(),
                     zip_code: aircraft_reg.zip_code.clone(),
-                    region_code: aircraft_reg.region_code.clone(),
-                    country_mail_code: aircraft_reg.country_mail_code.clone(),
+                    country_code: aircraft_reg.country_code.clone(),
+                    geolocation: None,
                 };
                 info!(
                     "Aircraft {}: registrant '{}' -> club '{}'",
@@ -142,9 +142,8 @@ impl AircraftRegistrationsRepository {
                     .club_name()
                     .and_then(|club_name| club_cache.get(&club_name).copied());
 
-                // Create NewAircraftRegistration with NULL location_id
+                // Create NewAircraftRegistration (preserve existing location_id on update)
                 let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
-                new_aircraft_reg.location_id = None; // Will fill in Phase 2b
                 new_aircraft_reg.club_id = club_id;
 
                 aircraft_registrations.push(new_aircraft_reg);
@@ -183,8 +182,7 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::registrant_type_code)),
                     aircraft_registrations::registrant_name
                         .eq(excluded(aircraft_registrations::registrant_name)),
-                    aircraft_registrations::location_id
-                        .eq(excluded(aircraft_registrations::location_id)),
+                    // location_id is NOT updated here - preserve existing values
                     aircraft_registrations::last_action_date
                         .eq(excluded(aircraft_registrations::last_action_date)),
                     aircraft_registrations::certificate_issue_date
@@ -294,11 +292,41 @@ impl AircraftRegistrationsRepository {
             start_time.elapsed().as_secs_f64()
         );
 
-        // PHASE 2b: Fill in location_id for aircraft with address data
-        info!("Phase 2b: Filling in locations for all aircraft...");
+        // PHASE 2b: Fill in location_id ONLY for aircraft that don't have one
+        info!("Phase 2b: Querying for aircraft without location_id...");
         let phase2b_start = Instant::now();
 
-        // Use original aircraft_vec which has address fields
+        // Query for registration numbers that need location_id filled
+        let mut conn = self.get_connection()?;
+        let aircraft_needing_locations: Vec<String> = aircraft_registrations::table
+            .filter(aircraft_registrations::location_id.is_null())
+            .select(aircraft_registrations::registration_number)
+            .load::<String>(&mut conn)?;
+
+        info!(
+            "Found {} aircraft (out of {}) that need location_id filled",
+            aircraft_needing_locations.len(),
+            total_count
+        );
+
+        // Filter aircraft_vec to only those needing locations
+        let aircraft_to_process: Vec<&Aircraft> = aircraft_vec
+            .iter()
+            .filter(|a| aircraft_needing_locations.contains(&a.n_number))
+            .collect();
+
+        let process_count = aircraft_to_process.len();
+        if process_count == 0 {
+            info!("Phase 2b complete: No aircraft need location processing");
+            info!(
+                "Successfully upserted {} aircraft registrations in {:.1} seconds ({:.0} records/sec)",
+                upserted_count,
+                start_time.elapsed().as_secs_f64(),
+                upserted_count as f64 / start_time.elapsed().as_secs_f64()
+            );
+            return Ok(upserted_count);
+        }
+
         // Process in batches with parallel location lookups
         const LOCATION_BATCH_SIZE: usize = 1000;
         const MAX_CONCURRENT: usize = 50; // Higher concurrency for location lookups only
@@ -314,9 +342,9 @@ impl AircraftRegistrationsRepository {
         let mut cache_hits = 0;
         let mut cache_misses = 0;
 
-        for batch_start in (0..total_count).step_by(LOCATION_BATCH_SIZE) {
-            let batch_end = (batch_start + LOCATION_BATCH_SIZE).min(total_count);
-            let batch = &aircraft_vec[batch_start..batch_end];
+        for batch_start in (0..process_count).step_by(LOCATION_BATCH_SIZE) {
+            let batch_end = (batch_start + LOCATION_BATCH_SIZE).min(process_count);
+            let batch = &aircraft_to_process[batch_start..batch_end];
 
             // Parallel location lookups - TIMED (only for cache misses)
             let lookup_start = Instant::now();
@@ -333,7 +361,7 @@ impl AircraftRegistrationsRepository {
                     aircraft_reg.state.clone().unwrap_or_default(),
                     aircraft_reg.zip_code.clone().unwrap_or_default(),
                     aircraft_reg
-                        .country_mail_code
+                        .country_code
                         .clone()
                         .unwrap_or_else(|| "US".to_string()),
                 );
@@ -354,19 +382,17 @@ impl AircraftRegistrationsRepository {
                 stream::iter(to_lookup.iter().map(|aircraft_reg| {
                     let reg_num = aircraft_reg.n_number.clone();
                     let locations_repo = self.locations_repo.clone();
-                    let street1 = aircraft_reg.street1.clone();
-                    let street2 = aircraft_reg.street2.clone();
-                    let city = aircraft_reg.city.clone();
-                    let state = aircraft_reg.state.clone();
-                    let zip = aircraft_reg.zip_code.clone();
-                    let region = aircraft_reg.region_code.clone();
-                    let country = aircraft_reg.country_mail_code.clone();
+                    let params = crate::locations_repo::LocationParams {
+                        street1: aircraft_reg.street1.clone(),
+                        street2: aircraft_reg.street2.clone(),
+                        city: aircraft_reg.city.clone(),
+                        state: aircraft_reg.state.clone(),
+                        zip_code: aircraft_reg.zip_code.clone(),
+                        country_code: aircraft_reg.country_code.clone(),
+                        geolocation: None,
+                    };
                     async move {
-                        let result = locations_repo
-                            .find_or_create(
-                                street1, street2, city, state, zip, region, country, None,
-                            )
-                            .await;
+                        let result = locations_repo.find_or_create(params).await;
                         (reg_num, result)
                     }
                 }))
@@ -390,7 +416,7 @@ impl AircraftRegistrationsRepository {
                         aircraft_reg.state.clone().unwrap_or_default(),
                         aircraft_reg.zip_code.clone().unwrap_or_default(),
                         aircraft_reg
-                            .country_mail_code
+                            .country_code
                             .clone()
                             .unwrap_or_else(|| "US".to_string()),
                     );
@@ -416,12 +442,12 @@ impl AircraftRegistrationsRepository {
             let update_elapsed = update_start.elapsed().as_secs_f64();
             total_update_time += update_elapsed;
 
-            if batch_end.is_multiple_of(1000) || batch_end == total_count {
+            if batch_end.is_multiple_of(1000) || batch_end == process_count {
                 info!(
                     "Location progress: {}/{} ({:.1}%) | Lookups: {} | Cache hits: {} | Batch time: {:.2}s (lookup: {:.2}s, update: {:.2}s)",
                     batch_end,
-                    total_count,
-                    (batch_end as f64 / total_count as f64) * 100.0,
+                    process_count,
+                    (batch_end as f64 / process_count as f64) * 100.0,
                     to_lookup.len(),
                     cache_hit_count,
                     lookup_elapsed + update_elapsed,

@@ -3,10 +3,11 @@ use std::path::PathBuf;
 
 /// Helper function to create ElevationDB for tests
 /// Uses test data path if available, otherwise falls back to system path
-fn create_test_elevation_db() -> ElevationDB {
+async fn create_test_elevation_db() -> ElevationDB {
     let test_data_path = PathBuf::from("tests/data/elevation");
     if test_data_path.exists() {
         ElevationDB::with_path(test_data_path)
+            .await
             .expect("Failed to initialize ElevationDB with test data")
     } else {
         ElevationDB::new().expect("Failed to initialize ElevationDB")
@@ -23,7 +24,7 @@ async fn test_elevation_denver() {
     let lat = 39.7392;
     let lon = -104.9903;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
 
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(result.is_ok(), "Elevation lookup should succeed");
@@ -52,7 +53,7 @@ async fn test_elevation_sea_level() {
     let lat = 40.7829;
     let lon = -73.9654;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(result.is_ok(), "Elevation lookup should succeed");
 
@@ -76,7 +77,7 @@ async fn test_elevation_sea_level() {
 /// not if they're in valid range. Invalid coordinates will fail when fetching the tile.
 #[tokio::test]
 async fn test_invalid_latitude() {
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(91.0, 0.0).await; // Latitude > 90
     assert!(
         result.is_err(),
@@ -89,7 +90,7 @@ async fn test_invalid_latitude() {
 /// not if they're in valid range. Invalid coordinates will fail when fetching the tile.
 #[tokio::test]
 async fn test_invalid_longitude() {
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(0.0, 181.0).await; // Longitude > 180
     assert!(
         result.is_err(),
@@ -100,7 +101,7 @@ async fn test_invalid_longitude() {
 /// Test error handling for NaN coordinates
 #[tokio::test]
 async fn test_nan_coordinates() {
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(f64::NAN, 0.0).await;
     assert!(result.is_err(), "Should fail for NaN latitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
@@ -113,7 +114,7 @@ async fn test_nan_coordinates() {
 /// Test error handling for infinite coordinates
 #[tokio::test]
 async fn test_infinite_coordinates() {
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(f64::INFINITY, 0.0).await;
     assert!(result.is_err(), "Should fail for infinite latitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
@@ -131,7 +132,7 @@ async fn test_elevation_ocean() {
     let lat = 0.0;
     let lon = -160.0;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     // Ocean tiles might not exist or might return None for NoData
     // Either case is acceptable
@@ -154,7 +155,7 @@ async fn test_elevation_caching() {
     let lat = 40.7829;
     let lon = -73.9654;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
 
     // First call - will download and cache tile
     let result1 = elevation_db.elevation_egm2008(lat, lon).await;
@@ -179,7 +180,7 @@ async fn test_elevation_southern_hemisphere() {
     let lat = -33.8688;
     let lon = 151.2093;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(result.is_ok(), "Elevation lookup should succeed");
 
@@ -206,7 +207,7 @@ async fn test_elevation_tile_boundary() {
     let lat = 45.0;
     let lon = 0.0;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(
         result.is_ok(),
@@ -229,7 +230,7 @@ async fn test_elevation_near_tile_boundary() {
     let lat = 45.1;
     let lon = 0.1;
 
-    let elevation_db = create_test_elevation_db();
+    let elevation_db = create_test_elevation_db().await;
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(
         result.is_ok(),

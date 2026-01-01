@@ -1,11 +1,12 @@
 pub mod aircraft;
+pub mod aircraft_images;
+pub mod aircraft_search;
 pub mod airports;
 pub mod airspaces;
 pub mod analytics;
-pub mod aprs_messages;
 pub mod auth;
 pub mod clubs;
-pub mod devices;
+pub mod coverage;
 pub mod fixes;
 pub mod flights;
 pub mod pilots;
@@ -17,13 +18,13 @@ pub mod views;
 pub mod watchlist;
 
 pub use aircraft::*;
+pub use aircraft_images::*;
+pub use aircraft_search::*;
 pub use airports::*;
 pub use airspaces::*;
 pub use analytics::*;
-pub use aprs_messages::*;
 pub use auth::*;
 pub use clubs::*;
-pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
 pub use receivers::*;
@@ -36,7 +37,47 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use serde::Serialize;
 use serde_json::json;
+
+/// Standard wrapper for single resource responses
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataResponse<T> {
+    pub data: T,
+}
+
+/// Standard wrapper for list responses
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataListResponse<T> {
+    pub data: Vec<T>,
+}
+
+/// Standard wrapper for list responses with total count
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataListResponseWithTotal<T> {
+    pub data: Vec<T>,
+    pub total: i64,
+}
+
+/// Pagination metadata (nested in paginated responses)
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaginationMetadata {
+    pub page: i64,
+    pub total_pages: i64,
+    pub total_count: i64,
+}
+
+/// Standard wrapper for paginated list responses
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaginatedDataResponse<T> {
+    pub data: Vec<T>,
+    pub metadata: PaginationMetadata,
+}
 
 /// Helper function to create consistent JSON error responses
 pub fn json_error(status: StatusCode, message: &str) -> impl IntoResponse {

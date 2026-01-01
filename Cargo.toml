@@ -18,8 +18,8 @@ async-nats = "0.45"
 async-trait = "0.1"
 bcrypt = "0.17"
 bigdecimal = { version = "0.4", features = ["serde"] }
-axum = { version = "0.8.7", features = ["macros", "ws"] }
-axum-extra = { version = "0.12.1", features = ["typed-header"] }
+axum = { version = "0.8.8", features = ["macros", "ws"] }
+axum-extra = { version = "0.12.5", features = ["typed-header"] }
 bytes = "1.11"
 http-body = "1.0"
 http-body-util = "0.1"
@@ -28,11 +28,13 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = { version = "0.15" }
 fake = { version = "4.4.0", features = ["derive", "chrono", "uuid"] }
-google_maps = { version = "3.9.0", features = [
+google_maps = { version = "3.9.1", features = [
     "geocoding",
     "elevation",
     "reqwest-rustls-tls",
 ], default-features = false }
+h3o = { version = "0.9", features = ["geo"] }
+geo = "0.30"
 include_dir = "0.7"
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 lettre = { version = "0.11", features = [
@@ -49,7 +51,7 @@ ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", branch = "master" 
 once_cell = "1.19"
 regex = "1.12"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-rs1090 = "0.4.14"
+rs1090 = "0.4.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 diesel = { version = "2.3", features = [
@@ -63,10 +65,10 @@ diesel = { version = "2.3", features = [
 ] }
 # For musl static builds: compile libpq from source with all internal static libraries
 # This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
-pq-sys = { version = "0.6", default-features = false }
+pq-sys = { version = "0.7", default-features = false }
 # OpenSSL is needed by bundled libpq - we use vendored feature for musl static builds
 openssl = { version = "0.10", optional = true }
-diesel_migrations = "2.2"
+diesel_migrations = "2.3"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 flate2 = "1.1"
@@ -74,9 +76,10 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "fs", "sync"
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+ts-rs = { version = "10.0", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1.0", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.19", features = ["v4", "v7", "serde"] }
 zstd = "0.13"
 csv = "1.3"
 axum-tungstenite = "0.3.0"
@@ -85,14 +88,14 @@ sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls", "reqwest
 # Note: Continuous profiling for Rust is not yet available in sentry-rust 0.45.0
 # Tracking issue: https://github.com/getsentry/sentry-rust/issues
 # For now, use performance monitoring (traces_sample_rate) and Sentry's server-side profiling
-postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
+postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.39"
-zip = "6"
+zip = "7"
 flydent = "0.6.0"
 flume = { version = "0.12", features = ["async"] }
 sitemap-rs = "0.4.0"
 metrics = "0.24"
-metrics-exporter-prometheus = "0.17"
+metrics-exporter-prometheus = "0.18"
 flarmnet = { git = "https://github.com/hut8/flarmnet-rs", features = ["xcsoar"] }
 pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec"] }
 lru = "0.16"
@@ -100,10 +103,14 @@ moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
 kml = "0.12"
 hex = "0.4.3"
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.80"
 
 [dev-dependencies]
 hex-literal = "1.1"
 serial_test = "3.2"
+tempfile = "3.24.0"
+fs2 = "0.4"
 
 [build-dependencies]
 vergen-git2 = { version = "1.0", features = ["build", "cargo"] }

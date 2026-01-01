@@ -4,10 +4,26 @@ This directory contains Grafana dashboard configurations for monitoring SOAR met
 
 ## Dashboards
 
+### Web & API
 - **grafana-dashboard-web.json** - Web server metrics (HTTP requests, elevation lookups)
-- **grafana-dashboard-run.json** - APRS processing service metrics
-- **grafana-dashboard-pull-data.json** - Data loading job metrics
-- **grafana-dashboard-ingest-ogn.json** - APRS ingest service metrics
+- **grafana-dashboard-analytics.json** - Analytics API and cache performance
+
+### Ingestion Services
+- **grafana-dashboard-ingest-ogn.json** - OGN/APRS ingestion (`ingest-ogn` command)
+- **grafana-dashboard-ingest-adsb.json** - ADS-B Beast ingestion (`ingest-adsb` command)
+
+### Run Command (APRS Processing)
+The `soar run` command dashboard has been split into focused sub-dashboards:
+
+- **grafana-dashboard-run-core.json** - Core system metrics (process, database, NATS publisher, latency)
+- **grafana-dashboard-run-ingestion.json** - Data ingestion pipelines (OGN, Beast/ADS-B)
+- **grafana-dashboard-run-routing.json** - Packet processing and routing (parser, router, queues)
+- **grafana-dashboard-run-flights.json** - Aircraft and flight tracking (active flights, coalesce)
+- **grafana-dashboard-run-geocoding.json** - Pelias geocoding service metrics
+- **grafana-dashboard-run-elevation.json** - Elevation processing and AGL calculations
+
+### NATS Messaging
+- **grafana-dashboard-nats.json** - NATS/JetStream metrics
 
 ## Automated Deployment (Recommended)
 
@@ -150,3 +166,9 @@ To add more metrics to the dashboard:
 2. Export it via the Prometheus exporter (already configured in `src/metrics.rs`)
 3. Add a new panel to `soar-dashboard.json` with the appropriate Prometheus query
 4. Re-import the dashboard
+
+## See Also
+
+- [Grafana Alerting Configuration](GRAFANA-ALERTING.md)
+- [Grafana Datasource Troubleshooting](GRAFANA-DATASOURCE-TROUBLESHOOTING.md)
+- [SOAR Deployment Guide](DEPLOYMENT.md)

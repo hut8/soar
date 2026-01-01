@@ -12,9 +12,9 @@
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
-		$auth.user?.club_id ? resolve(`/clubs/${$auth.user.club_id}/operations`) : ''
+		$auth.user?.clubId ? resolve(`/clubs/${$auth.user.clubId}/operations`) : ''
 	);
-	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.club_id);
+	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
 </script>
 
 <svelte:head>

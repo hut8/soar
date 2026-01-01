@@ -1,7 +1,10 @@
+mod adsb_exchange;
+mod aircraft_backfill;
+mod aircraft_home_base;
 mod aircraft_models;
 mod aircraft_registrations;
+mod aircraft_types;
 mod airports_runways;
-mod device_backfill;
 mod device_linking;
 mod devices_receivers;
 mod home_base_linking;
@@ -27,7 +30,7 @@ fn record_stage_metrics(metrics: &EntityMetrics, stage_name: &str) {
     let stage_name = stage_name.to_string();
     metrics::histogram!("data_load.stage.duration_seconds", "stage" => stage_name.clone())
         .record(metrics.duration_secs);
-    metrics::counter!("data_load.stage.records_loaded", "stage" => stage_name.clone())
+    metrics::counter!("data_load.stage.records_loaded_total", "stage" => stage_name.clone())
         .increment(metrics.records_loaded as u64);
     metrics::gauge!("data_load.stage.success", "stage" => stage_name.clone())
         .set(if metrics.success { 1.0 } else { 0.0 });
@@ -47,6 +50,7 @@ pub async fn handle_load_data(
     runways_path: Option<String>,
     receivers_path: Option<String>,
     devices_path: Option<String>,
+    adsb_exchange_path: Option<String>,
     geocode: bool,
     link_home_bases: bool,
 ) -> Result<()> {
@@ -93,6 +97,22 @@ pub async fn handle_load_data(
     .await
     {
         record_stage_metrics(&metrics, "aircraft_registrations");
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Load aircraft types reference data (ICAO/IATA type codes) from embedded data
+    {
+        let metrics = aircraft_types::load_aircraft_types_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "aircraft_types");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -215,6 +235,42 @@ pub async fn handle_load_data(
         report.add_entity(metrics);
     }
 
+    // Load ADS-B Exchange data to enhance aircraft records with ICAO type codes and owner/operator info
+    if let Some(metrics) =
+        adsb_exchange::load_adsb_exchange_with_metrics(diesel_pool.clone(), adsb_exchange_path)
+            .await
+    {
+        record_stage_metrics(&metrics, "adsb_exchange");
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Copy owner data from aircraft_registrations to aircraft (after ADS-B Exchange data loading)
+    {
+        let metrics =
+            aircraft_registrations::copy_owners_to_aircraft_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "copy_owners_to_aircraft");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
     // Geocoding (if requested)
     if geocode {
         // Geocode aircraft registration addresses
@@ -278,12 +334,29 @@ pub async fn handle_load_data(
             );
         }
         report.add_entity(metrics);
+
+        // Calculate aircraft home bases (copy from clubs + calculate from flight stats)
+        let metrics =
+            aircraft_home_base::calculate_aircraft_home_bases_with_metrics(diesel_pool.clone())
+                .await;
+        record_stage_metrics(&metrics, "calculate_aircraft_home_bases");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
     }
 
     // Backfill country codes for ICAO devices
     {
         let metrics =
-            device_backfill::backfill_country_codes_with_metrics(diesel_pool.clone()).await;
+            aircraft_backfill::backfill_country_codes_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "backfill_country_codes");
 
         if !metrics.success
@@ -301,7 +374,7 @@ pub async fn handle_load_data(
     // Backfill tail numbers for US ICAO devices
     {
         let metrics =
-            device_backfill::backfill_tail_numbers_with_metrics(diesel_pool.clone()).await;
+            aircraft_backfill::backfill_tail_numbers_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "backfill_tail_numbers");
 
         if !metrics.success
@@ -485,7 +558,7 @@ async fn geocode_aircraft_registration_locations(
                 location.city.as_deref(),
                 location.state.as_deref(),
                 location.zip_code.as_deref(),
-                location.country_mail_code.as_deref(),
+                location.country_code.as_deref(),
             )
             .await;
 
@@ -666,7 +739,7 @@ async fn geocode_airports(
             info!("Found {} airports to reverse geocode", total_airports);
             metrics.records_loaded = total_airports;
 
-            let geocoder = Geocoder::new();
+            let geocoder = Geocoder::new_batch_geocoding();
             let mut geocoded_count = 0;
 
             for airport in airports {
@@ -697,25 +770,21 @@ async fn geocode_airports(
                             result.city,
                             result.state,
                             result.zip_code,
-                            None,                                                // region_code
                             result.country.map(|c| c.chars().take(2).collect()), // country code
                             Some(soar::locations::Point::new(latitude, longitude)),
                         );
 
                         // Use find_or_create to avoid duplicate locations
-                        match locations_repo
-                            .find_or_create(
-                                location.street1.clone(),
-                                location.street2.clone(),
-                                location.city.clone(),
-                                location.state.clone(),
-                                location.zip_code.clone(),
-                                location.region_code.clone(),
-                                location.country_mail_code.clone(),
-                                location.geolocation,
-                            )
-                            .await
-                        {
+                        let params = soar::locations_repo::LocationParams {
+                            street1: location.street1.clone(),
+                            street2: location.street2.clone(),
+                            city: location.city.clone(),
+                            state: location.state.clone(),
+                            zip_code: location.zip_code.clone(),
+                            country_code: location.country_code.clone(),
+                            geolocation: location.geolocation,
+                        };
+                        match locations_repo.find_or_create(params).await {
                             Ok(created_location) => {
                                 // Link the airport to the location
                                 match airports_repo
@@ -805,7 +874,7 @@ async fn get_airports_for_geocoding(
             .filter(airports::location_id.is_null())
             .filter(airports::latitude_deg.is_not_null())
             .filter(airports::longitude_deg.is_not_null())
-            .limit(1000) // Process in batches to avoid overwhelming the geocoding service
+            .limit(2500) // Process in batches to avoid overwhelming the geocoding service
             .select(soar::airports::AirportModel::as_select())
             .load::<soar::airports::AirportModel>(&mut conn)?;
 

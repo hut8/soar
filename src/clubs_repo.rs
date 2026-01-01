@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::clubs::{Club, ClubModel, NewClubModel};
 use crate::locations::Point;
-use crate::locations_repo::LocationsRepository;
+use crate::locations_repo::{LocationParams, LocationsRepository};
 use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
@@ -35,9 +35,8 @@ struct ClubWithLocation {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    region_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    country_mail_code: Option<String>,
+    country_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
     longitude: Option<BigDecimal>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
@@ -73,9 +72,8 @@ pub struct ClubWithLocationAndSimilarity {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     pub zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    pub region_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    pub country_mail_code: Option<String>,
+    pub country_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
     pub longitude: Option<BigDecimal>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
@@ -113,9 +111,8 @@ pub struct ClubWithLocationAndDistance {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     pub zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    pub region_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    pub country_mail_code: Option<String>,
+    pub country_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
     pub longitude: Option<BigDecimal>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
@@ -165,8 +162,7 @@ impl From<ClubWithLocationAndDistance> for Club {
             city: cwld.city,
             state: cwld.state,
             zip_code: cwld.zip_code,
-            region_code: cwld.region_code,
-            country_mail_code: cwld.country_mail_code,
+            country_code: cwld.country_code,
             base_location,
             created_at: cwld.created_at,
             updated_at: cwld.updated_at,
@@ -200,8 +196,7 @@ impl From<ClubWithLocationAndSimilarity> for Club {
             city: cwls.city,
             state: cwls.state,
             zip_code: cwls.zip_code,
-            region_code: cwls.region_code,
-            country_mail_code: cwls.country_mail_code,
+            country_code: cwls.country_code,
             base_location,
             created_at: cwls.created_at,
             updated_at: cwls.updated_at,
@@ -235,25 +230,12 @@ impl From<ClubWithLocation> for Club {
             city: cwl.city,
             state: cwl.state,
             zip_code: cwl.zip_code,
-            region_code: cwl.region_code,
-            country_mail_code: cwl.country_mail_code,
+            country_code: cwl.country_code,
             base_location,
             created_at: cwl.created_at,
             updated_at: cwl.updated_at,
         }
     }
-}
-
-/// Location parameters for club creation
-#[derive(Debug, Clone)]
-pub struct LocationParams {
-    pub street1: Option<String>,
-    pub street2: Option<String>,
-    pub city: Option<String>,
-    pub state: Option<String>,
-    pub zip_code: Option<String>,
-    pub region_code: Option<String>,
-    pub country_mail_code: Option<String>,
 }
 
 #[derive(Clone)]
@@ -281,8 +263,8 @@ impl ClubsRepository {
 
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        CASE
                            WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
@@ -320,8 +302,8 @@ impl ClubsRepository {
             // Use raw SQL for complex join with locations table
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        CASE
                            WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
@@ -358,8 +340,8 @@ impl ClubsRepository {
             // Use raw SQL for complex join with locations table
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        CASE
                            WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
@@ -398,8 +380,8 @@ impl ClubsRepository {
 
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        CASE
                            WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
@@ -456,8 +438,8 @@ impl ClubsRepository {
 
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        NULL::float8 as longitude, NULL::float8 as latitude,
                        c.created_at, c.updated_at,
                        ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
@@ -492,8 +474,8 @@ impl ClubsRepository {
 
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
                        (l.geolocation)[0]::numeric as longitude,
                        (l.geolocation)[1]::numeric as latitude,
                        c.created_at, c.updated_at
@@ -563,8 +545,7 @@ impl ClubsRepository {
                         club.city = location.city;
                         club.state = location.state;
                         club.zip_code = location.zip_code;
-                        club.region_code = location.region_code;
-                        club.country_mail_code = location.country_mail_code;
+                        club.country_code = location.country_code;
                         club.base_location = location.geolocation;
                     }
 
@@ -639,19 +620,7 @@ impl ClubsRepository {
         use crate::schema::clubs::dsl::*;
 
         // Use LocationsRepository to find or create the location
-        let location = self
-            .locations_repo
-            .find_or_create(
-                location_params.street1,
-                location_params.street2,
-                location_params.city,
-                location_params.state,
-                location_params.zip_code,
-                location_params.region_code,
-                location_params.country_mail_code,
-                None, // geolocation will be set by triggers if coordinates are available
-            )
-            .await?;
+        let location = self.locations_repo.find_or_create(location_params).await?;
 
         // Create the club with the location_id
         let club_id = Uuid::now_v7();
@@ -757,8 +726,7 @@ mod tests {
             city: Some("Milton".to_string()),
             state: Some("NY".to_string()),
             zip_code: Some("12946".to_string()),
-            region_code: None,
-            country_mail_code: None,
+            country_code: None,
             base_location: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),

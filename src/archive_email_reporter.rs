@@ -43,6 +43,7 @@ pub struct ArchiveReport {
     pub total_duration_secs: f64,
     pub tables: Vec<TableArchiveMetrics>,
     pub daily_counts: HashMap<String, Vec<DailyCount>>, // table_name -> Vec<DailyCount>
+    pub unreferenced_locations_7d: Option<i64>, // Count of unreferenced locations created in last 7 days
 }
 
 impl Default for ArchiveReport {
@@ -57,6 +58,7 @@ impl ArchiveReport {
             total_duration_secs: 0.0,
             tables: Vec::new(),
             daily_counts: HashMap::new(),
+            unreferenced_locations_7d: None,
         }
     }
 
@@ -134,6 +136,31 @@ impl ArchiveReport {
 
     pub fn to_html(&self) -> String {
         let environment = get_environment_name();
+
+        // Build summary section with optional unreferenced locations
+        let mut summary_html = format!(
+            r#"<strong>Environment:</strong> {}<br>
+            <strong>Total Duration:</strong> {}<br>
+            <strong>Tables Processed:</strong> {}<br>
+            <strong>Total Rows Archived:</strong> {}<br>"#,
+            environment,
+            Self::format_duration(self.total_duration_secs),
+            self.tables.len(),
+            Self::format_number(self.tables.iter().map(|t| t.rows_deleted).sum())
+        );
+
+        if let Some(count) = self.unreferenced_locations_7d {
+            summary_html.push_str(&format!(
+                r#"<strong>Unreferenced Locations (last 7 days):</strong> {}<br>"#,
+                Self::format_count(count)
+            ));
+        }
+
+        summary_html.push_str(&format!(
+            r#"<strong>Time:</strong> {}"#,
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
+
         let mut html = format!(
             r#"<!DOCTYPE html>
 <html>
@@ -165,11 +192,7 @@ impl ArchiveReport {
         <h1>SOAR Archive Report - {}</h1>
         <div class="status">✓ SUCCESS</div>
         <div class="summary">
-            <strong>Environment:</strong> {}<br>
-            <strong>Total Duration:</strong> {}<br>
-            <strong>Tables Processed:</strong> {}<br>
-            <strong>Total Rows Archived:</strong> {}<br>
-            <strong>Time:</strong> {}
+            {}
         </div>
 
         <h2>Archive Summary</h2>
@@ -183,18 +206,13 @@ impl ArchiveReport {
                 <th>Oldest Remaining</th>
                 <th>Relative</th>
             </tr>"#,
-            environment,
-            environment,
-            Self::format_duration(self.total_duration_secs),
-            self.tables.len(),
-            Self::format_number(self.tables.iter().map(|t| t.rows_deleted).sum()),
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            environment, summary_html
         );
 
         for table in &self.tables {
             let oldest_str = table
                 .oldest_remaining
-                .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
+                .map(|d| d.format("%Y-%m-%d").to_string())
                 .unwrap_or_else(|| "N/A".to_string());
             let relative_str = table
                 .oldest_remaining
@@ -347,6 +365,7 @@ pub fn send_archive_email_report(
 ) -> Result<()> {
     use lettre::message::header::ContentType;
     use lettre::transport::smtp::authentication::Credentials;
+    use lettre::transport::smtp::client::TlsParametersBuilder;
     use lettre::{Message, SmtpTransport, Transport};
     use std::time::Duration;
     use tracing::info;
@@ -371,11 +390,45 @@ pub fn send_archive_email_report(
 
     let creds = Credentials::new(config.smtp_username.clone(), config.smtp_password.clone());
 
-    let mailer = SmtpTransport::relay(&config.smtp_server)?
-        .port(config.smtp_port)
-        .credentials(creds)
-        .timeout(Some(Duration::from_secs(30)))
-        .build();
+    // Configure SMTP transport based on port (same as send_email_report):
+    // - Port 1025: Insecure (Mailpit for local testing)
+    // - Port 465: Implicit TLS (TLS wrapper - immediate TLS connection)
+    // - Port 587: STARTTLS (start plain, upgrade to TLS)
+    let mailer = if config.smtp_port == 1025 {
+        // Use builder for insecure local SMTP (Mailpit)
+        info!("Using insecure SMTP connection for port 1025 (Mailpit) without TLS");
+        SmtpTransport::builder_dangerous(&config.smtp_server)
+            .port(config.smtp_port)
+            .tls(lettre::transport::smtp::client::Tls::None)
+            .timeout(Some(Duration::from_secs(30)))
+            .build()
+    } else if config.smtp_port == 465 {
+        // Port 465 uses implicit TLS (TLS wrapper - SMTPS)
+        info!("Using implicit TLS (SMTPS) for port 465");
+        let tls_params = TlsParametersBuilder::new(config.smtp_server.clone())
+            .dangerous_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to create TLS parameters: {}", e))?;
+        SmtpTransport::relay(&config.smtp_server)?
+            .port(config.smtp_port)
+            .credentials(creds)
+            .tls(lettre::transport::smtp::client::Tls::Wrapper(tls_params))
+            .timeout(Some(Duration::from_secs(30)))
+            .build()
+    } else {
+        // Port 587 and others use STARTTLS
+        info!("Using STARTTLS for port {}", config.smtp_port);
+        let tls_params = TlsParametersBuilder::new(config.smtp_server.clone())
+            .dangerous_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to create TLS parameters: {}", e))?;
+        SmtpTransport::relay(&config.smtp_server)?
+            .port(config.smtp_port)
+            .credentials(creds)
+            .tls(lettre::transport::smtp::client::Tls::Required(tls_params))
+            .timeout(Some(Duration::from_secs(30)))
+            .build()
+    };
 
     match mailer.send(&email) {
         Ok(_) => {

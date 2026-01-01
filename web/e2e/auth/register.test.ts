@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/worker-database.fixture';
 import { testUsers } from '../fixtures/data.fixture';
 
 interface MailpitRecipient {
@@ -79,9 +79,11 @@ test.describe('Registration', () => {
 		await expect(page).toHaveScreenshot('register-page.png');
 	});
 
-	test.skip('should successfully register a new user', async ({ page }) => {
+	test('should successfully register a new user', async ({ page }) => {
 		// Fill in the registration form with new user data
-		const timestamp = Date.now(); // Use timestamp to ensure unique email
+		// With per-worker database isolation, each worker has its own database
+		// so timestamp-based unique emails will work reliably without conflicts
+		const timestamp = Date.now();
 		const uniqueEmail = `test${timestamp}@example.com`;
 
 		await page.getByPlaceholder('First name').fill('Test');
@@ -150,7 +152,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/passwords do not match/i);
 
@@ -163,7 +165,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/fill in all required fields/i);
 
@@ -183,7 +185,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/at least 8 characters/i);
 
@@ -203,7 +205,7 @@ test.describe('Registration', () => {
 		await page.getByRole('button', { name: /create account/i }).click();
 
 		// Should show error message about existing account
-		const errorDiv = page.locator('div.preset-filled-error-500');
+		const errorDiv = page.locator('div.preset-filled-error-500').first();
 		await expect(errorDiv).toBeVisible();
 		await expect(errorDiv).toContainText(/account.*already exists/i);
 
@@ -217,22 +219,5 @@ test.describe('Registration', () => {
 
 		// Should navigate to login page
 		await expect(page).toHaveURL(/\/login/);
-	});
-
-	test.skip('should disable form during submission', async ({ page }) => {
-		// This test is skipped because the registration completes too quickly in E2E environment
-		// to reliably catch the loading state. The button text changes from "Create Account" to
-		// "Creating Account..." for such a short time that Playwright cannot consistently detect it.
-
-		// Fill in form
-		const timestamp = Date.now();
-		await page.getByPlaceholder('First name').fill('Test');
-		await page.getByPlaceholder('Last name').fill('User');
-		await page.getByPlaceholder(/email/i).fill(`test${timestamp}@example.com`);
-		await page.getByPlaceholder('Password', { exact: true }).fill('password123');
-		await page.getByPlaceholder('Confirm password').fill('password123');
-
-		// Submit and complete
-		await page.getByRole('button', { name: /create account/i }).click();
 	});
 });

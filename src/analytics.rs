@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 /// Daily flight analytics summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightAnalyticsDaily {
     pub date: NaiveDate,
     pub flight_count: i32,
@@ -17,6 +18,7 @@ pub struct FlightAnalyticsDaily {
 
 /// Flight duration bucket for histogram analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightDurationBucket {
     pub bucket_name: String,
     pub bucket_order: i32,
@@ -28,6 +30,7 @@ pub struct FlightDurationBucket {
 
 /// Hourly flight analytics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightAnalyticsHourly {
     pub hour: DateTime<Utc>,
     pub flight_count: i32,
@@ -38,6 +41,7 @@ pub struct FlightAnalyticsHourly {
 
 /// Aircraft analytics with anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceAnalytics {
     pub aircraft_id: Uuid,
     pub registration: Option<String>,
@@ -54,6 +58,7 @@ pub struct DeviceAnalytics {
 
 /// Club analytics daily summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClubAnalyticsDaily {
     pub club_id: Uuid,
     pub date: NaiveDate,
@@ -67,6 +72,7 @@ pub struct ClubAnalyticsDaily {
 
 /// Airport activity analytics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AirportAnalyticsDaily {
     pub airport_id: i32,
     pub date: NaiveDate,
@@ -79,6 +85,7 @@ pub struct AirportAnalyticsDaily {
 
 /// Data quality metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DataQualityMetricsDaily {
     pub metric_date: NaiveDate,
     pub total_fixes: i64,
@@ -93,17 +100,18 @@ pub struct DataQualityMetricsDaily {
 
 /// Summary statistics for dashboard overview
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnalyticsSummary {
     pub flights_today: i32,
     pub flights_7d: i32,
     pub flights_30d: i32,
     pub active_devices_7d: i32,
     pub outlier_devices_count: i32,
-    pub data_quality_score: Option<f64>,
 }
 
 /// Aircraft outlier for anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftOutlier {
     pub aircraft_id: Uuid,
     pub registration: Option<String>,
@@ -114,6 +122,7 @@ pub struct AircraftOutlier {
 
 /// Top aircraft by flight count
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TopAircraft {
     pub aircraft_id: Uuid,
     pub registration: Option<String>,
@@ -124,6 +133,7 @@ pub struct TopAircraft {
 
 /// Airport activity summary (aggregated)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AirportActivity {
     pub airport_id: i32,
     pub ident: Option<String>,

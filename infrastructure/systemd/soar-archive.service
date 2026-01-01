@@ -11,16 +11,12 @@ User=soar
 Group=soar
 WorkingDirectory=/var/soar
 
-# Run archive command with default retention (21 days ago)
-# Archives data with staggered retention:
-#   - Flights: 21+ days old
-#   - Fixes and ReceiverStatuses: 22+ days old
-#   - AprsMessages: 23+ days old
-# The archive command defaults to 21 days ago if no date is specified
-ExecStart=/usr/local/bin/soar archive --archive-path /var/soar/archive
+# Run archive command with 45-day retention
+# Archives all data (flights, fixes, receiver_statuses, raw_messages) 45+ days old
+ExecStart=/usr/local/bin/soar archive --max-age-days 45 --archive-path /var/soar/archive
 
 # Environment variables
-EnvironmentFile=/etc/soar/env
+EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes

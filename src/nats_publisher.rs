@@ -101,11 +101,11 @@ impl NatsFixPublisher {
                 match publish_to_nats(&client_clone, &aircraft_id, &fix_with_flight).await {
                     Ok(()) => {
                         fixes_published += 1;
-                        metrics::counter!("nats_publisher_fixes_published").increment(1);
+                        metrics::counter!("nats_publisher_fixes_published_total").increment(1);
                     }
                     Err(e) => {
                         error!("Failed to publish fix for device {}: {}", aircraft_id, e);
-                        metrics::counter!("nats_publisher_errors").increment(1);
+                        metrics::counter!("nats_publisher_errors_total").increment(1);
                     }
                 }
 
@@ -154,7 +154,7 @@ impl NatsFixPublisher {
             Err(flume::SendError(_)) => {
                 // NATS publisher task has shut down
                 error!("NATS publisher channel is closed - cannot publish fix");
-                metrics::counter!("nats_publisher_errors").increment(1);
+                metrics::counter!("nats_publisher_errors_total").increment(1);
             }
         }
     }

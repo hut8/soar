@@ -17,7 +17,7 @@ ExecStart=/usr/local/bin/soar ingest-ogn
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
-EnvironmentFile=/etc/soar/env
+EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes

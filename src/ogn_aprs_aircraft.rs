@@ -2,6 +2,7 @@ use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AddressType {
@@ -11,9 +12,10 @@ pub enum AddressType {
     OgnTracker,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Serialize, Deserialize, TS)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub enum AircraftType {
     Reserved,
     Glider,

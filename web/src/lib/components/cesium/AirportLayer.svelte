@@ -4,7 +4,7 @@
 	import { Math as CesiumMath } from 'cesium';
 	import { serverCall } from '$lib/api/server';
 	import { createAirportEntity } from '$lib/cesium/entities';
-	import type { Airport } from '$lib/types';
+	import type { Airport, DataListResponse } from '$lib/types';
 
 	// Props
 	let { viewer, enabled = $bindable(true) }: { viewer: Viewer; enabled?: boolean } = $props();
@@ -65,14 +65,16 @@
 		if (!bounds) return;
 
 		try {
-			const airports = await serverCall<Airport[]>('/airports', {
+			const response = await serverCall<DataListResponse<Airport>>('/airports', {
 				params: {
-					nw_lat: bounds.latMax,
-					nw_lng: bounds.lonMin,
-					se_lat: bounds.latMin,
-					se_lng: bounds.lonMax
+					north: bounds.latMax,
+					west: bounds.lonMin,
+					south: bounds.latMin,
+					east: bounds.lonMax
 				}
 			});
+
+			const airports = response.data || [];
 
 			// Update airport entities
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity

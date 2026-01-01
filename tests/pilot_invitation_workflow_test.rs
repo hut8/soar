@@ -1,23 +1,22 @@
-use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool};
+mod common;
+
+use common::TestDatabase;
+use serial_test::serial;
 use soar::clubs_repo::ClubsRepository;
 use soar::users::User;
 use soar::users_repo::UsersRepository;
 
-type PgPool = Pool<ConnectionManager<PgConnection>>;
-
-fn setup_test_db() -> PgPool {
-    let database_url =
-        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
-    let manager = ConnectionManager::<PgConnection>::new(database_url);
-    Pool::builder()
-        .build(manager)
-        .expect("Failed to create pool")
+async fn setup_test_db() -> TestDatabase {
+    TestDatabase::new()
+        .await
+        .expect("Failed to create test database")
 }
 
 #[tokio::test]
+#[serial]
 async fn test_create_pilot_without_email() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     let pilot = User::new_pilot(
@@ -43,13 +42,14 @@ async fn test_create_pilot_without_email() {
     assert!(!created_pilot.can_login());
     assert!(created_pilot.is_pilot());
 
-    // Cleanup
-    repo.soft_delete_user(pilot.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }
 
 #[tokio::test]
+#[serial]
 async fn test_send_invitation_to_pilot() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     // Create pilot without email
@@ -88,13 +88,14 @@ async fn test_send_invitation_to_pilot() {
     assert!(pilot_by_token.is_some());
     assert_eq!(pilot_by_token.unwrap().id, pilot.id);
 
-    // Cleanup
-    repo.soft_delete_user(pilot.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }
 
 #[tokio::test]
+#[serial]
 async fn test_complete_pilot_registration() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     // Create pilot and send invitation
@@ -144,13 +145,14 @@ async fn test_complete_pilot_registration() {
         "Token should be invalidated after registration"
     );
 
-    // Cleanup
-    repo.soft_delete_user(pilot.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }
 
 #[tokio::test]
+#[serial]
 async fn test_full_pilot_invitation_workflow() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     // Step 1: Admin creates pilot without email
@@ -201,13 +203,14 @@ async fn test_full_pilot_invitation_workflow() {
     let logged_in_user = login_result.unwrap();
     assert_eq!(logged_in_user.id, pilot.id);
 
-    // Cleanup
-    repo.soft_delete_user(pilot.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }
 
 #[tokio::test]
+#[serial]
 async fn test_get_pilots_by_club() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let users_repo = UsersRepository::new(pool.clone());
     let clubs_repo = ClubsRepository::new(pool.clone());
 
@@ -260,15 +263,14 @@ async fn test_get_pilots_by_club() {
         assert!(pilot.is_pilot());
     }
 
-    // Cleanup
-    users_repo.soft_delete_user(pilot1.id).await.unwrap();
-    users_repo.soft_delete_user(pilot2.id).await.unwrap();
-    users_repo.soft_delete_user(pilot3.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }
 
 #[tokio::test]
+#[serial]
 async fn test_soft_delete_pilot() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     let pilot = User::new_pilot(
@@ -296,8 +298,10 @@ async fn test_soft_delete_pilot() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_cannot_send_invitation_twice() {
-    let pool = setup_test_db();
+    let test_db = setup_test_db().await;
+    let pool = test_db.pool();
     let repo = UsersRepository::new(pool.clone());
 
     let pilot = User::new_pilot(
@@ -338,6 +342,5 @@ async fn test_cannot_send_invitation_twice() {
     let new_token_lookup = repo.get_by_verification_token(&token2).await.unwrap();
     assert!(new_token_lookup.is_some());
 
-    // Cleanup
-    repo.soft_delete_user(pilot.id).await.unwrap();
+    // Database automatically cleaned up when test_db goes out of scope
 }

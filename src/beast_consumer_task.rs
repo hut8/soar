@@ -79,7 +79,7 @@ impl BeastConsumerTask {
                     "Invalid Beast message: too short ({} bytes, expected at least 9)",
                     payload.len()
                 );
-                metrics::counter!("beast.nats.invalid_message").increment(1);
+                metrics::counter!("beast.nats.invalid_message_total").increment(1);
                 continue;
             }
 
@@ -95,7 +95,7 @@ impl BeastConsumerTask {
             // Decode the Beast frame using rs1090
             let decoded_json = match decode_beast_frame(raw_frame, received_at) {
                 Ok(decoded) => {
-                    metrics::counter!("beast.nats.decoded").increment(1);
+                    metrics::counter!("beast.nats.decoded_total").increment(1);
                     // Convert to JSON for storage
                     match message_to_json(&decoded.message) {
                         Ok(json) => {
@@ -104,7 +104,7 @@ impl BeastConsumerTask {
                         }
                         Err(e) => {
                             warn!("Failed to serialize decoded message to JSON: {}", e);
-                            metrics::counter!("beast.nats.json_error").increment(1);
+                            metrics::counter!("beast.nats.json_error_total").increment(1);
                             None
                         }
                     }
@@ -112,7 +112,7 @@ impl BeastConsumerTask {
                 Err(e) => {
                     // Log decode errors but still store the raw frame
                     debug!("Failed to decode Beast frame: {}", e);
-                    metrics::counter!("beast.nats.decode_error").increment(1);
+                    metrics::counter!("beast.nats.decode_error_total").increment(1);
                     None
                 }
             };
@@ -124,7 +124,7 @@ impl BeastConsumerTask {
             // Send to batch writer (blocking send for backpressure)
             match batch_tx.send_async(message).await {
                 Ok(_) => {
-                    metrics::counter!("beast.nats.consumed").increment(1);
+                    metrics::counter!("beast.nats.consumed_total").increment(1);
                 }
                 Err(e) => {
                     // Channel closed - batch writer stopped
@@ -213,7 +213,8 @@ impl BeastConsumerTask {
                 let duration = start.elapsed();
                 metrics::histogram!("beast.consumer.batch_write_ms")
                     .record(duration.as_millis() as f64);
-                metrics::counter!("beast.consumer.messages_stored").increment(batch_size as u64);
+                metrics::counter!("beast.consumer.messages_stored_total")
+                    .increment(batch_size as u64);
                 info!(
                     "Wrote batch of {} Beast messages in {:?}",
                     batch_size, duration
@@ -224,7 +225,7 @@ impl BeastConsumerTask {
                     "Failed to write batch of {} Beast messages: {}",
                     batch_size, e
                 );
-                metrics::counter!("beast.consumer.write_errors").increment(1);
+                metrics::counter!("beast.consumer.write_errors_total").increment(1);
             }
         }
 

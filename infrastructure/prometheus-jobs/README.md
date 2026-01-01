@@ -44,19 +44,21 @@ To add a new scrape job:
 
 ### Example Job Configuration
 
-```yaml
-job_name: 'my-service'
-metrics_path: '/metrics'
-scrape_interval: 15s
-scrape_timeout: 10s
+**IMPORTANT:** Each file must have `scrape_configs:` as the root key (Prometheus 2.47+)
 
-static_configs:
-  - targets:
-      - 'localhost:9090'
-    labels:
-      instance: 'my-service-prod'
-      component: 'backend'
-      environment: 'production'
+```yaml
+scrape_configs:
+  - job_name: 'my-service'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets:
+          - 'localhost:9090'
+        labels:
+          instance: 'my-service-prod'
+          component: 'backend'
+          environment: 'production'
 ```
 
 ## Advantages

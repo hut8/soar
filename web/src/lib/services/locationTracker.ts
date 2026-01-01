@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
-import { getApiBase } from '$lib/api/server';
+import { serverCall } from '$lib/api/server';
 import { calculateDistance } from '$lib/geography';
 
 // Configuration constants
@@ -136,25 +136,21 @@ async function sendUserFix(position: GeolocationPosition): Promise<void> {
 	};
 
 	try {
-		const response = await fetch(`${getApiBase()}/user-fix`, {
+		// Use serverCall which handles 401 responses with toast notifications and logout
+		await serverCall<void>('/user-fix', {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${authState.token}`
-			},
 			body: JSON.stringify(payload)
 		});
 
-		if (response.ok) {
-			lastFix = {
-				latitude,
-				longitude,
-				timestamp: Date.now()
-			};
-		} else {
-			console.warn('Failed to send user fix:', response.status);
-		}
+		// Only update lastFix if the request succeeded
+		lastFix = {
+			latitude,
+			longitude,
+			timestamp: Date.now()
+		};
 	} catch (error) {
+		// serverCall already handles 401 with toast + logout
+		// Just log other errors silently to avoid spamming the console
 		console.warn('Error sending user fix:', error);
 	}
 }

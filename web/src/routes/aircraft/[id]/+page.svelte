@@ -5,7 +5,6 @@
 	import { resolve } from '$app/paths';
 	import {
 		ArrowLeft,
-		Radio,
 		Plane,
 		User,
 		Calendar,
@@ -26,7 +25,10 @@
 		AircraftModel,
 		Fix,
 		Flight,
-		Club
+		Club,
+		DataResponse,
+		DataListResponse,
+		PaginatedDataResponse
 	} from '$lib/types';
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
@@ -49,20 +51,23 @@
 	dayjs.extend(utc);
 	dayjs.extend(relativeTime);
 
-	interface FixesResponse {
-		fixes: Fix[];
-		total: number;
-		page: number;
-		per_page: number;
-		total_pages: number;
+	// Local interfaces match backend paginated responses
+	// Backend returns: { data: Fix[], metadata: { page, totalPages, totalCount } }
+	type FixesResponse = PaginatedDataResponse<Fix>;
+	type FlightsResponse = PaginatedDataResponse<Flight>;
+
+	// Aircraft images interfaces
+	interface AircraftImage {
+		source: 'airport_data' | 'planespotters';
+		pageUrl: string;
+		thumbnailUrl: string;
+		imageUrl?: string;
+		photographer?: string;
 	}
 
-	interface FlightsResponse {
-		flights: Flight[];
-		total: number;
-		page: number;
-		per_page: number;
-		total_pages: number;
+	interface AircraftImageCollection {
+		images: AircraftImage[];
+		lastFetched: Record<string, string>;
 	}
 
 	let aircraft: Aircraft | null = null;
@@ -83,10 +88,12 @@
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
+	let aircraftImages: AircraftImage[] = [];
+	let loadingImages = true;
 
 	$: aircraftId = $page.params.id || '';
-	$: isAdmin = $auth.user?.is_admin === true;
-	$: userClubId = $auth.user?.club_id;
+	$: isAdmin = $auth.user?.isAdmin === true;
+	$: userClubId = $auth.user?.clubId;
 	$: isInWatchlist = watchlist.has(aircraftId);
 
 	function extractErrorMessage(err: unknown): string {
@@ -110,6 +117,7 @@
 			await loadAircraft();
 			await loadFixes();
 			await loadFlights();
+			await loadImages();
 			if (isAdmin) {
 				await loadClubs();
 			}
@@ -122,24 +130,24 @@
 
 		try {
 			// Load aircraft data
-			const deviceData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			aircraft = deviceData;
+			const aircraftResponse = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
+			aircraft = aircraftResponse.data;
 
 			// Initialize selected club ID if aircraft has one
-			if (aircraft.club_id) {
-				selectedClubId = aircraft.club_id;
+			if (aircraft.clubId) {
+				selectedClubId = aircraft.clubId;
 			}
 
 			// Load aircraft registration and model data in parallel
-			const [registration, model] = await Promise.all([
-				serverCall<AircraftRegistration>(`/aircraft/${aircraftId}/aircraft/registration`).catch(
-					() => null
-				),
-				serverCall<AircraftModel>(`/aircraft/${aircraftId}/aircraft/model`).catch(() => null)
+			const [registrationResponse, modelResponse] = await Promise.all([
+				serverCall<DataResponse<AircraftRegistration>>(
+					`/aircraft/${aircraftId}/registration`
+				).catch(() => null),
+				serverCall<DataResponse<AircraftModel>>(`/aircraft/${aircraftId}/model`).catch(() => null)
 			]);
 
-			aircraftRegistration = registration;
-			aircraftModel = model;
+			aircraftRegistration = registrationResponse?.data || null;
+			aircraftModel = modelResponse?.data || null;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load aircraft: ${errorMessage}`;
@@ -159,14 +167,14 @@
 			const response = await serverCall<FixesResponse>(`/aircraft/${aircraftId}/fixes`, {
 				params: {
 					page,
-					per_page: 50,
+					perPage: 10,
 					after,
 					...(hideInactiveFixes && { active: true })
 				}
 			});
-			fixes = response.fixes;
-			fixesPage = response.page;
-			fixesTotalPages = response.total_pages;
+			fixes = response.data;
+			fixesPage = response.metadata.page;
+			fixesTotalPages = response.metadata.totalPages;
 		} catch (err) {
 			console.error('Failed to load fixes:', err);
 		} finally {
@@ -183,22 +191,42 @@
 		loadingFlights = true;
 		try {
 			const response = await serverCall<FlightsResponse>(
-				`/aircraft/${aircraftId}/flights?page=${page}&per_page=100`
+				`/aircraft/${aircraftId}/flights?page=${page}&perPage=100`
 			);
-			flights = response.flights || [];
-			// Sort by takeoff_time descending (most recent first)
+			flights = response.data || [];
+			// Sort by takeoffTime if available, otherwise createdAt (most recent first)
+			// This matches the backend COALESCE(takeoff_time, created_at) sorting
 			flights.sort((a, b) => {
-				const timeA = a.takeoff_time ? new Date(a.takeoff_time).getTime() : 0;
-				const timeB = b.takeoff_time ? new Date(b.takeoff_time).getTime() : 0;
+				const timeA = a.takeoffTime
+					? new Date(a.takeoffTime).getTime()
+					: new Date(a.createdAt).getTime();
+				const timeB = b.takeoffTime
+					? new Date(b.takeoffTime).getTime()
+					: new Date(b.createdAt).getTime();
 				return timeB - timeA;
 			});
-			flightsPage = response.page || 1;
-			flightsTotalPages = response.total_pages || 1;
+			flightsPage = response.metadata.page || 1;
+			flightsTotalPages = response.metadata.totalPages || 1;
 		} catch (err) {
 			console.error('Failed to load flights:', err);
 			flights = [];
 		} finally {
 			loadingFlights = false;
+		}
+	}
+
+	async function loadImages() {
+		loadingImages = true;
+		try {
+			const response = await serverCall<DataResponse<AircraftImageCollection>>(
+				`/aircraft/${aircraftId}/images`
+			);
+			aircraftImages = response.data.images || [];
+		} catch (err) {
+			console.error('Failed to load aircraft images:', err);
+			aircraftImages = [];
+		} finally {
+			loadingImages = false;
 		}
 	}
 
@@ -208,8 +236,8 @@
 
 	async function loadClubs() {
 		try {
-			const response = await serverCall<{ clubs: Club[] }>('/clubs');
-			clubs = response.clubs || [];
+			const response = await serverCall<DataListResponse<Club>>('/clubs');
+			clubs = response.data || [];
 		} catch (err) {
 			console.error('Failed to load clubs:', err);
 		}
@@ -228,7 +256,7 @@
 		try {
 			await serverCall(`/aircraft/${aircraftId}/club`, {
 				method: 'PUT',
-				body: JSON.stringify({ club_id: selectedClubId || null })
+				body: JSON.stringify({ clubId: selectedClubId || null })
 			});
 
 			toaster.success({ title: 'Aircraft club assignment updated successfully' });
@@ -326,24 +354,24 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Radio class="h-8 w-8 text-primary-500" />
+							<Plane class="h-8 w-8 text-primary-500" />
 							<div>
 								<h1 class="h1">
 									{aircraft.registration || 'Unknown'}
-									{#if aircraft.competition_number}
-										<span class="text-surface-600-300-token">({aircraft.competition_number})</span>
+									{#if aircraft.competitionNumber}
+										<span class="text-surface-600-300-token">({aircraft.competitionNumber})</span>
 									{/if}
 								</h1>
-								{#if aircraft.aircraft_model}
-									<p class="text-lg">{aircraft.aircraft_model}</p>
+								{#if aircraft.aircraftModel}
+									<p class="text-lg">{aircraft.aircraftModel}</p>
 								{/if}
-								{#if aircraft.icao_model_code}
+								{#if aircraft.icaoModelCode}
 									<p class="text-surface-600-300-token text-sm">
-										ICAO Model Code: <span class="font-mono">{aircraft.icao_model_code}</span>
+										ICAO Model Code: <span class="font-mono">{aircraft.icaoModelCode}</span>
 									</p>
 								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {formatAircraftAddress(aircraft.address_type, aircraft.address)}
+									Address: {formatAircraftAddress(aircraft.addressType, aircraft.address)}
 								</p>
 							</div>
 						</div>
@@ -364,42 +392,83 @@
 								{aircraft.identified ? 'Identified' : 'Unidentified'}
 							</span>
 							<span
-								class="badge {aircraft.from_ddb
+								class="badge {aircraft.fromOgnDdb
 									? 'preset-filled-success-500'
 									: 'preset-filled-secondary-500'}"
 							>
-								{aircraft.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+								{aircraft.fromOgnDdb ? 'In OGN DB' : 'Not in OGN DB'}
 							</span>
-							{#if aircraft.aircraft_type_ogn}
-								<span class="badge {getAircraftTypeColor(aircraft.aircraft_type_ogn)} text-xs">
-									{getAircraftTypeOgnDescription(aircraft.aircraft_type_ogn)}
+							<span
+								class="badge {aircraft.fromAdsbxDdb
+									? 'preset-filled-success-500'
+									: 'preset-filled-secondary-500'}"
+							>
+								{aircraft.fromAdsbxDdb ? 'In ADSB Exchange DB' : 'Not in ADSB Exchange DB'}
+							</span>
+							{#if aircraft.aircraftTypeOgn}
+								<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
+									{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
 								</span>
 							{/if}
-							{#if aircraft.tracker_device_type}
-								<span class="preset-tonal-primary-500 badge text-xs">
-									{aircraft.tracker_device_type}
+							{#if aircraft.trackerDeviceType}
+								<span class="badge preset-filled-tertiary-500 text-xs">
+									OGN Tracker Device Type: {aircraft.trackerDeviceType}
 								</span>
 							{/if}
-							{#if aircraft.country_code}
-								{@const countryName = getCountryName(aircraft.country_code)}
-								{@const flagPath = getFlagPath(aircraft.country_code)}
+							{#if aircraft.countryCode}
+								{@const countryName = getCountryName(aircraft.countryCode)}
+								{@const flagPath = getFlagPath(aircraft.countryCode)}
 								<span class="preset-tonal-tertiary-500 badge flex items-center gap-1.5 text-xs">
 									{#if flagPath}
 										<img
 											src={flagPath}
-											alt="{aircraft.country_code} flag"
+											alt="{aircraft.countryCode} flag"
 											class="h-3 w-4 object-cover"
 										/>
 									{/if}
-									{countryName
-										? `${countryName} (${aircraft.country_code})`
-										: aircraft.country_code}
+									{countryName ? `${countryName} (${aircraft.countryCode})` : aircraft.countryCode}
 								</span>
 							{/if}
 						</div>
 					</div>
 				</div>
 			</div>
+
+			<!-- Aircraft Images Section -->
+			{#if !loadingImages && aircraftImages.length > 0}
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
+						<Plane class="h-6 w-6" />
+						Aircraft Photos
+					</h2>
+
+					<div class="flex gap-4 overflow-x-auto pb-2">
+						{#each aircraftImages as image (image.thumbnailUrl)}
+							<a
+								href={image.pageUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="group relative flex-shrink-0"
+							>
+								<img
+									src={image.thumbnailUrl}
+									alt="Aircraft photo{image.photographer ? ` by ${image.photographer}` : ''}"
+									class="border-surface-300-600-token h-48 rounded-lg border object-cover transition-all group-hover:border-primary-500 group-hover:shadow-lg"
+									loading="lazy"
+								/>
+								{#if image.photographer}
+									<p class="text-surface-600-300-token mt-1 text-center text-xs">
+										© {image.photographer}
+									</p>
+								{/if}
+								<p class="text-surface-600-300-token mt-0.5 text-center text-xs capitalize">
+									{image.source === 'airport_data' ? 'Airport Data' : 'Planespotters'}
+								</p>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -459,116 +528,6 @@
 					</div>
 				{/if}
 
-				<!-- Aircraft Registration -->
-				<div class="space-y-4 card p-6">
-					<h2 class="flex items-center gap-2 h2">
-						<Plane class="h-6 w-6" />
-						Aircraft Registration
-					</h2>
-
-					{#if aircraftRegistration}
-						<div class="space-y-3">
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
-									<p class="font-mono font-semibold">
-										{aircraft.registration || aircraftRegistration.n_number || 'Unknown'}
-									</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
-									<p class="font-mono">
-										{formatTransponderCode(aircraftRegistration.transponder_code)}
-									</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
-									<p>{aircraftRegistration.year_mfr}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<User class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
-									<p>{aircraftRegistration.registrant_name}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
-									<p class="font-mono">{aircraftRegistration.serial_number}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
-									<p>
-										{getStatusCodeDescription(aircraftRegistration.status_code)}
-										<span class="ml-1 text-xs text-surface-500"
-											>({aircraftRegistration.status_code})</span
-										>
-									</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
-									<p>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
-									<p>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
-									<p>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</p>
-								</div>
-							</div>
-
-							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Last Action Date</p>
-									<p>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</p>
-								</div>
-							</div>
-						</div>
-					{:else}
-						<div class="text-surface-600-300-token py-8 text-center">
-							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-							<p>
-								No aircraft registration found for {aircraft.registration || 'Unknown'}
-								<br />
-								<i>Data is currently only available for aircraft registered in the USA</i>
-							</p>
-						</div>
-					{/if}
-				</div>
-
 				<!-- Aircraft Model Details -->
 				{#if aircraftModel}
 					<div class="space-y-4 card p-6">
@@ -590,29 +549,29 @@
 								<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
 									<div>
 										<dt class="text-surface-600-300-token mb-1 font-medium">Manufacturer</dt>
-										<dd class="font-semibold">{aircraftModel.manufacturer_name}</dd>
+										<dd class="font-semibold">{aircraftModel.manufacturerName}</dd>
 									</div>
 									<div>
 										<dt class="text-surface-600-300-token mb-1 font-medium">Model</dt>
-										<dd class="font-semibold">{aircraftModel.model_name}</dd>
+										<dd class="font-semibold">{aircraftModel.modelName}</dd>
 									</div>
-									{#if aircraftModel.aircraft_type}
+									{#if aircraftModel.aircraftType}
 										<div>
 											<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
-											<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
+											<dd>{formatTitleCase(aircraftModel.aircraftType)}</dd>
 										</div>
 									{/if}
-									{#if aircraftModel.aircraft_category}
+									{#if aircraftModel.aircraftCategory}
 										<div>
 											<dt class="text-surface-600-300-token mb-1 font-medium">Category</dt>
-											<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
+											<dd>{formatTitleCase(aircraftModel.aircraftCategory)}</dd>
 										</div>
 									{/if}
 								</dl>
 							</div>
 
 							<!-- Technical Specifications -->
-							{#if aircraftModel.engine_type || (aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined) || aircraftModel.builder_certification || aircraftModel.weight_class}
+							{#if aircraftModel.engineType || (aircraftModel.numberOfEngines !== null && aircraftModel.numberOfEngines !== undefined) || aircraftModel.builderCertification || aircraftModel.weightClass}
 								<div
 									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
 								>
@@ -622,30 +581,30 @@
 										Technical Specifications
 									</h3>
 									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-										{#if aircraftModel.engine_type}
+										{#if aircraftModel.engineType}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
-												<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
+												<dd>{formatTitleCase(aircraftModel.engineType)}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
+										{#if aircraftModel.numberOfEngines !== null && aircraftModel.numberOfEngines !== undefined}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Engines</dt>
-												<dd>{aircraftModel.number_of_engines}</dd>
+												<dd>{aircraftModel.numberOfEngines}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.builder_certification}
+										{#if aircraftModel.builderCertification}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">
 													Builder Certification
 												</dt>
-												<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
+												<dd>{formatTitleCase(aircraftModel.builderCertification)}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.weight_class}
+										{#if aircraftModel.weightClass}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Weight Class</dt>
-												<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
+												<dd>{formatTitleCase(aircraftModel.weightClass)}</dd>
 											</div>
 										{/if}
 									</dl>
@@ -653,7 +612,7 @@
 							{/if}
 
 							<!-- Capacity & Performance -->
-							{#if aircraftModel.number_of_seats || (aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0)}
+							{#if aircraftModel.numberOfSeats || (aircraftModel.cruisingSpeed && aircraftModel.cruisingSpeed > 0)}
 								<div
 									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
 								>
@@ -663,16 +622,43 @@
 										Capacity & Performance
 									</h3>
 									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-										{#if aircraftModel.number_of_seats}
+										{#if aircraftModel.numberOfSeats}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Seats</dt>
-												<dd>{aircraftModel.number_of_seats}</dd>
+												<dd>{aircraftModel.numberOfSeats}</dd>
 											</div>
 										{/if}
-										{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
+										{#if aircraftModel.cruisingSpeed && aircraftModel.cruisingSpeed > 0}
 											<div>
 												<dt class="text-surface-600-300-token mb-1 font-medium">Cruising Speed</dt>
-												<dd>{aircraftModel.cruising_speed} kts</dd>
+												<dd>{aircraftModel.cruisingSpeed} kts</dd>
+											</div>
+										{/if}
+									</dl>
+								</div>
+							{/if}
+
+							<!-- Type Certificate Information -->
+							{#if aircraftModel.typeCertificateDataSheet || aircraftModel.typeCertificateDataHolder}
+								<div
+									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
+								>
+									<h3
+										class="text-surface-600-300-token mb-3 text-xs font-semibold tracking-wide uppercase"
+									>
+										Type Certificate
+									</h3>
+									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+										{#if aircraftModel.typeCertificateDataSheet}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Data Sheet</dt>
+												<dd>{aircraftModel.typeCertificateDataSheet}</dd>
+											</div>
+										{/if}
+										{#if aircraftModel.typeCertificateDataHolder}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Data Holder</dt>
+												<dd>{aircraftModel.typeCertificateDataHolder}</dd>
 											</div>
 										{/if}
 									</dl>
@@ -729,6 +715,262 @@
 					{/if}
 				{/if}
 			</div>
+
+			<!-- Aircraft Registration -->
+			<div class="space-y-4 card p-6">
+				<h2 class="flex items-center gap-2 h2">
+					<Plane class="h-6 w-6" />
+					Aircraft Registration
+				</h2>
+
+				{#if aircraftRegistration}
+					<div class="space-y-3">
+						<!-- Registration Number -->
+						<div class="flex items-start gap-3">
+							<Info class="mt-1 h-4 w-4 text-surface-500" />
+							<div>
+								<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
+								<p class="font-mono font-semibold">
+									{aircraft.registration || aircraftRegistration.registrationNumber || 'Unknown'}
+								</p>
+							</div>
+						</div>
+
+						<!-- Serial Number -->
+						<div class="flex items-start gap-3">
+							<Info class="mt-1 h-4 w-4 text-surface-500" />
+							<div>
+								<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
+								<p class="font-mono">{aircraftRegistration.serialNumber}</p>
+							</div>
+						</div>
+
+						<!-- Manufacturer/Model/Series Codes -->
+						{#if aircraftRegistration.manufacturerCode || aircraftRegistration.modelCode || aircraftRegistration.seriesCode}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer/Model/Series</p>
+									<p class="font-mono">
+										{[
+											aircraftRegistration.manufacturerCode,
+											aircraftRegistration.modelCode,
+											aircraftRegistration.seriesCode
+										]
+											.filter(Boolean)
+											.join('-')}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Engine Codes -->
+						{#if aircraftRegistration.engineManufacturerCode || aircraftRegistration.engineModelCode}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Engine Manufacturer/Model</p>
+									<p class="font-mono">
+										{[
+											aircraftRegistration.engineManufacturerCode,
+											aircraftRegistration.engineModelCode
+										]
+											.filter(Boolean)
+											.join('-')}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Year Manufactured -->
+						{#if aircraftRegistration.yearManufactured}
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
+									<p>{aircraftRegistration.yearManufactured}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Aircraft Type -->
+						{#if aircraftRegistration.aircraftType}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Type</p>
+									<p>{aircraftRegistration.aircraftType}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Engine Type -->
+						{#if aircraftRegistration.engineType}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Engine Type</p>
+									<p>{aircraftRegistration.engineType}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Registrant Name -->
+						{#if aircraftRegistration.registrantName}
+							<div class="flex items-start gap-3">
+								<User class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
+									<p>{aircraftRegistration.registrantName}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Home Base Airport -->
+						{#if aircraft?.homeBaseAirportIdent}
+							<div class="flex items-start gap-3">
+								<Building2 class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
+									<p>{aircraft.homeBaseAirportIdent}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Registrant Type -->
+						{#if aircraftRegistration.registrantType}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Registrant Type</p>
+									<p>{aircraftRegistration.registrantType}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Status Code -->
+						{#if aircraftRegistration.statusCode}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
+									<p>
+										{getStatusCodeDescription(aircraftRegistration.statusCode)}
+										<span class="ml-1 text-xs text-surface-500"
+											>({aircraftRegistration.statusCode})</span
+										>
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Transponder Code -->
+						{#if aircraftRegistration.transponderCode}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
+									<p class="font-mono">
+										{formatTransponderCode(aircraftRegistration.transponderCode)}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Airworthiness Class -->
+						{#if aircraftRegistration.airworthinessClass}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Class</p>
+									<p>{aircraftRegistration.airworthinessClass}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Airworthiness Date -->
+						{#if aircraftRegistration.airworthinessDate}
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
+									<p>{dayjs(aircraftRegistration.airworthinessDate).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Certificate Issue Date -->
+						{#if aircraftRegistration.certificateIssueDate}
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
+									<p>
+										{dayjs(aircraftRegistration.certificateIssueDate).format('YYYY-MM-DD')}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Expiration Date -->
+						{#if aircraftRegistration.expirationDate}
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
+									<p>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Kit Manufacturer/Model -->
+						{#if aircraftRegistration.kitManufacturerName || aircraftRegistration.kitModelName}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Kit</p>
+									<p>
+										{[aircraftRegistration.kitManufacturerName, aircraftRegistration.kitModelName]
+											.filter(Boolean)
+											.join(' ')}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Light Sport Type -->
+						{#if aircraftRegistration.lightSportType}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Light Sport Type</p>
+									<p>{aircraftRegistration.lightSportType}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Other Names -->
+						{#if aircraftRegistration.otherNames && aircraftRegistration.otherNames.length > 0}
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Other Names</p>
+									<p>{aircraftRegistration.otherNames.join(', ')}</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<div class="text-surface-600-300-token py-4 text-center text-xs">
+						<p>
+							No registration data found
+							<br />
+							<i>(Data currently only available for USA-registered aircraft)</i>
+						</p>
+					</div>
+				{/if}
+			</div>
+
 			<!-- Position Fixes Section -->
 			<div class="space-y-4 card p-6">
 				<h2 class="flex items-center gap-2 h2">
@@ -744,6 +986,7 @@
 					emptyMessage="No position fixes found in the last 24 hours"
 					hideInactiveValue={hideInactiveFixes}
 					onHideInactiveChange={handleHideInactiveChange}
+					fixesInChronologicalOrder={false}
 				/>
 
 				<!-- Pagination for fixes -->

@@ -1,4 +1,4 @@
-import type { User } from '$lib/types';
+import type { User, DataResponse } from '$lib/types';
 import { serverCall, ServerError } from './server';
 
 export interface LoginRequest {
@@ -12,11 +12,11 @@ export interface LoginResponse {
 }
 
 export interface RegisterRequest {
-	first_name: string;
-	last_name: string;
+	firstName: string;
+	lastName: string;
 	email: string;
 	password: string;
-	club_id?: string;
+	clubId?: string;
 }
 
 export interface PasswordResetRequest {
@@ -25,7 +25,7 @@ export interface PasswordResetRequest {
 
 export interface PasswordResetConfirm {
 	token: string;
-	new_password: string;
+	newPassword: string;
 }
 
 export interface EmailVerificationConfirm {
@@ -56,11 +56,12 @@ export const authApi = {
 	},
 
 	async getCurrentUser(token: string): Promise<User> {
-		return serverCall<User>('/auth/me', {
+		const response = await serverCall<DataResponse<User>>('/auth/me', {
 			headers: {
 				Authorization: `Bearer ${token}`
 			}
 		});
+		return response.data;
 	},
 
 	async requestPasswordReset(data: PasswordResetRequest): Promise<void> {
@@ -77,8 +78,8 @@ export const authApi = {
 		});
 	},
 
-	async verifyEmail(token: string): Promise<void> {
-		await serverCall<void>('/auth/verify-email', {
+	async verifyEmail(token: string): Promise<LoginResponse> {
+		return serverCall<LoginResponse>('/auth/verify-email', {
 			method: 'POST',
 			body: JSON.stringify({ token })
 		});

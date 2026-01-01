@@ -3,12 +3,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import FlightsList from '$lib/components/FlightsList.svelte';
-	import type { Flight } from '$lib/types';
-
-	interface FlightsListResponse {
-		flights: Flight[];
-		total_count: number;
-	}
+	import type { Flight, PaginatedDataResponse } from '$lib/types';
 
 	let completedFlights: Flight[] = [];
 	let activeFlights: Flight[] = [];
@@ -46,18 +41,18 @@
 
 			// Load both active and completed flights in parallel
 			const [activeResponse, completedResponse] = await Promise.all([
-				serverCall<FlightsListResponse>(
+				serverCall<PaginatedDataResponse<Flight>>(
 					`/flights?completed=false&limit=${ITEMS_PER_PAGE}&offset=${activeOffset}`
 				),
-				serverCall<FlightsListResponse>(
+				serverCall<PaginatedDataResponse<Flight>>(
 					`/flights?completed=true&limit=${ITEMS_PER_PAGE}&offset=${completedOffset}`
 				)
 			]);
 
-			activeFlights = activeResponse.flights || [];
-			activeTotalCount = activeResponse.total_count || 0;
-			completedFlights = completedResponse.flights || [];
-			completedTotalCount = completedResponse.total_count || 0;
+			activeFlights = activeResponse.data || [];
+			activeTotalCount = activeResponse.metadata.totalCount || 0;
+			completedFlights = completedResponse.data || [];
+			completedTotalCount = completedResponse.metadata.totalCount || 0;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load flights: ${errorMessage}`;

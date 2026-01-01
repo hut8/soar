@@ -77,7 +77,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Devices (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Outlier Devices\",\n  (SELECT ROUND(quality_score::numeric, 1) FROM data_quality_metrics_daily ORDER BY metric_date DESC LIMIT 1) as \"Data Quality Score\"",
+          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Devices (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Outlier Devices\"",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -370,7 +370,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '48 hours'\nORDER BY hour ASC",
+          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -379,7 +379,7 @@
           }
         }
       ],
-      "title": "Hourly Flight Activity (Last 48 Hours)",
+      "title": "Hourly Flight Activity (Last 30 Days)",
       "type": "timeseries"
     },
     {
@@ -911,128 +911,6 @@
         "type": "postgres",
         "uid": "soar-postgres"
       },
-      "description": "Data quality metrics over the last 30 days",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Avg Fixes Per Flight"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "max",
-                "value": null
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 39
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "min",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "soar-postgres"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  metric_date as time,\n  quality_score as \"Quality Score\",\n  avg_fixes_per_flight as \"Avg Fixes Per Flight\"\nFROM data_quality_metrics_daily\nWHERE metric_date >= CURRENT_DATE - 30\nORDER BY metric_date ASC",
-          "refId": "A",
-          "sql": {
-            "columns": [],
-            "groupBy": [],
-            "limit": 50
-          }
-        }
-      ],
-      "title": "Data Quality Metrics (Last 30 Days)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "soar-postgres"
-      },
       "description": "Cross-country flights vs regular flights over the last 30 days",
       "fieldConfig": {
         "defaults": {
@@ -1207,37 +1085,7 @@
     "flights"
   ],
   "templating": {
-    "list": [
-      {
-        "current": {
-          "selected": true,
-          "text": "Production",
-          "value": "production"
-        },
-        "description": "Select environment (production or staging)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "Environment",
-        "multi": false,
-        "name": "environment",
-        "options": [
-          {
-            "selected": true,
-            "text": "Production",
-            "value": "production"
-          },
-          {
-            "selected": false,
-            "text": "Staging",
-            "value": "staging"
-          }
-        ],
-        "query": "production,staging",
-        "queryValue": "",
-        "skipUrlSync": false,
-        "type": "custom"
-      }
-    ]
+    "list": []
   },
   "time": {
     "from": "now-30d",

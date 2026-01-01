@@ -13,7 +13,7 @@ WorkingDirectory=/var/soar
 ExecStart=/usr/local/bin/soar sitemap
 
 # Environment variables
-EnvironmentFile=/etc/soar/env
+EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes

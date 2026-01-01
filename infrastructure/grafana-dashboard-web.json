@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -92,7 +92,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_uptime_seconds{component=\"web\",environment=\"$environment\"}",
@@ -107,7 +107,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -176,7 +176,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_is_up{component=\"web\",environment=\"$environment\"}",
@@ -191,7 +191,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -269,7 +269,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"web\",environment=\"$environment\"}",
@@ -297,7 +297,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -375,7 +375,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket{component=\"web\",environment=\"$environment\"}[5m])))",
@@ -390,7 +390,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -468,7 +468,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "sum by(endpoint) (rate(http_requests_total{component=\"web\",environment=\"$environment\"}[5m]))",
@@ -496,7 +496,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -551,7 +551,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "websocket_connections{component=\"web\",environment=\"$environment\"}",
@@ -566,7 +566,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -621,7 +621,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "websocket_active_subscriptions{component=\"web\",environment=\"$environment\"}",
@@ -636,7 +636,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -691,7 +691,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
           "expr": "websocket_queue_depth{component=\"web\",environment=\"$environment\"}",
@@ -706,7 +706,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -784,10 +784,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_messages_sent{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_messages_sent_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Messages Sent/sec",
           "range": true,
           "refId": "A"
@@ -795,10 +795,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_send_errors{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_send_errors_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Send Errors/sec",
           "range": true,
           "refId": "B"
@@ -806,10 +806,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_serialization_errors{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_serialization_errors_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Serialization Errors/sec",
           "range": true,
           "refId": "C"
@@ -821,7 +821,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -899,10 +899,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_aircraft_subscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_aircraft_subscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Device Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -910,10 +910,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_aircraft_unsubscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_aircraft_unsubscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Device Unsubscribes/sec",
           "range": true,
           "refId": "B"
@@ -925,7 +925,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "Prometheus"
+        "uid": "prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1003,10 +1003,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_subscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_area_subscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Area Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -1014,10 +1014,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "Prometheus"
+            "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_unsubscribes{component=\"web\",environment=\"$environment\"}[5m])",
+          "expr": "rate(websocket_area_unsubscribes_total{component=\"web\",environment=\"$environment\"}[5m])",
           "legendFormat": "Area Unsubscribes/sec",
           "range": true,
           "refId": "B"

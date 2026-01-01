@@ -267,8 +267,8 @@ pub async fn handle_pull_airspaces(
     )?;
 
     // Record metrics
-    metrics::counter!("airspace_sync.total_fetched").increment(total_fetched as u64);
-    metrics::counter!("airspace_sync.total_inserted").increment(total_inserted as u64);
+    metrics::counter!("airspace_sync.total_fetched_total").increment(total_fetched as u64);
+    metrics::counter!("airspace_sync.total_inserted_total").increment(total_inserted as u64);
     metrics::gauge!("airspace_sync.last_run_timestamp").set(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

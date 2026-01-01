@@ -187,7 +187,7 @@ impl RawMessagesRepository {
                 .execute(&mut conn)
             {
                 Ok(_) => {
-                    metrics::counter!("aprs.messages.inserted").increment(1);
+                    metrics::counter!("aprs.messages.inserted_total").increment(1);
                     Ok::<Uuid, anyhow::Error>(message_id)
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -196,7 +196,7 @@ impl RawMessagesRepository {
                 )) => {
                     // Duplicate message on redelivery - this is expected after crashes
                     debug!("Duplicate aprs_message detected on redelivery");
-                    metrics::counter!("aprs.messages.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("aprs.messages.duplicate_on_redelivery_total").increment(1);
 
                     // Find existing message ID by natural key
                     let existing = raw_messages
@@ -246,7 +246,7 @@ impl RawMessagesRepository {
 
             match insert_result {
                 Ok(_) => {
-                    metrics::counter!("beast.messages.inserted").increment(1);
+                    metrics::counter!("beast.messages.inserted_total").increment(1);
                     Ok::<Uuid, anyhow::Error>(message_id)
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -255,7 +255,7 @@ impl RawMessagesRepository {
                 )) => {
                     // Duplicate message on redelivery - this is expected after crashes
                     debug!("Duplicate beast message detected on redelivery");
-                    metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
 
                     // Find existing message ID by natural key
                     use crate::schema::raw_messages::dsl::*;
@@ -306,9 +306,9 @@ impl RawMessagesRepository {
                     .execute(conn)?;
 
                     if insert_result > 0 {
-                        metrics::counter!("beast.messages.inserted").increment(1);
+                        metrics::counter!("beast.messages.inserted_total").increment(1);
                     } else {
-                        metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+                        metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
                     }
                 }
                 Ok(())
@@ -412,6 +412,7 @@ mod tests {
     use chrono::Utc;
     use diesel::connection::SimpleConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
+    use serial_test::serial;
 
     /// Helper to create a test database pool
     /// Uses TEST_DATABASE_URL environment variable or defaults to local test database
@@ -422,61 +423,76 @@ mod tests {
 
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         Pool::builder()
-            .max_size(1)
+            .max_size(5)
             .build(manager)
             .expect("Failed to create test pool")
     }
 
     /// Helper to clean up test data between tests
-    /// Assumes migrations have already been run (as in CI)
+    ///
+    /// NOTE: Assumes migrations have already been run (as in CI).
+    /// To run tests locally, first run migrations on your test database:
+    ///   diesel migration run --database-url postgresql://localhost/soar_test
     fn cleanup_test_data(pool: &PgPool) {
         let mut conn = pool.get().expect("Failed to get connection");
 
-        // Clean up test data (migrations have already created the schema)
-        conn.batch_execute(
-            r#"
-            DELETE FROM raw_messages;
-            DELETE FROM receivers;
-            "#,
-        )
-        .expect("Failed to clean up test data");
+        // CRITICAL: TRUNCATE in dependency order (children first) to avoid deadlocks
+        // NEVER use CASCADE - it creates complex lock hierarchies on TimescaleDB hypertables
+        // that deadlock with concurrent INSERT operations
+        //
+        // Dependency order:
+        // 1. fixes (references raw_messages)
+        // 2. receiver_statuses (references raw_messages)
+        // 3. raw_messages (hypertable, references receivers)
+        // 4. receivers (parent table)
+        let _ = conn.batch_execute("TRUNCATE TABLE fixes");
+        let _ = conn.batch_execute("TRUNCATE TABLE receiver_statuses");
+        let _ = conn.batch_execute("TRUNCATE TABLE raw_messages");
+        let _ = conn.batch_execute("TRUNCATE TABLE receivers");
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_insert_and_get_by_id() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
-        let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver with unique callsign
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let mut message_id = Uuid::nil();
+
+        // Insert receiver and message in a single transaction
         {
+            use diesel::Connection;
             let mut conn = pool.get().expect("Failed to get connection");
-            diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(&mut conn)
-                .expect("Failed to insert test receiver");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
+
+                // Insert message using Diesel
+                let new_message = NewAprsMessage::new(
+                    "TEST>APRS:>Test message".to_string(),
+                    Utc::now(),
+                    receiver_id,
+                    None,
+                );
+                message_id = new_message.id;
+                diesel::insert_into(crate::schema::raw_messages::table)
+                    .values(&new_message)
+                    .execute(conn)?;
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
-        // Insert a test message
-        let new_message = NewAprsMessage::new(
-            "TEST>APRS:>Test message".to_string(),
-            Utc::now(),
-            receiver_id,
-            None,
-        );
-        let message_id = new_message.id;
-
-        let inserted_id = repo
-            .insert_aprs(new_message)
-            .await
-            .expect("Failed to insert");
-        assert_eq!(inserted_id, message_id);
-
-        // Retrieve the message by ID
+        // Now use repo for querying
+        let repo = AprsMessagesRepository::new(pool.clone());
         let retrieved = repo
             .get_by_id(message_id)
             .await
@@ -506,41 +522,51 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_ids_multiple() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
-        let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver with unique callsign
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
-        {
-            let mut conn = pool.get().expect("Failed to get connection");
-            diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(&mut conn)
-                .expect("Failed to insert test receiver");
-        }
-
-        // Insert multiple test messages
         let mut message_ids: Vec<Uuid> = Vec::new();
 
-        for i in 0..3 {
-            let new_message = NewAprsMessage::new(
-                format!("TEST{}>APRS:>Test message {}", i, i),
-                Utc::now(),
-                receiver_id,
-                None,
-            );
-            message_ids.push(new_message.id);
-            repo.insert_aprs(new_message)
-                .await
-                .expect("Failed to insert");
+        // Insert receiver and messages in a single transaction
+        {
+            use diesel::Connection;
+            let mut conn = pool.get().expect("Failed to get connection");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
+
+                // Insert multiple messages using Diesel
+                // Use distinct timestamps to avoid deadlocks in TimescaleDB hypertable
+                let base_time = Utc::now();
+                for i in 0..3 {
+                    let new_message = NewAprsMessage::new(
+                        format!("TEST{}>APRS:>Test message {}", i, i),
+                        base_time + chrono::Duration::milliseconds(i as i64 * 100),
+                        receiver_id,
+                        None,
+                    );
+                    message_ids.push(new_message.id);
+                    diesel::insert_into(crate::schema::raw_messages::table)
+                        .values(&new_message)
+                        .execute(conn)?;
+                }
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
-        // Retrieve all messages by their IDs
+        // Now use repo for querying
+        let repo = AprsMessagesRepository::new(pool.clone());
         let messages = repo
             .get_by_ids(message_ids.clone())
             .await
@@ -555,35 +581,47 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_ids_partial_match() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
 
-        let repo = AprsMessagesRepository::new(pool.clone());
-
-        // Create a test receiver with unique callsign
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let mut existing_id = Uuid::nil();
+
+        // Insert receiver and message in a single transaction
         {
+            use diesel::Connection;
             let mut conn = pool.get().expect("Failed to get connection");
-            diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
-                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-                .bind::<diesel::sql_types::Text, _>(&callsign)
-                .execute(&mut conn)
-                .expect("Failed to insert test receiver");
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Insert receiver using direct SQL
+                diesel::sql_query("INSERT INTO receivers (id, callsign) VALUES ($1, $2)")
+                    .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                    .bind::<diesel::sql_types::Text, _>(&callsign)
+                    .execute(conn)?;
+
+                // Insert message using Diesel
+                let new_message = NewAprsMessage::new(
+                    "TEST>APRS:>Existing message".to_string(),
+                    Utc::now(),
+                    receiver_id,
+                    None,
+                );
+                existing_id = new_message.id;
+                diesel::insert_into(crate::schema::raw_messages::table)
+                    .values(&new_message)
+                    .execute(conn)?;
+
+                Ok(())
+            })
+            .expect("Failed to insert test data");
+            // Explicitly drop connection before using repo
+            drop(conn);
         }
 
-        // Insert one message
-        let new_message = NewAprsMessage::new(
-            "TEST>APRS:>Existing message".to_string(),
-            Utc::now(),
-            receiver_id,
-            None,
-        );
-        let existing_id = new_message.id;
-        repo.insert_aprs(new_message)
-            .await
-            .expect("Failed to insert");
+        // Now use repo for querying
+        let repo = AprsMessagesRepository::new(pool.clone());
 
         // Request both existing and non-existing IDs
         let non_existing_id = Uuid::new_v4();

@@ -1,17 +1,15 @@
 <script lang="ts">
 	import { Plane, ExternalLink } from '@lucide/svelte';
 	import { getAircraftTitle } from '$lib/formatters';
-	import type { Aircraft, Flight } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 
 	let {
 		aircraft,
-		aircraftId,
 		size = 'md',
 		openInNewTab = false,
 		showIcon = false
 	}: {
-		aircraft?: Aircraft | Flight;
-		aircraftId?: string;
+		aircraft: Aircraft;
 		size?: 'sm' | 'md' | 'lg';
 		openInNewTab?: boolean;
 		showIcon?: boolean;
@@ -38,47 +36,14 @@
 		lg: 'h-4'
 	};
 
-	// Helper to format device address for Flight objects
-	function formatDeviceAddress(address: string, addressType?: string): string {
-		if (!addressType) return address;
-		const typePrefix = addressType === 'Flarm' ? 'FLARM' : addressType === 'Ogn' ? 'OGN' : 'ICAO';
-		return `${typePrefix}-${address}`;
-	}
-
 	// Get aircraft ID and title
-	const id = $derived(
-		aircraftId ||
-			('aircraft_id' in (aircraft || {}) ? (aircraft as Flight)?.aircraft_id : aircraft!.id) ||
-			''
-	);
+	const id = $derived(aircraft.id);
+	const title = $derived(() => getAircraftTitle(aircraft));
 
-	const title = $derived(() => {
-		if (!aircraft) return '';
-
-		// Check if this is a Flight object (has aircraft_id instead of id)
-		if ('aircraft_id' in aircraft) {
-			const flight = aircraft as Flight;
-			return getAircraftTitle({
-				registration: flight.registration,
-				aircraft_model: flight.aircraft_model,
-				competition_number: null,
-				device_address: formatDeviceAddress(flight.device_address, flight.device_address_type)
-			});
-		}
-
-		// It's an Aircraft object
-		return getAircraftTitle(aircraft as Aircraft);
-	});
-
-	// Get country code (only available on Aircraft objects, not Flight)
+	// Get country code
 	const countryCode = $derived(() => {
-		if (!aircraft) return null;
-		// Only Aircraft objects have country_code
-		if ('country_code' in aircraft) {
-			const code = (aircraft as Aircraft).country_code;
-			return code && code.trim() !== '' ? code.toUpperCase() : null;
-		}
-		return null;
+		const code = aircraft.countryCode;
+		return code && code.trim() !== '' ? code.toUpperCase() : null;
 	});
 
 	// Flag SVG URL from local flags directory

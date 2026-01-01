@@ -1,9 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-	// Global setup to seed test database before running tests
-	globalSetup: process.env.CI ? undefined : './playwright.global-setup.ts',
-
 	// Test directory
 	testDir: 'e2e',
 
@@ -14,16 +11,16 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0, // Disabled retries for faster feedback
-	// Allow parallel execution in CI - use PLAYWRIGHT_WORKERS env var to override
-	workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : undefined,
+	workers: process.env.CI ? 4 : undefined, // Limit workers in CI to prevent resource exhaustion
 
 	// Reporter configuration
 	reporter: [['html'], ['list'], ...(process.env.CI ? [['github' as const]] : [])],
 
 	// Shared settings for all projects
 	use: {
-		// Base URL for navigation
-		// Use PLAYWRIGHT_BASE_URL environment variable in CI/Docker, otherwise default to localhost
+		// Base URL points to shared preview server
+		// In CI: Started by CI workflow on port 4173
+		// Locally: Start with `npm run preview` before running tests
 		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
 
 		// Ignore HTTPS errors for test environments
@@ -46,6 +43,7 @@ export default defineConfig({
 			use: {
 				...devices['Desktop Chrome'],
 				// Disable security features that can interfere with Docker/testing
+				// Enable SwiftShader for software WebGL rendering (required for Cesium)
 				launchOptions: {
 					args: [
 						'--no-sandbox',
@@ -53,7 +51,9 @@ export default defineConfig({
 						'--disable-dev-shm-usage',
 						'--disable-web-security',
 						'--disable-features=IsolateOrigins,site-per-process',
-						'--disable-blink-features=AutomationControlled'
+						'--disable-blink-features=AutomationControlled',
+						'--use-gl=swiftshader', // Enable software WebGL for Cesium 3D globe
+						'--disable-accelerated-2d-canvas'
 					]
 				}
 			}
@@ -71,40 +71,9 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	// In CI, servers are started manually in the workflow
-	// In local development, Playwright starts them automatically
-	webServer: process.env.CI
-		? undefined
-		: {
-				// Start soar web server with embedded assets and test database
-				// This matches production architecture: single process serving both API and assets
-				command: '../target/release/soar web --port 4173 --interface localhost',
-				port: 4173,
-				timeout: 120000, // 2 minutes for server startup
-				reuseExistingServer: true, // Can reuse since globalSetup seeds database first
-				env: {
-					// Test database
-					DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
-					// JWT secret for tests
-					JWT_SECRET: 'test_jwt_secret_key_for_e2e_tests_only',
-					// NATS (use test instance or disable if not needed)
-					NATS_URL: 'nats://localhost:4222',
-					// Environment
-					SOAR_ENV: 'test',
-					// Disable Sentry in tests
-					SENTRY_DSN: '',
-					// SMTP configuration - for local testing, run:
-					//   docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.20
-					// Or use ./scripts/run-acceptance-tests which handles this automatically
-					SMTP_SERVER: 'localhost',
-					SMTP_PORT: '1025',
-					SMTP_USERNAME: 'test',
-					SMTP_PASSWORD: 'test',
-					FROM_EMAIL: 'test@soar.local',
-					FROM_NAME: 'SOAR Test',
-					BASE_URL: 'http://localhost:4173'
-				}
-			},
+	// NOTE: Web server is started externally (by CI workflow or manually with `npm run preview`)
+	// All test workers share the same server and database
+	// Tests ensure data isolation through unique identifiers (timestamps, UUIDs)
 
 	// Screenshot comparison settings
 	expect: {

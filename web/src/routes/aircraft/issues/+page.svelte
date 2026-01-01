@@ -6,11 +6,12 @@
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	interface AircraftIssuesResponse {
-		duplicateDeviceAddresses: Aircraft[];
-		totalCount: number;
-		page: number;
-		perPage: number;
-		totalPages: number;
+		data: Aircraft[];
+		metadata: {
+			page: number;
+			totalPages: number;
+			totalCount: number;
+		};
 	}
 
 	let duplicateDevices = $state<Aircraft[]>([]);
@@ -30,11 +31,10 @@
 				method: 'GET',
 				params: { page, perPage }
 			});
-			duplicateDevices = response.duplicateDeviceAddresses || [];
-			currentPage = response.page;
-			totalPages = response.totalPages;
-			totalCount = response.totalCount;
-			perPage = response.perPage;
+			duplicateDevices = response.data || [];
+			currentPage = response.metadata.page;
+			totalPages = response.metadata.totalPages;
+			totalCount = response.metadata.totalCount;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load aircraft issues: ${errorMessage}`;
@@ -54,11 +54,6 @@
 	onMount(() => {
 		loadIssues();
 	});
-
-	function formatAddress(address: string): string {
-		// Address is already in hex format, just ensure it's uppercase and padded
-		return address.toUpperCase().padStart(6, '0');
-	}
 
 	function formatDate(dateStr: string | null | undefined): string {
 		if (!dateStr) return '-';
@@ -139,8 +134,8 @@
 						<tbody>
 							{#each duplicateDevices as device (device.id || device.address)}
 								<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
-									<td class="p-3 font-mono font-semibold">{formatAddress(device.address)}</td>
-									<td class="p-3">{device.address_type}</td>
+									<td class="p-3 font-mono font-semibold">{device.address}</td>
+									<td class="p-3">{device.addressType}</td>
 									<td class="p-3">
 										{#if device.id}
 											<AircraftLink aircraft={device} size="sm" />
@@ -148,10 +143,10 @@
 											{device.registration}
 										{/if}
 									</td>
-									<td class="p-3">{device.aircraft_model || '-'}</td>
-									<td class="p-3">{device.from_ddb ? 'Yes' : 'No'}</td>
+									<td class="p-3">{device.aircraftModel || '-'}</td>
+									<td class="p-3">{device.fromOgnDdb ? 'Yes' : 'No'}</td>
 									<td class="p-3">{device.tracked ? 'Yes' : 'No'}</td>
-									<td class="p-3">{formatDate(device.last_fix_at)}</td>
+									<td class="p-3">{formatDate(device.lastFixAt)}</td>
 								</tr>
 							{/each}
 						</tbody>

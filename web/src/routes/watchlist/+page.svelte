@@ -93,13 +93,13 @@
 		{:else}
 			<!-- Watchlist Grid -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each $watchlist.entries as entry (entry.aircraft_id)}
+				{#each $watchlist.entries as entry (entry.aircraftId)}
 					<div class="card p-4">
 						<!-- Aircraft Info -->
 						<div class="mb-3">
 							{#if entry.aircraft}
 								<a
-									href="/aircraft/{entry.aircraft_id}"
+									href="/aircraft/{entry.aircraftId}"
 									class="font-semibold text-primary-500 hover:underline"
 								>
 									{entry.aircraft.registration || entry.aircraft.address}
@@ -110,19 +110,19 @@
 									</p>
 								{/if}
 							{:else}
-								<p class="font-semibold">{entry.aircraft_id}</p>
+								<p class="font-semibold">{entry.aircraftId}</p>
 							{/if}
 						</div>
 
 						<!-- Email Toggle -->
 						<div class="mb-3">
 							<button
-								onclick={() => toggleEmailNotification(entry.aircraft_id, entry.send_email)}
-								class="btn w-full btn-sm {entry.send_email
+								onclick={() => toggleEmailNotification(entry.aircraftId, entry.sendEmail)}
+								class="btn w-full btn-sm {entry.sendEmail
 									? 'preset-filled-success-500'
 									: 'preset-ghost-surface'}"
 							>
-								{#if entry.send_email}
+								{#if entry.sendEmail}
 									<Bell class="h-4 w-4" />
 									Email notifications on
 								{:else}
@@ -134,7 +134,7 @@
 
 						<!-- Remove Button -->
 						<button
-							onclick={() => removeAircraft(entry.aircraft_id)}
+							onclick={() => removeAircraft(entry.aircraftId)}
 							class="preset-ghost-error-500 btn w-full btn-sm"
 						>
 							<Trash2 class="h-4 w-4" />
@@ -143,7 +143,7 @@
 
 						<!-- Added Date -->
 						<p class="text-surface-600-300-token mt-2 text-xs">
-							Added {new Date(entry.created_at).toLocaleDateString()}
+							Added {new Date(entry.createdAt).toLocaleDateString()}
 						</p>
 					</div>
 				{/each}

@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix } from '$lib/types';
+import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -26,7 +26,6 @@ export class AircraftRegistry {
 	private static instance: AircraftRegistry | null = null;
 	private aircraft = new Map<string, AircraftWithFixesCache>();
 	private subscribers = new Set<AircraftRegistrySubscriber>();
-	private readonly storageKeyPrefix = 'aircraft.';
 	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private readonly aircraftCacheExpiration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private refreshIntervalId: number | null = null;
@@ -114,20 +113,13 @@ export class AircraftRegistry {
 		});
 	}
 
-	// Get an aircraft by ID, loading from localStorage if needed
+	// Get an aircraft by ID from memory cache
 	public getAircraft(aircraftId: string): Aircraft | null {
-		// Check in-memory cache first
+		// Check in-memory cache
 		if (this.aircraft.has(aircraftId)) {
 			const cached = this.aircraft.get(aircraftId)!;
 			// Return aircraft with current fixes
 			return { ...cached.aircraft, fixes: cached.fixes };
-		}
-
-		// Try to load from localStorage
-		const stored = this.loadAircraftFromStorage(aircraftId);
-		if (stored) {
-			this.aircraft.set(aircraftId, stored);
-			return { ...stored.aircraft, fixes: stored.fixes };
 		}
 
 		return null;
@@ -149,12 +141,41 @@ export class AircraftRegistry {
 
 	// Add or update an aircraft
 	public setAircraft(aircraft: Aircraft): void {
+		// Validate that aircraft has a valid ID
+		if (!aircraft.id) {
+			console.warn('Attempted to set aircraft with undefined ID, skipping:', aircraft);
+			return;
+		}
+
 		// Get existing fixes if any, or use the ones from the aircraft, or empty array
-		const existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+		let existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+
+		// If this is a new aircraft with a currentFix but no fixes array, use currentFix as the initial fix
+		if (
+			!this.aircraft.has(aircraft.id) &&
+			aircraft.currentFix &&
+			(!aircraft.fixes || aircraft.fixes.length === 0)
+		) {
+			try {
+				// currentFix is already a Fix object (or should be)
+				const fix = aircraft.currentFix as Fix;
+				existingFixes = [fix];
+				console.log('[REGISTRY] Initialized aircraft with currentFix:', {
+					aircraftId: aircraft.id,
+					fixTimestamp: fix.timestamp
+				});
+			} catch (error) {
+				console.warn('[REGISTRY] Failed to parse currentFix:', error);
+			}
+		}
+
+		// Strip out currentFix after we've used it - fixes array is the source of truth
+		const aircraftToStore = { ...aircraft };
+		delete aircraftToStore.currentFix;
+
 		const cached_at = Date.now();
 
-		this.aircraft.set(aircraft.id, { aircraft, fixes: existingFixes, cached_at });
-		this.saveAircraftToStorage({ aircraft, fixes: existingFixes, cached_at });
+		this.aircraft.set(aircraft.id, { aircraft: aircraftToStore, fixes: existingFixes, cached_at });
 
 		// Notify subscribers
 		this.notifySubscribers({
@@ -185,8 +206,13 @@ export class AircraftRegistry {
 		// Add fix to the beginning (most recent first)
 		cached.fixes.unshift(fix);
 
-		// Clean up old fixes
+		// Clean up old fixes (by age)
 		cached.fixes = this.cleanupOldFixes(cached.fixes);
+
+		// Limit to most recent 100 fixes
+		if (cached.fixes.length > 100) {
+			cached.fixes = cached.fixes.slice(0, 100);
+		}
 
 		// Update the map
 		this.aircraft.set(aircraftId, cached);
@@ -195,13 +221,13 @@ export class AircraftRegistry {
 	// Create or update aircraft from backend API data
 	public async updateAircraftFromAPI(aircraftId: string): Promise<Aircraft | null> {
 		try {
-			const apiAircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
-			if (!apiAircraft) return null;
+			const response = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
+			if (!response || !response.data) return null;
 
-			this.setAircraft(apiAircraft);
+			this.setAircraft(response.data);
 			return this.getAircraft(aircraftId);
 		} catch (error) {
-			console.warn(`Failed to fetch aircraft ${aircraftId} from API:`, error);
+			console.warn('Failed to fetch aircraft from API:', aircraftId, error);
 			return null;
 		}
 	}
@@ -209,25 +235,11 @@ export class AircraftRegistry {
 	// Update aircraft from Aircraft data (from WebSocket or bbox search)
 	public async updateAircraftFromAircraftData(aircraft: Aircraft): Promise<Aircraft | null> {
 		try {
-			// Check if this is a new aircraft (not already in cache)
-			const isNewAircraft = !this.aircraft.has(aircraft.id);
-
 			// The aircraft is already in the correct format
 			this.setAircraft(aircraft);
 
-			// If this is a new aircraft, automatically load 8 hours of historical fixes
-			if (isNewAircraft) {
-				console.log(
-					`[REGISTRY] New aircraft encountered: ${aircraft.id}, loading 8 hours of fixes`
-				);
-				// Don't await - load in background to avoid blocking
-				this.loadRecentFixesFromAPI(aircraft.id, 8).catch((error) => {
-					console.warn(
-						`[REGISTRY] Failed to load historical fixes for new aircraft ${aircraft.id}:`,
-						error
-					);
-				});
-			}
+			// Don't automatically load fixes - they will come from WebSocket
+			// This reduces initial page load time and database load
 
 			return this.getAircraft(aircraft.id);
 		} catch (error) {
@@ -242,15 +254,15 @@ export class AircraftRegistry {
 		allowApiFallback: boolean = true
 	): Promise<Aircraft | null> {
 		console.log('[REGISTRY] Adding fix to aircraft:', {
-			aircraftId: fix.aircraft_id,
-			deviceAddressHex: fix.device_address_hex,
+			aircraftId: fix.aircraftId,
+			deviceAddressHex: fix.deviceAddressHex,
 			timestamp: fix.timestamp,
 			position: { lat: fix.latitude, lng: fix.longitude }
 		});
 
-		const aircraftId = fix.aircraft_id;
+		const aircraftId = fix.aircraftId;
 		if (!aircraftId) {
-			console.warn('[REGISTRY] No aircraft_id in fix, cannot add');
+			console.warn('[REGISTRY] No aircraftId in fix, cannot add');
 			return null;
 		}
 
@@ -284,18 +296,18 @@ export class AircraftRegistry {
 				console.log('[REGISTRY] Creating minimal aircraft for fix:', aircraftId);
 				aircraft = {
 					id: aircraftId,
-					device_address: fix.device_address_hex || '',
-					address_type: '',
-					address: fix.device_address_hex || '',
-					aircraft_model: fix.model || '',
-					registration: fix.registration || '',
-					competition_number: '',
+					addressType: '',
+					address: fix.deviceAddressHex || '',
+					aircraftModel: fix.model || '',
+					registration: fix.registration || null,
+					competitionNumber: '',
 					tracked: false,
 					identified: false,
-					club_id: null,
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
-					from_ddb: false,
+					clubId: null,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					fromOgnDdb: false,
+					fromAdsbxDdb: false,
 					fixes: []
 				};
 			}
@@ -368,12 +380,12 @@ export class AircraftRegistry {
 		}
 		this.pendingEvents = [];
 
-		// Clear localStorage
+		// Clean up any old localStorage entries from previous versions
 		if (browser) {
 			const keys = [];
 			for (let i = 0; i < localStorage.length; i++) {
 				const key = localStorage.key(i);
-				if (key && key.startsWith(this.storageKeyPrefix)) {
+				if (key && key.startsWith('aircraft.')) {
 					keys.push(key);
 				}
 			}
@@ -384,47 +396,6 @@ export class AircraftRegistry {
 			type: 'aircraft_changed',
 			aircraft: []
 		});
-	}
-
-	// Private methods for localStorage management
-	private saveAircraftToStorage(cached: AircraftWithFixesCache): void {
-		if (!browser) return;
-
-		try {
-			const key = this.storageKeyPrefix + cached.aircraft.id;
-			// Strip fixes entirely before saving to localStorage - they should never be cached
-			const cacheWithoutFixes = {
-				aircraft: cached.aircraft,
-				cached_at: cached.cached_at
-			};
-			localStorage.setItem(key, JSON.stringify(cacheWithoutFixes));
-		} catch (error) {
-			console.warn('Failed to save aircraft to localStorage:', error);
-		}
-	}
-
-	private loadAircraftFromStorage(aircraftId: string): AircraftWithFixesCache | null {
-		if (!browser) return null;
-
-		const key = this.storageKeyPrefix + aircraftId;
-		const stored = localStorage.getItem(key);
-
-		if (stored) {
-			try {
-				const data = JSON.parse(stored) as AircraftWithFixesCache;
-				// Handle backward compatibility: if cached_at is missing, set it to 0 (will be refreshed)
-				if (!data.cached_at) {
-					data.cached_at = 0;
-				}
-				return data;
-			} catch (e) {
-				console.warn(`Failed to parse stored aircraft ${aircraftId}:`, e);
-				// Remove corrupted data
-				localStorage.removeItem(key);
-			}
-		}
-
-		return null;
 	}
 
 	// Check if an aircraft cache entry is stale
@@ -471,7 +442,6 @@ export class AircraftRegistry {
 	// Start periodic refresh of stale aircraft
 	private startPeriodicRefresh(): void {
 		// Initial refresh on load
-		this.loadAllAircraftFromStorage();
 		void this.refreshStaleAircraft();
 
 		// Set up periodic refresh every hour
@@ -491,28 +461,6 @@ export class AircraftRegistry {
 		}
 	}
 
-	// Load all aircraft from localStorage into memory
-	private loadAllAircraftFromStorage(): void {
-		if (!browser) return;
-
-		console.log('[REGISTRY] Loading aircraft from localStorage');
-		let count = 0;
-
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key && key.startsWith(this.storageKeyPrefix)) {
-				const aircraftId = key.substring(this.storageKeyPrefix.length);
-				const cached = this.loadAircraftFromStorage(aircraftId);
-				if (cached) {
-					this.aircraft.set(aircraftId, cached);
-					count++;
-				}
-			}
-		}
-
-		console.log(`[REGISTRY] Loaded ${count} aircraft from localStorage`);
-	}
-
 	// Batch load recent fixes for an aircraft from API
 	// Fetches fixes from the last 8 hours by default
 	public async loadRecentFixesFromAPI(aircraftId: string, hoursBack: number = 8): Promise<Fix[]> {
@@ -520,15 +468,15 @@ export class AircraftRegistry {
 			// Calculate timestamp for N hours ago in ISO 8601 UTC format
 			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
 
-			const response = await serverCall<{ fixes: Fix[] }>(`/aircraft/${aircraftId}/fixes`, {
-				params: { after, per_page: 1000 }
+			const response = await serverCall<DataListResponse<Fix>>(`/aircraft/${aircraftId}/fixes`, {
+				params: { after }
 			});
-			if (response.fixes) {
+			if (response.data) {
 				// Add fixes to aircraft
-				for (const fix of response.fixes) {
+				for (const fix of response.data) {
 					await this.addFixToAircraft(fix, false);
 				}
-				return response.fixes;
+				return response.data;
 			}
 			return [];
 		} catch (error) {

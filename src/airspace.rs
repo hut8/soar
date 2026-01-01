@@ -202,6 +202,7 @@ pub struct AirspaceGeoJson {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AirspaceProperties {
     pub id: Uuid,
     pub openaip_id: String,

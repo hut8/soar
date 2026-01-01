@@ -1,13 +1,13 @@
-mod aprs_messages;
 mod archiver;
 mod fixes;
 mod flights;
+mod raw_messages;
 mod receiver_statuses;
 
 use anyhow::{Context, Result};
-use aprs_messages::AprsMessageCsv;
 use archiver::{Archivable, PgPool, archive, collect_daily_counts_grouped, resurrect};
 use chrono::{NaiveDate, TimeZone, Utc};
+use raw_messages::RawMessageCsv;
 use soar::fixes::Fix;
 use soar::flights::FlightModel;
 use soar::receiver_statuses::ReceiverStatus;
@@ -17,13 +17,13 @@ use tracing::info;
 
 /// Handle the archive command
 /// Archives data in the correct order to respect foreign key constraints with ON DELETE RESTRICT:
-/// 1. Fixes (children first - they reference flights and aprs_messages)
-/// 2. ReceiverStatuses (children - they reference aprs_messages)
+/// 1. Fixes (children first - they reference flights and raw_messages)
+/// 2. ReceiverStatuses (children - they reference raw_messages)
 /// 3. Flights (parents - after fixes are deleted, clear self-references via towed_by_flight_id)
-/// 4. AprsMessages (parents last - nothing references them anymore)
+/// 4. RawMessages (parents last - nothing references them anymore)
 ///
 /// All tables archive data from the same date (before_date).
-/// Defaults to 21 days ago if no before date is specified.
+/// Defaults to 45 days ago if no before date is specified.
 pub async fn handle_archive(
     pool: PgPool,
     before: Option<String>,
@@ -44,8 +44,8 @@ pub async fn handle_archive(
             before_str
         ))?
     } else {
-        // Default to 21 days ago
-        Utc::now().date_naive() - chrono::Duration::days(21)
+        // Default to 45 days ago
+        Utc::now().date_naive() - chrono::Duration::days(45)
     };
 
     // Get today's date (UTC)
@@ -74,19 +74,19 @@ pub async fn handle_archive(
     // Archive sequentially in dependency order to respect ON DELETE RESTRICT constraints
     // All tables use the same before_date (simplified from staggered dates)
     info!(
-        "Starting sequential archive: fixes -> receiver_statuses -> flights -> aprs_messages (all before {})",
+        "Starting sequential archive: fixes -> receiver_statuses -> flights -> raw_messages (all before {})",
         before_date
     );
 
     let archive_dir_path = archive_dir.to_path_buf();
 
-    // Step 1: Archive fixes first (they reference flights and aprs_messages)
+    // Step 1: Archive fixes first (they reference flights and raw_messages)
     info!("=== Step 1/4: Archiving fixes ===");
     let start = Instant::now();
     let fixes_metrics = archive::<Fix>(&pool, before_date, &archive_dir_path).await?;
     let fixes_duration = start.elapsed().as_secs_f64();
 
-    // Step 2: Archive receiver_statuses (they reference aprs_messages)
+    // Step 2: Archive receiver_statuses (they reference raw_messages)
     info!("=== Step 2/4: Archiving receiver_statuses ===");
     let start = Instant::now();
     let receiver_statuses_metrics =
@@ -125,12 +125,12 @@ pub async fn handle_archive(
     let flights_metrics = archive::<FlightModel>(&pool, before_date, &archive_dir_path).await?;
     let flights_duration = start.elapsed().as_secs_f64();
 
-    // Step 4: Archive aprs_messages last (nothing references them anymore)
-    info!("=== Step 4/4: Archiving aprs_messages ===");
+    // Step 4: Archive raw_messages last (nothing references them anymore)
+    info!("=== Step 4/4: Archiving raw_messages ===");
     let start = Instant::now();
-    let aprs_messages_metrics =
-        archive::<AprsMessageCsv>(&pool, before_date, &archive_dir_path).await?;
-    let aprs_messages_duration = start.elapsed().as_secs_f64();
+    let raw_messages_metrics =
+        archive::<RawMessageCsv>(&pool, before_date, &archive_dir_path).await?;
+    let raw_messages_duration = start.elapsed().as_secs_f64();
 
     info!("Sequential archival completed, collecting metadata...");
 
@@ -202,26 +202,26 @@ pub async fn handle_archive(
         oldest_remaining: receiver_statuses_oldest,
     });
 
-    // Collect metadata for aprs_messages
-    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool, far_future).await?;
-    let aprs_messages_file_size = aprs_messages_metrics
+    // Collect metadata for raw_messages
+    let raw_messages_oldest = RawMessageCsv::get_oldest_date(&pool, far_future).await?;
+    let raw_messages_file_size = raw_messages_metrics
         .archive_files
         .iter()
         .map(|f| f.size_bytes)
         .sum();
-    let aprs_messages_file_path = aprs_messages_metrics
+    let raw_messages_file_path = raw_messages_metrics
         .archive_files
         .first()
         .map(|f| f.path.clone())
         .unwrap_or_else(|| "N/A".to_string());
 
     report.add_table(TableArchiveMetrics {
-        table_name: "aprs_messages".to_string(),
-        rows_deleted: aprs_messages_metrics.total_rows_deleted,
-        file_path: aprs_messages_file_path,
-        file_size_bytes: aprs_messages_file_size,
-        duration_secs: aprs_messages_duration,
-        oldest_remaining: aprs_messages_oldest,
+        table_name: "raw_messages".to_string(),
+        rows_deleted: raw_messages_metrics.total_rows_deleted,
+        file_path: raw_messages_file_path,
+        file_size_bytes: raw_messages_file_size,
+        duration_secs: raw_messages_duration,
+        oldest_remaining: raw_messages_oldest,
     });
 
     report.total_duration_secs = total_start.elapsed().as_secs_f64();
@@ -242,7 +242,7 @@ pub async fn handle_archive(
         flights_counts_result,
         fixes_counts_result,
         receiver_statuses_counts_result,
-        aprs_messages_counts_result,
+        raw_messages_counts_result,
     ) = tokio::join!(
         collect_daily_counts_grouped::<FlightModel>(
             &pool_clone1,
@@ -257,7 +257,7 @@ pub async fn handle_archive(
             today,
             before_date
         ),
-        collect_daily_counts_grouped::<AprsMessageCsv>(
+        collect_daily_counts_grouped::<RawMessageCsv>(
             &pool_clone4,
             analytics_start_date,
             today,
@@ -271,7 +271,30 @@ pub async fn handle_archive(
         "receiver_statuses".to_string(),
         receiver_statuses_counts_result?,
     );
-    report.add_daily_counts("aprs_messages".to_string(), aprs_messages_counts_result?);
+    report.add_daily_counts("raw_messages".to_string(), raw_messages_counts_result?);
+
+    // Count unreferenced locations created in the last 7 days
+    info!("Counting unreferenced locations from last 7 days...");
+    let seven_days_ago = today - chrono::Duration::days(7);
+    let locations_repo = soar::locations_repo::LocationsRepository::new(pool.clone());
+    match locations_repo
+        .count_unreferenced_locations_in_range(seven_days_ago, today)
+        .await
+    {
+        Ok(count) => {
+            info!(
+                "Found {} unreferenced locations created in last 7 days",
+                count
+            );
+            report.unreferenced_locations_7d = Some(count);
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to count unreferenced locations for email report: {}",
+                e
+            );
+        }
+    }
 
     info!("Archive process completed successfully");
 
@@ -298,7 +321,7 @@ pub async fn handle_archive(
 /// Resurrects (restores) archived data from compressed CSV files back into the database
 /// Restores data in the reverse order of archival to respect foreign key constraints:
 /// 1. AprsMessages (must be restored first)
-/// 2. Fixes and ReceiverStatuses (depend on aprs_messages)
+/// 2. Fixes and ReceiverStatuses (depend on raw_messages)
 /// 3. Flights (depend on fixes)
 pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) -> Result<()> {
     // Parse the date
@@ -320,15 +343,15 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
 
     // Resurrect in reverse order to respect foreign key constraints
     // AprsMessages first
-    info!("=== Resurrecting aprs_messages ===");
-    let aprs_messages_file = archive_dir.join(format!("{}-aprs_messages.csv.zst", date_str));
-    if aprs_messages_file.exists() {
-        resurrect::<AprsMessageCsv>(&pool, &aprs_messages_file).await?;
+    info!("=== Resurrecting raw_messages ===");
+    let raw_messages_file = archive_dir.join(format!("{}-raw_messages.csv.zst", date_str));
+    if raw_messages_file.exists() {
+        resurrect::<RawMessageCsv>(&pool, &raw_messages_file).await?;
     } else {
         info!(
-            "No aprs_messages archive found for {} (expected: {})",
+            "No raw_messages archive found for {} (expected: {})",
             date,
-            aprs_messages_file.display()
+            raw_messages_file.display()
         );
     }
 

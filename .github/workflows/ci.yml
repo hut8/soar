@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, develop ]
@@ -22,12 +25,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -46,7 +49,7 @@ jobs:
         run: npm run build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: web-build
           path: web/build/
@@ -62,16 +65,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Build custom PostgreSQL image with pg_partman
+      - name: Build custom PostgreSQL image with TimescaleDB
         working-directory: .
         run: |
-          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+          docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
 
-      - name: Start PostgreSQL service with pg_partman
+      - name: Start PostgreSQL service with TimescaleDB
         working-directory: .
         run: |
           docker run -d \
@@ -84,7 +87,7 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            postgis-partman:test
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         working-directory: .
@@ -106,7 +109,7 @@ jobs:
           timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -116,7 +119,7 @@ jobs:
         run: npm ci
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -148,7 +151,7 @@ jobs:
 
       - name: Cache Diesel CLI
         id: cache-diesel
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/diesel
           key: ${{ runner.os }}-diesel-cli-2.2.0
@@ -169,7 +172,7 @@ jobs:
           # Create PostGIS extension
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
-          # Run migrations
+          # Run migrations (includes h3 extension setup)
           diesel migration run
 
           # Build the project to get the seed-test-data command
@@ -267,7 +270,7 @@ jobs:
 
       - name: Upload E2E test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-test-artifacts
           path: |
@@ -283,15 +286,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Build custom PostgreSQL image with pg_partman
+      - name: Build custom PostgreSQL image with TimescaleDB
         run: |
-          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+          docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
 
-      - name: Start PostgreSQL service with pg_partman
+      - name: Start PostgreSQL service with TimescaleDB
         run: |
           docker run -d \
             --name postgres \
@@ -303,14 +306,14 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            postgis-partman:test
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         run: |
           timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -352,12 +355,14 @@ jobs:
           # Create PostGIS extension (already available in postgis/postgis image)
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
+          # H3 extensions will be created by migrations
+
       - name: Check Rust formatting
         run: cargo fmt --check
 
       - name: Cache Diesel CLI
         id: cache-diesel
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/diesel
           key: ${{ runner.os }}-diesel-cli-2.2.0
@@ -371,9 +376,17 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: diesel migration run
 
+      - name: Setup test template database
+        env:
+          PGPASSWORD: postgres
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+        run: ./scripts/setup-test-template.sh
+
       - name: Cache cargo-nextest
         id: cache-nextest
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cargo-nextest
           key: ${{ runner.os }}-cargo-nextest-0.9.68
@@ -390,6 +403,10 @@ jobs:
       - name: Run Rust tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          ELEVATION_DATA_PATH: /tmp/elevation
+          ELEVATION_S3_BUCKET: elevation-tiles-prod
+          ELEVATION_S3_PREFIX: skadi
+          AWS_REGION: us-east-1
         run: cargo nextest run
 
       - name: Cleanup PostgreSQL container
@@ -405,12 +422,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -430,7 +447,7 @@ jobs:
 
       - name: Cache cross
         id: cache-cross
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cross
           key: ${{ runner.os }}-cross-0.2.5
@@ -466,7 +483,7 @@ jobs:
           tar -czf soar-linux-x64.tar.gz -C release .
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: soar-linux-x64
           path: soar-linux-x64.tar.gz
@@ -492,12 +509,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: web-build
           path: web/build/
@@ -517,7 +534,7 @@ jobs:
 
       - name: Cache cross
         id: cache-cross
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/bin/cross
           key: ${{ runner.os }}-cross-0.2.5
@@ -546,7 +563,7 @@ jobs:
           tar -czf soar-linux-arm64.tar.gz -C release .
 
       - name: Upload release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: soar-linux-arm64
           path: soar-linux-arm64.tar.gz
@@ -566,7 +583,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
@@ -592,12 +609,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
@@ -662,6 +679,13 @@ jobs:
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
+
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
             cp -r infrastructure/prometheus-jobs deploy-pkg/
@@ -715,7 +739,7 @@ jobs:
           ssh soar@staging.glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@staging.glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@staging.glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
@@ -738,12 +762,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: soar-linux-x64
           path: ./
@@ -808,6 +832,13 @@ jobs:
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
           cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
+          # Copy systemd directory (includes template files for Grafana SMTP config)
+          if [ -d infrastructure/systemd ]; then
+            mkdir -p deploy-pkg/systemd
+            cp infrastructure/systemd/*.template deploy-pkg/systemd/ 2>/dev/null || echo "No systemd template files found"
+            echo "Systemd template files included in deployment package"
+          fi
+
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
             cp -r infrastructure/prometheus-jobs deploy-pkg/
@@ -861,7 +892,7 @@ jobs:
           ssh soar@glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@glider.flights:$DEPLOY_DIR/
+          rsync -az --info=progress2 deploy-pkg/ soar@glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 

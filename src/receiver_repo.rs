@@ -351,6 +351,41 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Search receivers by callsign with pagination
+    /// Returns (receivers, total_count)
+    pub async fn search_by_callsign_paginated(
+        &self,
+        callsign_param: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverModel>, i64)> {
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", callsign_param);
+
+        tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
+            let mut conn = pool.get()?;
+
+            // Get total count
+            let total_count: i64 = receivers::table
+                .filter(receivers::callsign.ilike(&search_pattern))
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let receiver_models = receivers::table
+                .filter(receivers::callsign.ilike(&search_pattern))
+                .order(receivers::callsign.asc())
+                .limit(per_page)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok((receiver_models, total_count))
+        })
+        .await?
+    }
+
     /// Get all receivers with pagination
     pub async fn get_receivers_paginated(
         &self,
@@ -393,6 +428,64 @@ impl ReceiverRepository {
                 .into_iter()
                 .map(ReceiverRecord::from)
                 .collect())
+        })
+        .await?
+    }
+
+    /// Get all receivers with valid coordinates
+    /// Returns receivers that have non-null latitude and longitude values
+    /// Ordered by callsign for consistent results
+    pub async fn get_receivers_with_coordinates(&self) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
+        })
+        .await?
+    }
+
+    /// Get all receivers with valid coordinates with pagination
+    /// Returns (receivers, total_count)
+    pub async fn get_receivers_with_coordinates_paginated(
+        &self,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverModel>, i64)> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
+            let mut conn = pool.get()?;
+
+            // Get total count
+            let total_count: i64 = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let receiver_models = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .order(receivers::callsign.asc())
+                .limit(per_page)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok((receiver_models, total_count))
         })
         .await?
     }
@@ -568,6 +661,52 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get receivers in a bounding box with pagination
+    /// Returns (receivers, total_count)
+    pub async fn get_receivers_in_bounding_box_paginated(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverModel>, i64)> {
+        use diesel::dsl::sql;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
+            let mut conn = pool.get()?;
+
+            let bbox_filter = sql::<diesel::sql_types::Bool>(&format!(
+                "ST_Within(receivers.location::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
+                nw_lng, se_lat, se_lng, nw_lat
+            ));
+
+            // Get total count
+            let total_count: i64 = receivers::table
+                .filter(receivers::location.is_not_null())
+                .filter(bbox_filter.clone())
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let receiver_models = receivers::table
+                .filter(receivers::location.is_not_null())
+                .filter(bbox_filter)
+                .order(receivers::callsign.asc())
+                .limit(per_page)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok((receiver_models, total_count))
+        })
+        .await?
+    }
+
     /// Search receivers by text query (searches across callsign, description, country, contact, email, city, region)
     pub async fn search_by_query(&self, query_param: &str) -> Result<Vec<ReceiverModel>> {
         let pool = self.pool.clone();
@@ -592,6 +731,51 @@ impl ReceiverRepository {
                 .load::<ReceiverModel>(&mut conn)?;
 
             Ok(receiver_models)
+        })
+        .await?
+    }
+
+    /// Search receivers by text query with pagination
+    /// Returns (receivers, total_count)
+    pub async fn search_by_query_paginated(
+        &self,
+        query_param: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverModel>, i64)> {
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", query_param);
+
+        tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
+            let mut conn = pool.get()?;
+
+            let filter = receivers::callsign
+                .ilike(&search_pattern)
+                .or(receivers::description.ilike(&search_pattern))
+                .or(receivers::ogn_db_country.ilike(&search_pattern))
+                .or(receivers::country.ilike(&search_pattern))
+                .or(receivers::contact.ilike(&search_pattern))
+                .or(receivers::email.ilike(&search_pattern))
+                .or(receivers::city.ilike(&search_pattern))
+                .or(receivers::region.ilike(&search_pattern));
+
+            // Get total count
+            let total_count: i64 = receivers::table
+                .filter(filter)
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let receiver_models = receivers::table
+                .filter(filter)
+                .order(receivers::callsign.asc())
+                .limit(per_page)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok((receiver_models, total_count))
         })
         .await?
     }
@@ -635,6 +819,58 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get receivers within a radius with pagination
+    /// Returns (receivers, total_count)
+    pub async fn get_receivers_within_radius_paginated(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_miles: f64,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverModel>, i64)> {
+        use diesel::dsl::sql;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
+            let mut conn = pool.get()?;
+
+            // Convert miles to meters for PostGIS ST_DWithin (1 mile = 1609.34 meters)
+            let radius_meters = radius_miles * 1609.34;
+
+            // Get total count
+            let total_count: i64 = receivers::table
+                .filter(receivers::location.is_not_null())
+                .filter(sql::<diesel::sql_types::Bool>(&format!(
+                    "ST_DWithin(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
+                    longitude, latitude, radius_meters
+                )))
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let receiver_models = receivers::table
+                .filter(receivers::location.is_not_null())
+                .filter(sql::<diesel::sql_types::Bool>(&format!(
+                    "ST_DWithin(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
+                    longitude, latitude, radius_meters
+                )))
+                .order(sql::<diesel::sql_types::Double>(&format!(
+                    "ST_Distance(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography)",
+                    longitude, latitude
+                )))
+                .limit(per_page)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok((receiver_models, total_count))
+        })
+        .await?
+    }
+
     /// Update the latest_packet_at timestamp for a receiver
     /// This is cached - we only update the database if >5 seconds have passed since the last update
     pub async fn update_latest_packet_at(&self, receiver_id: Uuid) -> Result<bool> {
@@ -645,7 +881,7 @@ impl ReceiverRepository {
             let elapsed = now.signed_duration_since(last_update);
             if elapsed.num_seconds() < 5 {
                 // Less than 5 seconds since last update - skip database write
-                metrics::counter!("receiver_repo.latest_packet_at.skipped").increment(1);
+                metrics::counter!("receiver_repo.latest_packet_at.skipped_total").increment(1);
                 return Ok(true);
             }
         }
@@ -668,7 +904,7 @@ impl ReceiverRepository {
         // Update cache with the current timestamp
         if result.is_ok() {
             self.latest_packet_at_cache.insert(receiver_id, now);
-            metrics::counter!("receiver_repo.latest_packet_at.updated").increment(1);
+            metrics::counter!("receiver_repo.latest_packet_at.updated_total").increment(1);
         }
 
         result

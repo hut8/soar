@@ -161,6 +161,20 @@ impl From<FixDslRow> for Fix {
     }
 }
 
+/// Cluster result from grid-based spatial clustering
+#[derive(Debug, Clone)]
+pub struct ClusterResult {
+    pub grid_lat: f64,
+    pub grid_lng: f64,
+    pub aircraft_count: i64,
+    pub centroid_lat: f64,
+    pub centroid_lng: f64,
+    pub min_lat: f64,
+    pub max_lat: f64,
+    pub min_lng: f64,
+    pub max_lng: f64,
+}
+
 #[derive(Clone)]
 pub struct FixesRepository {
     pool: PgPool,
@@ -189,7 +203,7 @@ impl FixesRepository {
                 .execute(&mut conn)
             {
                 Ok(_) => {
-                    metrics::counter!("aprs.fixes.inserted").increment(1);
+                    metrics::counter!("aprs.fixes.inserted_total").increment(1);
                     trace!(
                         "Inserted fix | Aircraft: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
                         new_fix.aircraft_id,
@@ -199,6 +213,21 @@ impl FixesRepository {
                         new_fix.latitude,
                         new_fix.longitude
                     );
+
+                    // Update aircraft's current_fix, latitude, and longitude columns with the new fix
+                    // The latitude/longitude columns are used to generate location_geom for spatial queries
+                    if let Ok(fix_json) = serde_json::to_value(&new_fix) {
+                        use crate::schema::aircraft;
+                        let _ = diesel::update(aircraft::table)
+                            .filter(aircraft::id.eq(new_fix.aircraft_id))
+                            .set((
+                                aircraft::current_fix.eq(fix_json),
+                                aircraft::latitude.eq(new_fix.latitude),
+                                aircraft::longitude.eq(new_fix.longitude),
+                            ))
+                            .execute(&mut conn);
+                    }
+
                     Ok(())
                 }
                 Err(diesel::result::Error::DatabaseError(
@@ -210,7 +239,7 @@ impl FixesRepository {
                         "Duplicate fix detected for aircraft {} at {}",
                         new_fix.aircraft_id, new_fix.timestamp
                     );
-                    metrics::counter!("aprs.fixes.duplicate_on_redelivery").increment(1);
+                    metrics::counter!("aprs.fixes.duplicate_on_redelivery_total").increment(1);
                     // Not an error - just skip the duplicate
                     Ok(())
                 }
@@ -238,63 +267,6 @@ impl FixesRepository {
                 ))
                 .execute(&mut conn)?;
             Ok::<(), anyhow::Error>(())
-        })
-        .await?
-    }
-
-    /// Batch update AGL values for multiple fixes in a single query
-    /// This is much more efficient than individual updates when processing many fixes
-    /// Returns the number of fixes updated
-    pub async fn batch_update_altitude_agl(
-        &self,
-        tasks: &[crate::elevation::AglDatabaseTask],
-    ) -> Result<usize> {
-        if tasks.is_empty() {
-            return Ok(0);
-        }
-
-        let pool = self.pool.clone();
-
-        // Clone the task data for the blocking task
-        let tasks_data: Vec<(Uuid, Option<i32>)> = tasks
-            .iter()
-            .map(|task| (task.fix_id, task.altitude_agl_feet))
-            .collect();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Build a true batch UPDATE using a VALUES clause for efficiency
-            // This is 10-100x faster than individual UPDATEs in a loop
-            // UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true
-            // FROM (VALUES (uuid1, agl1), (uuid2, agl2), ...) AS data(id, agl)
-            // WHERE fixes.id = data.id
-
-            // Build the VALUES clause
-            // Safe to use format! here since UUIDs are validated by Uuid type
-            // and agl values are Option<i32> from our own code
-            let mut value_clauses = Vec::new();
-
-            for (fix_id, agl_value) in &tasks_data {
-                let agl_str = match agl_value {
-                    Some(v) => v.to_string(),
-                    None => "NULL".to_string(),
-                };
-                value_clauses.push(format!("('{}'::uuid, {}::int4)", fix_id, agl_str));
-            }
-
-            let values_clause = value_clauses.join(", ");
-            let sql = format!(
-                "UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true \
-                 FROM (VALUES {}) AS data(id, agl) \
-                 WHERE fixes.id = data.id",
-                values_clause
-            );
-
-            // Execute the batch UPDATE
-            let updated_count = diesel::sql_query(sql).execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(updated_count)
         })
         .await?
     }
@@ -526,40 +498,75 @@ impl FixesRepository {
     }
 
     /// Get fixes by receiver ID with pagination (last 24 hours only)
+    /// Returns fixes with full aircraft information
     pub async fn get_fixes_by_receiver_id_paginated(
         &self,
         receiver_uuid: Uuid,
         page: i64,
         per_page: i64,
-    ) -> Result<(Vec<Fix>, i64)> {
+    ) -> Result<(Vec<crate::fixes::FixWithAircraftInfo>, i64)> {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
+            use crate::actions::views::AircraftView;
+            use crate::aircraft::AircraftModel;
+            use crate::schema::{aircraft, fixes, raw_messages};
             let mut conn = pool.get()?;
 
             // Only get fixes from the last 24 hours
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
             // Get total count
-            let total_count = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
+            let total_count = fixes::table
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
-            // Get paginated results (most recent first)
+            // Get paginated results (most recent first) with raw packet info
             let offset = (page - 1) * per_page;
-            let results = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
-                .order(received_at.desc())
+            let fix_results = fixes::table
+                .inner_join(
+                    raw_messages::table.on(fixes::raw_message_id
+                        .eq(raw_messages::id)
+                        .and(fixes::received_at.eq(raw_messages::received_at))),
+                )
+                .filter(fixes::receiver_id.eq(receiver_uuid))
+                .filter(fixes::received_at.gt(cutoff_time))
+                .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .select((Fix::as_select(), raw_messages::raw_message))
+                .load::<(Fix, Vec<u8>)>(&mut conn)?;
 
-            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+            // Get aircraft for these fixes
+            let aircraft_ids: Vec<Uuid> =
+                fix_results.iter().map(|(fix, _)| fix.aircraft_id).collect();
+            let aircraft_models: Vec<AircraftModel> = aircraft::table
+                .filter(aircraft::id.eq_any(&aircraft_ids))
+                .select(AircraftModel::as_select())
+                .load::<AircraftModel>(&mut conn)?;
+
+            // Create a map of aircraft ID to AircraftView
+            let aircraft_map: std::collections::HashMap<Uuid, AircraftView> = aircraft_models
+                .into_iter()
+                .map(|model| (model.id, AircraftView::from_device_model(model)))
+                .collect();
+
+            // Combine fixes with their aircraft
+            let results = fix_results
+                .into_iter()
+                .map(|(fix, raw_packet_bytes)| {
+                    let raw_packet = Some(String::from_utf8_lossy(&raw_packet_bytes).to_string());
+                    let aircraft = aircraft_map.get(&fix.aircraft_id).cloned();
+                    crate::fixes::FixWithAircraftInfo::new(fix, raw_packet, aircraft)
+                })
+                .collect();
+
+            Ok::<(Vec<crate::fixes::FixWithAircraftInfo>, i64), anyhow::Error>((
+                results,
+                total_count,
+            ))
         })
         .await??;
 
@@ -608,6 +615,212 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Count aircraft in bounding box with cached location
+    pub async fn count_aircraft_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        cutoff_time: DateTime<Utc>,
+    ) -> Result<i64> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Count aircraft with cached location in the bounding box
+            let count_sql = r#"
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        cutoff_time
+                    FROM params
+                )
+                SELECT COUNT(*)
+                FROM aircraft d, parts
+                WHERE d.last_fix_at >= parts.cutoff_time
+                  AND d.location_geom IS NOT NULL
+                  AND (
+                      d.location_geom && parts.boxes[1]
+                      OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                  )
+            "#;
+
+            #[derive(QueryableByName)]
+            struct CountRow {
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                count: i64,
+            }
+
+            let count_result: CountRow = diesel::sql_query(count_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
+                .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
+                .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
+                .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .get_result(&mut conn)?;
+
+            Ok::<i64, anyhow::Error>(count_result.count)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get clustered aircraft in bounding box using PostGIS ST_SnapToGrid
+    #[instrument(skip(self))]
+    pub async fn get_clustered_aircraft_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        cutoff_time: DateTime<Utc>,
+        grid_size: f64,
+    ) -> Result<Vec<ClusterResult>> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let cluster_sql = r#"
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time,
+                        $6::double precision AS grid_size
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        cutoff_time,
+                        grid_size
+                    FROM params
+                ),
+                aircraft_in_bbox AS (
+                    SELECT
+                        d.id,
+                        d.latitude,
+                        d.longitude,
+                        d.location_geom
+                    FROM aircraft d, parts
+                    WHERE d.last_fix_at >= parts.cutoff_time
+                      AND d.location_geom IS NOT NULL
+                      AND (
+                          d.location_geom && parts.boxes[1]
+                          OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                      )
+                ),
+                grid_clusters AS (
+                    SELECT
+                        ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), (SELECT grid_size FROM params)) AS grid_point,
+                        COUNT(*) AS aircraft_count,
+                        AVG(latitude) AS centroid_lat,
+                        AVG(longitude) AS centroid_lng,
+                        MIN(latitude) AS min_lat,
+                        MAX(latitude) AS max_lat,
+                        MIN(longitude) AS min_lng,
+                        MAX(longitude) AS max_lng
+                    FROM aircraft_in_bbox
+                    GROUP BY grid_point
+                )
+                SELECT
+                    ST_X(grid_point) AS grid_lng,
+                    ST_Y(grid_point) AS grid_lat,
+                    aircraft_count,
+                    centroid_lat,
+                    centroid_lng,
+                    min_lat,
+                    max_lat,
+                    min_lng,
+                    max_lng
+                FROM grid_clusters
+                ORDER BY aircraft_count DESC
+            "#;
+
+            #[derive(QueryableByName)]
+            struct ClusterRow {
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                grid_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                grid_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                aircraft_count: i64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                centroid_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                centroid_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                min_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                max_lat: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                min_lng: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                max_lng: f64,
+            }
+
+            let clusters: Vec<ClusterRow> = diesel::sql_query(cluster_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)
+                .bind::<diesel::sql_types::Double, _>(se_lat)
+                .bind::<diesel::sql_types::Double, _>(se_lng)
+                .bind::<diesel::sql_types::Double, _>(nw_lat)
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .bind::<diesel::sql_types::Double, _>(grid_size)
+                .load(&mut conn)?;
+
+            let results: Vec<ClusterResult> = clusters
+                .into_iter()
+                .map(|row| ClusterResult {
+                    grid_lat: row.grid_lat,
+                    grid_lng: row.grid_lng,
+                    aircraft_count: row.aircraft_count,
+                    centroid_lat: row.centroid_lat,
+                    centroid_lng: row.centroid_lng,
+                    min_lat: row.min_lat,
+                    max_lat: row.max_lat,
+                    min_lng: row.min_lng,
+                    max_lng: row.max_lng,
+                })
+                .collect();
+
+            Ok::<Vec<ClusterResult>, anyhow::Error>(results)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get aircraft with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
     #[instrument(skip(self), fields(fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5)))]
@@ -620,9 +833,9 @@ impl FixesRepository {
         cutoff_time: DateTime<Utc>,
         fixes_per_aircraft: Option<i64>,
     ) -> Result<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>> {
-        info!("Starting bounding box query");
+        info!("Starting bounding box query (using current_fix from aircraft table)");
         let pool = self.pool.clone();
-        let fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5);
+        // fixes_per_aircraft parameter is ignored - we use current_fix from aircraft table instead
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -638,7 +851,8 @@ impl FixesRepository {
                         $1::double precision AS left_lng,
                         $2::double precision AS bottom_lat,
                         $3::double precision AS right_lng,
-                        $4::double precision AS top_lat
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time
                 ),
                 parts AS (
                     SELECT
@@ -651,12 +865,13 @@ impl FixesRepository {
                                 ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
                                 ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
                             ]
-                        END AS boxes
+                        END AS boxes,
+                        cutoff_time
                     FROM params
                 )
                 SELECT d.*
                 FROM aircraft d, parts
-                WHERE d.last_fix_at >= NOW() - INTERVAL '1 hour'
+                WHERE d.last_fix_at >= parts.cutoff_time
                   AND d.location_geom IS NOT NULL
                   AND (
                       d.location_geom && parts.boxes[1]
@@ -672,8 +887,8 @@ impl FixesRepository {
                 address_type: crate::aircraft::AddressType,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 aircraft_model: String,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                registration: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                registration: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 competition_number: String,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
@@ -687,7 +902,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
                 id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
-                from_ddb: bool,
+                from_ogn_ddb: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
                 frequency_mhz: Option<bigdecimal::BigDecimal>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -712,6 +927,8 @@ impl FixesRepository {
                 latitude: Option<f64>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
                 longitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
+                current_fix: Option<serde_json::Value>,
             }
 
             let aircraft_rows: Vec<AircraftRow> = diesel::sql_query(aircraft_sql)
@@ -719,6 +936,7 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
                 .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
                 .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)  // cutoff_time
                 .load(&mut conn)?;
 
             info!("First query returned {} aircraft rows", aircraft_rows.len());
@@ -726,9 +944,6 @@ impl FixesRepository {
             if aircraft_rows.is_empty() {
                 return Ok(Vec::new());
             }
-
-            // Extract aircraft IDs for the second query
-            let aircraft_ids: Vec<uuid::Uuid> = aircraft_rows.iter().map(|row| row.id).collect();
 
             // Convert rows to AircraftModel
             let aircraft_models: Vec<crate::aircraft::AircraftModel> = aircraft_rows
@@ -744,7 +959,8 @@ impl FixesRepository {
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                     id: row.id,
-                    from_ddb: row.from_ddb,
+                    from_ogn_ddb: row.from_ogn_ddb,
+            from_adsbx_ddb: false,
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
@@ -757,135 +973,25 @@ impl FixesRepository {
                     country_code: row.country_code,
                     latitude: row.latitude,
                     longitude: row.longitude,
+                    owner_operator: None,           // Not selected in this query
+                    aircraft_category: None,   // Not selected in this query
+                    engine_count: None,              // Not selected in this query
+                    engine_type: None,         // Not selected in this query
+                    faa_pia: None,                  // Not selected in this query
+                    faa_ladd: None,                 // Not selected in this query
+                    year: None,                     // Not selected in this query
+                    is_military: None,              // Not selected in this query
+                    current_fix: row.current_fix,
+                    images: None,                   // Not selected in this query
                 })
                 .collect();
 
-            info!("Executing second query for fixes with {} aircraft IDs", aircraft_ids.len());
+            info!("Returning {} aircraft with current_fix from aircraft table (no fixes query needed)", aircraft_models.len());
 
-            // Second query: Get recent fixes for the aircraft using the aircraft_id index
-            // This is much faster than repeating the spatial query
-            // Time-based pruning filter reduces rows before windowing for better performance
-            let fixes_sql = r#"
-                WITH ranked AS (
-                    SELECT f.*,
-                           ROW_NUMBER() OVER (PARTITION BY f.aircraft_id ORDER BY f.received_at DESC) AS rn
-                    FROM fixes f
-                    WHERE f.aircraft_id = ANY($1)
-                      AND f.received_at >= $3
-                )
-                SELECT *
-                FROM ranked
-                WHERE rn <= $2
-                ORDER BY aircraft_id, received_at DESC
-            "#;
-
-            // QueryableByName version of FixDslRow for raw SQL query
-            // Note: Excludes location and geom geography/geometry columns
-            #[derive(QueryableByName)]
-            struct FixRow {
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                source: String,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                aprs_type: String,
-                #[diesel(sql_type = diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>)]
-                via: Vec<Option<String>>,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                timestamp: DateTime<Utc>,
-                #[diesel(sql_type = diesel::sql_types::Double)]
-                latitude: f64,
-                #[diesel(sql_type = diesel::sql_types::Double)]
-                longitude: f64,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_msl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                flight_number: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                squawk: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                ground_speed_knots: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                track_degrees: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                climb_fpm: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                turn_rate_rot: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
-                source_metadata: Option<serde_json::Value>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-                flight_id: Option<uuid::Uuid>,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                aircraft_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
-                received_at: DateTime<Utc>,
-                #[diesel(sql_type = diesel::sql_types::Bool)]
-                is_active: bool,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_agl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                receiver_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                raw_message_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Bool)]
-                altitude_agl_valid: bool,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                time_gap_seconds: Option<i32>,
-            }
-
-            let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
-                .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&aircraft_ids)
-                .bind::<diesel::sql_types::BigInt, _>(fixes_per_aircraft)
-                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
-                .load(&mut conn)?;
-
-            info!("Second query returned {} fix rows", fix_rows.len());
-
-            // Group fixes by aircraft_id
-            let mut fixes_by_aircraft: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
-                std::collections::HashMap::new();
-            for fix_row in fix_rows {
-                let aircraft_id = fix_row.aircraft_id;
-                // Convert FixRow to Fix
-                let fix = Fix {
-                    id: fix_row.id,
-                    source: fix_row.source,
-                    aprs_type: fix_row.aprs_type,
-                    via: fix_row.via,
-                    timestamp: fix_row.timestamp,
-                    received_at: fix_row.received_at,
-                    latitude: fix_row.latitude,
-                    longitude: fix_row.longitude,
-                    altitude_msl_feet: fix_row.altitude_msl_feet,
-                    altitude_agl_feet: fix_row.altitude_agl_feet,
-                    flight_id: fix_row.flight_id,
-                    flight_number: fix_row.flight_number,
-                    squawk: fix_row.squawk,
-                    ground_speed_knots: fix_row.ground_speed_knots,
-                    track_degrees: fix_row.track_degrees,
-                    climb_fpm: fix_row.climb_fpm,
-                    turn_rate_rot: fix_row.turn_rate_rot,
-                    source_metadata: fix_row.source_metadata,
-                    aircraft_id: fix_row.aircraft_id,
-                    is_active: fix_row.is_active,
-                    receiver_id: fix_row.receiver_id,
-                    raw_message_id: fix_row.raw_message_id,
-                    altitude_agl_valid: fix_row.altitude_agl_valid,
-                    time_gap_seconds: fix_row.time_gap_seconds,
-                };
-                fixes_by_aircraft
-                    .entry(aircraft_id)
-                    .or_default()
-                    .push(fix);
-            }
-
-            // Combine aircraft with their fixes
+            // Return aircraft with empty fix arrays - current_fix field contains the latest position
             let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = aircraft_models
                 .into_iter()
-                .map(|aircraft| {
-                    let fixes = fixes_by_aircraft.remove(&aircraft.id).unwrap_or_default();
-                    (aircraft, fixes)
-                })
+                .map(|aircraft| (aircraft, Vec::new()))
                 .collect();
 
             Ok::<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>, anyhow::Error>(results)

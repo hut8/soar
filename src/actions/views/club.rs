@@ -26,8 +26,7 @@ fn create_location_from_fields(
     city: Option<String>,
     state: Option<String>,
     zip_code: Option<String>,
-    region_code: Option<String>,
-    country_mail_code: Option<String>,
+    country_code: Option<String>,
     latitude: Option<f64>,
     longitude: Option<f64>,
     created_at: DateTime<Utc>,
@@ -40,8 +39,7 @@ fn create_location_from_fields(
         city,
         state,
         zip_code,
-        region_code,
-        country_mail_code,
+        country_code,
         geolocation: if let (Some(lat), Some(lng)) = (latitude, longitude) {
             Some(Point::new(lat, lng))
         } else {
@@ -53,6 +51,7 @@ fn create_location_from_fields(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AircraftModelView {
     pub manufacturer_code: String,
     pub model_code: String,
@@ -98,6 +97,7 @@ impl From<AircraftModelRecord> for AircraftModelView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClubView {
     pub id: Uuid,
     pub name: String,
@@ -123,8 +123,7 @@ impl From<Club> for ClubView {
             club.city,
             club.state,
             club.zip_code,
-            club.region_code,
-            club.country_mail_code,
+            club.country_code,
             club.base_location.as_ref().map(|p| p.latitude),
             club.base_location.as_ref().map(|p| p.longitude),
             club.created_at,
@@ -154,8 +153,7 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             club.city,
             club.state,
             club.zip_code,
-            club.region_code,
-            club.country_mail_code,
+            club.country_code,
             bigdecimal_to_f64(club.latitude),
             bigdecimal_to_f64(club.longitude),
             club.created_at,
@@ -185,8 +183,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             club.city,
             club.state,
             club.zip_code,
-            club.region_code,
-            club.country_mail_code,
+            club.country_code,
             bigdecimal_to_f64(club.latitude),
             bigdecimal_to_f64(club.longitude),
             club.created_at,
@@ -208,6 +205,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClubWithRecentFlightsView {
     #[serde(flatten)]
     pub club: ClubView,

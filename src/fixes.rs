@@ -4,6 +4,7 @@ use diesel::prelude::*;
 use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ts_rs::TS;
 use uuid::Uuid;
 
 /// Custom serializer for via field to convert Vec to comma-separated string
@@ -38,9 +39,11 @@ where
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[diesel(table_name = crate::schema::fixes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[serde(rename_all = "camelCase")]
 pub struct Fix {
     /// Unique identifier for this fix
     pub id: Uuid,
@@ -58,9 +61,7 @@ pub struct Fix {
     pub latitude: f64,
     pub longitude: f64,
     // Note: location and geom fields are skipped as they're computed from lat/lng
-    #[serde(rename = "altitude_msl_feet")]
     pub altitude_msl_feet: Option<i32>,
-    #[serde(rename = "altitude_agl_feet")]
     pub altitude_agl_feet: Option<i32>,
 
     /// Flight information
@@ -106,6 +107,7 @@ pub struct Fix {
 /// Extended Fix struct that includes raw packet data from aprs_messages table
 /// Used for API responses where raw packet data is needed
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FixWithRawPacket {
     #[serde(flatten)]
     pub fix: Fix,
@@ -114,9 +116,25 @@ pub struct FixWithRawPacket {
     pub raw_packet: Option<String>,
 }
 
+/// Extended Fix struct that includes both raw packet and aircraft information
+/// Used for receiver fixes API where aircraft details need to be displayed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixWithAircraftInfo {
+    #[serde(flatten)]
+    pub fix: Fix,
+
+    /// Raw APRS packet data (joined from aprs_messages table)
+    pub raw_packet: Option<String>,
+
+    /// Full aircraft information (joined from aircraft table)
+    pub aircraft: Option<crate::actions::views::AircraftView>,
+}
+
 /// Extended Fix struct that includes flight metadata for WebSocket streaming
 /// Used when streaming fixes to include current flight information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FixWithFlightInfo {
     #[serde(flatten)]
     pub fix: Fix,
@@ -133,6 +151,21 @@ impl FixWithRawPacket {
     }
 }
 
+impl FixWithAircraftInfo {
+    /// Create a FixWithAircraftInfo from a Fix, raw packet, and aircraft information
+    pub fn new(
+        fix: Fix,
+        raw_packet: Option<String>,
+        aircraft: Option<crate::actions::views::AircraftView>,
+    ) -> Self {
+        Self {
+            fix,
+            raw_packet,
+            aircraft,
+        }
+    }
+}
+
 impl std::ops::Deref for FixWithRawPacket {
     type Target = Fix;
 
@@ -142,6 +175,20 @@ impl std::ops::Deref for FixWithRawPacket {
 }
 
 impl std::ops::DerefMut for FixWithRawPacket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fix
+    }
+}
+
+impl std::ops::Deref for FixWithAircraftInfo {
+    type Target = Fix;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fix
+    }
+}
+
+impl std::ops::DerefMut for FixWithAircraftInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }

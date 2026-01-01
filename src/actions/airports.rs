@@ -11,7 +11,7 @@ use crate::clubs_repo::ClubsRepository;
 use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::AirportView, views::ClubView};
+use super::{DataListResponse, DataResponse, json_error, views::AirportView, views::ClubView};
 
 #[derive(Debug, Deserialize)]
 pub struct AirportSearchParams {
@@ -21,10 +21,10 @@ pub struct AirportSearchParams {
     pub longitude: Option<f64>,
     pub radius: Option<f64>,
     // Bounding box parameters
-    pub nw_lat: Option<f64>, // Northwest corner latitude
-    pub nw_lng: Option<f64>, // Northwest corner longitude
-    pub se_lat: Option<f64>, // Southeast corner latitude
-    pub se_lng: Option<f64>, // Southeast corner longitude
+    pub north: Option<f64>,
+    pub south: Option<f64>,
+    pub east: Option<f64>,
+    pub west: Option<f64>,
 }
 
 pub async fn get_airport_by_id(
@@ -47,7 +47,7 @@ pub async fn get_airport_by_id(
             };
 
             let airport_view = AirportView::with_runways(airport, runways);
-            Json(airport_view).into_response()
+            Json(DataResponse { data: airport_view }).into_response()
         }
         Ok(None) => json_error(
             StatusCode::NOT_FOUND,
@@ -72,11 +72,11 @@ pub async fn search_airports(
     let airports_repo = AirportsRepository::new(state.pool.clone());
 
     // Check if bounding box parameters are provided
-    if let (Some(nw_lat), Some(nw_lng), Some(se_lat), Some(se_lng)) =
-        (params.nw_lat, params.nw_lng, params.se_lat, params.se_lng)
+    if let (Some(north), Some(south), Some(east), Some(west)) =
+        (params.north, params.south, params.east, params.west)
     {
         // Validate bounding box coordinates
-        if !(-90.0..=90.0).contains(&nw_lat) || !(-90.0..=90.0).contains(&se_lat) {
+        if !(-90.0..=90.0).contains(&north) || !(-90.0..=90.0).contains(&south) {
             return json_error(
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
@@ -84,7 +84,7 @@ pub async fn search_airports(
             .into_response();
         }
 
-        if !(-180.0..=180.0).contains(&nw_lng) || !(-180.0..=180.0).contains(&se_lng) {
+        if !(-180.0..=180.0).contains(&east) || !(-180.0..=180.0).contains(&west) {
             return json_error(
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
@@ -92,10 +92,18 @@ pub async fn search_airports(
             .into_response();
         }
 
+        if south >= north {
+            return json_error(StatusCode::BAD_REQUEST, "south must be less than north")
+                .into_response();
+        }
+
+        // Note: west can be >= east when crossing the International Date Line
+        // The PostGIS query handles this case by splitting into two bounding boxes
+
         // Get airports within the bounding box
         let runways_repo = RunwaysRepository::new(state.pool);
         match airports_repo
-            .get_airports_in_bounding_box(nw_lat, nw_lng, se_lat, se_lng, params.limit)
+            .get_airports_in_bounding_box(north, south, east, west, params.limit)
             .await
         {
             Ok(airports) => {
@@ -116,7 +124,10 @@ pub async fn search_airports(
                     airport_views.push(AirportView::with_runways(airport, runways));
                 }
 
-                Json(airport_views).into_response()
+                Json(DataListResponse {
+                    data: airport_views,
+                })
+                .into_response()
             }
             Err(e) => {
                 error!("Failed to get airports in bounding box: {}", e);
@@ -163,7 +174,7 @@ pub async fn search_airports(
             .search_nearby(lat, lng, radius, params.limit)
             .await
         {
-            Ok(airports) => Json(airports).into_response(),
+            Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
                 error!("Failed to search nearby airports: {}", e);
                 json_error(
@@ -184,7 +195,7 @@ pub async fn search_airports(
         }
 
         match airports_repo.fuzzy_search(&query, params.limit).await {
-            Ok(airports) => Json(airports).into_response(),
+            Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
                 error!("Failed to search airports: {}", e);
                 json_error(
@@ -220,7 +231,7 @@ pub async fn get_clubs_by_airport(
     match clubs_repo.get_clubs_by_airport(airport_id).await {
         Ok(clubs) => {
             let club_views: Vec<ClubView> = clubs.into_iter().map(|club| club.into()).collect();
-            Json(club_views).into_response()
+            Json(DataListResponse { data: club_views }).into_response()
         }
         Err(e) => {
             error!("Failed to get clubs for airport {}: {}", airport_id, e);

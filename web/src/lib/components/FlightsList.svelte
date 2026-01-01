@@ -7,9 +7,10 @@
 		getAircraftTypeColor,
 		getFlagPath
 	} from '$lib/formatters';
-	import type { Flight } from '$lib/types';
+	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
+	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
 
@@ -20,6 +21,57 @@
 	}
 
 	let { flights, showEnd = false, showAircraft = true }: Props = $props();
+
+	// Internal state for enriched flight details
+	let flightDetails: FlightDetails[] = $state([]);
+
+	// Fetch aircraft data whenever flights change
+	$effect(() => {
+		async function fetchAircraftData() {
+			// Debug: Log flight IDs and aircraft IDs
+			console.log('[FlightsList] Flights received:', {
+				count: flights.length,
+				firstFlight: flights[0]
+					? {
+							id: flights[0].id,
+							aircraftId: flights[0].aircraftId
+						}
+					: null
+			});
+
+			// Extract unique aircraft IDs from flights
+			const aircraftIds = Array.from(
+				new Set(flights.filter((f) => f.aircraftId).map((f) => f.aircraftId!))
+			);
+
+			if (aircraftIds.length === 0) {
+				// No aircraft IDs, just create FlightDetails with null aircraft
+				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
+				return;
+			}
+
+			try {
+				// Fetch bulk aircraft data
+				const response = await serverCall<DataResponse<Record<string, Aircraft>>>(
+					`/aircraft/bulk?ids=${aircraftIds.join(',')}`
+				);
+
+				const aircraftMap = response.data;
+
+				// Decorate flights with aircraft data
+				flightDetails = flights.map((flight) => ({
+					flight,
+					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
+				}));
+			} catch (err) {
+				console.error('Failed to fetch aircraft data:', err);
+				// On error, create FlightDetails with null aircraft
+				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
+			}
+		}
+
+		fetchAircraftData();
+	});
 
 	function formatAircraftAddress(address: string, addressType: string): string {
 		const typePrefix = addressType === 'Flarm' ? 'F' : addressType === 'Ogn' ? 'O' : 'I';
@@ -41,7 +93,7 @@
 		latestFixTimestamp: string | null | undefined,
 		landing: string | null | undefined
 	): string {
-		// Always use created_at as start time
+		// Always use createdAt as start time
 		if (!createdAt) return '—';
 
 		const startTime = new Date(createdAt).getTime();
@@ -91,17 +143,17 @@
 
 	// Check if flight was first seen airborne (no takeoff time)
 	function isAirborne(flight: Flight): boolean {
-		return !flight.takeoff_time;
+		return !flight.takeoffTime;
 	}
 
 	// Check if flight timed out
 	function isTimedOut(flight: Flight): boolean {
-		return !!flight.timed_out_at && !flight.landing_time;
+		return !!flight.timedOutAt && !flight.landingTime;
 	}
 
 	// Check if flight is still active
 	function isActive(flight: Flight): boolean {
-		return !flight.landing_time && !flight.timed_out_at;
+		return !flight.landingTime && !flight.timedOutAt;
 	}
 </script>
 
@@ -132,24 +184,24 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each flights as flight (flight.id)}
+				{#each flightDetails as { flight, aircraft } (flight.id)}
 					<tr>
 						{#if showAircraft}
 							<td>
 								<div class="flex flex-col gap-1">
 									<div class="flex items-center gap-2">
-										{#if flight.aircraft_id}
-											<AircraftLink aircraft={flight} size="md" />
+										{#if aircraft}
+											<AircraftLink {aircraft} size="md" />
 										{:else}
 											<span class="font-medium"
 												>{flight.registration ||
 													formatAircraftAddress(
-														flight.device_address,
-														flight.device_address_type
+														flight.deviceAddress,
+														flight.deviceAddressType
 													)}</span
 											>
 										{/if}
-										{#if flight.towed_by_aircraft_id}
+										{#if flight.towedByAircraftId}
 											<span
 												class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 												title="This aircraft was towed"
@@ -162,9 +214,9 @@
 								</div>
 							</td>
 							<td>
-								{#if flight.aircraft_type_ogn}
-									<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+								{#if flight.aircraftTypeOgn}
+									<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
+										{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 									</span>
 								{:else}
 									<span class="text-surface-500">—</span>
@@ -174,11 +226,11 @@
 						<td>
 							<div class="flex flex-col gap-1">
 								<div class="text-sm">
-									{formatRelativeTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+									{formatRelativeTime(isAirborne(flight) ? flight.createdAt : flight.takeoffTime)}
 								</div>
 								<div class="flex items-center gap-1 text-xs">
 									<span class="text-surface-500-400-token">
-										{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+										{formatLocalTime(isAirborne(flight) ? flight.createdAt : flight.takeoffTime)}
 									</span>
 									{#if isAirborne(flight)}
 										<span
@@ -189,17 +241,17 @@
 										</span>
 									{/if}
 								</div>
-								{#if flight.departure_airport}
+								{#if flight.departureAirport}
 									<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 										<MapPin class="h-3 w-3" />
-										{#if flight.departure_airport_country}
+										{#if flight.departureAirportCountry}
 											<img
-												src={getFlagPath(flight.departure_airport_country)}
+												src={getFlagPath(flight.departureAirportCountry)}
 												alt=""
 												class="inline-block h-3 rounded-sm"
 											/>
 										{/if}
-										{flight.departure_airport}
+										{flight.departureAirport}
 									</div>
 								{/if}
 							</div>
@@ -210,11 +262,11 @@
 									{#if isTimedOut(flight)}
 										<div class="flex items-center gap-1 text-sm">
 											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.latest_fix_timestamp)}
+											{formatRelativeTime(flight.latestFixTimestamp)}
 										</div>
-										{#if flight.latest_fix_timestamp}
+										{#if flight.latestFixTimestamp}
 											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.latest_fix_timestamp)}
+												{formatLocalTime(flight.latestFixTimestamp)}
 											</div>
 										{/if}
 										<div class="mt-1">
@@ -231,24 +283,24 @@
 									{:else}
 										<div class="flex items-center gap-1 text-sm">
 											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.landing_time)}
+											{formatRelativeTime(flight.landingTime)}
 										</div>
-										{#if flight.landing_time}
+										{#if flight.landingTime}
 											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.landing_time)}
+												{formatLocalTime(flight.landingTime)}
 											</div>
 										{/if}
-										{#if flight.arrival_airport}
+										{#if flight.arrivalAirport}
 											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 												<MapPin class="h-3 w-3" />
-												{#if flight.arrival_airport_country}
+												{#if flight.arrivalAirportCountry}
 													<img
-														src={getFlagPath(flight.arrival_airport_country)}
+														src={getFlagPath(flight.arrivalAirportCountry)}
 														alt=""
 														class="inline-block h-3 rounded-sm"
 													/>
 												{/if}
-												{flight.arrival_airport}
+												{flight.arrivalAirport}
 											</div>
 										{/if}
 									{/if}
@@ -257,32 +309,32 @@
 						{/if}
 						<td class="font-semibold">
 							{calculateFlightDuration(
-								flight.created_at,
-								flight.latest_fix_timestamp,
-								flight.landing_time
+								flight.createdAt,
+								flight.latestFixTimestamp,
+								flight.landingTime
 							)}
 						</td>
 						{#if showEnd}
 							<td class="font-semibold">
-								{formatDistance(flight.total_distance_meters)}
+								{formatDistance(flight.totalDistanceMeters)}
 							</td>
 						{/if}
 						{#if !showEnd}
 							<td>
 								<div class="text-sm">
-									{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+									{formatAltitude(flight.latestAltitudeMslFeet, flight.latestAltitudeAglFeet)}
 								</div>
 							</td>
 							<td>
 								<div class="flex items-center gap-1 text-sm">
 									<Clock class="h-3 w-3" />
-									{formatRelativeTime(flight.latest_fix_timestamp)}
+									{formatRelativeTime(flight.latestFixTimestamp)}
 								</div>
 							</td>
 						{/if}
 						<td>
-							{#if flight.towed_by_aircraft_id}
-								<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
+							{#if flight.towedByAircraftId}
+								<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
 							{:else}
 								<span class="text-surface-500">—</span>
 							{/if}
@@ -307,27 +359,27 @@
 
 <!-- Mobile Cards -->
 <div class="block space-y-4 md:hidden">
-	{#each flights as flight (flight.id)}
+	{#each flightDetails as { flight, aircraft } (flight.id)}
 		<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
 			<!-- Aircraft info -->
 			<div class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3">
 				<div class="flex flex-wrap items-center gap-2">
 					{#if showAircraft}
-						{#if flight.aircraft_id}
-							<AircraftLink aircraft={flight} size="md" />
+						{#if aircraft}
+							<AircraftLink {aircraft} size="md" />
 						{:else}
 							<span class="font-semibold"
 								>{flight.registration ||
-									formatAircraftAddress(flight.device_address, flight.device_address_type)}</span
+									formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}</span
 							>
 						{/if}
 					{/if}
-					{#if flight.aircraft_type_ogn}
-						<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-							{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+					{#if flight.aircraftTypeOgn}
+						<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
+							{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
 						</span>
 					{/if}
-					{#if flight.towed_by_aircraft_id}
+					{#if flight.towedByAircraftId}
 						<span
 							class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 							title="This aircraft was towed"
@@ -350,21 +402,21 @@
 			<div class="text-surface-600-300-token space-y-2 text-sm">
 				<div>
 					<span class="text-surface-500-400-token text-xs">Start:</span>
-					{#if flight.departure_airport}
+					{#if flight.departureAirport}
 						<span class="font-medium">
-							{#if flight.departure_airport_country}
+							{#if flight.departureAirportCountry}
 								<img
-									src={getFlagPath(flight.departure_airport_country)}
+									src={getFlagPath(flight.departureAirportCountry)}
 									alt=""
 									class="inline-block h-3 rounded-sm"
 								/>
 							{/if}
-							{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}
+							{flight.departureAirport}{#if flight.takeoffRunwayIdent}/{flight.takeoffRunwayIdent}{/if}
 						</span>
 					{/if}
-					{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+					{formatLocalTime(isAirborne(flight) ? flight.createdAt : flight.takeoffTime)}
 					<span class="text-surface-500-400-token text-xs">
-						({formatRelativeTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)})
+						({formatRelativeTime(isAirborne(flight) ? flight.createdAt : flight.takeoffTime)})
 					</span>
 					{#if isAirborne(flight)}
 						<span
@@ -379,10 +431,10 @@
 					<div>
 						<span class="text-surface-500-400-token text-xs">End:</span>
 						{#if isTimedOut(flight)}
-							{#if flight.latest_fix_timestamp}
-								{formatLocalTime(flight.latest_fix_timestamp)}
+							{#if flight.latestFixTimestamp}
+								{formatLocalTime(flight.latestFixTimestamp)}
 								<span class="text-surface-500-400-token text-xs">
-									({formatRelativeTime(flight.latest_fix_timestamp)})
+									({formatRelativeTime(flight.latestFixTimestamp)})
 								</span>
 							{/if}
 							<span
@@ -395,21 +447,21 @@
 						{:else if isActive(flight)}
 							<span class="text-surface-500-400-token">In progress</span>
 						{:else}
-							{#if flight.arrival_airport}
+							{#if flight.arrivalAirport}
 								<span class="font-medium">
-									{#if flight.arrival_airport_country}
+									{#if flight.arrivalAirportCountry}
 										<img
-											src={getFlagPath(flight.arrival_airport_country)}
+											src={getFlagPath(flight.arrivalAirportCountry)}
 											alt=""
 											class="inline-block h-3 rounded-sm"
 										/>
 									{/if}
-									{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}
+									{flight.arrivalAirport}{#if flight.landingRunwayIdent}/{flight.landingRunwayIdent}{/if}
 								</span>
 							{/if}
-							{formatLocalTime(flight.landing_time)}
+							{formatLocalTime(flight.landingTime)}
 							<span class="text-surface-500-400-token text-xs">
-								({formatRelativeTime(flight.landing_time)})
+								({formatRelativeTime(flight.landingTime)})
 							</span>
 						{/if}
 					</div>
@@ -419,29 +471,29 @@
 						<span class="text-surface-500-400-token text-xs">Duration:</span>
 						<span class="font-semibold"
 							>{calculateFlightDuration(
-								flight.created_at,
-								flight.latest_fix_timestamp,
-								flight.landing_time
+								flight.createdAt,
+								flight.latestFixTimestamp,
+								flight.landingTime
 							)}</span
 						>
 					</div>
 					{#if showEnd}
 						<div>
 							<span class="text-surface-500-400-token text-xs">Distance:</span>
-							<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
+							<span class="font-semibold">{formatDistance(flight.totalDistanceMeters)}</span>
 						</div>
 					{/if}
 				</div>
-				{#if !showEnd && (flight.latest_altitude_msl_feet !== null || flight.latest_altitude_agl_feet !== null)}
+				{#if !showEnd && (flight.latestAltitudeMslFeet !== null || flight.latestAltitudeAglFeet !== null)}
 					<div>
 						<span class="text-surface-500-400-token text-xs">Altitude:</span>
-						{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+						{formatAltitude(flight.latestAltitudeMslFeet, flight.latestAltitudeAglFeet)}
 					</div>
 				{/if}
-				{#if !showEnd && flight.latest_fix_timestamp}
+				{#if !showEnd && flight.latestFixTimestamp}
 					<div>
 						<span class="text-surface-500-400-token text-xs">Latest fix:</span>
-						{formatRelativeTime(flight.latest_fix_timestamp)}
+						{formatRelativeTime(flight.latestFixTimestamp)}
 					</div>
 				{/if}
 			</div>

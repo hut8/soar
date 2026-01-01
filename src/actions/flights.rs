@@ -6,13 +6,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::actions::json_error;
 use crate::actions::views::{AircraftInfo, AirportInfo, FlightView};
+use crate::actions::{
+    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
+};
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::fixes::FixWithRawPacket;
 use crate::fixes_repo::FixesRepository;
-use crate::flights::Flight;
+use crate::flights::{Flight, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::geometry::spline::{GeoPoint, generate_spline_path};
 use crate::web::AppState;
@@ -26,17 +28,7 @@ pub struct FlightsQueryParams {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FlightResponse {
-    pub flight: FlightView,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightFixesResponse {
-    pub fixes: Vec<FixWithRawPacket>,
-    pub count: usize,
-}
-
-#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SplinePoint {
     pub latitude: f64,
     pub longitude: f64,
@@ -44,15 +36,32 @@ pub struct SplinePoint {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FlightSplinePathResponse {
-    pub points: Vec<SplinePoint>,
-    pub count: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FlightsListResponse {
-    pub flights: Vec<FlightView>,
-    pub total_count: i64,
+#[serde(rename_all = "camelCase")]
+pub struct FlightGap {
+    /// Start time of the gap (timestamp of last fix before gap)
+    pub gap_start: String,
+    /// End time of the gap (timestamp of first fix after gap)
+    pub gap_end: String,
+    /// Duration of the gap in seconds
+    pub duration_seconds: i64,
+    /// Straight-line distance covered during the gap in meters
+    pub distance_meters: f64,
+    /// Callsign before the gap (if available)
+    pub callsign_before: Option<String>,
+    /// Callsign after the gap (if available)
+    pub callsign_after: Option<String>,
+    /// Squawk code before the gap (if available)
+    pub squawk_before: Option<String>,
+    /// Squawk code after the gap (if available)
+    pub squawk_after: Option<String>,
+    /// Climb rate (fpm) for the fix immediately before the gap
+    pub climb_rate_before: Option<i32>,
+    /// Climb rate (fpm) for the fix immediately after the gap
+    pub climb_rate_after: Option<i32>,
+    /// Average climb rate (fpm) for 10 fixes before the gap
+    pub avg_climb_rate_10_before: Option<i32>,
+    /// Average climb rate (fpm) for 10 fixes after the gap
+    pub avg_climb_rate_10_after: Option<i32>,
 }
 
 /// Get a flight by its UUID
@@ -136,10 +145,7 @@ pub async fn get_flight_by_id(
                 previous_flight_id,
                 next_flight_id,
             );
-            Json(FlightResponse {
-                flight: flight_view,
-            })
-            .into_response()
+            Json(DataResponse { data: flight_view }).into_response()
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
@@ -163,7 +169,7 @@ pub async fn get_flight_device(
             if let Some(aircraft_id) = flight.aircraft_id {
                 // Look up aircraft information
                 match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
-                    Ok(Some(aircraft)) => Json(aircraft).into_response(),
+                    Ok(Some(aircraft)) => Json(DataResponse { data: aircraft }).into_response(),
                     Ok(None) => {
                         json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
@@ -289,10 +295,7 @@ pub async fn get_flight_fixes(
         )
         .await
     {
-        Ok(fixes) => {
-            let count = fixes.len();
-            Json(FlightFixesResponse { fixes, count }).into_response()
-        }
+        Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             tracing::error!("Failed to get fixes for flight {}: {}", id, e);
             json_error(
@@ -350,11 +353,7 @@ pub async fn get_flight_spline_path(
 
     if fixes.len() < 2 {
         // Not enough points for spline interpolation, return empty
-        return Json(FlightSplinePathResponse {
-            points: vec![],
-            count: 0,
-        })
-        .into_response();
+        return Json(DataListResponse::<SplinePoint> { data: vec![] }).into_response();
     }
 
     // Convert fixes to GeoPoints with altitude
@@ -383,8 +382,7 @@ pub async fn get_flight_spline_path(
         })
         .collect();
 
-    let count = points.len();
-    Json(FlightSplinePathResponse { points, count }).into_response()
+    Json(DataListResponse { data: points }).into_response()
 }
 
 /// Generate an appropriate filename for the KML download
@@ -429,7 +427,7 @@ pub async fn search_flights(
                         match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
                             Ok(Some(aircraft)) => Some(AircraftInfo {
                                 aircraft_model: Some(aircraft.aircraft_model),
-                                registration: Some(aircraft.registration),
+                                registration: aircraft.registration,
                                 aircraft_type_ogn: aircraft.aircraft_type_ogn,
                                 country_code: aircraft.country_code,
                             }),
@@ -443,9 +441,15 @@ pub async fn search_flights(
                     flight_views.push(flight_view);
                 }
 
-                Json(FlightsListResponse {
-                    flights: flight_views,
-                    total_count,
+                let page = (offset / limit) + 1;
+                let total_pages = ((total_count as f64) / (limit as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: flight_views,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -474,7 +478,7 @@ pub async fn search_flights(
                         match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
                             Ok(Some(aircraft)) => Some(AircraftInfo {
                                 aircraft_model: Some(aircraft.aircraft_model),
-                                registration: Some(aircraft.registration),
+                                registration: aircraft.registration,
                                 aircraft_type_ogn: aircraft.aircraft_type_ogn,
                                 country_code: aircraft.country_code,
                             }),
@@ -515,9 +519,15 @@ pub async fn search_flights(
                     flight_views.push(flight_view);
                 }
 
-                Json(FlightsListResponse {
-                    flights: flight_views,
-                    total_count,
+                let page = (offset / limit) + 1;
+                let total_pages = ((total_count as f64) / (limit as f64)).ceil() as i64;
+                Json(PaginatedDataResponse {
+                    data: flight_views,
+                    metadata: PaginationMetadata {
+                        page,
+                        total_pages,
+                        total_count,
+                    },
                 })
                 .into_response()
             }
@@ -584,7 +594,7 @@ pub async fn get_airport_flights(
                     match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
                         Ok(Some(aircraft)) => Some(AircraftInfo {
                             aircraft_model: Some(aircraft.aircraft_model),
-                            registration: Some(aircraft.registration),
+                            registration: aircraft.registration,
                             aircraft_type_ogn: aircraft.aircraft_type_ogn,
                             country_code: aircraft.country_code,
                         }),
@@ -600,12 +610,13 @@ pub async fn get_airport_flights(
                     arrival_airport,
                     aircraft_info,
                 );
-                flight_responses.push(FlightResponse {
-                    flight: flight_view,
-                });
+                flight_responses.push(flight_view);
             }
 
-            Json(flight_responses).into_response()
+            Json(DataListResponse {
+                data: flight_responses,
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get flights for airport {}: {}", airport_id, e);
@@ -638,7 +649,7 @@ pub async fn get_nearby_flights(
                     match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
                         Ok(Some(aircraft)) => Some(AircraftInfo {
                             aircraft_model: Some(aircraft.aircraft_model),
-                            registration: Some(aircraft.registration),
+                            registration: aircraft.registration,
                             aircraft_type_ogn: aircraft.aircraft_type_ogn,
                             country_code: aircraft.country_code,
                         }),
@@ -652,7 +663,7 @@ pub async fn get_nearby_flights(
                 flight_views.push(flight_view);
             }
 
-            Json(flight_views).into_response()
+            Json(DataListResponse { data: flight_views }).into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get nearby flights for flight {}: {}", id, e);
@@ -663,4 +674,140 @@ pub async fn get_nearby_flights(
             .into_response()
         }
     }
+}
+
+/// Calculate average climb rate from a slice of fixes
+fn calculate_avg_climb_rate(fixes: &[FixWithRawPacket]) -> Option<i32> {
+    if fixes.len() < 2 {
+        return None;
+    }
+
+    let first = &fixes[0];
+    let last = &fixes[fixes.len() - 1];
+
+    // Get altitude MSL for both fixes
+    let first_alt = first.altitude_msl_feet?;
+    let last_alt = last.altitude_msl_feet?;
+
+    // Calculate time difference in minutes
+    let time_diff = (last.timestamp - first.timestamp).num_seconds() as f64 / 60.0;
+
+    if time_diff == 0.0 {
+        return None;
+    }
+
+    // Calculate climb rate in feet per minute
+    let climb_rate = (last_alt - first_alt) as f64 / time_diff;
+
+    Some(climb_rate.round() as i32)
+}
+
+/// Get gaps in position fixes for a flight (5+ minutes between fixes)
+/// This is useful for debugging flight detection and understanding tracking coverage
+pub async fn get_flight_gaps(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+
+    // First verify the flight exists
+    let flight = match flights_repo.get_flight_by_id(id).await {
+        Ok(Some(flight)) => flight,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
+                .into_response();
+        }
+    };
+
+    // Get all fixes for the flight in chronological order
+    let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
+    let end_time = flight.landing_time.unwrap_or_else(chrono::Utc::now);
+
+    let mut fixes = match fixes_repo
+        .get_fixes_for_aircraft_with_time_range(
+            &flight.aircraft_id.unwrap_or(Uuid::nil()),
+            start_time,
+            end_time,
+            None,
+        )
+        .await
+    {
+        Ok(fixes) => fixes,
+        Err(e) => {
+            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get flight fixes",
+            )
+            .into_response();
+        }
+    };
+
+    // Reverse to get chronological order (earliest first)
+    fixes.reverse();
+
+    const GAP_THRESHOLD_SECONDS: i64 = 5 * 60; // 5 minutes
+    const LOOKBACK_COUNT: usize = 10;
+
+    let mut gaps = Vec::new();
+
+    // Iterate through consecutive fixes to find gaps
+    for i in 0..fixes.len().saturating_sub(1) {
+        let current = &fixes[i];
+        let next = &fixes[i + 1];
+
+        let time_diff = (next.timestamp - current.timestamp).num_seconds();
+
+        if time_diff >= GAP_THRESHOLD_SECONDS {
+            // Calculate distance covered during the gap
+            let distance_meters = haversine_distance(
+                current.latitude,
+                current.longitude,
+                next.latitude,
+                next.longitude,
+            );
+
+            // Get callsign before and after (only if different)
+            let callsign_before = current.flight_number.clone();
+            let callsign_after = next.flight_number.clone();
+
+            // Get squawk codes
+            let squawk_before = current.squawk.clone();
+            let squawk_after = next.squawk.clone();
+
+            // Climb rate for fixes immediately before and after
+            let climb_rate_before = current.climb_fpm;
+            let climb_rate_after = next.climb_fpm;
+
+            // Calculate average climb rate for 10 fixes before the gap
+            let start_lookback = i.saturating_sub(LOOKBACK_COUNT);
+            let fixes_before = &fixes[start_lookback..=i];
+            let avg_climb_rate_10_before = calculate_avg_climb_rate(fixes_before);
+
+            // Calculate average climb rate for 10 fixes after the gap
+            let end_lookback = (i + 1 + LOOKBACK_COUNT).min(fixes.len());
+            let fixes_after = &fixes[(i + 1)..end_lookback];
+            let avg_climb_rate_10_after = calculate_avg_climb_rate(fixes_after);
+
+            gaps.push(FlightGap {
+                gap_start: current.timestamp.to_rfc3339(),
+                gap_end: next.timestamp.to_rfc3339(),
+                duration_seconds: time_diff,
+                distance_meters,
+                callsign_before,
+                callsign_after,
+                squawk_before,
+                squawk_after,
+                climb_rate_before,
+                climb_rate_after,
+                avg_climb_rate_10_before,
+                avg_climb_rate_10_after,
+            });
+        }
+    }
+
+    Json(DataListResponse { data: gaps }).into_response()
 }

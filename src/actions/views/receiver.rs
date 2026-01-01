@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 /// API view of a receiver with extracted latitude and longitude
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReceiverView {
     pub id: Uuid,
     pub callsign: String,

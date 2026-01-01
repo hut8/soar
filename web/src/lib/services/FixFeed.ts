@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment';
-import type { Aircraft, Fix } from '$lib/types';
+import type { Aircraft, Fix, AircraftSearchResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
@@ -17,20 +17,26 @@ export type FixFeedEvent =
 
 export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
+export interface GeoBounds {
+	north: number;
+	south: number;
+	east: number;
+	west: number;
+}
+
 export interface AircraftSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
 	type: 'aircraft';
 	id: string;
 }
 
-export interface AreaSubscriptionMessage {
+export interface BulkAreaSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	type: 'area';
-	latitude: number;
-	longitude: number;
+	type: 'area_bulk';
+	bounds: GeoBounds;
 }
 
-export type SubscriptionMessage = AircraftSubscriptionMessage | AreaSubscriptionMessage;
+export type SubscriptionMessage = AircraftSubscriptionMessage | BulkAreaSubscriptionMessage;
 
 export class FixFeed {
 	private static instance: FixFeed | null = null;
@@ -91,8 +97,8 @@ export class FixFeed {
 				// Dev mode with local backend
 				this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
 			} else {
-				// Dev mode using production backend
-				this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+				// Dev mode using staging backend
+				this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
 			}
 		}
 	}
@@ -139,19 +145,19 @@ export class FixFeed {
 						// Transform WebSocket fix data to match Fix interface
 						const fix: Fix = {
 							id: rawMessage.id,
-							aircraft_id: rawMessage.aircraft_id,
-							device_address_hex: rawMessage.device_address_hex,
+							aircraftId: rawMessage.aircraftId,
+							deviceAddressHex: rawMessage.deviceAddressHex,
 							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
 							longitude: rawMessage.longitude,
-							altitude_msl_feet: rawMessage.altitude_msl_feet,
-							altitude_agl_feet: rawMessage.altitude_agl_feet,
-							track_degrees: rawMessage.track,
-							ground_speed_knots: rawMessage.ground_speed,
-							climb_fpm: rawMessage.climb_rate,
+							altitudeMslFeet: rawMessage.altitudeMslFeet,
+							altitudeAglFeet: rawMessage.altitudeAglFeet,
+							trackDegrees: rawMessage.trackDegrees,
+							groundSpeedKnots: rawMessage.groundSpeedKnots,
+							climbFpm: rawMessage.climbFpm,
 							registration: rawMessage.registration,
 							model: rawMessage.model,
-							flight_id: rawMessage.flight_id,
+							flightId: rawMessage.flightId,
 							active: rawMessage.active
 						};
 
@@ -175,6 +181,14 @@ export class FixFeed {
 						const aircraftFixes = aircraft.fixes || [];
 						if (aircraftFixes.length > 0) {
 							for (const fix of aircraftFixes) {
+								// Ensure fix has aircraftId set (should come from backend, but validate)
+								if (!fix.aircraftId && aircraft.id) {
+									console.warn(
+										'[FIXFEED] Fix missing aircraftId, setting from parent aircraft:',
+										aircraft.id
+									);
+									fix.aircraftId = aircraft.id;
+								}
 								this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
 									console.warn('Failed to add aircraft fix to registry:', error);
 								});
@@ -412,29 +426,31 @@ export class FixFeed {
 
 	// Fetch aircraft in bounding box via REST API
 	public async fetchAircraftInBoundingBox(
-		latMin: number,
-		latMax: number,
-		lonMin: number,
-		lonMax: number,
-		afterTimestamp?: string // Expected in ISO 8601 format
-	): Promise<Aircraft[]> {
-		if (!browser) return [];
+		south: number,
+		north: number,
+		west: number,
+		east: number,
+		afterTimestamp?: string, // Expected in ISO 8601 format
+		limit?: number
+	): Promise<AircraftSearchResponse> {
+		if (!browser) return { items: [], total: 0, clustered: false };
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall('/aircraft', {
+			const response = await serverCall<AircraftSearchResponse>('/aircraft', {
 				params: {
-					latitude_min: latMin,
-					latitude_max: latMax,
-					longitude_min: lonMin,
-					longitude_max: lonMax,
-					...(afterTimestamp && { after: afterTimestamp })
+					south,
+					north,
+					west,
+					east,
+					...(afterTimestamp && { after: afterTimestamp }),
+					...(limit && { limit })
 				}
 			});
-			return response as Aircraft[];
+			return response;
 		} catch (error) {
 			console.error('Failed to fetch aircraft in bounding box:', error);
-			return [];
+			return { items: [], total: 0, clustered: false };
 		}
 	}
 }
