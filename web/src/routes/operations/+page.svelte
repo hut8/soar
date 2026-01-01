@@ -72,6 +72,9 @@
 	let shouldShowAirspaces: boolean = false;
 	let airspaceUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Zoom debounce timer
+	let zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let clusterMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
@@ -566,15 +569,28 @@
 			setTimeout(checkAndUpdateAirspaces, 100); // Check airspaces as well
 			// Update aircraft marker scaling on zoom change
 			updateAllAircraftMarkersScale();
-			// Update area tracker availability and subscriptions
+			// Update area tracker availability
 			updateAreaTrackerAvailability();
-			if (areaTrackerActive) {
-				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
-				setTimeout(async () => {
-					await fetchAndDisplayDevicesInViewport();
-					updateAreaSubscriptions();
-				}, 100);
+
+			// Clear any existing debounce timer
+			if (zoomDebounceTimer) {
+				clearTimeout(zoomDebounceTimer);
 			}
+
+			// Debounce aircraft fetching by 1 second after zoom stops
+			zoomDebounceTimer = setTimeout(async () => {
+				// Always fetch aircraft in viewport to check for clustering
+				// This ensures clustering activates even when area tracker is off
+				await fetchAndDisplayDevicesInViewport();
+
+				// Update WebSocket subscriptions only if area tracker is active
+				if (areaTrackerActive) {
+					updateAreaSubscriptions();
+				}
+
+				zoomDebounceTimer = null;
+			}, 1000); // Wait 1 second after zoom stops
+
 			// Save map state after zoom changes
 			saveMapState();
 		});
@@ -583,12 +599,15 @@
 			checkAndUpdateAirports();
 			checkAndUpdateReceivers();
 			checkAndUpdateAirspaces();
-			// Update area subscriptions after panning
+
+			// Always fetch aircraft in viewport after panning
+			await fetchAndDisplayDevicesInViewport();
+
+			// Update WebSocket subscriptions only if area tracker is active
 			if (areaTrackerActive) {
-				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
-				await fetchAndDisplayDevicesInViewport();
 				updateAreaSubscriptions();
 			}
+
 			// Save map state after panning
 			saveMapState();
 		});
@@ -1974,6 +1993,9 @@
 				// Clear WebSocket area subscriptions - clustered mode uses REST API polling instead
 				clearAreaSubscriptions();
 
+				// Clear aircraft registry - we're forgetting all aircraft outside viewport
+				aircraftRegistry.clear();
+
 				clearAircraftMarkers();
 				clearClusterMarkers();
 
@@ -1984,7 +2006,7 @@
 					}
 				}
 
-				console.log(`[REST] Rendered ${clusterMarkers.size} cluster markers`);
+				console.log(`[AIRCRAFT COUNT] ${clusterMarkers.size} cluster markers on map`);
 			} else {
 				console.log('[REST] Response has individual aircraft, rendering aircraft markers');
 
@@ -1997,6 +2019,9 @@
 					updateAreaSubscriptions();
 				}
 
+				// Clear aircraft registry - we're forgetting all aircraft outside viewport
+				aircraftRegistry.clear();
+
 				clearClusterMarkers();
 
 				for (const item of items) {
@@ -2005,7 +2030,8 @@
 					}
 				}
 
-				console.log('[REST] Aircraft loaded, markers created from latest positions');
+				// Log the count of aircraft now on the map
+				console.log(`[AIRCRAFT COUNT] ${aircraftMarkers.size} aircraft markers on map`);
 			}
 		} catch (error) {
 			console.error('[REST] Failed to fetch aircraft in viewport:', error);
