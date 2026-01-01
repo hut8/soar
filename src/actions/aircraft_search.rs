@@ -319,17 +319,26 @@ async fn search_aircraft_by_bbox(
                             (cluster.grid_lng * 1000.0) as i64
                         );
 
+                        // Calculate grid cell bounds and center
+                        // grid_lat/grid_lng are the lower-left corner of the grid cell
+                        let grid_north = cluster.grid_lat + grid_size;
+                        let grid_south = cluster.grid_lat;
+                        let grid_east = cluster.grid_lng + grid_size;
+                        let grid_west = cluster.grid_lng;
+                        let grid_center_lat = cluster.grid_lat + (grid_size / 2.0);
+                        let grid_center_lng = cluster.grid_lng + (grid_size / 2.0);
+
                         AircraftOrCluster::Cluster {
                             data: AircraftCluster {
                                 id: cluster_id,
-                                latitude: cluster.centroid_lat,
-                                longitude: cluster.centroid_lng,
+                                latitude: grid_center_lat,
+                                longitude: grid_center_lng,
                                 count: cluster.aircraft_count,
                                 bounds: ClusterBounds {
-                                    north: cluster.max_lat,
-                                    south: cluster.min_lat,
-                                    east: cluster.max_lng,
-                                    west: cluster.min_lng,
+                                    north: grid_north,
+                                    south: grid_south,
+                                    east: grid_east,
+                                    west: grid_west,
                                 },
                             },
                         }
