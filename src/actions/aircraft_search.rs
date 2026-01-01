@@ -290,11 +290,11 @@ async fn search_aircraft_by_bbox(
 
     info!("Total aircraft in bounding box: {}", total_count);
 
-    // Use clustering if total count exceeds 50 aircraft
-    if total_count > 50 {
-        info!("Total count exceeds 50, using clustering");
+    // Use clustering if total count exceeds 250 aircraft
+    if total_count > 250 {
+        info!("Total count exceeds 250, using clustering");
 
-        let grid_size = 0.1; // 0.1 degrees (~11km)
+        let grid_size = 0.25; // 0.25 degrees (~28km)
 
         match fixes_repo
             .get_clustered_aircraft_in_bounding_box(

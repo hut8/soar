@@ -75,6 +75,7 @@
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let clusterMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
+	let clusterPolygons = new SvelteMap<string, google.maps.Polygon>();
 	let latestFixes = new SvelteMap<string, Fix>();
 
 	// Aircraft trail variables
@@ -1563,30 +1564,50 @@
 			count: cluster.count
 		});
 
+		// Create polygon outline for the cluster bounds
+		const polygon = new google.maps.Polygon({
+			paths: [
+				{ lat: cluster.bounds.north, lng: cluster.bounds.west },
+				{ lat: cluster.bounds.north, lng: cluster.bounds.east },
+				{ lat: cluster.bounds.south, lng: cluster.bounds.east },
+				{ lat: cluster.bounds.south, lng: cluster.bounds.west }
+			],
+			strokeColor: '#3B82F6',
+			strokeOpacity: 0.8,
+			strokeWeight: 2,
+			fillColor: '#3B82F6',
+			fillOpacity: 0.1,
+			map: map,
+			zIndex: 400
+		});
+
+		// Store the polygon for later cleanup
+		clusterPolygons.set(cluster.id, polygon);
+
+		// Add click listener to polygon
+		polygon.addListener('click', () => {
+			handleClusterClick(cluster);
+		});
+
+		// Create label marker at centroid with colored background
 		const markerContent = document.createElement('div');
-		markerContent.className = 'cluster-marker';
+		markerContent.className = 'cluster-label';
+		markerContent.style.display = 'flex';
+		markerContent.style.alignItems = 'center';
+		markerContent.style.gap = '6px';
+		markerContent.style.padding = '8px 12px';
+		markerContent.style.background = 'rgba(59, 130, 246, 0.9)';
+		markerContent.style.borderRadius = '6px';
+		markerContent.style.cursor = 'pointer';
+		markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+		markerContent.style.transition = 'transform 0.2s, box-shadow 0.2s';
+		markerContent.style.border = '2px solid #2563EB';
 
-		const clusterCircle = document.createElement('div');
-		clusterCircle.className = 'cluster-circle';
-
-		// Size based on count: 40px base + log scale
-		const size = Math.min(60, 40 + Math.log10(cluster.count) * 10);
-		clusterCircle.style.width = `${size}px`;
-		clusterCircle.style.height = `${size}px`;
-		clusterCircle.style.borderRadius = '50%';
-		clusterCircle.style.background = 'rgba(59, 130, 246, 0.7)';
-		clusterCircle.style.border = '2px solid rgb(37, 99, 235)';
-		clusterCircle.style.display = 'flex';
-		clusterCircle.style.alignItems = 'center';
-		clusterCircle.style.justifyContent = 'center';
-		clusterCircle.style.flexDirection = 'column';
-		clusterCircle.style.cursor = 'pointer';
-		clusterCircle.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
-		clusterCircle.style.transition = 'transform 0.2s, box-shadow 0.2s';
-
-		// Airplane SVG icon
+		// Small airplane SVG icon
 		const iconDiv = document.createElement('div');
-		iconDiv.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+		iconDiv.style.display = 'flex';
+		iconDiv.style.alignItems = 'center';
+		iconDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white">
 			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
 		</svg>`;
 
@@ -1595,12 +1616,11 @@
 		countLabel.style.color = 'white';
 		countLabel.style.fontWeight = 'bold';
 		countLabel.style.fontSize = '14px';
-		countLabel.style.marginTop = '2px';
+		countLabel.style.whiteSpace = 'nowrap';
 		countLabel.textContent = cluster.count.toString();
 
-		clusterCircle.appendChild(iconDiv);
-		clusterCircle.appendChild(countLabel);
-		markerContent.appendChild(clusterCircle);
+		markerContent.appendChild(iconDiv);
+		markerContent.appendChild(countLabel);
 
 		const marker = new google.maps.marker.AdvancedMarkerElement({
 			position: { lat: cluster.latitude, lng: cluster.longitude },
@@ -1615,13 +1635,13 @@
 		});
 
 		markerContent.addEventListener('mouseenter', () => {
-			clusterCircle.style.transform = 'scale(1.1)';
-			clusterCircle.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+			markerContent.style.transform = 'scale(1.1)';
+			markerContent.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
 		});
 
 		markerContent.addEventListener('mouseleave', () => {
-			clusterCircle.style.transform = 'scale(1)';
-			clusterCircle.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+			markerContent.style.transform = 'scale(1)';
+			markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
 		});
 
 		return marker;
@@ -1650,7 +1670,14 @@
 			marker.map = null;
 		});
 		clusterMarkers.clear();
-		console.log('[CLUSTER] All cluster markers cleared');
+
+		// Also clear cluster polygons
+		console.log('[CLUSTER] Clearing all cluster polygons. Count:', clusterPolygons.size);
+		clusterPolygons.forEach((polygon) => {
+			polygon.setMap(null);
+		});
+		clusterPolygons.clear();
+		console.log('[CLUSTER] All cluster markers and polygons cleared');
 	}
 
 	// Aircraft trail functions
