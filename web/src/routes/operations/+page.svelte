@@ -1608,33 +1608,33 @@
 			handleClusterClick(cluster);
 		});
 
-		// Create label marker at centroid with colored background
+		// Create label marker at centroid - no solid background, just text with shadow for visibility
 		const markerContent = document.createElement('div');
 		markerContent.className = 'cluster-label';
 		markerContent.style.display = 'flex';
+		markerContent.style.flexDirection = 'column';
 		markerContent.style.alignItems = 'center';
-		markerContent.style.gap = '6px';
-		markerContent.style.padding = '8px 12px';
-		markerContent.style.background = 'rgba(59, 130, 246, 0.9)';
-		markerContent.style.borderRadius = '6px';
+		markerContent.style.justifyContent = 'center';
+		markerContent.style.gap = '4px';
 		markerContent.style.cursor = 'pointer';
-		markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
-		markerContent.style.transition = 'transform 0.2s, box-shadow 0.2s';
-		markerContent.style.border = '2px solid #2563EB';
+		markerContent.style.pointerEvents = 'auto';
 
-		// Small airplane SVG icon
+		// Airplane SVG icon with white fill and shadow
 		const iconDiv = document.createElement('div');
 		iconDiv.style.display = 'flex';
 		iconDiv.style.alignItems = 'center';
-		iconDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+		iconDiv.style.justifyContent = 'center';
+		iconDiv.style.filter = 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8))';
+		iconDiv.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="white">
 			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
 		</svg>`;
 
-		// Count label
+		// Count label with shadow for visibility
 		const countLabel = document.createElement('div');
 		countLabel.style.color = 'white';
 		countLabel.style.fontWeight = 'bold';
-		countLabel.style.fontSize = '14px';
+		countLabel.style.fontSize = '18px';
+		countLabel.style.textShadow = '0 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.6)';
 		countLabel.style.whiteSpace = 'nowrap';
 		countLabel.textContent = cluster.count.toString();
 
@@ -1654,13 +1654,11 @@
 		});
 
 		markerContent.addEventListener('mouseenter', () => {
-			markerContent.style.transform = 'scale(1.1)';
-			markerContent.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.4)';
+			markerContent.style.transform = 'scale(1.15)';
 		});
 
 		markerContent.addEventListener('mouseleave', () => {
 			markerContent.style.transform = 'scale(1)';
-			markerContent.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
 		});
 
 		return marker;
