@@ -1836,6 +1836,13 @@
 	function updateAreaSubscriptions(): void {
 		if (!areaTrackerActive || !areaTrackerAvailable || !map) return;
 
+		// Don't subscribe to area updates when in clustered mode
+		// Clustered mode uses periodic REST API refreshes instead of real-time WebSocket updates
+		if (isClusteredMode) {
+			console.log('[AREA TRACKER] Skipping subscription - in clustered mode');
+			return;
+		}
+
 		const bounds = map.getBounds();
 		if (!bounds) return;
 
@@ -1937,6 +1944,9 @@
 				isClusteredMode = true;
 				startClusterRefreshTimer();
 
+				// Clear WebSocket area subscriptions - clustered mode uses REST API polling instead
+				clearAreaSubscriptions();
+
 				clearAircraftMarkers();
 				clearClusterMarkers();
 
@@ -1954,6 +1964,11 @@
 				// Exit clustered mode
 				isClusteredMode = false;
 				stopClusterRefreshTimer();
+
+				// Restore WebSocket area subscriptions for real-time updates
+				if (areaTrackerActive) {
+					updateAreaSubscriptions();
+				}
 
 				clearClusterMarkers();
 
