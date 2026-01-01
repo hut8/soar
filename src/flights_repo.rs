@@ -754,21 +754,37 @@ impl FlightsRepository {
 
     /// Update the last_fix_at timestamp for a flight
     /// This should be called whenever a new fix is assigned to a flight
+    ///
+    /// Handles out-of-order fixes by:
+    /// - Setting created_at to the EARLIEST fix timestamp (LEAST)
+    /// - Setting last_fix_at to the LATEST fix timestamp (GREATEST)
+    ///
+    /// This ensures the check_last_fix_after_created constraint is always satisfied
+    /// even when fixes arrive out of order.
     pub async fn update_last_fix_at(
         &self,
         flight_id: Uuid,
         fix_timestamp: DateTime<Utc>,
     ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
         let pool = self.pool.clone();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((last_fix_at.eq(fix_timestamp), updated_at.eq(Utc::now())))
-                .execute(&mut conn)?;
+            // Use LEAST/GREATEST to handle out-of-order fixes:
+            // - created_at should be the earliest fix timestamp
+            // - last_fix_at should be the latest fix timestamp
+            // This ensures last_fix_at >= created_at is always true
+            let rows = diesel::sql_query(
+                "UPDATE flights
+                 SET created_at = LEAST(created_at, $1),
+                     last_fix_at = GREATEST(last_fix_at, $1),
+                     updated_at = NOW()
+                 WHERE id = $2",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(fix_timestamp)
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })
