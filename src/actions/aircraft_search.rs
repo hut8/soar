@@ -294,7 +294,7 @@ async fn search_aircraft_by_bbox(
     if total_count > 250 {
         info!("Total count exceeds 250, using clustering");
 
-        let grid_size = 1.0; // 1.0 degree (~111km)
+        let grid_size = 3.0; // 3.0 degrees (~333km)
 
         match fixes_repo
             .get_clustered_aircraft_in_bounding_box(
