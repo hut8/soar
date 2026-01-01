@@ -294,7 +294,7 @@ async fn search_aircraft_by_bbox(
     if total_count > 250 {
         info!("Total count exceeds 250, using clustering");
 
-        let grid_size = 3.0; // 3.0 degrees (~333km)
+        let grid_size = 5.0; // 5.0 degrees (~555km)
 
         match fixes_repo
             .get_clustered_aircraft_in_bounding_box(
@@ -320,13 +320,13 @@ async fn search_aircraft_by_bbox(
                         );
 
                         // Calculate grid cell bounds and center
-                        // grid_lat/grid_lng are the lower-left corner of the grid cell
-                        let grid_north = cluster.grid_lat + grid_size;
-                        let grid_south = cluster.grid_lat;
-                        let grid_east = cluster.grid_lng + grid_size;
-                        let grid_west = cluster.grid_lng;
-                        let grid_center_lat = cluster.grid_lat + (grid_size / 2.0);
-                        let grid_center_lng = cluster.grid_lng + (grid_size / 2.0);
+                        // Align to multiples of grid_size for uniform, aligned grid cells
+                        let grid_south = (cluster.grid_lat / grid_size).floor() * grid_size;
+                        let grid_north = grid_south + grid_size;
+                        let grid_west = (cluster.grid_lng / grid_size).floor() * grid_size;
+                        let grid_east = grid_west + grid_size;
+                        let grid_center_lat = grid_south + (grid_size / 2.0);
+                        let grid_center_lng = grid_west + (grid_size / 2.0);
 
                         AircraftOrCluster::Cluster {
                             data: AircraftCluster {

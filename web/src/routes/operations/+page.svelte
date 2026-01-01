@@ -1626,27 +1626,29 @@
 		markerContent.style.flexDirection = 'column';
 		markerContent.style.alignItems = 'center';
 		markerContent.style.justifyContent = 'center';
-		markerContent.style.gap = '4px';
+		markerContent.style.gap = '2px';
 		markerContent.style.cursor = 'pointer';
 		markerContent.style.pointerEvents = 'auto';
+		markerContent.style.position = 'relative';
 
-		// Airplane SVG icon with white fill and shadow
+		// Airplane SVG icon with white fill and shadow - SMALLER
 		const iconDiv = document.createElement('div');
 		iconDiv.style.display = 'flex';
 		iconDiv.style.alignItems = 'center';
 		iconDiv.style.justifyContent = 'center';
 		iconDiv.style.filter = 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8))';
-		iconDiv.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+		iconDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white">
 			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
 		</svg>`;
 
-		// Count label with shadow for visibility
+		// Count label with shadow for visibility - SMALLER
 		const countLabel = document.createElement('div');
 		countLabel.style.color = 'white';
 		countLabel.style.fontWeight = 'bold';
-		countLabel.style.fontSize = '18px';
+		countLabel.style.fontSize = '14px';
 		countLabel.style.textShadow = '0 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.6)';
 		countLabel.style.whiteSpace = 'nowrap';
+		countLabel.style.lineHeight = '1';
 		countLabel.textContent = cluster.count.toString();
 
 		markerContent.appendChild(iconDiv);
