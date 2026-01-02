@@ -424,12 +424,11 @@
 			marker.addListener('click', () => {
 				const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
 				const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
-				const heading = fix.trackDegrees !== undefined ? Math.round(fix.trackDegrees) + '°' : 'N/A';
-				const turnRate =
-					fix.turnRateRot !== undefined ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
-				const climbRate = fix.climbFpm !== undefined ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
+				const heading = fix.trackDegrees !== null ? Math.round(fix.trackDegrees) + '°' : 'N/A';
+				const turnRate = fix.turnRateRot !== null ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
+				const climbRate = fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 				const groundSpeed =
-					fix.groundSpeedKnots !== undefined ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
+					fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
 				const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 				const content = `

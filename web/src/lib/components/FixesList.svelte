@@ -2,12 +2,12 @@
 	import { Activity } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Fix } from '$lib/types';
+	import type { Fix, FixWithExtras } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
 	interface Props {
-		fixes: Fix[];
+		fixes: FixWithExtras[];
 		loading?: boolean;
 		showHideInactive?: boolean; // Show "hide inactive" checkbox
 		showRaw?: boolean; // Show "show raw" checkbox
@@ -213,6 +213,8 @@
 						{#if showClimb}
 							<th class="px-3 py-2 text-left text-sm font-medium">Climb</th>
 						{/if}
+						<th class="px-3 py-2 text-left text-sm font-medium">Squawk</th>
+						<th class="px-3 py-2 text-left text-sm font-medium">Flight #</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -253,6 +255,8 @@
 							{#if showClimb}
 								<td class="px-3 py-2 text-sm">{formatClimb(fix.climbFpm)}</td>
 							{/if}
+							<td class="px-3 py-2 font-mono text-sm">{fix.squawk || 'N/A'}</td>
+							<td class="px-3 py-2 font-mono text-sm">{fix.flightNumber || 'N/A'}</td>
 						</tr>
 						{#if showRawData && fix.rawPacket}
 							<tr
@@ -261,7 +265,7 @@
 									: ''}"
 							>
 								<td
-									colspan={showClimb ? (showTimeIntervals ? 8 : 7) : showTimeIntervals ? 7 : 6}
+									colspan={showClimb ? (showTimeIntervals ? 10 : 9) : showTimeIntervals ? 9 : 8}
 									class="px-3 py-2 font-mono text-sm"
 								>
 									{fix.rawPacket}
@@ -327,6 +331,14 @@
 								<dd class="font-medium">{formatClimb(fix.climbFpm)}</dd>
 							</div>
 						{/if}
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Squawk</dt>
+							<dd class="font-mono font-medium">{fix.squawk || 'N/A'}</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Flight Number</dt>
+							<dd class="font-mono font-medium">{fix.flightNumber || 'N/A'}</dd>
+						</div>
 					</dl>
 
 					{#if showRawData && fix.rawPacket}

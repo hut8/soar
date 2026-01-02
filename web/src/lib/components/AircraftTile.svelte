@@ -19,9 +19,18 @@
 	);
 
 	// Build the flight detail URL from current fix flight ID
-	let flightUrl = $derived(
-		aircraft.currentFix?.flightId ? `/flights/${aircraft.currentFix.flightId}` : null
-	);
+	// currentFix is JsonValue, so we need to check if it's an object with flightId
+	let flightUrl = $derived.by(() => {
+		if (
+			!aircraft.currentFix ||
+			typeof aircraft.currentFix !== 'object' ||
+			Array.isArray(aircraft.currentFix)
+		) {
+			return null;
+		}
+		const fixObj = aircraft.currentFix as Record<string, unknown>;
+		return fixObj.flightId ? `/flights/${fixObj.flightId}` : null;
+	});
 
 	// Get country code for flag display
 	const countryCode = $derived(() => {
