@@ -4,7 +4,8 @@
 	import {
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
-		getAircraftTitle
+		getAircraftTitle,
+		formatAircraftAddress
 	} from '$lib/formatters';
 	import type { Aircraft } from '$lib/types';
 
@@ -53,22 +54,24 @@
 			</div>
 		</div>
 
-		<!-- Registration and Model -->
+		<!-- Aircraft Details (matching detail page header) -->
 		<div class="mb-4 space-y-2">
-			<div class="flex items-center gap-2">
-				<Plane class="h-4 w-4 text-surface-500" />
-				<div>
-					<p class="text-surface-600-300-token text-xs">Registration</p>
-					<p class="text-sm font-semibold">
-						{aircraft.registration || 'Unknown'}
-					</p>
+			{#if aircraft.icaoModelCode}
+				<div class="flex items-center gap-2">
+					<Plane class="h-4 w-4 text-surface-500" />
+					<div>
+						<p class="text-surface-600-300-token text-xs">ICAO Model Code</p>
+						<p class="font-mono text-sm">{aircraft.icaoModelCode}</p>
+					</div>
 				</div>
-			</div>
+			{/if}
 			<div class="flex items-center gap-2">
 				<Antenna class="h-4 w-4 text-surface-500" />
 				<div>
-					<p class="text-surface-600-300-token text-xs">Aircraft Model</p>
-					<p class="text-sm">{aircraft.aircraftModel || 'Unknown'}</p>
+					<p class="text-surface-600-300-token text-xs">Address</p>
+					<p class="font-mono text-sm">
+						{formatAircraftAddress(aircraft.addressType, aircraft.address)}
+					</p>
 				</div>
 			</div>
 			{#if aircraft.competitionNumber}
