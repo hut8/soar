@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { AlertTriangle, Radio, ChevronLeft, ChevronRight } from '@lucide/svelte';
+	import { AlertTriangle, Radio, ChevronLeft, ChevronRight, Search } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import type { Aircraft } from '$lib/types';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
+	import { getFlagPath } from '$lib/formatters';
 
 	interface AircraftIssuesResponse {
 		data: Aircraft[];
@@ -21,15 +22,26 @@
 	let totalPages = $state(0);
 	let totalCount = $state(0);
 	let perPage = $state(50);
+	let searchQuery = $state('');
 
-	async function loadIssues(page: number = 1) {
+	async function loadIssues(page: number = 1, search: string = '') {
 		loading = true;
 		error = '';
 
 		try {
+			const params: { page: number; perPage: number; hexSearch?: string } = {
+				page,
+				perPage
+			};
+
+			// Add search parameter if provided
+			if (search.trim()) {
+				params.hexSearch = search.trim();
+			}
+
 			const response = await serverCall<AircraftIssuesResponse>('/aircraft/issues', {
 				method: 'GET',
-				params: { page, perPage }
+				params
 			});
 			duplicateDevices = response.data || [];
 			currentPage = response.metadata.page;
@@ -45,9 +57,26 @@
 		}
 	}
 
+	// Debounce timer for search
+	let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Handle search input changes
+	function handleSearchInput() {
+		// Clear existing timer
+		if (searchTimer !== null) {
+			clearTimeout(searchTimer);
+		}
+
+		// Set new timer to trigger search after 300ms of inactivity
+		searchTimer = setTimeout(() => {
+			// Reset to page 1 when search changes
+			loadIssues(1, searchQuery);
+		}, 300);
+	}
+
 	function goToPage(page: number) {
 		if (page >= 1 && page <= totalPages) {
-			loadIssues(page);
+			loadIssues(page, searchQuery);
 		}
 	}
 
@@ -91,6 +120,20 @@
 			Duplicate Aircraft Addresses
 		</h2>
 
+		<!-- Search Input -->
+		<div class="flex gap-2">
+			<div class="input-group flex-1 grid-cols-[auto_1fr_auto]">
+				<div class="input-group-shim"><Search class="h-4 w-4" /></div>
+				<input
+					type="text"
+					placeholder="Search by hex ID (e.g., f00)"
+					bind:value={searchQuery}
+					oninput={handleSearchInput}
+					class="input"
+				/>
+			</div>
+		</div>
+
 		{#if loading}
 			<div class="flex items-center justify-center p-12">
 				<div
@@ -123,6 +166,7 @@
 						<thead>
 							<tr class="bg-surface-200-700-token">
 								<th class="p-3 text-left font-semibold">Address (Hex)</th>
+								<th class="p-3 text-left font-semibold">Address Country</th>
 								<th class="p-3 text-left font-semibold">Address Type</th>
 								<th class="p-3 text-left font-semibold">Registration</th>
 								<th class="p-3 text-left font-semibold">Aircraft Model</th>
@@ -135,6 +179,18 @@
 							{#each duplicateDevices as device (device.id || device.address)}
 								<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
 									<td class="p-3 font-mono font-semibold">{device.address}</td>
+									<td class="p-3">
+										{#if device.addressCountry}
+											<img
+												src={getFlagPath(device.addressCountry)}
+												alt={device.addressCountry}
+												class="inline-block h-4 rounded-sm"
+												title={device.addressCountry}
+											/>
+										{:else}
+											<span class="text-surface-500">—</span>
+										{/if}
+									</td>
 									<td class="p-3">{device.addressType}</td>
 									<td class="p-3">
 										{#if device.id}
@@ -157,6 +213,9 @@
 					<p class="text-surface-600-300-token text-sm">
 						<strong>Total Devices with Duplicate Addresses:</strong>
 						{totalCount}
+						{#if searchQuery.trim()}
+							matching "{searchQuery}"
+						{/if}
 					</p>
 					<p class="text-surface-600-300-token text-sm">
 						Showing {(currentPage - 1) * perPage + 1} - {Math.min(

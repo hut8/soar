@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Radio, Plane, Antenna, Check, X, Activity, Map, Navigation } from '@lucide/svelte';
+	import { Radio, Plane, Antenna, Check, Activity, Map, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import {
 		getAircraftTypeOgnDescription,
@@ -46,9 +46,10 @@
 		<!-- Header Section -->
 		<div class="mb-4 flex items-start justify-between">
 			<div class="flex items-center gap-2">
-				<Radio class="h-5 w-5 text-primary-500" />
 				{#if flagUrl()}
-					<img src={flagUrl()} alt="" class="inline-block h-4 rounded-sm" />
+					<img src={flagUrl()} alt="" class="inline-block h-5 rounded-sm" />
+				{:else}
+					<Radio class="h-5 w-5 text-primary-500" />
 				{/if}
 				<h3 class="text-lg font-semibold">{getAircraftTitle(aircraft)}</h3>
 			</div>
@@ -87,30 +88,6 @@
 
 		<!-- Status Badges -->
 		<div class="flex flex-wrap gap-2">
-			<span
-				class="badge text-xs {aircraft.tracked
-					? 'preset-filled-success-500'
-					: 'preset-filled-surface-500'}"
-			>
-				{#if aircraft.tracked}
-					<Check class="mr-1 h-3 w-3" />
-				{:else}
-					<X class="mr-1 h-3 w-3" />
-				{/if}
-				{aircraft.tracked ? 'Tracked' : 'Not Tracked'}
-			</span>
-			<span
-				class="badge text-xs {aircraft.identified
-					? 'preset-filled-primary-500'
-					: 'preset-filled-surface-500'}"
-			>
-				{#if aircraft.identified}
-					<Check class="mr-1 h-3 w-3" />
-				{:else}
-					<X class="mr-1 h-3 w-3" />
-				{/if}
-				{aircraft.identified ? 'Identified' : 'Unidentified'}
-			</span>
 			{#if aircraft.fromOgnDdb}
 				<span class="badge preset-filled-success-500 text-xs">
 					<Check class="mr-1 h-3 w-3" />

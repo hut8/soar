@@ -565,11 +565,13 @@ impl AircraftRepository {
     }
 
     /// Query for aircraft that have duplicate addresses with pagination
+    /// Optionally filter by hex address substring (case-insensitive)
     /// Returns (results, total_count)
     pub async fn get_duplicate_aircraft_paginated(
         &self,
         page: i64,
         per_page: i64,
+        hex_search: Option<String>,
     ) -> Result<(Vec<AircraftModel>, i64)> {
         let pool = self.pool.clone();
 
@@ -577,13 +579,30 @@ impl AircraftRepository {
             let mut conn = pool.get()?;
 
             // Find addresses that appear more than once with different address types
-            let duplicate_addresses: Vec<i32> = aircraft::table
+            // Optionally filter by hex address substring
+            let mut duplicate_query = aircraft::table
                 .select(aircraft::address)
                 .group_by(aircraft::address)
                 .having(diesel::dsl::sql::<diesel::sql_types::Bool>(
                     "COUNT(DISTINCT address_type) > 1",
                 ))
-                .load(&mut conn)?;
+                .into_boxed();
+
+            // Apply hex search filter if provided
+            if let Some(ref search) = hex_search
+                && !search.trim().is_empty()
+            {
+                // Convert search to lowercase for case-insensitive matching
+                let search_lower = search.trim().to_lowercase();
+                // Filter where hex representation of address contains the search string
+                duplicate_query =
+                    duplicate_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
+                        "LOWER(to_hex(address)) LIKE '%{}%'",
+                        search_lower.replace('\'', "''") // Escape single quotes
+                    )));
+            }
+
+            let duplicate_addresses: Vec<i32> = duplicate_query.load(&mut conn)?;
 
             if duplicate_addresses.is_empty() {
                 return Ok((Vec::new(), 0));

@@ -253,6 +253,24 @@
 										{/if}
 										{flight.departureAirport}
 									</div>
+								{:else if flight.startLocationCity || flight.startLocationState || flight.startLocationCountry}
+									<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+										<MapPin class="h-3 w-3" />
+										{#if flight.startLocationCountry}
+											<img
+												src={getFlagPath(flight.startLocationCountry)}
+												alt=""
+												class="inline-block h-3 rounded-sm"
+											/>
+										{/if}
+										{[
+											flight.startLocationCity,
+											flight.startLocationState,
+											flight.startLocationCountry
+										]
+											.filter(Boolean)
+											.join(', ')}
+									</div>
 								{/if}
 							</div>
 						</td>
@@ -301,6 +319,24 @@
 													/>
 												{/if}
 												{flight.arrivalAirport}
+											</div>
+										{:else if flight.endLocationCity || flight.endLocationState || flight.endLocationCountry}
+											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+												<MapPin class="h-3 w-3" />
+												{#if flight.endLocationCountry}
+													<img
+														src={getFlagPath(flight.endLocationCountry)}
+														alt=""
+														class="inline-block h-3 rounded-sm"
+													/>
+												{/if}
+												{[
+													flight.endLocationCity,
+													flight.endLocationState,
+													flight.endLocationCountry
+												]
+													.filter(Boolean)
+													.join(', ')}
 											</div>
 										{/if}
 									{/if}
@@ -413,6 +449,19 @@
 							{/if}
 							{flight.departureAirport}{#if flight.takeoffRunwayIdent}/{flight.takeoffRunwayIdent}{/if}
 						</span>
+					{:else if flight.startLocationCity || flight.startLocationState || flight.startLocationCountry}
+						<span class="font-medium">
+							{#if flight.startLocationCountry}
+								<img
+									src={getFlagPath(flight.startLocationCountry)}
+									alt=""
+									class="inline-block h-3 rounded-sm"
+								/>
+							{/if}
+							{[flight.startLocationCity, flight.startLocationState, flight.startLocationCountry]
+								.filter(Boolean)
+								.join(', ')}
+						</span>
 					{/if}
 					{formatLocalTime(isAirborne(flight) ? flight.createdAt : flight.takeoffTime)}
 					<span class="text-surface-500-400-token text-xs">
@@ -457,6 +506,19 @@
 										/>
 									{/if}
 									{flight.arrivalAirport}{#if flight.landingRunwayIdent}/{flight.landingRunwayIdent}{/if}
+								</span>
+							{:else if flight.endLocationCity || flight.endLocationState || flight.endLocationCountry}
+								<span class="font-medium">
+									{#if flight.endLocationCountry}
+										<img
+											src={getFlagPath(flight.endLocationCountry)}
+											alt=""
+											class="inline-block h-3 rounded-sm"
+										/>
+									{/if}
+									{[flight.endLocationCity, flight.endLocationState, flight.endLocationCountry]
+										.filter(Boolean)
+										.join(', ')}
 								</span>
 							{/if}
 							{formatLocalTime(flight.landingTime)}

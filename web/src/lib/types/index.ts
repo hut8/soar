@@ -183,6 +183,7 @@ export interface Aircraft {
 	trackerDeviceType?: string | null;
 	icaoModelCode?: string | null;
 	countryCode?: string | null;
+	addressCountry?: string | null; // Country derived from ICAO address using flydent
 	latitude?: number | null;
 	longitude?: number | null;
 	activeFlightId?: string | null;
@@ -306,6 +307,14 @@ export interface Flight {
 	arrivalAirport?: string; // Airport identifier
 	arrivalAirportId?: number; // Airport ID in database
 	arrivalAirportCountry?: string; // Country code
+	// Geocoded location for flight start
+	startLocationCity?: string;
+	startLocationState?: string;
+	startLocationCountry?: string;
+	// Geocoded location for flight end
+	endLocationCity?: string;
+	endLocationState?: string;
+	endLocationCountry?: string;
 	towedByAircraftId?: string; // UUID of towplane aircraft that towed this glider
 	towedByFlightId?: string; // UUID of towplane flight that towed this glider
 	clubId?: string; // UUID of club that owns the aircraft
