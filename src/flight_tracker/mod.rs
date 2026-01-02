@@ -44,6 +44,59 @@ pub(crate) enum FlightPhase {
     Unknown,
 }
 
+/// Calculate climb rate from recent fixes within the last 60 seconds
+/// Returns climb rate in feet per minute, or None if insufficient data
+///
+/// Algorithm:
+/// 1. Filter fixes to last 60 seconds (based on most recent fix timestamp)
+/// 2. Require at least 2 fixes with altitude data
+/// 3. Use first and last fix to calculate rate: (alt_delta / time_delta_seconds) * 60
+/// 4. Return None if time delta < 5 seconds (too noisy)
+pub(crate) fn calculate_climb_rate_from_fixes(fixes: &[Fix]) -> Option<i32> {
+    if fixes.is_empty() {
+        return None;
+    }
+
+    // Get the most recent timestamp
+    let most_recent_timestamp = fixes.iter().map(|f| f.timestamp).max()?;
+
+    // Filter to fixes within last 60 seconds that have altitude data
+    let mut recent_fixes_with_altitude: Vec<&Fix> = fixes
+        .iter()
+        .filter(|f| {
+            let age = most_recent_timestamp.signed_duration_since(f.timestamp);
+            age.num_seconds() <= 60 && f.altitude_msl_feet.is_some()
+        })
+        .collect();
+
+    // Need at least 2 fixes with altitude
+    if recent_fixes_with_altitude.len() < 2 {
+        return None;
+    }
+
+    // Sort by timestamp to get first and last
+    recent_fixes_with_altitude.sort_by_key(|f| f.timestamp);
+
+    let first_fix = recent_fixes_with_altitude.first()?;
+    let last_fix = recent_fixes_with_altitude.last()?;
+
+    let first_alt = first_fix.altitude_msl_feet?;
+    let last_alt = last_fix.altitude_msl_feet?;
+
+    let time_delta_seconds = (last_fix.timestamp - first_fix.timestamp).num_seconds();
+
+    // Require at least 5 seconds between fixes to avoid noise
+    if time_delta_seconds < 5 {
+        return None;
+    }
+
+    // Calculate climb rate: (altitude_change_ft / time_delta_seconds) * 60 seconds/minute
+    let altitude_change_ft = last_alt - first_alt;
+    let climb_rate_fpm = (altitude_change_ft as f64 / time_delta_seconds as f64) * 60.0;
+
+    Some(climb_rate_fpm.round() as i32)
+}
+
 /// Tracks the current flight state for a device
 #[derive(Debug, Clone)]
 pub(crate) struct CurrentFlightState {
@@ -58,8 +111,11 @@ pub(crate) struct CurrentFlightState {
     pub recent_fix_history: VecDeque<bool>,
     /// Last known altitude MSL in feet (for phase determination)
     pub last_altitude_msl_ft: Option<i32>,
-    /// Last known climb rate in fpm (for phase determination)
+    /// Last known climb rate in fpm from fix data (untrusted - for reference only)
     pub last_climb_fpm: Option<i32>,
+    /// Calculated climb rate in fpm based on altitude changes over time (trusted)
+    /// Used for phase determination instead of last_climb_fpm when available
+    pub calculated_climb_fpm: Option<i32>,
     /// Last known position (latitude, longitude) for distance calculations
     pub last_position: (f64, f64),
 }
@@ -76,6 +132,7 @@ impl CurrentFlightState {
             recent_fix_history: history,
             last_altitude_msl_ft: None,
             last_climb_fpm: None,
+            calculated_climb_fpm: None,
             last_position: (0.0, 0.0), // Will be updated with first fix
         }
     }
@@ -99,13 +156,17 @@ impl CurrentFlightState {
 
     /// Determine the flight phase based on current state
     /// Used to decide coalescing behavior when flight times out
+    /// Prefers calculated_climb_fpm over last_climb_fpm for accuracy
     pub fn determine_flight_phase(&self) -> FlightPhase {
+        // Use calculated climb rate if available, otherwise fall back to last_climb_fpm
+        let climb = self.calculated_climb_fpm.or(self.last_climb_fpm);
+
         // Check climb rate first (most specific indicator)
-        if let Some(climb) = self.last_climb_fpm {
-            if climb > 300 {
+        if let Some(climb_rate) = climb {
+            if climb_rate > 300 {
                 return FlightPhase::Climbing;
             }
-            if climb < -300 {
+            if climb_rate < -300 {
                 return FlightPhase::Descending;
             }
         }
@@ -113,7 +174,7 @@ impl CurrentFlightState {
         // If at high altitude with stable or gentle climb/descent, assume cruising
         if let Some(alt) = self.last_altitude_msl_ft
             && alt > 10_000
-            && self.last_climb_fpm.map(|c| c.abs() < 500).unwrap_or(true)
+            && climb.map(|c| c.abs() < 500).unwrap_or(true)
         {
             return FlightPhase::Cruising;
         }
@@ -280,6 +341,7 @@ impl FlightTracker {
                         recent_fix_history: history,
                         last_altitude_msl_ft: None,
                         last_climb_fpm: None,
+                        calculated_climb_fpm: None,
                         last_position: (0.0, 0.0), // Will be updated when next fix arrives
                     };
 
@@ -550,5 +612,99 @@ impl FlightTracker {
         callsign: Option<String>,
     ) -> Result<bool> {
         self.flights_repo.update_callsign(flight_id, callsign).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    // Helper function to create a test fix
+    fn create_test_fix(timestamp: DateTime<Utc>, altitude_msl: Option<i32>) -> Fix {
+        Fix {
+            id: Uuid::new_v4(),
+            source: "TEST".to_string(),
+            aprs_type: "position".to_string(),
+            via: vec![],
+            timestamp,
+            latitude: 42.0,
+            longitude: -122.0,
+            altitude_msl_feet: altitude_msl,
+            altitude_agl_feet: None,
+            flight_number: None,
+            squawk: None,
+            ground_speed_knots: Some(100.0),
+            track_degrees: None,
+            climb_fpm: None,
+            turn_rate_rot: None,
+            source_metadata: None,
+            flight_id: None,
+            aircraft_id: Uuid::new_v4(),
+            received_at: timestamp,
+            is_active: true,
+            receiver_id: Uuid::new_v4(),
+            raw_message_id: Uuid::new_v4(),
+            altitude_agl_valid: false,
+            time_gap_seconds: None,
+        }
+    }
+
+    #[test]
+    fn test_calculate_climb_rate_ascending() {
+        // Create fixes: 1000 ft at T+0s, 1600 ft at T+60s
+        // Expected: +600 FPM
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+
+        let fixes = vec![
+            create_test_fix(base_time, Some(1000)),
+            create_test_fix(base_time + chrono::Duration::seconds(60), Some(1600)),
+        ];
+
+        let result = calculate_climb_rate_from_fixes(&fixes);
+        assert_eq!(result, Some(600));
+    }
+
+    #[test]
+    fn test_calculate_climb_rate_descending() {
+        // Create fixes: 5000 ft at T+0s, 4000 ft at T+60s
+        // Expected: -1000 FPM
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+
+        let fixes = vec![
+            create_test_fix(base_time, Some(5000)),
+            create_test_fix(base_time + chrono::Duration::seconds(60), Some(4000)),
+        ];
+
+        let result = calculate_climb_rate_from_fixes(&fixes);
+        assert_eq!(result, Some(-1000));
+    }
+
+    #[test]
+    fn test_calculate_climb_rate_insufficient_data() {
+        // Only 1 fix with altitude - should return None
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+
+        let fixes = vec![
+            create_test_fix(base_time, Some(1000)),
+            create_test_fix(base_time + chrono::Duration::seconds(60), None),
+        ];
+
+        let result = calculate_climb_rate_from_fixes(&fixes);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_calculate_climb_rate_time_too_short() {
+        // Fixes only 2 seconds apart - should return None
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+
+        let fixes = vec![
+            create_test_fix(base_time, Some(1000)),
+            create_test_fix(base_time + chrono::Duration::seconds(2), Some(1020)),
+        ];
+
+        let result = calculate_climb_rate_from_fixes(&fixes);
+        assert_eq!(result, None);
     }
 }
