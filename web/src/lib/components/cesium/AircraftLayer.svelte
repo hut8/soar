@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Viewer, Entity } from 'cesium';
-	import { Math as CesiumMath } from 'cesium';
-	import { createAircraftEntity } from '$lib/cesium/entities';
+	import { Math as CesiumMath, Rectangle } from 'cesium';
+	import { createAircraftEntity, createClusterEntity } from '$lib/cesium/entities';
 	import { FixFeed, type FixFeedEvent } from '$lib/services/FixFeed';
 	import type { Aircraft, Fix } from '$lib/types';
-	import { isAircraftItem } from '$lib/types';
+	import { isAircraftItem, isClusterItem } from '$lib/types';
+	import { browser } from '$app/environment';
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -13,7 +14,9 @@
 	// State
 	let aircraftEntities = $state<Map<string, Entity>>(new Map()); // Map of aircraft ID -> Entity
 	let aircraftData = $state<Map<string, Aircraft>>(new Map()); // Map of aircraft ID -> Aircraft data
+	let clusterEntities = $state<Map<string, Entity>>(new Map()); // Map of cluster ID -> Entity
 	let isLoading = $state(false);
+	let isClusteredMode = $state(false); // Whether we're displaying clusters instead of individual aircraft
 	let lastBounds: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null = null;
 	let subscribedAreas = $state<Set<string>>(new Set()); // Set of subscribed lat/lon squares
 
@@ -24,6 +27,7 @@
 	// Debounce timers
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let areaSubscriptionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let clusterRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 	// Rendering limits (like operations page)
 	const MAX_AIRCRAFT_DISPLAY = 50;
@@ -124,55 +128,91 @@
 				`[GLOBE] Loaded ${items.length} items (total: ${total}, clustered: ${clustered})`
 			);
 
-			// Update aircraft entities
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity
-			const newAircraftIds = new Set<string>();
+			if (clustered) {
+				console.log('[GLOBE] Response is clustered, rendering cluster entities');
 
-			// Check if we should show labels based on zoom
-			const showLabels = shouldShowLabels();
+				// Enter clustered mode
+				isClusteredMode = true;
+				startClusterRefreshTimer();
 
-			for (const item of items) {
-				// Only handle individual aircraft, not clusters (globe doesn't support cluster display yet)
-				if (!isAircraftItem(item)) {
-					console.log('[GLOBE] Skipping cluster item (not yet supported on globe)');
-					continue;
+				// Clear WebSocket area subscriptions - clustered mode uses REST API polling instead
+				clearAreaSubscriptions();
+
+				// Clear aircraft data and entities
+				clearAircraftEntities();
+				clearClusterEntities();
+
+				// Render cluster entities
+				for (const item of items) {
+					if (isClusterItem(item)) {
+						const cluster = item.data;
+						const entity = createClusterEntity(cluster);
+						viewer.entities.add(entity);
+						clusterEntities.set(cluster.id, entity);
+					}
 				}
 
-				const aircraft = item.data;
+				console.log(`[GLOBE] ${clusterEntities.size} cluster entities on globe`);
+			} else {
+				console.log('[GLOBE] Response has individual aircraft, rendering aircraft entities');
 
-				// Get latest fix from currentFix or fall back to fixes array
-				const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
+				// Exit clustered mode
+				isClusteredMode = false;
+				stopClusterRefreshTimer();
 
-				// Skip if no fix data available
-				if (!latestFix) continue;
+				// Restore WebSocket area subscriptions for real-time updates
+				updateAreaSubscriptions();
 
-				// Update or create entity
-				const existingEntity = aircraftEntities.get(aircraft.id);
-				if (existingEntity) {
-					// Update existing entity (position, label, etc.)
-					viewer.entities.remove(existingEntity);
+				// Clear clusters and aircraft data
+				clearClusterEntities();
+				aircraftData.clear();
+
+				// Update aircraft entities
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
+				const newAircraftIds = new Set<string>();
+
+				// Check if we should show labels based on zoom
+				const showLabels = shouldShowLabels();
+
+				for (const item of items) {
+					if (isAircraftItem(item)) {
+						const aircraft = item.data;
+
+						// Get latest fix from currentFix or fall back to fixes array
+						const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
+
+						// Skip if no fix data available
+						if (!latestFix) continue;
+
+						// Update or create entity
+						const existingEntity = aircraftEntities.get(aircraft.id);
+						if (existingEntity) {
+							// Update existing entity (position, label, etc.)
+							viewer.entities.remove(existingEntity);
+						}
+
+						// Create new entity with label visibility based on zoom
+						const entity = createAircraftEntity(aircraft, latestFix, showLabels);
+						viewer.entities.add(entity);
+						aircraftEntities.set(aircraft.id, entity);
+						newAircraftIds.add(aircraft.id);
+
+						// Store aircraft data for WebSocket updates
+						aircraftData.set(aircraft.id, aircraft);
+					}
 				}
 
-				// Create new entity with label visibility based on zoom
-				const entity = createAircraftEntity(aircraft, latestFix, showLabels);
-				viewer.entities.add(entity);
-				aircraftEntities.set(aircraft.id, entity);
-				newAircraftIds.add(aircraft.id);
+				// Remove aircraft that are no longer in viewport
+				for (const [aircraftId, entity] of aircraftEntities.entries()) {
+					if (!newAircraftIds.has(aircraftId)) {
+						viewer.entities.remove(entity);
+						aircraftEntities.delete(aircraftId);
+						aircraftData.delete(aircraftId);
+					}
+				}
 
-				// Store aircraft data for WebSocket updates
-				aircraftData.set(aircraft.id, aircraft);
+				console.log(`[GLOBE] ${aircraftEntities.size} aircraft entities on globe`);
 			}
-
-			// Remove aircraft that are no longer in viewport
-			for (const [aircraftId, entity] of aircraftEntities.entries()) {
-				if (!newAircraftIds.has(aircraftId)) {
-					viewer.entities.remove(entity);
-					aircraftEntities.delete(aircraftId);
-					aircraftData.delete(aircraftId);
-				}
-			}
-
-			console.log(`[GLOBE] ${aircraftEntities.size} aircraft entities on globe`);
 		} catch (error) {
 			console.error('Error loading aircraft:', error);
 		} finally {
@@ -262,9 +302,87 @@
 	}
 
 	/**
+	 * Clear all aircraft entities from the globe
+	 */
+	function clearAircraftEntities(): void {
+		for (const entity of aircraftEntities.values()) {
+			viewer.entities.remove(entity);
+		}
+		aircraftEntities.clear();
+		aircraftData.clear();
+	}
+
+	/**
+	 * Clear all cluster entities from the globe
+	 */
+	function clearClusterEntities(): void {
+		for (const entity of clusterEntities.values()) {
+			viewer.entities.remove(entity);
+		}
+		clusterEntities.clear();
+	}
+
+	/**
+	 * Clear area subscriptions
+	 */
+	function clearAreaSubscriptions(): void {
+		if (subscribedAreas.size > 0) {
+			fixFeed.sendWebSocketMessage({
+				action: 'unsubscribe',
+				type: 'area_bulk',
+				bounds: {
+					north: 0,
+					south: 0,
+					east: 0,
+					west: 0
+				}
+			});
+			subscribedAreas.clear();
+		}
+	}
+
+	/**
+	 * Start the cluster refresh timer (refreshes every 60 seconds when tab is visible)
+	 */
+	function startClusterRefreshTimer(): void {
+		// Clear any existing timer
+		stopClusterRefreshTimer();
+
+		console.log('[GLOBE CLUSTER] Starting 60-second refresh timer');
+
+		clusterRefreshTimer = setInterval(async () => {
+			// Only refresh if the page is visible (user has the tab active)
+			if (browser && document.visibilityState === 'visible') {
+				console.log('[GLOBE CLUSTER] Tab is visible, refreshing clusters...');
+				await loadAircraftInViewport();
+			} else {
+				console.log('[GLOBE CLUSTER] Tab is hidden, skipping refresh');
+			}
+		}, 60000); // 60 seconds
+	}
+
+	/**
+	 * Stop the cluster refresh timer
+	 */
+	function stopClusterRefreshTimer(): void {
+		if (clusterRefreshTimer) {
+			console.log('[GLOBE CLUSTER] Stopping refresh timer');
+			clearInterval(clusterRefreshTimer);
+			clusterRefreshTimer = null;
+		}
+	}
+
+	/**
 	 * Handle WebSocket events (fix updates, aircraft data)
 	 */
 	function handleFixFeedEvent(event: FixFeedEvent): void {
+		// IMPORTANT: Ignore all fix feed events when in clustered mode
+		// In clustered mode, we only show cluster entities, not individual aircraft
+		if (isClusteredMode) {
+			console.log('[GLOBE CLUSTER] Ignoring fix feed event in clustered mode:', event.type);
+			return;
+		}
+
 		if (event.type === 'fix_received') {
 			// Update aircraft position from real-time fix
 			const fix = event.fix;
@@ -331,6 +449,9 @@
 	function updateAircraftPosition(aircraft: Aircraft, fix: Fix): void {
 		const existingEntity = aircraftEntities.get(aircraft.id);
 
+		// Check if this entity is currently selected
+		const wasSelected = existingEntity && viewer.selectedEntity === existingEntity;
+
 		if (existingEntity) {
 			// Remove old entity
 			viewer.entities.remove(existingEntity);
@@ -341,6 +462,11 @@
 		const entity = createAircraftEntity(aircraft, fix, showLabels);
 		viewer.entities.add(entity);
 		aircraftEntities.set(aircraft.id, entity);
+
+		// Restore selection if it was previously selected
+		if (wasSelected) {
+			viewer.selectedEntity = entity;
+		}
 	}
 
 	onMount(() => {
@@ -356,6 +482,34 @@
 		// Subscribe to area-based updates
 		updateAreaSubscriptions();
 
+		// Listen for entity selection changes to handle cluster clicks
+		const handleEntitySelection = () => {
+			const selected = viewer.selectedEntity;
+			if (selected && selected.properties?.isCluster?.getValue()) {
+				// User clicked on a cluster - zoom to its bounds
+				const bounds = selected.properties.clusterBounds.getValue();
+				console.log('[GLOBE CLUSTER] Clicked on cluster, zooming to bounds:', bounds);
+
+				const rectangle = Rectangle.fromDegrees(
+					bounds.west,
+					bounds.south,
+					bounds.east,
+					bounds.north
+				);
+				viewer.camera.flyTo({
+					destination: rectangle,
+					duration: 1.5
+				});
+
+				// Clear the selection after initiating zoom
+				setTimeout(() => {
+					viewer.selectedEntity = undefined;
+				}, 100);
+			}
+		};
+
+		viewer.selectedEntityChanged.addEventListener(handleEntitySelection);
+
 		// Listen for camera movement - use separate handlers with different debounce times
 		const handleCameraMoveComplete = () => {
 			handleCameraMove(); // Load aircraft from API (500ms debounce)
@@ -367,12 +521,14 @@
 		// Cleanup
 		return () => {
 			viewer.camera.moveEnd.removeEventListener(handleCameraMoveComplete);
+			viewer.selectedEntityChanged.removeEventListener(handleEntitySelection);
 			if (debounceTimer) {
 				clearTimeout(debounceTimer);
 			}
 			if (areaSubscriptionDebounceTimer) {
 				clearTimeout(areaSubscriptionDebounceTimer);
 			}
+			stopClusterRefreshTimer();
 			if (unsubscribeFixFeed) {
 				unsubscribeFixFeed();
 			}
@@ -380,25 +536,17 @@
 	});
 
 	onDestroy(() => {
+		// Stop cluster refresh timer
+		stopClusterRefreshTimer();
+
 		// Unsubscribe from all areas
-		fixFeed.sendWebSocketMessage({
-			action: 'unsubscribe',
-			type: 'area_bulk',
-			bounds: {
-				north: 0,
-				south: 0,
-				east: 0,
-				west: 0
-			}
-		});
-		subscribedAreas.clear();
+		clearAreaSubscriptions();
 
 		// Remove all aircraft entities
-		for (const entity of aircraftEntities.values()) {
-			viewer.entities.remove(entity);
-		}
-		aircraftEntities.clear();
-		aircraftData.clear();
+		clearAircraftEntities();
+
+		// Remove all cluster entities
+		clearClusterEntities();
 
 		// Unsubscribe from fix feed
 		if (unsubscribeFixFeed) {

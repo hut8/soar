@@ -4,7 +4,7 @@
 	import { Math as CesiumMath } from 'cesium';
 	import { serverCall } from '$lib/api/server';
 	import { createReceiverEntity } from '$lib/cesium/entities';
-	import type { Receiver } from '$lib/types';
+	import type { Receiver, PaginatedDataResponse } from '$lib/types';
 
 	// Props
 	let { viewer, enabled = $bindable(true) }: { viewer: Viewer; enabled?: boolean } = $props();
@@ -65,16 +65,12 @@
 		if (!bounds) return;
 
 		try {
-			interface ReceiverSearchResponse {
-				receivers: Receiver[];
-			}
-
-			const response = await serverCall<ReceiverSearchResponse>('/receivers', {
+			const response = await serverCall<PaginatedDataResponse<Receiver>>('/receivers', {
 				params: {
-					latitude_min: bounds.latMin,
-					latitude_max: bounds.latMax,
-					longitude_min: bounds.lonMin,
-					longitude_max: bounds.lonMax
+					south: bounds.latMin,
+					north: bounds.latMax,
+					west: bounds.lonMin,
+					east: bounds.lonMax
 				}
 			});
 
@@ -82,7 +78,7 @@
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const newReceiverIds = new Set<string>();
 
-			for (const receiver of response.receivers) {
+			for (const receiver of response.data) {
 				// Skip if already rendered
 				if (receiverEntities.has(receiver.id)) {
 					newReceiverIds.add(receiver.id);
@@ -108,7 +104,7 @@
 				}
 			}
 
-			console.log(`Loaded ${response.receivers.length} receivers in viewport`);
+			console.log(`Loaded ${response.data.length} receivers in viewport`);
 		} catch (error) {
 			console.error('Error loading receivers:', error);
 		}
