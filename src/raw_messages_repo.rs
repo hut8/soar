@@ -409,7 +409,7 @@ pub type BeastMessagesRepository = RawMessagesRepository;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
     use diesel::connection::SimpleConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
     use serial_test::serial;
@@ -542,21 +542,28 @@ mod tests {
                     .bind::<diesel::sql_types::Text, _>(&callsign)
                     .execute(conn)?;
 
-                // Insert multiple messages using Diesel
-                // Use distinct timestamps to avoid deadlocks in TimescaleDB hypertable
-                let base_time = Utc::now();
-                for i in 0..3 {
-                    let new_message = NewAprsMessage::new(
-                        format!("TEST{}>APRS:>Test message {}", i, i),
-                        base_time + chrono::Duration::milliseconds(i as i64 * 100),
-                        receiver_id,
-                        None,
-                    );
-                    message_ids.push(new_message.id);
-                    diesel::insert_into(crate::schema::raw_messages::table)
-                        .values(&new_message)
-                        .execute(conn)?;
-                }
+                // Insert multiple messages using batch insert to avoid deadlocks
+                // Use well-spaced timestamps (seconds apart) to avoid TimescaleDB chunk conflicts
+                // Use a fixed base time to avoid issues with chunk boundaries
+                let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+                let new_messages: Vec<NewAprsMessage> = (0..3)
+                    .map(|i| {
+                        NewAprsMessage::new(
+                            format!("TEST{}>APRS:>Test message {}", i, i),
+                            base_time + chrono::Duration::seconds(i as i64 * 10),
+                            receiver_id,
+                            None,
+                        )
+                    })
+                    .collect();
+
+                // Store message IDs for later verification
+                message_ids.extend(new_messages.iter().map(|m| m.id));
+
+                // Batch insert all messages at once to avoid lock contention
+                diesel::insert_into(crate::schema::raw_messages::table)
+                    .values(&new_messages)
+                    .execute(conn)?;
 
                 Ok(())
             })
