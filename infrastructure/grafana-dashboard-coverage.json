@@ -714,7 +714,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Total coverage records and unique hexagons stored in database",
       "fieldConfig": {
@@ -762,7 +762,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -789,7 +789,54 @@
     "h3"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "staging",
+          "value": "staging"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "environment",
+        "options": [
+          {
+            "selected": false,
+            "text": "production",
+            "value": "production"
+          },
+          {
+            "selected": true,
+            "text": "staging",
+            "value": "staging"
+          }
+        ],
+        "query": "production,staging",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "soar-postgres-staging",
+          "value": "soar-postgres-staging"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "Postgres",
+        "multi": false,
+        "name": "postgres_datasource",
+        "options": [],
+        "query": "postgres",
+        "refresh": 1,
+        "regex": "/soar-postgres-${environment}/",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
   },
   "time": {
     "from": "now-6h",
