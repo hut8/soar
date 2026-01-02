@@ -436,6 +436,7 @@ impl BeastClient {
         let message_timeout = Duration::from_secs(300); // 5 minute timeout
         let mut buffer = vec![0u8; 8192]; // 8KB buffer for Beast messages
         let mut frame_buffer = Vec::new();
+        let mut pending_escape = false; // Track if we saw 0x1A at end of previous buffer
         let mut message_count = 0u64;
         let mut last_stats_log = std::time::Instant::now();
 
@@ -479,25 +480,68 @@ impl BeastClient {
                     trace!("Received {} bytes from Beast server", n);
                     metrics::counter!("beast.bytes.received_total").increment(n as u64);
 
-                    // Process Beast frames
-                    // Beast format: <1A> <message_type> <data...>
-                    // We'll publish each complete frame as a separate message
-                    for &byte in &buffer[..n] {
-                        frame_buffer.push(byte);
+                    // Process Beast frames with proper escape sequence handling
+                    // Beast format: <1A> <message_type> <6-byte timestamp> <signal> <payload>
+                    // Escape rule: Any 0x1A in the data is escaped as <1A><1A>
+                    // We need to un-escape and detect frame boundaries correctly
 
-                        // Check if we have a complete frame
-                        // Beast messages start with 0x1A and vary in length based on type
-                        // For simplicity, we'll accumulate data and publish on frame boundaries
-                        if byte == 0x1A && frame_buffer.len() > 1 {
-                            // Start of new frame, publish previous frame
-                            let previous_frame = frame_buffer[..frame_buffer.len() - 1].to_vec();
-                            if !previous_frame.is_empty() {
-                                Self::publish_frame(&raw_message_tx, previous_frame).await;
-                                message_count += 1;
+                    let mut i = 0;
+
+                    // Handle pending escape from previous buffer
+                    if pending_escape && n > 0 {
+                        pending_escape = false;
+                        if buffer[0] == 0x1A {
+                            // Escape sequence: the previous 0x1A + this 0x1A = one literal 0x1A
+                            frame_buffer.push(0x1A);
+                            i = 1;
+                        } else {
+                            // Frame boundary: previous 0x1A started a new frame
+                            // Publish the previous frame (without the 0x1A which is already in frame_buffer)
+                            if frame_buffer.len() > 1 {
+                                // Remove the trailing 0x1A that we added last time
+                                frame_buffer.pop();
+                                if !frame_buffer.is_empty() {
+                                    Self::publish_frame(&raw_message_tx, frame_buffer.clone()).await;
+                                    message_count += 1;
+                                }
                             }
-                            // Start new frame with current 0x1A
                             frame_buffer.clear();
                             frame_buffer.push(0x1A);
+                            frame_buffer.push(buffer[0]);
+                            i = 1;
+                        }
+                    }
+
+                    while i < n {
+                        let byte = buffer[i];
+
+                        if byte == 0x1A {
+                            if i + 1 < n {
+                                // We can peek at the next byte
+                                if buffer[i + 1] == 0x1A {
+                                    // Escape sequence: <1A><1A> represents a literal 0x1A
+                                    frame_buffer.push(0x1A);
+                                    i += 2; // Skip both bytes
+                                } else {
+                                    // Frame boundary: publish previous frame and start new one
+                                    if !frame_buffer.is_empty() {
+                                        Self::publish_frame(&raw_message_tx, frame_buffer.clone()).await;
+                                        message_count += 1;
+                                    }
+                                    frame_buffer.clear();
+                                    frame_buffer.push(0x1A);
+                                    i += 1;
+                                }
+                            } else {
+                                // 0x1A at end of buffer - we need to wait for next byte
+                                frame_buffer.push(0x1A);
+                                pending_escape = true;
+                                i += 1;
+                            }
+                        } else {
+                            // Regular data byte
+                            frame_buffer.push(byte);
+                            i += 1;
                         }
                     }
 

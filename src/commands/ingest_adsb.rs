@@ -1,13 +1,30 @@
 use anyhow::{Context, Result};
 use soar::beast::{BeastClient, BeastClientConfig};
 use soar::instance_lock::InstanceLock;
+use soar::sbs::{SbsClient, SbsClientConfig};
 use std::env;
 use tracing::Instrument;
 use tracing::{error, info};
 
+/// Parse a "host:port" string into (hostname, port)
+fn parse_server_address(addr: &str) -> Result<(String, u16)> {
+    let parts: Vec<&str> = addr.split(':').collect();
+    if parts.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "Invalid server address '{}' - expected format 'host:port'",
+            addr
+        ));
+    }
+    let host = parts[0].to_string();
+    let port = parts[1]
+        .parse::<u16>()
+        .context(format!("Invalid port in '{}'", addr))?;
+    Ok((host, port))
+}
+
 pub async fn handle_ingest_adsb(
-    server: String,
-    port: u16,
+    beast_servers: Vec<String>,
+    sbs_servers: Vec<String>,
     max_retries: u32,
     retry_delay: u64,
     nats_url: String,
@@ -16,32 +33,46 @@ pub async fn handle_ingest_adsb(
         scope.set_tag("operation", "ingest-adsb");
     });
 
-    // Determine environment and use appropriate NATS subject
-    // Production: "adsb.raw"
-    // Staging: "staging.adsb.raw"
+    // Validate that at least one server is specified
+    if beast_servers.is_empty() && sbs_servers.is_empty() {
+        return Err(anyhow::anyhow!(
+            "No servers specified - use --beast or --sbs to specify at least one server"
+        ));
+    }
+
+    // Determine environment and use appropriate NATS subjects
+    // Production: "adsb.raw" (Beast), "adsb.sbs" (SBS)
+    // Staging: "staging.adsb.raw" (Beast), "staging.adsb.sbs" (SBS)
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let nats_subject = if is_production {
+    let beast_subject = if is_production {
         "adsb.raw"
     } else {
         "staging.adsb.raw"
     };
 
+    let sbs_subject = if is_production {
+        "adsb.sbs"
+    } else {
+        "staging.adsb.sbs"
+    };
+
     info!(
-        "Starting ADS-B ingestion service - server: {}:{}, NATS: {}, subject: {}",
-        server, port, nats_url, nats_subject
+        "Starting ADS-B ingestion service - Beast servers: {:?}, SBS servers: {:?}, NATS: {}",
+        beast_servers, sbs_servers, nats_url
     );
 
     info!(
-        "Environment: {}, using NATS subject '{}'",
+        "Environment: {}, Beast subject: '{}', SBS subject: '{}'",
         if is_production {
             "production"
         } else {
             "staging"
         },
-        nats_subject
+        beast_subject,
+        sbs_subject
     );
 
     // Initialize health state for this ingester
@@ -126,82 +157,144 @@ pub async fn handle_ingest_adsb(
         let _ = shutdown_tx.send(());
     });
 
-    // Create Beast client config
-    let config = BeastClientConfig {
-        server,
-        port,
-        max_retries,
-        retry_delay_seconds: retry_delay,
-        max_retry_delay_seconds: 60,
-    };
+    // Connect to NATS
+    info!("Connecting to NATS at {}...", nats_url);
+    let nats_client_name = soar::nats_client_name("adsb-ingester");
+    let nats_client = async_nats::ConnectOptions::new()
+        .name(&nats_client_name)
+        .connect(&nats_url)
+        .await
+        .context("Failed to connect to NATS")?;
+    info!("Connected to NATS successfully");
 
-    // Retry loop for NATS connection
-    loop {
-        info!("Connecting to NATS at {}...", nats_url);
-        let nats_client_name = soar::nats_client_name("adsb-ingester");
-        let nats_result = async_nats::ConnectOptions::new()
-            .name(&nats_client_name)
-            .connect(&nats_url)
-            .await;
+    // Mark NATS as connected in health state
+    {
+        let mut health = health_state.write().await;
+        health.nats_connected = true;
+    }
 
-        let nats_client = match nats_result {
-            Ok(client) => {
-                info!("Connected to NATS successfully");
-                client
-            }
-            Err(e) => {
-                error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("beast.nats.connection_failed_total").increment(1);
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                continue;
-            }
+    // Create publishers
+    let beast_publisher = soar::beast_nats_publisher::NatsPublisher::new(
+        nats_client.clone(),
+        beast_subject.to_string(),
+    );
+    let sbs_publisher =
+        soar::sbs_nats_publisher::SbsNatsPublisher::new(nats_client, sbs_subject.to_string());
+
+    // Create broadcast channel for shutdown signal (multiple tasks need to receive it)
+    let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+
+    // Spawn signal handler task
+    let shutdown_tx_clone = shutdown_broadcast_tx.clone();
+    tokio::spawn(async move {
+        let _ = shutdown_rx.await;
+        info!("Shutdown signal received, broadcasting to all client tasks...");
+        let _ = shutdown_tx_clone.send(());
+    });
+
+    // Spawn tasks for each Beast server
+    let mut client_handles = vec![];
+
+    for beast_addr in &beast_servers {
+        let (server, port) = parse_server_address(beast_addr)?;
+        let config = BeastClientConfig {
+            server: server.clone(),
+            port,
+            max_retries,
+            retry_delay_seconds: retry_delay,
+            max_retry_delay_seconds: 60,
         };
 
-        info!(
-            "NATS ready - will publish ADS-B messages to subject '{}'",
-            nats_subject
-        );
+        let publisher = beast_publisher.clone();
+        let health = health_state.clone();
+        let shutdown_rx = shutdown_broadcast_tx.subscribe();
+        let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
-        // Create ADS-B (Beast) NATS publisher
-        let nats_publisher =
-            soar::beast_nats_publisher::NatsPublisher::new(nats_client, nats_subject.to_string());
-
-        let mut client = BeastClient::new(config.clone());
-
-        // Mark NATS as connected in health state
-        {
-            let mut health = health_state.write().await;
-            health.nats_connected = true;
-        }
-
-        info!("Starting ADS-B (Beast) client for ingestion...");
-
-        // Run Beast client with shutdown signal - this will exit immediately on SIGINT/SIGTERM
-        match client
-            .start_with_shutdown(nats_publisher, shutdown_rx, health_state.clone())
-            .await
-        {
-            Ok(_) => {
-                info!("ADS-B ingestion stopped normally");
-                break;
+        // Bridge broadcast to oneshot
+        tokio::spawn(async move {
+            let mut rx = shutdown_rx;
+            if rx.recv().await.is_ok() {
+                let _ = client_shutdown_tx.send(());
             }
-            Err(e) => {
-                error!("ADS-B ingestion failed: {} - retrying in 1s", e);
-                metrics::counter!("beast.ingest_failed_total").increment(1);
+        });
 
-                // Mark NATS as disconnected
+        info!("Spawning Beast client for {}:{}", server, port);
+        let server_clone = server.clone();
+        let handle = tokio::spawn(
+            async move {
+                let mut client = BeastClient::new(config);
+                match client
+                    .start_with_shutdown(publisher, client_shutdown_rx, health)
+                    .await
                 {
-                    let mut health = health_state.write().await;
-                    health.nats_connected = false;
+                    Ok(_) => info!("Beast client {}:{} stopped normally", server, port),
+                    Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
                 }
-
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
-        }
+            .instrument(tracing::info_span!("beast_client", server = %server_clone, port = %port)),
+        );
+        client_handles.push(handle);
+    }
 
-        // If we get here, either shutdown was requested or connection failed
-        // In either case, exit the loop
-        break;
+    // Spawn tasks for each SBS server
+    for sbs_addr in &sbs_servers {
+        let (server, port) = parse_server_address(sbs_addr)?;
+        let config = SbsClientConfig {
+            server: server.clone(),
+            port,
+            max_retries,
+            retry_delay_seconds: retry_delay,
+            max_retry_delay_seconds: 60,
+        };
+
+        let publisher = sbs_publisher.clone();
+        let health = health_state.clone();
+        let shutdown_rx = shutdown_broadcast_tx.subscribe();
+        let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // Bridge broadcast to oneshot
+        tokio::spawn(async move {
+            let mut rx = shutdown_rx;
+            if rx.recv().await.is_ok() {
+                let _ = client_shutdown_tx.send(());
+            }
+        });
+
+        info!("Spawning SBS client for {}:{}", server, port);
+        let server_clone = server.clone();
+        let handle = tokio::spawn(
+            async move {
+                let mut client = SbsClient::new(config);
+                match client
+                    .start_with_shutdown(publisher, client_shutdown_rx, health)
+                    .await
+                {
+                    Ok(_) => info!("SBS client {}:{} stopped normally", server, port),
+                    Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
+                }
+            }
+            .instrument(tracing::info_span!("sbs_client", server = %server_clone, port = %port)),
+        );
+        client_handles.push(handle);
+    }
+
+    info!(
+        "Started {} Beast client(s) and {} SBS client(s)",
+        beast_servers.len(),
+        sbs_servers.len()
+    );
+
+    // Wait for all client tasks to complete
+    for handle in client_handles {
+        let _ = handle.await;
+    }
+
+    info!("All client tasks completed, shutting down");
+
+    // Mark NATS as disconnected
+    {
+        let mut health = health_state.write().await;
+        health.nats_connected = false;
     }
 
     Ok(())

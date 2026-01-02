@@ -1,0 +1,107 @@
+use anyhow::{Context, Result};
+use async_nats::Client;
+use tracing::{error, warn};
+
+use crate::sbs::SbsPublisher;
+
+/// Publisher that sends raw SBS messages to NATS for lightweight, fast queuing
+///
+/// This allows the SBS ingestion service to be decoupled from message processing.
+/// Uses regular NATS (not JetStream) for maximum throughput with fire-and-forget semantics.
+#[derive(Clone)]
+pub struct SbsNatsPublisher {
+    client: Client,
+    subject: String,
+}
+
+impl SbsNatsPublisher {
+    /// Create a new NATS publisher for SBS messages
+    pub fn new(client: Client, subject: String) -> Self {
+        Self { client, subject }
+    }
+
+    /// Publish a raw SBS message to NATS
+    ///
+    /// This is called by the SBS client for each message received from the SBS server.
+    /// Uses fire-and-forget semantics for maximum throughput.
+    pub fn publish_fire_and_forget(&self, message: &[u8]) {
+        // Clone for the spawned task
+        let client = self.client.clone();
+        let subject = self.subject.clone();
+        let message_bytes = message.to_vec();
+
+        // Spawn task to publish without blocking
+        tokio::spawn(async move {
+            let start = std::time::Instant::now();
+
+            // Regular NATS publish - fire and forget, no ack
+            match client.publish(subject, message_bytes.into()).await {
+                Ok(()) => {
+                    let duration_ms = start.elapsed().as_millis() as f64;
+                    metrics::histogram!("sbs.nats.publish_duration_ms").record(duration_ms);
+                    metrics::counter!("sbs.nats.published_total").increment(1);
+
+                    // Log slow publishes
+                    if duration_ms > 100.0 {
+                        warn!("Slow NATS publish: {:.1}ms", duration_ms);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to publish SBS message to NATS: {}", e);
+                    metrics::counter!("sbs.nats.publish_error_total").increment(1);
+                }
+            }
+        });
+    }
+
+    /// Publish with acknowledgment and error propagation (for critical messages)
+    pub async fn publish(&self, message: &[u8]) -> Result<()> {
+        self.client
+            .publish(self.subject.clone(), message.to_vec().into())
+            .await
+            .context("Failed to publish SBS message to NATS")?;
+
+        metrics::counter!("sbs.nats.published_total").increment(1);
+
+        Ok(())
+    }
+
+    /// Publish a message with retry logic (for graceful shutdown flushing)
+    ///
+    /// Retries up to `max_retries` times with exponential backoff on failure
+    pub async fn publish_with_retry(&self, message: &[u8], max_retries: u32) -> Result<()> {
+        let mut retries = 0;
+
+        loop {
+            match self.publish(message).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    retries += 1;
+                    if retries >= max_retries {
+                        return Err(e)
+                            .context(format!("Failed to publish after {} retries", max_retries));
+                    }
+
+                    let delay_ms = 100 * (2_u64.pow(retries - 1)); // Exponential backoff: 100ms, 200ms, 400ms
+                    warn!(
+                        "Failed to publish SBS message (retry {}/{}): {} - retrying in {}ms",
+                        retries, max_retries, e, delay_ms
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                }
+            }
+        }
+    }
+}
+
+// Implement SbsPublisher trait for NATS publisher
+#[async_trait::async_trait]
+impl SbsPublisher for SbsNatsPublisher {
+    async fn publish_fire_and_forget(&self, message: &[u8]) {
+        self.publish_fire_and_forget(message)
+    }
+
+    async fn publish_with_retry(&self, message: &[u8], max_retries: u32) -> Result<()> {
+        self.publish_with_retry(message, max_retries).await
+    }
+}

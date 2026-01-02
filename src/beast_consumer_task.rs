@@ -73,10 +73,11 @@ impl BeastConsumerTask {
         while let Some(msg) = subscriber.next().await {
             let payload = msg.payload.to_vec();
 
-            // Decode message: 8-byte timestamp + Beast frame
-            if payload.len() < 9 {
+            // Decode message: 8-byte SOAR timestamp + Beast frame (minimum 11 bytes)
+            // Beast frame minimum: 1 (0x1A) + 1 (type) + 6 (timestamp) + 1 (signal) + 2 (Mode A/C payload) = 11 bytes
+            if payload.len() < 19 {
                 warn!(
-                    "Invalid Beast message: too short ({} bytes, expected at least 9)",
+                    "Invalid Beast message: too short ({} bytes, expected at least 19)",
                     payload.len()
                 );
                 metrics::counter!("beast.nats.invalid_message_total").increment(1);
