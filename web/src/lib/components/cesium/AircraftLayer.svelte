@@ -331,6 +331,9 @@
 	function updateAircraftPosition(aircraft: Aircraft, fix: Fix): void {
 		const existingEntity = aircraftEntities.get(aircraft.id);
 
+		// Check if this entity is currently selected
+		const wasSelected = existingEntity && viewer.selectedEntity === existingEntity;
+
 		if (existingEntity) {
 			// Remove old entity
 			viewer.entities.remove(existingEntity);
@@ -341,6 +344,11 @@
 		const entity = createAircraftEntity(aircraft, fix, showLabels);
 		viewer.entities.add(entity);
 		aircraftEntities.set(aircraft.id, entity);
+
+		// Restore selection if it was previously selected
+		if (wasSelected) {
+			viewer.selectedEntity = entity;
+		}
 	}
 
 	onMount(() => {

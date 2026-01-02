@@ -89,11 +89,6 @@
 		avgClimbRate10After: number | null;
 	}
 
-	interface FlightGapsResponse {
-		gaps: FlightGap[];
-		count: number;
-	}
-
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
 	let flightPathSegments = $state<google.maps.Polyline[]>([]);
@@ -1340,10 +1335,10 @@
 
 		isLoadingGaps = true;
 		try {
-			const response = await serverCall<DataResponse<FlightGapsResponse>>(
+			const response = await serverCall<DataResponse<FlightGap[]>>(
 				`/flights/${data.flight.id}/gaps`
 			);
-			flightGaps = response.data.gaps;
+			flightGaps = response.data;
 			showGaps = true;
 		} catch (err) {
 			console.error('Failed to fetch flight gaps:', err);
