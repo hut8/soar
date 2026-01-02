@@ -24,6 +24,8 @@ pub struct AircraftIssuesParams {
     pub page: i64,
     #[serde(default = "default_per_page")]
     pub per_page: i64,
+    /// Optional hex address search filter (case-insensitive substring match)
+    pub hex_search: Option<String>,
 }
 
 fn default_page() -> i64 {
@@ -318,7 +320,7 @@ pub async fn get_aircraft_issues(
     let per_page = params.per_page.clamp(1, 100);
 
     match aircraft_repo
-        .get_duplicate_aircraft_paginated(page, per_page)
+        .get_duplicate_aircraft_paginated(page, per_page, params.hex_search)
         .await
     {
         Ok((duplicate_aircraft, total_count)) => {

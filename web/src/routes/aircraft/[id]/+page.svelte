@@ -418,7 +418,7 @@
 							{#if aircraft.countryCode}
 								{@const countryName = getCountryName(aircraft.countryCode)}
 								{@const flagPath = getFlagPath(aircraft.countryCode)}
-								<span class="preset-tonal-tertiary-500 badge flex items-center gap-1.5 text-xs">
+								<span class="badge flex items-center gap-1.5 preset-filled-tertiary-500 text-xs">
 									{#if flagPath}
 										<img
 											src={flagPath}

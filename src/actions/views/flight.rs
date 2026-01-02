@@ -13,6 +13,14 @@ pub struct AirportInfo {
     pub country: Option<String>,
 }
 
+/// Helper struct for geocoded location information when constructing FlightView
+#[derive(Debug, Clone, Default)]
+pub struct LocationInfo {
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub country: Option<String>,
+}
+
 /// Helper struct for device information when constructing FlightView
 #[derive(Debug, Clone, Default)]
 pub struct AircraftInfo {
@@ -50,6 +58,17 @@ pub struct FlightView {
     pub arrival_airport: Option<String>,
     pub arrival_airport_id: Option<i32>,
     pub arrival_airport_country: Option<String>,
+
+    // Geocoded location for flight start (from start_location_id)
+    pub start_location_city: Option<String>,
+    pub start_location_state: Option<String>,
+    pub start_location_country: Option<String>,
+
+    // Geocoded location for flight end (from end_location_id)
+    pub end_location_city: Option<String>,
+    pub end_location_state: Option<String>,
+    pub end_location_country: Option<String>,
+
     pub club_id: Option<Uuid>,
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
@@ -108,6 +127,8 @@ impl FlightView {
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
         device_info: Option<AircraftInfo>,
+        start_location: Option<LocationInfo>,
+        end_location: Option<LocationInfo>,
         latest_altitude_msl_feet: Option<i32>,
         latest_altitude_agl_feet: Option<i32>,
         latest_fix_timestamp: Option<DateTime<Utc>>,
@@ -126,6 +147,8 @@ impl FlightView {
         let departure_airport = departure_airport.unwrap_or_default();
         let arrival_airport = arrival_airport.unwrap_or_default();
         let device_info = device_info.unwrap_or_default();
+        let start_location = start_location.unwrap_or_default();
+        let end_location = end_location.unwrap_or_default();
 
         Self {
             id: flight.id,
@@ -143,6 +166,12 @@ impl FlightView {
             arrival_airport: arrival_airport.ident,
             arrival_airport_id: flight.arrival_airport_id,
             arrival_airport_country: arrival_airport.country,
+            start_location_city: start_location.city,
+            start_location_state: start_location.state,
+            start_location_country: start_location.country,
+            end_location_city: end_location.city,
+            end_location_state: end_location.state,
+            end_location_country: end_location.country,
             club_id: flight.club_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
@@ -182,6 +211,8 @@ impl FlightView {
             departure_airport,
             arrival_airport,
             device_info,
+            None,
+            None,
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,
             latest_fix_timestamp,
