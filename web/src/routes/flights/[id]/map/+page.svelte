@@ -704,19 +704,19 @@
 			const sw = bounds.getSouthWest();
 
 			const params = new URLSearchParams({
-				latitude_min: sw.lat().toString(),
-				latitude_max: ne.lat().toString(),
-				longitude_min: sw.lng().toString(),
-				longitude_max: ne.lng().toString()
+				north: ne.lat().toString(),
+				south: sw.lat().toString(),
+				east: ne.lng().toString(),
+				west: sw.lng().toString()
 			});
 
 			const data = await serverCall(`/receivers?${params}`);
-			if (!data || typeof data !== 'object' || !('receivers' in data)) {
+			if (!data || typeof data !== 'object' || !('data' in data)) {
 				throw new Error('Invalid response format');
 			}
 
-			const response = data as { receivers: unknown[] };
-			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
+			const response = data as { data: unknown[] };
+			receivers = response.data.filter((receiver: unknown): receiver is Receiver => {
 				// Validate receiver object
 				if (typeof receiver !== 'object' || receiver === null) {
 					console.error('Invalid receiver: not an object or is null', receiver);

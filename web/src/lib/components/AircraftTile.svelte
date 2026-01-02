@@ -5,7 +5,8 @@
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
 		getAircraftTitle,
-		formatAircraftAddress
+		formatAircraftAddress,
+		getFlagPath
 	} from '$lib/formatters';
 	import type { Aircraft } from '$lib/types';
 
@@ -33,17 +34,19 @@
 	});
 
 	// Get country code for flag display
+	// Prioritize addressCountry (from ICAO address via flydent), fall back to countryCode (from FAA registry)
 	const countryCode = $derived(() => {
+		if (aircraft.addressCountry && aircraft.addressCountry.trim() !== '') {
+			return aircraft.addressCountry.toUpperCase();
+		}
 		const code = aircraft.countryCode;
 		return code && code.trim() !== '' ? code.toUpperCase() : null;
 	});
 
-	// Flag SVG URL from hampusborgos/country-flags repository
+	// Flag SVG URL - use getFlagPath for consistency
 	const flagUrl = $derived(() => {
 		const code = countryCode();
-		return code
-			? `https://cdn.jsdelivr.net/gh/hampusborgos/country-flags@main/svg/${code}.svg`
-			: null;
+		return code ? getFlagPath(code) : null;
 	});
 </script>
 

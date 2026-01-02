@@ -198,7 +198,8 @@ export function formatTransponderCode(transponderCode: number | null | undefined
  * Priority:
  * 1. If both registration and aircraftModel: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
- * 3. Otherwise: formatted address (e.g., "FLARM-A0B380")
+ * 3. If OGN aircraft type is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
+ * 4. Otherwise: formatted address (e.g., "FLARM-A0B380")
  */
 export function getAircraftTitle(aircraft: {
 	registration?: string | null;
@@ -206,6 +207,7 @@ export function getAircraftTitle(aircraft: {
 	competitionNumber?: string | null;
 	addressType: string;
 	address: string;
+	aircraftTypeOgn?: string | null;
 }): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
 	const hasModel = aircraft.aircraftModel && aircraft.aircraftModel.trim() !== '';
@@ -218,6 +220,13 @@ export function getAircraftTitle(aircraft: {
 	// If only registration
 	if (hasRegistration) {
 		return aircraft.registration!;
+	}
+
+	// If OGN aircraft type is available (but no registration/model), show type with hex code
+	if (aircraft.aircraftTypeOgn && aircraft.aircraftTypeOgn.trim() !== '') {
+		const typeName = getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn);
+		const hexCode = aircraft.address.toUpperCase();
+		return `${typeName} (${hexCode})`;
 	}
 
 	// Default to formatted address
