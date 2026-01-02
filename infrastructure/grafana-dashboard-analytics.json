@@ -176,7 +176,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN devices d ON f.device_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.ogn_aircraft_type = 'glider') as \"Glider Flights\",\n  tow_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
+          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.ogn_aircraft_type = 'glider') as \"Glider Flights\",\n  tow_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -578,7 +578,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  aa.registration || ' (' || d.address || ')' as \"Aircraft\",\n  aa.aircraft_model as \"Model\",\n  aa.flight_count_30d as \"Flights (30d)\",\n  ROUND(aa.total_distance_meters / 1000.0) as \"Total Distance (km)\",\n  ROUND(aa.avg_flight_duration_seconds / 60.0) as \"Avg Duration (min)\"\nFROM aircraft_analytics aa\nJOIN devices d ON aa.device_id = d.id\nWHERE aa.flight_count_30d > 0\nORDER BY aa.flight_count_30d DESC\nLIMIT 10",
+          "rawSql": "SELECT\n  aa.registration || ' (' || d.address || ')' as \"Aircraft\",\n  aa.aircraft_model as \"Model\",\n  aa.flight_count_30d as \"Flights (30d)\",\n  ROUND(aa.total_distance_meters / 1000.0) as \"Total Distance (km)\",\n  ROUND(aa.avg_flight_duration_seconds / 60.0) as \"Avg Duration (min)\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE aa.flight_count_30d > 0\nORDER BY aa.flight_count_30d DESC\nLIMIT 10",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -1157,7 +1157,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  d.registration || ' (' || d.address || ')' as \"Aircraft\",\n  d.model as \"Model\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics aa\nJOIN devices d ON aa.device_id = d.id\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC",
+          "rawSql": "SELECT\n  d.registration || ' (' || d.address || ')' as \"Aircraft\",\n  d.model as \"Model\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC",
           "refId": "A",
           "sql": {
             "columns": [],
