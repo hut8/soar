@@ -117,8 +117,9 @@ impl FromStr for AircraftType {
 }
 
 /// ADS-B emitter category codes as per DO-260B specification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, TS)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AdsbEmitterCategory")]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub enum AdsbEmitterCategory {
     // Category A: Aircraft types
     A0, // No ADS-B emitter category information

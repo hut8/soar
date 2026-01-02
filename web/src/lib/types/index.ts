@@ -184,6 +184,7 @@ export interface Aircraft {
 	icaoModelCode?: string | null;
 	countryCode?: string | null;
 	addressCountry?: string | null; // Country derived from ICAO address using flydent
+	adsbEmitterCategory?: string | null; // ADS-B emitter category (two-digit code like A1, B6, C2)
 	latitude?: number | null;
 	longitude?: number | null;
 	activeFlightId?: string | null;
@@ -257,6 +258,8 @@ export interface Fix {
 	registration?: string;
 	model?: string;
 	flightId?: string;
+	flightNumber?: string | null;
+	squawk?: string | null;
 	active: boolean;
 	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)

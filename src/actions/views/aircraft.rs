@@ -154,6 +154,8 @@ pub struct AircraftView {
     pub latitude: Option<f64>,
     /// Longitude of aircraft's last known position (stored in database for quick access)
     pub longitude: Option<f64>,
+    /// ADS-B emitter category (two-digit code like A1, B6, C2)
+    pub adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
     /// Current fix (latest position data for this aircraft)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_fix: Option<serde_json::Value>,
@@ -220,6 +222,7 @@ impl AircraftView {
             address_country,
             latitude: None,
             longitude: None,
+            adsb_emitter_category: device.adsb_emitter_category,
             current_fix: None,
             fixes: None,
         }
@@ -277,6 +280,7 @@ impl AircraftView {
             address_country,
             latitude: device_model.latitude,
             longitude: device_model.longitude,
+            adsb_emitter_category: device_model.adsb_emitter_category,
             current_fix: device_model.current_fix,
             fixes: None,
         }

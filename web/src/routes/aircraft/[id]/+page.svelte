@@ -13,7 +13,8 @@
 		Building2,
 		Save,
 		Eye,
-		EyeOff
+		EyeOff,
+		HelpCircle
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -42,6 +43,10 @@
 		getCountryName,
 		getFlagPath
 	} from '$lib/formatters';
+	import {
+		getEmitterCategoryLabel,
+		getEmitterCategoryDescription
+	} from '$lib/constants/adsbEmitterCategories';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import utc from 'dayjs/plugin/utc';
@@ -427,6 +432,17 @@
 										/>
 									{/if}
 									{countryName ? `${countryName} (${aircraft.countryCode})` : aircraft.countryCode}
+								</span>
+							{/if}
+							{#if aircraft.adsbEmitterCategory}
+								<span
+									class="badge flex cursor-help items-center gap-1.5 preset-filled-primary-500 text-xs"
+									title="{aircraft.adsbEmitterCategory.toUpperCase()} - {getEmitterCategoryDescription(
+										aircraft.adsbEmitterCategory
+									)}"
+								>
+									ADS-B: {getEmitterCategoryLabel(aircraft.adsbEmitterCategory)}
+									<HelpCircle class="h-3 w-3" />
 								</span>
 							{/if}
 						</div>
