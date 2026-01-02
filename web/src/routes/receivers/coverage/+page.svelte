@@ -13,20 +13,20 @@
 	let loading = false;
 	let error = '';
 	let resolution = 7;
-	let hexCount = 0;
+	let hexCount = $state(0);
 	let receivers: Receiver[] = [];
 	let receiverMarkers: maplibregl.Marker[] = [];
-	let selectedReceiverId = '';
-	let minAltitude = 0;
-	let maxAltitude = 50000;
-	let showAdvancedFilters = false;
+	let selectedReceiverId = $state('');
+	let minAltitude = $state(0);
+	let maxAltitude = $state(50000);
+	let showAdvancedFilters = $state(false);
 	let currentPopup: maplibregl.Popup | null = null;
-	let autoResolution = true; // Auto-select resolution based on zoom level
+	let autoResolution = $state(true); // Auto-select resolution based on zoom level
 	let moveDebounceTimer: number | null = null;
-	let receiverSearchQuery = '';
-	let receiverSearchResults: Receiver[] = [];
+	let receiverSearchQuery = $state('');
+	let receiverSearchResults = $state<Receiver[]>([]);
 	let searchDebounceTimer: number | null = null;
-	let showReceiverDropdown = false;
+	let showReceiverDropdown = $state(false);
 	let showHexModal = $state(false);
 	let selectedHexProperties = $state<CoverageHexProperties | null>(null);
 
@@ -40,8 +40,8 @@
 	}
 
 	const defaultDates = getDefaultDates();
-	let startDate = defaultDates.start;
-	let endDate = defaultDates.end;
+	let startDate = $state(defaultDates.start);
+	let endDate = $state(defaultDates.end);
 
 	async function loadReceivers() {
 		if (!map) return;
