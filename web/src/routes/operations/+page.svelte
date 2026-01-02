@@ -595,6 +595,15 @@
 			saveMapState();
 		});
 
+		// Initial aircraft fetch after map is ready (even if area tracker is off)
+		// This ensures clustering works on page load
+		setTimeout(async () => {
+			await fetchAndDisplayDevicesInViewport();
+			if (areaTrackerActive) {
+				updateAreaSubscriptions();
+			}
+		}, 500);
+
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
 			checkAndUpdateReceivers();
