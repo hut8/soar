@@ -37,9 +37,13 @@
 			const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 			const completed = flightType === 'completed';
 
-			const response = await serverCall<PaginatedDataResponse<Flight>>(
-				`/flights?completed=${completed}&limit=${ITEMS_PER_PAGE}&offset=${offset}`
-			);
+			const params = new URLSearchParams({
+				completed: completed.toString(),
+				limit: ITEMS_PER_PAGE.toString(),
+				offset: offset.toString()
+			});
+
+			const response = await serverCall<PaginatedDataResponse<Flight>>(`/flights?${params}`);
 
 			flights = response.data || [];
 			totalCount = response.metadata.totalCount || 0;

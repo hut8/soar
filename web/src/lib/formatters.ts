@@ -1,5 +1,6 @@
 // Shared formatting utility functions for aircraft data
 import countryCodes from '$lib/data/countries.json';
+import type { Aircraft } from '$lib/types';
 
 /**
  * Convert TitleCase strings to Title Case with spaces
@@ -201,14 +202,12 @@ export function formatTransponderCode(transponderCode: number | null | undefined
  * 3. If OGN aircraft type is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
  * 4. Otherwise: formatted address (e.g., "FLARM-A0B380")
  */
-export function getAircraftTitle(aircraft: {
-	registration?: string | null;
-	aircraftModel?: string | null;
-	competitionNumber?: string | null;
-	addressType: string;
-	address: string;
-	aircraftTypeOgn?: string | null;
-}): string {
+export function getAircraftTitle(
+	aircraft: Pick<
+		Aircraft,
+		'registration' | 'aircraftModel' | 'addressType' | 'address' | 'aircraftTypeOgn'
+	>
+): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
 	const hasModel = aircraft.aircraftModel && aircraft.aircraftModel.trim() !== '';
 
