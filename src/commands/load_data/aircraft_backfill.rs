@@ -115,8 +115,12 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
                 device_model.address as u32,
                 AddressType::Icao,
             ) {
+                // Use COALESCE to never overwrite existing country codes
                 match diesel::update(aircraft.filter(id.eq(device_model.id)))
-                    .set(country_code.eq(&extracted_country_code))
+                    .set(country_code.eq(diesel::dsl::sql(&format!(
+                        "COALESCE(aircraft.country_code, '{}')",
+                        extracted_country_code
+                    ))))
                     .execute(&mut conn)
                 {
                     Ok(_) => {
@@ -157,8 +161,12 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
                 && let Some(extracted_country_code) =
                     Aircraft::extract_country_code_from_registration(reg)
             {
+                // Use COALESCE to never overwrite existing country codes
                 match diesel::update(aircraft.filter(id.eq(device_model.id)))
-                    .set(country_code.eq(&extracted_country_code))
+                    .set(country_code.eq(diesel::dsl::sql(&format!(
+                        "COALESCE(aircraft.country_code, '{}')",
+                        extracted_country_code
+                    ))))
                     .execute(&mut conn)
                 {
                     Ok(_) => {

@@ -252,7 +252,14 @@ impl Fix {
                     .filter(|&c| c < 360)
                     .map(|c| c as f32);
 
-                let flight_number = pos_packet.comment.flight_number.clone();
+                // Use flight_number if present, otherwise fall back to call_sign
+                // ogn-parser only sets flight_number when "fn" prefix is used (e.g., "fnA3:CALLSIGN")
+                // Without "fn", it only sets call_sign, so we use that as a fallback
+                let flight_number = pos_packet
+                    .comment
+                    .flight_number
+                    .clone()
+                    .or_else(|| pos_packet.comment.call_sign.clone());
                 let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
                 let turn_rate_rot = pos_packet
@@ -355,5 +362,75 @@ impl Fix {
                 Ok(None)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[test]
+    fn test_flight_number_fallback_to_call_sign() {
+        // Test packet with A3:T7TJ1 (without "fn" prefix)
+        // ogn-parser will set call_sign but not flight_number
+        let packet_str = "ICA500465>OGADSB,qAS,EBKT:/124803h5152.51N/00209.57E^316/304/A=015721 !W36! id25500465 -1024fpm FL168.19 A3:T7TJ1 Sq7545";
+
+        let parsed = ogn_parser::parse(packet_str).expect("Failed to parse APRS packet");
+        let received_at = Utc::now();
+        let aircraft_id = Uuid::now_v7();
+        let receiver_id = Uuid::now_v7();
+        let raw_message_id = Uuid::now_v7();
+
+        let fix = Fix::from_aprs_packet(
+            parsed,
+            received_at,
+            aircraft_id,
+            receiver_id,
+            raw_message_id,
+        )
+        .expect("Failed to create Fix")
+        .expect("Expected Some(Fix), got None");
+
+        // Should have flight_number set to "T7TJ1" (from call_sign fallback)
+        assert_eq!(
+            fix.flight_number,
+            Some("T7TJ1".to_string()),
+            "flight_number should be set from call_sign when no 'fn' prefix"
+        );
+
+        // Should have squawk set to "7545"
+        assert_eq!(fix.squawk, Some("7545".to_string()));
+    }
+
+    #[test]
+    fn test_flight_number_with_fn_prefix() {
+        // Test packet with fnA3:TEST123 (with "fn" prefix)
+        // ogn-parser will set both call_sign AND flight_number
+        let packet_str =
+            "ICA500465>OGADSB,qAS,EBKT:/124803h5152.51N/00209.57E^316/304/A=015721 fnA3:TEST123";
+
+        let parsed = ogn_parser::parse(packet_str).expect("Failed to parse APRS packet");
+        let received_at = Utc::now();
+        let aircraft_id = Uuid::now_v7();
+        let receiver_id = Uuid::now_v7();
+        let raw_message_id = Uuid::now_v7();
+
+        let fix = Fix::from_aprs_packet(
+            parsed,
+            received_at,
+            aircraft_id,
+            receiver_id,
+            raw_message_id,
+        )
+        .expect("Failed to create Fix")
+        .expect("Expected Some(Fix), got None");
+
+        // Should have flight_number set to "TEST123" (from flight_number field)
+        assert_eq!(
+            fix.flight_number,
+            Some("TEST123".to_string()),
+            "flight_number should be set directly when 'fn' prefix is present"
+        );
     }
 }
