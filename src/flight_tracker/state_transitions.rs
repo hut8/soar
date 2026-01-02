@@ -442,6 +442,14 @@ pub(crate) async fn process_state_transition(
                         metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
                             .record(distance_km);
 
+                        // Calculate and record coalesce speed (distance/time)
+                        if gap_hours > 0 {
+                            let speed_kmh = distance_km / (gap_hours as f64);
+                            let speed_mph = speed_kmh * 0.621371;
+                            metrics::histogram!("flight_tracker.coalesce.speed_mph")
+                                .record(speed_mph);
+                        }
+
                         // Atomically clear the timeout and update last_fix_at in a single database operation
                         // This prevents violating the check_timeout_after_last_fix constraint
                         if let Err(e) = ctx
