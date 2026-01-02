@@ -40,6 +40,10 @@
 	// Clock listener
 	let clockTickListener: (() => void) | null = null;
 
+	// Last camera position (for optimization)
+	let lastCameraLat = 0;
+	let lastCameraLon = 0;
+
 	// Speed options
 	const speedOptions = [
 		{ value: 0.5, label: '0.5x' },
@@ -70,6 +74,10 @@
 				console.warn('No fixes found for flight');
 				return;
 			}
+
+			// Sort fixes by timestamp in ascending order (oldest first)
+			// This ensures the timeline plays forward correctly
+			fixes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
 			// Initialize timeline
 			initializeTimeline();
@@ -192,23 +200,32 @@
 		viewer.entities.add(playbackEntity);
 
 		// Follow camera if enabled
+		// Only update camera if position changed significantly (> 0.01 degrees ~= 1km)
 		if (followCamera) {
-			const altitude = fix.altitudeMslFeet || 0;
-			const altitudeMeters = altitude * 0.3048;
+			const latDiff = Math.abs(fix.latitude - lastCameraLat);
+			const lonDiff = Math.abs(fix.longitude - lastCameraLon);
 
-			viewer.camera.flyTo({
-				destination: Cartesian3.fromDegrees(
-					fix.longitude,
-					fix.latitude,
-					altitudeMeters + 5000 // 5km above aircraft
-				),
-				orientation: {
-					heading: 0.0,
-					pitch: -CesiumMath.PI_OVER_FOUR, // 45 degree angle
-					roll: 0.0
-				},
-				duration: 0.5
-			});
+			if (latDiff > 0.01 || lonDiff > 0.01) {
+				lastCameraLat = fix.latitude;
+				lastCameraLon = fix.longitude;
+
+				const altitude = fix.altitudeMslFeet || 0;
+				const altitudeMeters = altitude * 0.3048;
+
+				viewer.camera.flyTo({
+					destination: Cartesian3.fromDegrees(
+						fix.longitude,
+						fix.latitude,
+						altitudeMeters + 5000 // 5km above aircraft
+					),
+					orientation: {
+						heading: 0.0,
+						pitch: -CesiumMath.PI_OVER_FOUR, // 45 degree angle
+						roll: 0.0
+					},
+					duration: 0.5
+				});
+			}
 		}
 	}
 
