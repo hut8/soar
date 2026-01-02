@@ -1554,6 +1554,14 @@ mod tests {
         let ca_code = Aircraft::extract_country_code_from_registration("C-GABC");
         assert_eq!(ca_code, Some("CA".to_string()), "C-GABC should be Canada");
 
+        // Test Czech registration (OK-0753 from unified FlarmNet)
+        let cz_code = Aircraft::extract_country_code_from_registration("OK-0753");
+        assert_eq!(
+            cz_code,
+            Some("CZ".to_string()),
+            "OK-0753 should be Czech Republic"
+        );
+
         // Test invalid registration
         let invalid_code = Aircraft::extract_country_code_from_registration("INVALID");
         assert_eq!(

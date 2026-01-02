@@ -4,10 +4,9 @@
 	import { Math as CesiumMath, Rectangle } from 'cesium';
 	import { createAircraftEntity, createClusterEntity } from '$lib/cesium/entities';
 	import { FixFeed, type FixFeedEvent } from '$lib/services/FixFeed';
-	import type { Aircraft, Fix, FixWithExtras } from '$lib/types';
+	import type { Aircraft, Fix } from '$lib/types';
 	import { isAircraftItem, isClusterItem } from '$lib/types';
 	import { browser } from '$app/environment';
-	import type { JsonValue } from '../../../../../bindings/serde_json/JsonValue';
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -394,54 +393,24 @@
 
 			if (!aircraftId) return;
 
-			// Get or create aircraft data
+			// Get aircraft data - skip if not loaded yet
 			let aircraft = aircraftData.get(aircraftId);
 			if (!aircraft) {
-				// Create minimal aircraft data from fix
-				const fixWithExtras = fix as FixWithExtras;
-				aircraft = {
-					id: aircraftId,
-					addressType: '',
-					address: fixWithExtras.deviceAddressHex || '',
-					aircraftModel: fixWithExtras.model || '',
-					registration: fixWithExtras.registration || null,
-					competitionNumber: '',
-					tracked: false,
-					identified: false,
-					clubId: null,
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					fromOgnDdb: false,
-					fromAdsbxDdb: false,
-					frequencyMhz: null,
-					pilotName: null,
-					homeBaseAirportIdent: null,
-					aircraftTypeOgn: null,
-					lastFixAt: null,
-					trackerDeviceType: null,
-					icaoModelCode: null,
-					countryCode: null,
-					ownerOperator: null,
-					addressCountry: null,
-					latitude: null,
-					longitude: null,
-					adsbEmitterCategory: null,
-					currentFix: null,
-					fixes: []
-				};
-				aircraftData.set(aircraftId, aircraft);
-			} else {
-				// Push old currentFix to fixes array if it exists
-				// Note: currentFix is JsonValue, not Fix in the typed interface
-				if (aircraft.currentFix && aircraft.fixes) {
-					aircraft.fixes.unshift(fix);
-					// Limit to 100 fixes
-					if (aircraft.fixes.length > 100) {
-						aircraft.fixes = aircraft.fixes.slice(0, 100);
-					}
+				// Aircraft not loaded yet - skip this fix
+				// The aircraft should be loaded from the backend via the AircraftRegistry
+				console.warn('[CESIUM] Received fix for unknown aircraft, skipping:', aircraftId);
+				return;
+			}
+
+			// Add fix to fixes array
+			if (aircraft.fixes) {
+				aircraft.fixes.unshift(fix);
+				// Limit to 100 fixes
+				if (aircraft.fixes.length > 100) {
+					aircraft.fixes = aircraft.fixes.slice(0, 100);
 				}
-				// Set new currentFix (cast to JsonValue as it's stored as JSON)
-				aircraft.currentFix = fix as unknown as JsonValue;
+			} else {
+				aircraft.fixes = [fix];
 			}
 
 			// Update aircraft entity
