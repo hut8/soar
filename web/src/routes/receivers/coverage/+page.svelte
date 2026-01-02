@@ -6,6 +6,7 @@
 	import { Loader, Calendar, Layers, Radio, Filter, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import type { CoverageHexProperties, CoverageGeoJsonResponse, Receiver } from '$lib/types';
+	import HexSamplesModal from '$lib/components/HexSamplesModal.svelte';
 
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = null;
@@ -26,6 +27,8 @@
 	let receiverSearchResults: Receiver[] = [];
 	let searchDebounceTimer: number | null = null;
 	let showReceiverDropdown = false;
+	let showHexModal = $state(false);
+	let selectedHexProperties = $state<CoverageHexProperties | null>(null);
 
 	// Default to last 30 days
 	function getDefaultDates() {
@@ -40,22 +43,15 @@
 	let startDate = defaultDates.start;
 	let endDate = defaultDates.end;
 
-	// Normalize longitude to [-180, 180] range
-	function normalizeLongitude(lng: number): number {
-		// Wrap longitude to -180 to 180 range
-		while (lng > 180) lng -= 360;
-		while (lng < -180) lng += 360;
-		return lng;
-	}
-
 	async function loadReceivers() {
 		if (!map) return;
 
 		try {
 			// Get current map bounds
+			// Note: Do not normalize longitude - allow west > east for date line crossing
 			const bounds = map.getBounds();
-			const west = normalizeLongitude(bounds.getWest());
-			const east = normalizeLongitude(bounds.getEast());
+			const west = bounds.getWest();
+			const east = bounds.getEast();
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
@@ -209,8 +205,9 @@
 
 		try {
 			const bounds = map.getBounds();
-			const west = normalizeLongitude(bounds.getWest());
-			const east = normalizeLongitude(bounds.getEast());
+			// Note: Do not normalize longitude - allow west > east for date line crossing
+			const west = bounds.getWest();
+			const east = bounds.getEast();
 			const south = bounds.getSouth();
 			const north = bounds.getNorth();
 
@@ -373,6 +370,25 @@
 					currentPopup = null;
 				}
 				map!.getCanvas().style.cursor = '';
+			});
+
+			// Add click handler for hexagons to show detailed modal
+			map.on('click', 'coverage-hexes', (e: maplibregl.MapLayerMouseEvent) => {
+				if (!e.features || !e.features[0]) return;
+
+				const feature = e.features[0] as maplibregl.MapGeoJSONFeature & {
+					properties: CoverageHexProperties;
+				};
+
+				// Close hover popup when clicking
+				if (currentPopup) {
+					currentPopup.remove();
+					currentPopup = null;
+				}
+
+				// Open modal with hex properties
+				selectedHexProperties = feature.properties;
+				showHexModal = true;
 			});
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -699,6 +715,17 @@
 		</div>
 	</div>
 </div>
+
+<!-- Hex Details Modal -->
+<HexSamplesModal
+	bind:showModal={showHexModal}
+	bind:hexProperties={selectedHexProperties}
+	dateRange={{ start: startDate, end: endDate }}
+	receiverId={selectedReceiverId}
+	altitudeFilter={minAltitude > 0 || maxAltitude < 50000
+		? { min: minAltitude, max: maxAltitude }
+		: undefined}
+/>
 
 <style>
 	/* Receiver marker styling - matches operations page */

@@ -240,6 +240,7 @@ export interface AircraftWithRegistration extends Aircraft {
 
 export interface Fix {
 	id: string;
+	source?: string; // APRS source identifier
 	aircraftId?: string;
 	deviceAddressHex?: string;
 	timestamp: string;
@@ -426,4 +427,12 @@ export interface CoverageHexFeature {
 export interface CoverageGeoJsonResponse {
 	type: 'FeatureCollection';
 	features: CoverageHexFeature[];
+}
+
+// Hex fixes modal - individual position fixes within a coverage hex
+export interface FixesInHexResponse {
+	data: Fix[];
+	total: number;
+	h3Index: string;
+	resolution: number;
 }
