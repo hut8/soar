@@ -93,7 +93,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 1
       },
@@ -119,7 +119,7 @@
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_published_total{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
-          "legendFormat": "Raw APRS Messages Published",
+          "legendFormat": "OGN/APRS Messages (ingest-ogn → ogn.raw)",
           "range": true,
           "refId": "A"
         },
@@ -129,10 +129,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_fixes_published_total{component=\"run\",environment=\"$environment\"}[1m])",
-          "legendFormat": "Processed Fixes Published",
+          "expr": "rate(beast_nats_published_total{component=\"ingest-adsb\",environment=\"$environment\"}[1m])",
+          "legendFormat": "ADS-B/Beast Messages (ingest-adsb → adsb.raw)",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(nats_publisher_fixes_published_total{component=\"run\",environment=\"$environment\"}[1m])",
+          "legendFormat": "Processed Fixes (soar run → aircraft.*)",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "NATS Publishing Rate",
@@ -201,9 +212,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 1
+        "w": 24,
+        "x": 0,
+        "y": 9
       },
       "id": 3,
       "options": {
@@ -227,7 +238,7 @@
           },
           "editorMode": "code",
           "expr": "rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
-          "legendFormat": "Ingest-OGN Publish Errors",
+          "legendFormat": "OGN Publish Errors (ingest-ogn)",
           "range": true,
           "refId": "A"
         },
@@ -237,10 +248,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1m])",
-          "legendFormat": "Run Publisher Errors",
+          "expr": "rate(beast_nats_publish_error_total{component=\"ingest-adsb\",environment=\"$environment\"}[1m])",
+          "legendFormat": "ADS-B Publish Errors (ingest-adsb)",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1m])",
+          "legendFormat": "Fix Publish Errors (soar run)",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "NATS Publishing Errors",
@@ -279,15 +301,15 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
+        "h": 6,
+        "w": 24,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "id": 4,
       "options": {
         "minVizHeight": 75,
-        "minVizWidth": 75,
+        "minVizWidth": 200,
         "orientation": "auto",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
@@ -307,12 +329,23 @@
           },
           "editorMode": "code",
           "expr": "nats_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Queue Depth",
+          "legendFormat": "Fix Publisher Queue (soar run)",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_nats_queue_depth{component=\"ingest-adsb\",environment=\"$environment\"}",
+          "legendFormat": "ADS-B Publisher Queue (ingest-adsb)",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Fix Publisher Queue Depth",
+      "title": "NATS Publisher Queue Depth",
       "type": "gauge"
     },
     {
@@ -382,9 +415,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 9
+        "w": 24,
+        "x": 0,
+        "y": 23
       },
       "id": 5,
       "options": {
@@ -408,7 +441,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.5\"}",
-          "legendFormat": "P50 - Ingest APRS",
+          "legendFormat": "P50 - OGN (ingest-ogn)",
           "range": true,
           "refId": "A"
         },
@@ -419,7 +452,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.95\"}",
-          "legendFormat": "P95 - Ingest APRS",
+          "legendFormat": "P95 - OGN (ingest-ogn)",
           "range": true,
           "refId": "B"
         },
@@ -430,9 +463,42 @@
           },
           "editorMode": "code",
           "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.99\"}",
-          "legendFormat": "P99 - Ingest APRS",
+          "legendFormat": "P99 - OGN (ingest-ogn)",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.5\"}",
+          "legendFormat": "P50 - ADS-B (ingest-adsb)",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.95\"}",
+          "legendFormat": "P95 - ADS-B (ingest-adsb)",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.99\"}",
+          "legendFormat": "P99 - ADS-B (ingest-adsb)",
+          "range": true,
+          "refId": "F"
         }
       ],
       "title": "NATS Publish Latency",
@@ -444,7 +510,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 31
       },
       "id": 6,
       "panels": [],
@@ -477,9 +543,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
+        "w": 24,
         "x": 0,
-        "y": 18
+        "y": 32
       },
       "id": 7,
       "options": {
@@ -506,12 +572,23 @@
           },
           "editorMode": "code",
           "expr": "sum(increase(aprs_nats_published_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h]))",
-          "legendFormat": "Last Hour",
+          "legendFormat": "OGN/APRS (ingest-ogn)",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(beast_nats_published_total{component=\"ingest-adsb\",environment=\"$environment\"}[1h]))",
+          "legendFormat": "ADS-B/Beast (ingest-adsb)",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Raw APRS Messages Published (1h)",
+      "title": "Raw Messages Published (Last Hour)",
       "type": "stat"
     },
     {
@@ -540,9 +617,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 18
+        "w": 24,
+        "x": 0,
+        "y": 36
       },
       "id": 8,
       "options": {
@@ -569,12 +646,12 @@
           },
           "editorMode": "code",
           "expr": "sum(increase(nats_publisher_fixes_published_total{component=\"run\",environment=\"$environment\"}[1h]))",
-          "legendFormat": "Last Hour",
+          "legendFormat": "Processed Fixes (soar run)",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Processed Fixes Published (1h)",
+      "title": "Processed Fixes Published (Last Hour)",
       "type": "stat"
     },
     {
@@ -618,9 +695,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 18
+        "w": 24,
+        "x": 0,
+        "y": 40
       },
       "id": 9,
       "options": {
@@ -646,13 +723,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h])) + sum(increase(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1h]))",
-          "legendFormat": "Total Errors",
+          "expr": "sum(increase(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(beast_nats_publish_error_total{component=\"ingest-adsb\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(nats_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1h]) or vector(0))",
+          "legendFormat": "Total Errors (All Components)",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Publishing Errors (1h)",
+      "title": "Total Publishing Errors (Last Hour)",
       "type": "stat"
     },
     {
@@ -660,12 +737,12 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Topics published by SOAR:\n- aircraft.fix.{aircraft_id} - Individual aircraft position fixes (production)\n- aircraft.area.{lat}.{lon} - Position fixes by geographic area (production)\n- staging.aircraft.fix.{aircraft_id} - Individual aircraft (staging)\n- staging.aircraft.area.{lat}.{lon} - Geographic area (staging)\n- aprs.raw - Raw APRS messages from APRS-IS (all environments)",
+      "description": "Topics published by SOAR components showing the complete message flow from ingestion to client delivery",
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 44
       },
       "id": 10,
       "options": {
@@ -674,7 +751,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "# NATS Topics Published by SOAR\n\n## Production Topics\n- `aircraft.fix.{aircraft_id}` - Individual aircraft position fixes\n- `aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (1° grid)\n\n## Staging Topics\n- `staging.aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (staging)\n- `staging.aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (staging)\n\n## Raw OGN Topic\n- `ogn.raw` - Raw OGN/APRS messages from APRS-IS (consumed by soar-run)\n\n## Message Flow\n1. **ingest-ogn** receives raw OGN/APRS from APRS-IS → publishes to `ogn.raw`\n2. **soar-run** consumes `ogn.raw` → processes → publishes to `aircraft.*` topics\n3. **Web clients** subscribe to `aircraft.fix.{id}` or `aircraft.area.{lat}.{lon}` for live updates",
+        "content": "# NATS Topics Published by SOAR\n\n## Raw Ingestion Topics (Stage 1)\n- `ogn.raw` - Raw OGN/APRS messages from APRS-IS (**ingest-ogn** → NATS)\n- `adsb.raw` - Raw ADS-B/Beast frames from receivers (**ingest-adsb** → NATS)\n\n## Processed Aircraft Topics (Stage 2)\n### Production Environment\n- `aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (**soar run** → NATS)\n- `aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area, 1° grid (**soar run** → NATS)\n\n### Staging Environment\n- `staging.aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (**soar run** → NATS)\n- `staging.aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (**soar run** → NATS)\n\n## Message Flow\n1. **soar ingest-ogn** - Receives OGN/APRS from APRS-IS → publishes to `ogn.raw`\n2. **soar ingest-adsb** - Receives ADS-B/Beast from receivers → publishes to `adsb.raw`\n3. **soar run** - Consumes `ogn.raw` and `adsb.raw` → processes → publishes to `aircraft.*` topics\n4. **Web clients** - Subscribe to `aircraft.fix.{id}` or `aircraft.area.{lat}.{lon}` for live updates",
         "mode": "markdown"
       },
       "pluginVersion": "12.2.1",

@@ -10,9 +10,10 @@ import {
 	VerticalOrigin,
 	HorizontalOrigin,
 	HeightReference,
-	type Cartesian2
+	type Cartesian2,
+	PolygonHierarchy
 } from 'cesium';
-import type { Aircraft, Fix, Flight, Airport, Receiver } from '$lib/types';
+import type { Aircraft, Fix, Flight, Airport, Receiver, AircraftCluster } from '$lib/types';
 import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
 import { getAircraftTitle } from '$lib/formatters';
 
@@ -330,6 +331,77 @@ export function createLandingMarker(latitude: number, longitude: number, altitud
 			outlineColor: Color.BLACK,
 			outlineWidth: 2,
 			pixelOffset: { x: 0, y: -20 } as unknown as Cartesian2
+		}
+	});
+}
+
+/**
+ * Create cluster entity with bounding box and label
+ * Shows aggregated aircraft count in a geographic area
+ */
+export function createClusterEntity(cluster: AircraftCluster): Entity {
+	const { north, south, east, west } = cluster.bounds;
+	const centerLat = (north + south) / 2;
+	const centerLon = (east + west) / 2;
+
+	// Create polygon outline showing cluster bounds
+	const positions = [
+		Cartesian3.fromDegrees(west, north, 0),
+		Cartesian3.fromDegrees(east, north, 0),
+		Cartesian3.fromDegrees(east, south, 0),
+		Cartesian3.fromDegrees(west, south, 0)
+	];
+
+	// Create airplane SVG icon for cluster
+	const clusterIconSvg = `
+		<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+			<circle cx="16" cy="16" r="14" fill="rgba(59, 130, 246, 0.8)" stroke="white" stroke-width="2"/>
+			<path d="M 16 8 L 12 20 L 16 18 L 20 20 Z" fill="white" stroke="white" stroke-width="1"/>
+		</svg>
+	`;
+	const clusterIconUrl = `data:image/svg+xml;base64,${btoa(clusterIconSvg)}`;
+
+	return new Entity({
+		id: `cluster-${cluster.id}`,
+		name: `${cluster.count} aircraft`,
+		position: Cartesian3.fromDegrees(centerLon, centerLat, 0),
+		billboard: {
+			image: clusterIconUrl,
+			scale: 1.5,
+			verticalOrigin: VerticalOrigin.CENTER,
+			horizontalOrigin: HorizontalOrigin.CENTER,
+			heightReference: HeightReference.CLAMP_TO_GROUND,
+			disableDepthTestDistance: Number.POSITIVE_INFINITY
+		},
+		label: {
+			text: cluster.count.toString(),
+			font: 'bold 16px sans-serif',
+			fillColor: Color.WHITE,
+			outlineColor: Color.BLACK,
+			outlineWidth: 3,
+			pixelOffset: { x: 0, y: 25 } as unknown as Cartesian2,
+			heightReference: HeightReference.CLAMP_TO_GROUND,
+			disableDepthTestDistance: Number.POSITIVE_INFINITY
+		},
+		polygon: {
+			hierarchy: new PolygonHierarchy(positions),
+			material: Color.fromCssColorString('rgba(59, 130, 246, 0.1)'),
+			outline: true,
+			outlineColor: Color.fromCssColorString('rgba(59, 130, 246, 0.8)'),
+			outlineWidth: 3,
+			heightReference: HeightReference.CLAMP_TO_GROUND
+		},
+		description: `
+			<h3>Aircraft Cluster</h3>
+			<p><strong>Aircraft Count:</strong> ${cluster.count}</p>
+			<p><strong>Area:</strong> ${Math.abs(north - south).toFixed(2)}° × ${Math.abs(east - west).toFixed(2)}°</p>
+			<p>Click to zoom in and see individual aircraft</p>
+		`,
+		properties: {
+			clusterId: cluster.id,
+			clusterCount: cluster.count,
+			clusterBounds: cluster.bounds,
+			isCluster: true
 		}
 	});
 }

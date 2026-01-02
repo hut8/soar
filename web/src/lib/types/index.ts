@@ -219,12 +219,6 @@ export interface FixWithExtras extends Fix {
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 }
 
-export interface FixesResponse {
-	fixes: Fix[];
-	page: number;
-	totalPages: number;
-}
-
 // User authentication and profile (now includes pilot fields)
 export interface User {
 	id: string;

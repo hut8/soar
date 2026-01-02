@@ -159,6 +159,27 @@
 					attributeFilter: ['class']
 				});
 
+				// Add listener for entity selection to log aircraft data
+				viewer.selectedEntityChanged.addEventListener(() => {
+					const selected = viewer.selectedEntity;
+					if (selected && selected.properties?.aircraftId) {
+						console.log('[GLOBE] Selected aircraft entity:', {
+							id: selected.id,
+							name: selected.name,
+							properties: {
+								aircraftId: selected.properties.aircraftId?.getValue(),
+								registration: selected.properties.registration?.getValue(),
+								fixId: selected.properties.fixId?.getValue(),
+								altitude: selected.properties.altitude?.getValue(),
+								timestamp: selected.properties.timestamp?.getValue(),
+								isOld: selected.properties.isOld?.getValue()
+							},
+							position: selected.position,
+							description: selected.description
+						});
+					}
+				});
+
 				// Mark viewer as ready for child components
 				viewerReady = true;
 			} catch (error) {
