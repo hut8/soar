@@ -196,7 +196,7 @@
 		loadingFlights = true;
 		try {
 			const response = await serverCall<FlightsResponse>(
-				`/aircraft/${aircraftId}/flights?page=${page}&perPage=100`
+				`/aircraft/${aircraftId}/flights?page=${page}&perPage=5`
 			);
 			flights = response.data || [];
 			// Sort by takeoffTime if available, otherwise createdAt (most recent first)
