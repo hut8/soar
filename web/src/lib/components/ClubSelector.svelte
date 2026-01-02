@@ -113,10 +113,12 @@
 			<Combobox.Input {placeholder} {required} />
 		</Combobox.Control>
 		<Combobox.Positioner>
-			<Combobox.Content class="bg-surface-50 dark:bg-surface-800">
+			<Combobox.Content
+				class="border border-surface-300 bg-surface-50 shadow-lg dark:border-surface-600 dark:bg-surface-800"
+			>
 				{#each comboboxData as clubItem (clubItem.value)}
 					<Combobox.Item item={{ label: clubItem.label, value: clubItem.value }}>
-						<div class="flex w-full items-center space-x-2">
+						<div class="flex w-full items-center space-x-2 bg-surface-50 dark:bg-surface-800">
 							<span class="flex-1 text-left">{clubItem.label}</span>
 							{#if clubItem.club.isSoaring}
 								<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span
