@@ -138,7 +138,14 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 - **Pre-commit hooks automatically run `cargo fmt`** - but format manually for immediate feedback
 - **Use `cargo clippy`** to catch common issues and improve code quality
 - All Rust code must pass formatting, clippy, and tests before commit
-- **For local testing**: Use `cargo build` (debug build), not `cargo build --release` unless you specifically need release optimizations
+
+#### Rust Build Commands (IMPORTANT)
+- **NEVER run `cargo build --release`** unless explicitly instructed - release builds are slow and unnecessary for development
+- **Use `cargo check`** for quick validation - this checks that code compiles without building binaries
+- **Use `cargo build`** (debug mode) only when you need to run the binary locally for testing
+- **Pre-commit hooks run `cargo clippy` automatically** - this is more thorough than `cargo check` and runs on every commit
+- **NEVER run `cargo test` manually during development** - pre-commit hooks will run tests automatically when you commit
+- Release builds are only needed for deployment, which is handled by CI/CD
 
 #### Rust Patterns
 ```rust

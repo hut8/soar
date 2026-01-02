@@ -27,6 +27,8 @@ pub mod auth;
 pub mod beast;
 pub mod beast_consumer_task;
 pub mod beast_nats_publisher;
+pub mod club_tow_fees;
+pub mod club_tow_fees_repo;
 pub mod clubs;
 pub mod clubs_repo;
 pub mod coverage;

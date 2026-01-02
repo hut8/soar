@@ -357,6 +357,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    club_tow_fees (id) {
+        id -> Uuid,
+        club_id -> Uuid,
+        max_altitude -> Nullable<Int4>,
+        cost -> Numeric,
+        modified_by -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     clubs (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -815,6 +827,7 @@ diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(airports -> locations (location_id));
+diesel::joinable!(club_tow_fees -> clubs (club_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));
@@ -846,6 +859,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     airspace_sync_log,
     airspaces,
     club_analytics_daily,
+    club_tow_fees,
     clubs,
     countries,
     fixes,
