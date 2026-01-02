@@ -28,6 +28,27 @@ impl LocationsRepository {
         Self { pool }
     }
 
+    /// Get a location by its ID
+    pub async fn get_by_id(&self, location_id: Uuid) -> Result<Option<Location>> {
+        use crate::schema::locations::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let location_model = locations
+                .filter(id.eq(location_id))
+                .first::<LocationModel>(&mut conn)
+                .optional()?;
+
+            Ok::<Option<LocationModel>, anyhow::Error>(location_model)
+        })
+        .await??;
+
+        Ok(result.map(|model| model.into()))
+    }
+
     /// Update geolocation for a location
     pub async fn update_geolocation(
         &self,

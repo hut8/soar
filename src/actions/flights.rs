@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::actions::views::{AircraftInfo, AirportInfo, FlightView};
+use crate::actions::views::{AircraftInfo, AirportInfo, FlightView, LocationInfo};
 use crate::actions::{
     DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
 };
@@ -17,6 +17,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::flights::{Flight, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::geometry::spline::{GeoPoint, generate_spline_path};
+use crate::locations_repo::LocationsRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -72,6 +73,7 @@ pub async fn get_flight_by_id(
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
+    let locations_repo = LocationsRepository::new(state.pool.clone());
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(mut flight)) => {
@@ -99,6 +101,38 @@ pub async fn get_flight_by_id(
                     .map(|a| AirportInfo {
                         ident: Some(a.ident),
                         country: a.iso_country,
+                    })
+            } else {
+                None
+            };
+
+            // Look up geocoded start location
+            let start_location = if let Some(start_loc_id) = flight.start_location_id {
+                locations_repo
+                    .get_by_id(start_loc_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|loc| LocationInfo {
+                        city: loc.city,
+                        state: loc.state,
+                        country: loc.country_code,
+                    })
+            } else {
+                None
+            };
+
+            // Look up geocoded end location
+            let end_location = if let Some(end_loc_id) = flight.end_location_id {
+                locations_repo
+                    .get_by_id(end_loc_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|loc| LocationInfo {
+                        city: loc.city,
+                        state: loc.state,
+                        country: loc.country_code,
                     })
             } else {
                 None
@@ -139,6 +173,8 @@ pub async fn get_flight_by_id(
                 departure_airport,
                 arrival_airport,
                 None, // No device info - fetch separately via /flights/{id}/device
+                start_location,
+                end_location,
                 None,
                 None,
                 None,

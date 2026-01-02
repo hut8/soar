@@ -148,6 +148,8 @@ pub struct AircraftView {
     pub icao_model_code: Option<String>,
     pub country_code: Option<String>,
     pub owner_operator: Option<String>,
+    /// Country code derived from ICAO address using flydent (for ICAO addresses only)
+    pub address_country: Option<String>,
     /// Latitude of aircraft's last known position (stored in database for quick access)
     pub latitude: Option<f64>,
     /// Longitude of aircraft's last known position (stored in database for quick access)
@@ -172,6 +174,17 @@ impl AircraftView {
             crate::aircraft::AddressType::Unknown => "",
         }
         .to_string();
+
+        // Derive country from address using flydent (always attempt, regardless of address type)
+        let address_country = {
+            let parser = flydent::Parser::new();
+            parser
+                .parse(&address_hex, false, true)
+                .and_then(|entity| match entity {
+                    flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                    flydent::EntityResult::Organization { .. } => None,
+                })
+        };
 
         Self {
             id: device
@@ -204,6 +217,7 @@ impl AircraftView {
             icao_model_code: device.icao_model_code,
             country_code: device.country_code,
             owner_operator: device.owner_operator,
+            address_country,
             latitude: None,
             longitude: None,
             current_fix: None,
@@ -223,6 +237,17 @@ impl AircraftView {
             crate::aircraft::AddressType::Unknown => "",
         }
         .to_string();
+
+        // Derive country from address using flydent (always attempt, regardless of address type)
+        let address_country = {
+            let parser = flydent::Parser::new();
+            parser
+                .parse(&address_hex, false, true)
+                .and_then(|entity| match entity {
+                    flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                    flydent::EntityResult::Organization { .. } => None,
+                })
+        };
 
         Self {
             id: device_model.id,
@@ -249,6 +274,7 @@ impl AircraftView {
             icao_model_code: device_model.icao_model_code,
             country_code: device_model.country_code,
             owner_operator: device_model.owner_operator,
+            address_country,
             latitude: device_model.latitude,
             longitude: device_model.longitude,
             current_fix: device_model.current_fix,
