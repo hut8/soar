@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Receiver } from '$lib/types';
+	import type { Receiver, DataListResponse } from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -704,45 +704,23 @@
 			const sw = bounds.getSouthWest();
 
 			const params = new URLSearchParams({
-				latitude_min: sw.lat().toString(),
-				latitude_max: ne.lat().toString(),
-				longitude_min: sw.lng().toString(),
-				longitude_max: ne.lng().toString()
+				north: ne.lat().toString(),
+				south: sw.lat().toString(),
+				east: ne.lng().toString(),
+				west: sw.lng().toString()
 			});
 
-			const data = await serverCall(`/receivers?${params}`);
-			if (!data || typeof data !== 'object' || !('receivers' in data)) {
-				throw new Error('Invalid response format');
-			}
-
-			const response = data as { receivers: unknown[] };
-			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
-				// Validate receiver object
-				if (typeof receiver !== 'object' || receiver === null) {
-					console.error('Invalid receiver: not an object or is null', receiver);
+			const response = await serverCall<DataListResponse<Receiver>>(`/receivers?${params}`);
+			receivers = response.data.filter((receiver: Receiver) => {
+				// Basic validation
+				if (!receiver) {
+					console.error('Invalid receiver: null or undefined', receiver);
 					return false;
 				}
 
-				// Check required fields
-				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
-				for (const field of requiredFields) {
-					if (!(field in receiver)) {
-						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
-						return false;
-					}
-				}
-
-				// Validate latitude and longitude are numbers (or null)
-				const lat = (receiver as Record<string, unknown>).latitude;
-				const lng = (receiver as Record<string, unknown>).longitude;
-
-				if (lat !== null && typeof lat !== 'number') {
-					console.error('Invalid receiver: latitude is not a number or null', receiver);
-					return false;
-				}
-
-				if (lng !== null && typeof lng !== 'number') {
-					console.error('Invalid receiver: longitude is not a number or null', receiver);
+				// Validate latitude and longitude are numbers
+				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number') {
+					console.error('Invalid receiver: latitude or longitude is not a number', receiver);
 					return false;
 				}
 
