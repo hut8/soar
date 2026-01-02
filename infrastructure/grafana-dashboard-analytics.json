@@ -25,7 +25,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Key flight metrics from the last 30 days",
       "fieldConfig": {
@@ -72,12 +72,12 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Devices (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Outlier Devices\"",
+          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Aircraft (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Anomalous Aircraft\"",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -92,7 +92,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Daily flight counts over the last 30 days",
       "fieldConfig": {
@@ -146,7 +146,7 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 6
       },
@@ -171,7 +171,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "time_series",
@@ -191,7 +191,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Distribution of flight durations across all flights",
       "fieldConfig": {
@@ -245,8 +245,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 6
       },
       "id": 3,
@@ -266,7 +266,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -286,7 +286,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Hourly flight activity over the last 48 hours",
       "fieldConfig": {
@@ -340,7 +340,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 15
       },
@@ -365,12 +365,12 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
+          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_aircraft as \"Active Aircraft\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -385,7 +385,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Top 10 most active aircraft by flight count in the last 30 days",
       "fieldConfig": {
@@ -456,8 +456,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 15
       },
       "id": 5,
@@ -479,7 +479,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -499,7 +499,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Average flight duration by day over the last 30 days",
       "fieldConfig": {
@@ -553,7 +553,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 23
       },
@@ -578,7 +578,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "time_series",
@@ -598,7 +598,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Total distance flown per day over the last 30 days",
       "fieldConfig": {
@@ -652,8 +652,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 23
       },
       "id": 7,
@@ -677,7 +677,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "time_series",
@@ -697,7 +697,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Top 10 busiest airports by total flight count in the last 30 days",
       "fieldConfig": {
@@ -752,7 +752,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 31
       },
@@ -775,7 +775,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -795,7 +795,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Club activity breakdown for the last 30 days",
       "fieldConfig": {
@@ -866,8 +866,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 31
       },
       "id": 9,
@@ -889,12 +889,12 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  MAX(club_name) as \"Club\",\n  SUM(flight_count) as \"Total Flights\",\n  SUM(tow_count) as \"Tow Flights\",\n  COUNT(DISTINCT date) as \"Active Days\",\n  SUM(active_devices) / COUNT(*) as \"Avg Active Devices\",\n  SUM(total_airtime_seconds) / 3600.0 as \"Total Airtime (hrs)\"\nFROM club_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nGROUP BY club_id\nORDER BY SUM(flight_count) DESC",
+          "rawSql": "SELECT\n  MAX(club_name) as \"Club\",\n  SUM(flight_count) as \"Total Flights\",\n  SUM(tow_count) as \"Tow Flights\",\n  COUNT(DISTINCT date) as \"Active Days\",\n  SUM(active_aircraft) / COUNT(*) as \"Avg Active Aircraft\",\n  SUM(total_airtime_seconds) / 3600.0 as \"Total Airtime (hrs)\"\nFROM club_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nGROUP BY club_id\nORDER BY SUM(flight_count) DESC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -909,7 +909,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Cross-country flights vs regular flights over the last 30 days",
       "fieldConfig": {
@@ -930,7 +930,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 24,
         "x": 0,
         "y": 47
       },
@@ -955,7 +955,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -975,7 +975,7 @@
     {
       "datasource": {
         "type": "postgres",
-        "uid": "soar-postgres"
+        "uid": "${postgres_datasource}"
       },
       "description": "Aircraft with anomalous flight patterns (z-score > 3.0)",
       "fieldConfig": {
@@ -1035,8 +1035,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 16,
-        "x": 8,
+        "w": 24,
+        "x": 0,
         "y": 47
       },
       "id": 12,
@@ -1058,7 +1058,7 @@
         {
           "datasource": {
             "type": "postgres",
-            "uid": "soar-postgres"
+            "uid": "${postgres_datasource}"
           },
           "editorMode": "code",
           "format": "table",
@@ -1085,7 +1085,54 @@
     "flights"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "staging",
+          "value": "staging"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "environment",
+        "options": [
+          {
+            "selected": false,
+            "text": "production",
+            "value": "production"
+          },
+          {
+            "selected": true,
+            "text": "staging",
+            "value": "staging"
+          }
+        ],
+        "query": "production,staging",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "soar-postgres-staging",
+          "value": "soar-postgres-staging"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "Postgres",
+        "multi": false,
+        "name": "postgres_datasource",
+        "options": [],
+        "query": "postgres",
+        "refresh": 1,
+        "regex": "/soar-postgres-${environment}/",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
   },
   "time": {
     "from": "now-30d",
