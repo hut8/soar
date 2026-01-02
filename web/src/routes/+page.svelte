@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera } from '@lucide/svelte';
+	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera, Globe } from '@lucide/svelte';
 	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
@@ -10,6 +10,7 @@
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
 	const arPath = resolve('/ar');
+	const globePath = resolve('/globe');
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -58,7 +59,7 @@
 
 			<!-- Standard Navigation Grid -->
 			<div
-				class="grid w-full grid-cols-1 content-evenly justify-items-center gap-y-24 md:grid-cols-3 md:gap-x-12 md:gap-y-32"
+				class="grid w-full grid-cols-1 content-evenly justify-items-center gap-y-24 md:grid-cols-4 md:gap-x-12 md:gap-y-32"
 			>
 				<!-- Clubs Button -->
 				<a
@@ -189,6 +190,25 @@
 						</div>
 						<div class="space-y-2">
 							<h2 class="text-2xl font-bold text-white drop-shadow-lg">AR Tracker</h2>
+						</div>
+					</div>
+				</a>
+
+				<!-- 3D Globe Button -->
+				<a
+					href={globePath}
+					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				>
+					<div class="space-y-6 text-center">
+						<div class="flex justify-center">
+							<div
+								class="rounded-full bg-secondary-500/20 p-4 transition-colors group-hover:bg-secondary-500/30"
+							>
+								<Globe size={48} class="text-white drop-shadow-lg" />
+							</div>
+						</div>
+						<div class="space-y-2">
+							<h2 class="text-2xl font-bold text-white drop-shadow-lg">3D Globe</h2>
 						</div>
 					</div>
 				</a>

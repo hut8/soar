@@ -52,10 +52,12 @@
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
 	const watchlistPath = resolve('/watchlist');
+	const arPath = resolve('/ar');
 
 	let { children } = $props();
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
+	let showDesktopMenu = $state(false);
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -119,6 +121,9 @@
 		}
 		if (!target.closest('.mobile-menu') && !target.closest('.mobile-menu-button')) {
 			showMobileMenu = false;
+		}
+		if (!target.closest('.desktop-menu') && !target.closest('.desktop-menu-button')) {
+			showDesktopMenu = false;
 		}
 	}
 </script>
@@ -206,38 +211,90 @@
 								<Radar /> Club Ops
 							</a>
 						{/if}
-						<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
-							<Users /> Clubs
-						</a>
+
+						<!-- Desktop Hamburger Menu -->
+						<div class="desktop-menu relative">
+							<button
+								class="desktop-menu-button preset-tonal-surface-500 btn btn-sm"
+								onclick={(e) => {
+									e.stopPropagation();
+									showDesktopMenu = !showDesktopMenu;
+								}}
+							>
+								<Menu size={18} />
+							</button>
+
+							{#if showDesktopMenu}
+								<div class="absolute top-12 left-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
+									<div class="space-y-1">
+										<a
+											href={clubsPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<Users size={16} /> Clubs
+										</a>
+										<a
+											href={aircraftPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<Plane size={16} /> Aircraft
+										</a>
+										<a
+											href={receiversPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<Antenna size={16} /> Receivers
+										</a>
+										<a
+											href={airportsPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<MapPin size={16} /> Airports
+										</a>
+										<a
+											href={flightsPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<PlaneTakeoff size={16} /> Flights
+										</a>
+										{#if $auth.isAuthenticated}
+											<a
+												href={watchlistPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<Eye size={16} /> Watchlist
+											</a>
+										{/if}
+										<a
+											href={arPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<Globe size={16} /> AR
+										</a>
+										<a
+											href={infoPath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={() => (showDesktopMenu = false)}
+										>
+											<Info size={16} /> Info
+										</a>
+									</div>
+								</div>
+							{/if}
+						</div>
+
 						<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
 							<Radar /> Operations
 						</a>
 						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
 							<Globe /> 3D Globe
-						</a>
-						<a href={aircraftPath} class="btn preset-filled-primary-500 btn-sm">
-							<Plane /> Aircraft
-						</a>
-						<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
-							<Antenna /> Receivers
-						</a>
-						<a href={airportsPath} class="btn preset-filled-primary-500 btn-sm">
-							<MapPin /> Airports
-						</a>
-						<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
-							<PlaneTakeoff /> Flights
-						</a>
-						{#if $auth.isAuthenticated}
-							<a href={watchlistPath} class="btn preset-filled-primary-500 btn-sm">
-								<Eye /> Watchlist
-							</a>
-						{/if}
-						<a
-							href={infoPath}
-							class="btn preset-filled-primary-500 btn-sm"
-							title="System Information"
-						>
-							<Info />
 						</a>
 					</nav>
 
