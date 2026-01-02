@@ -5,7 +5,8 @@
 	import { DollarSign, Plus, ArrowLeft, Trash2, Edit2, AlertCircle } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { ClubView, TowFeeView } from '$lib/types/generated';
+	import type { ClubView } from '$lib/types/generated/ClubView';
+	import type { TowFeeView } from '$lib/types/generated/TowFeeView';
 
 	let club = $state<ClubView | null>(null);
 	let towFees = $state<TowFeeView[]>([]);

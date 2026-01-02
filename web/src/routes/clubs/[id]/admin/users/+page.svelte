@@ -6,7 +6,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { User } from '$lib/types';
-	import type { ClubView } from '$lib/types/generated';
+	import type { ClubView } from '$lib/types/generated/ClubView';
 
 	let club = $state<ClubView | null>(null);
 	let pilots = $state<User[]>([]);
