@@ -630,6 +630,22 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs/{id}", get(actions::get_club_by_id))
         .route("/clubs/{id}/flights", get(actions::get_club_flights))
         .route(
+            "/clubs/{id}/tow-fees",
+            get(actions::club_tow_fees::get_club_tow_fees),
+        )
+        .route(
+            "/clubs/{id}/tow-fees",
+            post(actions::club_tow_fees::create_club_tow_fee),
+        )
+        .route(
+            "/clubs/{id}/tow-fees/{fee_id}",
+            put(actions::club_tow_fees::update_club_tow_fee),
+        )
+        .route(
+            "/clubs/{id}/tow-fees/{fee_id}",
+            delete(actions::club_tow_fees::delete_club_tow_fee),
+        )
+        .route(
             "/coverage/hexes",
             get(actions::coverage::get_coverage_hexes),
         )
