@@ -14,7 +14,7 @@ import {
 } from 'cesium';
 import type { Aircraft, Fix, Flight, Airport, Receiver } from '$lib/types';
 import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
-import { formatAircraftAddress } from '$lib/formatters';
+import { getAircraftTitle } from '$lib/formatters';
 
 /**
  * Feet to meters conversion factor
@@ -77,8 +77,7 @@ export function createAircraftEntity(
 	// Create icon URL with aircraft heading
 	const iconUrl = createAircraftIconSVG(color, fix.trackDegrees || 0);
 
-	const displayName =
-		aircraft.registration || formatAircraftAddress(aircraft.address, aircraft.addressType);
+	const displayName = getAircraftTitle(aircraft);
 
 	return new Entity({
 		id: aircraft.id,
