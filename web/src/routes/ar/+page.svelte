@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { auth } from '$lib/stores/auth';
 	import { Camera, AlertCircle, X, Info } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { ARTracker } from '$lib/services/arTracker';
@@ -25,6 +24,7 @@
 
 	// State
 	let videoElement: HTMLVideoElement | undefined = $state();
+	let cameraStream: MediaStream | null = $state(null);
 	let cameraReady = $state(false);
 	let cameraError = $state<string | null>(null);
 	let permissionDenied = $state<'camera' | 'location' | 'orientation' | null>(null);
@@ -55,12 +55,8 @@
 	const fixFeed = FixFeed.getInstance();
 	const aircraftRegistry = AircraftRegistry.getInstance();
 
-	// Redirect if not authenticated
-	$effect(() => {
-		if (!$auth.isAuthenticated) {
-			goto(resolve('/login'));
-		}
-	});
+	// AR tracking doesn't require authentication
+	// Users can view aircraft positions without logging in
 
 	// Update screen dimensions
 	function updateDimensions() {
@@ -72,10 +68,8 @@
 	const unsubscribeTracker = arTracker.subscribe((event) => {
 		switch (event.type) {
 			case 'camera_ready':
-				if (videoElement) {
-					videoElement.srcObject = event.stream;
-					cameraReady = true;
-				}
+				cameraStream = event.stream;
+				cameraReady = true;
 				break;
 
 			case 'camera_error':
@@ -95,6 +89,13 @@
 				deviceOrientation = event.orientation;
 				updateAircraftProjections();
 				break;
+		}
+	});
+
+	// Set video srcObject when both stream and element are available
+	$effect(() => {
+		if (videoElement && cameraStream) {
+			videoElement.srcObject = cameraStream;
 		}
 	});
 
