@@ -184,7 +184,7 @@
           },
           "editorMode": "code",
           "expr": "process_is_up{component=\"ingest-adsb\"}",
-          "legendFormat": "SOAR BEAST Ingest",
+          "legendFormat": "SOAR ADS-B Ingest",
           "range": true,
           "refId": "A"
         }
@@ -257,7 +257,7 @@
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"ingest-adsb\"}",
-          "legendFormat": "SOAR BEAST Ingest",
+          "legendFormat": "SOAR ADS-B Ingest",
           "range": true,
           "refId": "A"
         }
@@ -275,7 +275,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "SOAR BEAST Ingest - BEAST Connection & Data",
+      "title": "SOAR ADS-B Ingest - ADS-B Connection & Data",
       "type": "row"
     },
     {
@@ -360,7 +360,7 @@
           "refId": "A"
         }
       ],
-      "title": "BEAST Connection Status",
+      "title": "ADS-B Connection Status",
       "type": "gauge"
     },
     {
@@ -782,7 +782,7 @@
           "refId": "B"
         }
       ],
-      "title": "BEAST Frames Published vs Dropped",
+      "title": "ADS-B Frames Published vs Dropped",
       "type": "timeseries"
     }
   ],
