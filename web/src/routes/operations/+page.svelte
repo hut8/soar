@@ -49,7 +49,6 @@
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
 	// Compass rose variables
-	let aircraftHeading: number = 0;
 	let compassHeading: number = $state(0);
 	let previousCompassHeading: number = 0;
 	let isCompassActive: boolean = $state(false);
@@ -594,6 +593,15 @@
 			// Save map state after zoom changes
 			saveMapState();
 		});
+
+		// Initial aircraft fetch after map is ready (even if area tracker is off)
+		// This ensures clustering works on page load
+		setTimeout(async () => {
+			await fetchAndDisplayDevicesInViewport();
+			if (areaTrackerActive) {
+				updateAreaSubscriptions();
+			}
+		}, 500);
 
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
@@ -1217,17 +1225,14 @@
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
 		if (event.alpha !== null) {
 			isCompassActive = true;
-			// Store the raw device heading
-			aircraftHeading = event.alpha;
-			displayHeading = Math.round(aircraftHeading);
-
-			// Use aircraftHeading directly (not inverted) to keep north arrow pointing north
-			// When phone rotates clockwise (alpha increases), we rotate compass counter-clockwise
-			// by using the heading value directly in the CSS transform
-			let newHeading = aircraftHeading;
+			// Invert alpha: when device rotates clockwise (alpha increases),
+			// compass rose must rotate counter-clockwise to keep north pointing north
+			// This matches the NOAA compass implementation: (360 - event.alpha)
+			const invertedAlpha = 360 - event.alpha;
+			displayHeading = Math.round(event.alpha); // Display shows device heading, not compass rotation
 
 			// Normalize to 0-360 range
-			newHeading = ((newHeading % 360) + 360) % 360;
+			let newHeading = ((invertedAlpha % 360) + 360) % 360;
 
 			// Calculate the shortest rotation path to avoid spinning around unnecessarily
 			// If the difference is greater than 180°, we should wrap around
@@ -1626,27 +1631,29 @@
 		markerContent.style.flexDirection = 'column';
 		markerContent.style.alignItems = 'center';
 		markerContent.style.justifyContent = 'center';
-		markerContent.style.gap = '4px';
+		markerContent.style.gap = '2px';
 		markerContent.style.cursor = 'pointer';
 		markerContent.style.pointerEvents = 'auto';
+		markerContent.style.position = 'relative';
 
-		// Airplane SVG icon with white fill and shadow
+		// Airplane SVG icon with white fill and shadow - SMALLER
 		const iconDiv = document.createElement('div');
 		iconDiv.style.display = 'flex';
 		iconDiv.style.alignItems = 'center';
 		iconDiv.style.justifyContent = 'center';
 		iconDiv.style.filter = 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8))';
-		iconDiv.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+		iconDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="white">
 			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
 		</svg>`;
 
-		// Count label with shadow for visibility
+		// Count label with shadow for visibility - SMALLER
 		const countLabel = document.createElement('div');
 		countLabel.style.color = 'white';
 		countLabel.style.fontWeight = 'bold';
-		countLabel.style.fontSize = '18px';
+		countLabel.style.fontSize = '14px';
 		countLabel.style.textShadow = '0 2px 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.6)';
 		countLabel.style.whiteSpace = 'nowrap';
+		countLabel.style.lineHeight = '1';
 		countLabel.textContent = cluster.count.toString();
 
 		markerContent.appendChild(iconDiv);

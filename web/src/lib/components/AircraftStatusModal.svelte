@@ -374,18 +374,6 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					{#if selectedAircraft.currentFix?.flightId}
-						<a
-							href="/flights/{selectedAircraft.currentFix.flightId}"
-							target="_blank"
-							rel="noopener noreferrer"
-							class="btn preset-filled-success-500 btn-sm"
-							title="View current flight"
-						>
-							<Plane size={16} />
-							Current Flight
-						</a>
-					{/if}
 					<button
 						class="btn btn-sm {isInWatchlist
 							? 'preset-filled-warning-500'
@@ -700,71 +688,125 @@
 								Loading flight information...
 							</div>
 						{:else if currentFlight}
-							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
-								<h4 class="font-medium text-surface-900 dark:text-surface-100">Current Flight</h4>
+							<div
+								class="space-y-4 rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="flex items-center justify-between">
+									<h4 class="font-medium text-surface-900 dark:text-surface-100">Current Flight</h4>
+									<a
+										href="/flights/{currentFlight.id}"
+										target="_blank"
+										rel="noopener noreferrer"
+										class="btn preset-filled-success-500 btn-sm"
+										title="View full flight details"
+									>
+										<Plane size={14} />
+										View Flight
+										<ExternalLink size={12} />
+									</a>
+								</div>
+
 								<dl class="grid grid-cols-2 gap-4 text-sm">
-									{#if currentFlight.departureAirport}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
-											<dd>
-												{currentFlight.departureAirport}
-												{#if currentFlight.takeoffTime}
-													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.takeoffTime).format('HH:mm')}
-													</div>
-												{/if}
-											</dd>
-										</div>
-									{/if}
-									{#if currentFlight.arrivalAirport}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
-											<dd>
-												{currentFlight.arrivalAirport}
-												{#if currentFlight.landingTime}
-													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.landingTime).format('HH:mm')}
-													</div>
-												{/if}
-											</dd>
-										</div>
-									{/if}
-									<div>
+									<!-- Flight State -->
+									<div class="col-span-2">
 										<dt class="font-medium text-surface-600 dark:text-surface-400">State</dt>
 										<dd>
-											<span class="badge preset-filled-primary-500">
+											<span class="badge preset-filled-primary-500 text-sm">
 												{currentFlight.state}
 											</span>
 										</dd>
 									</div>
+
+									<!-- Departure Airport -->
+									{#if currentFlight.departureAirport}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
+											<dd class="font-semibold">{currentFlight.departureAirport}</dd>
+										</div>
+									{/if}
+
+									<!-- Arrival Airport -->
+									{#if currentFlight.arrivalAirport}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
+											<dd class="font-semibold">{currentFlight.arrivalAirport}</dd>
+										</div>
+									{/if}
+
+									<!-- Takeoff Time -->
+									{#if currentFlight.takeoffTime}
+										<div class="col-span-2">
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Takeoff Time
+											</dt>
+											<dd>
+												{formatTimestamp(currentFlight.takeoffTime).relative}
+												<div class="text-xs text-surface-500">
+													{formatTimestamp(currentFlight.takeoffTime).absolute}
+												</div>
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Landing Time -->
+									{#if currentFlight.landingTime}
+										<div class="col-span-2">
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Landing Time
+											</dt>
+											<dd>
+												{formatTimestamp(currentFlight.landingTime).relative}
+												<div class="text-xs text-surface-500">
+													{formatTimestamp(currentFlight.landingTime).absolute}
+												</div>
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Flight Duration -->
 									{#if currentFlight.durationSeconds}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Duration</dt>
-											<dd>
+											<dd class="font-semibold">
 												{Math.floor(currentFlight.durationSeconds / 3600)}h
 												{Math.floor((currentFlight.durationSeconds % 3600) / 60)}m
 											</dd>
 										</div>
 									{/if}
+
+									<!-- Current Altitude -->
 									{#if currentFlight.latestAltitudeMslFeet}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">
 												Current Altitude
 											</dt>
-											<dd>{currentFlight.latestAltitudeMslFeet.toLocaleString()} ft MSL</dd>
+											<dd class="font-semibold">
+												{currentFlight.latestAltitudeMslFeet.toLocaleString()} ft MSL
+											</dd>
 										</div>
 									{/if}
-									<div class="col-span-2">
-										<a
-											href="/flights/{currentFlight.id}"
-											target="_blank"
-											rel="noopener noreferrer"
-											class="btn w-full preset-filled-primary-500 btn-sm"
-										>
-											<ExternalLink size={14} />
-											View Full Flight Details
-										</a>
-									</div>
+
+									<!-- Distance Traveled -->
+									{#if currentFlight.totalDistanceMeters}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Distance</dt>
+											<dd class="font-semibold">
+												{(currentFlight.totalDistanceMeters / 1852).toFixed(1)} nm
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Maximum Displacement -->
+									{#if currentFlight.maximumDisplacementMeters}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Max Displacement
+											</dt>
+											<dd class="font-semibold">
+												{(currentFlight.maximumDisplacementMeters / 1852).toFixed(1)} nm
+											</dd>
+										</div>
+									{/if}
 								</dl>
 							</div>
 						{/if}
