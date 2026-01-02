@@ -213,7 +213,10 @@
 
 		<!-- Layers - render when viewer is ready -->
 		{#if viewerReady && viewer}
-			<AircraftLayer {viewer} />
+			<!-- Only show live aircraft when NOT in playback mode -->
+			{#if !playbackFlightId}
+				<AircraftLayer {viewer} />
+			{/if}
 			<FlightPathLayer
 				{viewer}
 				bind:flightIds={selectedFlightIds}
