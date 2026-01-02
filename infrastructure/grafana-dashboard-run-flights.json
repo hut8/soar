@@ -545,7 +545,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "flight_tracker_coalesce_resumed_total_distance_km{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+          "expr": "histogram_quantile(0.50, rate(flight_tracker_coalesce_resumed_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval]))",
           "legendFormat": "Resumed Distance (km)",
           "range": true,
           "refId": "A"
@@ -556,7 +556,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "flight_tracker_coalesce_resumed_total_distance_km{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+          "expr": "histogram_quantile(0.50, rate(flight_tracker_coalesce_rejected_distance_km_bucket{component=\"run\",environment=\"$environment\"}[$__rate_interval]))",
           "legendFormat": "Rejected Distance (km)",
           "range": true,
           "refId": "B"
@@ -689,6 +689,142 @@
       "title": "Flight Timeouts by Phase",
       "type": "timeseries",
       "id": 8
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "description": "Explanation of flight phase detection logic",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 9,
+      "options": {
+        "code": {
+          "language": "markdown",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "# Flight Phase Definitions\n\nFlight phases are determined by vertical speed and altitude changes:\n\n## Climbing\n- Vertical speed > 0.5 m/s\n- Aircraft gaining altitude\n- Typical: thermal circling, ridge lift, wave lift\n\n## Cruising\n- Vertical speed between -0.5 and +0.5 m/s\n- Relatively stable altitude\n- Typical: straight glides between thermals\n\n## Descending\n- Vertical speed < -0.5 m/s\n- Aircraft losing altitude\n- Typical: approach to landing, poor lift conditions\n\n## Unknown\n- Insufficient data to determine phase\n- First few fixes of flight\n- GPS quality issues\n\n**Timeout Detection:**\nWhen a flight times out (no position updates for 30+ minutes), the phase at timeout\nhelps identify flight conditions and potential issues.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.2.1",
+      "title": "Flight Phase Definitions",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 24,
+        "h": 8
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(flight_tracker_flight_created_takeoff_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Takeoff",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(flight_tracker_flight_created_airborne_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Airborne",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Flight Creation",
+      "type": "timeseries"
     }
   ],
   "preload": false,

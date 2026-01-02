@@ -93,6 +93,18 @@ pub fn init_metrics() -> PrometheusHandle {
             ],
         )
         .expect("failed to set buckets for beast_nats_publish_duration_ms")
+        // Configure coalesce speed histogram with mph buckets
+        // Buckets: 0, 5, 10, 20, 30, 50, 100, 200, 500, 1000 mph
+        // Covers: stationary gliders, normal glider speeds, high-speed aircraft, anomalies
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "flight_tracker_coalesce_speed_mph".to_string(),
+            ),
+            &[
+                0.0, 5.0, 10.0, 20.0, 30.0, 50.0, 100.0, 200.0, 500.0, 1000.0,
+            ],
+        )
+        .expect("failed to set buckets for flight_tracker_coalesce_speed_mph")
         .install_recorder()
         .expect("failed to install Prometheus recorder")
 }
@@ -361,6 +373,7 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.coalesce.rejected.probable_landing_total").absolute(0);
     metrics::histogram!("flight_tracker.coalesce.rejected.distance_km").record(0.0);
     metrics::histogram!("flight_tracker.coalesce.resumed.distance_km").record(0.0);
+    metrics::histogram!("flight_tracker.coalesce.speed_mph").record(0.0);
 
     // Flight timeout phase tracking
     metrics::counter!("flight_tracker.timeout.phase_total", "phase" => "climbing").absolute(0);
@@ -451,6 +464,14 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "5").absolute(0);
     metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "10")
         .absolute(0);
+
+    // Pelias reverse geocoding metrics
+    metrics::counter!("flight_tracker.location.pelias.success_total").absolute(0);
+    metrics::counter!("flight_tracker.location.pelias.failure_total").absolute(0);
+    metrics::counter!("flight_tracker.location.pelias.no_structured_data_total").absolute(0);
+    metrics::histogram!("flight_tracker.location.pelias.latency_ms").record(0.0);
+
+    // Flight location tracking metrics
     metrics::counter!("flight_tracker.location.created_total", "type" => "start_takeoff")
         .absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "start_airborne")

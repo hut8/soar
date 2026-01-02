@@ -1446,6 +1446,156 @@
       ],
       "title": "Queue Closed Errors (Permanent Failures)",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "description": "Explanation of queue closed errors and their significance",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 85
+      },
+      "id": 16,
+      "options": {
+        "code": {
+          "language": "markdown",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "# Queue Closed Errors\n\nQueue closed errors occur when internal message channels are shut down, typically during:\n\n## Causes\n\n1. **Graceful shutdown** - Application is stopping normally\n   - Expected during deployments or restarts\n   - All queues are closed cleanly\n\n2. **Component failure** - Upstream component crashed or restarted\n   - Indicates unexpected termination\n   - May require investigation\n\n3. **Resource exhaustion** - System under extreme load\n   - Memory pressure forcing queue closures\n   - Could indicate capacity issues\n\n## Metrics\n\n- `aprs.aircraft_queue.closed_total` - Aircraft processing queue closed\n- `aprs.receiver_status_queue.closed_total` - Receiver status queue closed\n- `aprs.receiver_position_queue.closed_total` - Receiver position queue closed\n- `aprs.server_status_queue.closed_total` - Server status queue closed\n\n## Normal Behavior\n\n**During normal operation:** Should be 0\n- Queues remain open for continuous message processing\n- No unexpected shutdowns\n\n**During deployment:** Brief spike is expected\n- Graceful shutdown closes all queues\n- New instance starts with fresh queues\n\n## Alert Threshold\n\n**> 0 outside of deployments** indicates:\n- Abnormal shutdown or component failure\n- Requires investigation of logs\n- Check for OOM kills, panics, or crashes",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.2.1",
+      "title": "Queue Closed Errors - What They Mean",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Updates Skipped"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 85,
+        "w": 24,
+        "h": 8
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(receiver_repo_latest_packet_at_skipped_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Updates Skipped (Cached)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(receiver_repo_latest_packet_at_updated_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Database Updates",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Receiver latest_packet_at Cache",
+      "type": "timeseries"
     }
   ],
   "preload": false,
