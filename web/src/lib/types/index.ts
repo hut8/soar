@@ -1,5 +1,29 @@
 // Core data types for the application
 
+// Import auto-generated types from Rust
+import type { Aircraft } from './generated/Aircraft';
+import type { AircraftView } from './generated/AircraftView';
+import type { AircraftCluster } from './generated/AircraftCluster';
+import type { AircraftOrCluster } from './generated/AircraftOrCluster';
+import type { AircraftSearchResponse } from './generated/AircraftSearchResponse';
+import type { ClusterBounds } from './generated/ClusterBounds';
+import type { Fix } from './generated/Fix';
+import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
+import type { AircraftType } from './generated/AircraftType';
+
+// Re-export them for external use
+export type {
+	Aircraft,
+	AircraftView,
+	AircraftCluster,
+	AircraftOrCluster,
+	AircraftSearchResponse,
+	ClusterBounds,
+	Fix,
+	AdsbEmitterCategory,
+	AircraftType
+};
+
 // API Response Wrapper Types
 export interface DataResponse<T> {
 	data: T;
@@ -159,67 +183,7 @@ export interface AircraftModel {
 	typeCertificateDataHolder: string | null;
 }
 
-// Aircraft interface matching backend AircraftView exactly
-// Backend uses camelCase serialization
-export interface Aircraft {
-	id: string;
-	addressType: string; // F, O, I, or empty string
-	address: string; // Hex format like "ABCDEF"
-	aircraftModel: string; // Short string from device database (e.g., "Cessna 172")
-	registration: string | null;
-	competitionNumber: string;
-	tracked: boolean;
-	identified: boolean;
-	clubId?: string | null;
-	createdAt: string;
-	updatedAt: string;
-	fromOgnDdb: boolean;
-	fromAdsbxDdb: boolean;
-	frequencyMhz?: number | null;
-	pilotName?: string | null;
-	homeBaseAirportIdent?: string | null;
-	aircraftTypeOgn?: string | null;
-	lastFixAt?: string | null;
-	trackerDeviceType?: string | null;
-	icaoModelCode?: string | null;
-	countryCode?: string | null;
-	addressCountry?: string | null; // Country derived from ICAO address using flydent
-	latitude?: number | null;
-	longitude?: number | null;
-	activeFlightId?: string | null;
-	currentFix?: Fix | null;
-	fixes?: Fix[];
-}
-
-// Cluster types for aircraft spatial grouping
-export interface ClusterBounds {
-	north: number;
-	south: number;
-	east: number;
-	west: number;
-}
-
-export interface AircraftCluster {
-	id: string;
-	latitude: number;
-	longitude: number;
-	count: number;
-	bounds: ClusterBounds;
-}
-
-// Discriminated union for either individual aircraft or cluster
-export type AircraftOrCluster =
-	| { type: 'aircraft'; data: Aircraft }
-	| { type: 'cluster'; data: AircraftCluster };
-
-// Response from aircraft search endpoint
-export interface AircraftSearchResponse {
-	items: AircraftOrCluster[];
-	total: number;
-	clustered: boolean;
-}
-
-// Type guards for AircraftOrCluster
+// Type guards for AircraftOrCluster (not auto-generated)
 export function isAircraftItem(
 	item: AircraftOrCluster
 ): item is { type: 'aircraft'; data: Aircraft } {
@@ -239,25 +203,18 @@ export interface AircraftWithRegistration extends Aircraft {
 	aircraftModelDetails?: AircraftModel;
 }
 
-export interface Fix {
-	id: string;
-	source?: string; // APRS source identifier
-	aircraftId?: string;
-	deviceAddressHex?: string;
-	timestamp: string;
-	latitude: number;
-	longitude: number;
-	altitudeMslFeet?: number;
-	altitudeAglFeet?: number;
-	trackDegrees?: number;
-	groundSpeedKnots?: number;
-	climbFpm?: number;
-	turnRateRot?: number;
-	snrDb?: number;
-	registration?: string;
-	model?: string;
-	flightId?: string;
-	active: boolean;
+// Frontend-specific Aircraft interface that matches how we actually use Aircraft in the UI
+// Uses Partial to make all fields optional for flexibility in partial objects
+export type AircraftPartial = Partial<Aircraft> & {
+	id: string; // ID is always required
+};
+
+// Extended Fix interface for WebSocket/legacy responses that include extra fields not in the generated Rust Fix type
+// Note: New code should avoid using these extra fields and rely on proper joins instead
+export interface FixWithExtras extends Fix {
+	deviceAddressHex?: string; // Legacy field, prefer aircraftId with proper join
+	registration?: string; // Aircraft registration (joined, not in Rust Fix)
+	model?: string; // Aircraft model (joined, not in Rust Fix)
 	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 }

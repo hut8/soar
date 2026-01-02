@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
+import type { Aircraft, Fix, FixWithExtras, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -170,8 +170,7 @@ export class AircraftRegistry {
 		}
 
 		// Strip out currentFix after we've used it - fixes array is the source of truth
-		const aircraftToStore = { ...aircraft };
-		delete aircraftToStore.currentFix;
+		const aircraftToStore = { ...aircraft, currentFix: null };
 
 		const cached_at = Date.now();
 
@@ -255,7 +254,6 @@ export class AircraftRegistry {
 	): Promise<Aircraft | null> {
 		console.log('[REGISTRY] Adding fix to aircraft:', {
 			aircraftId: fix.aircraftId,
-			deviceAddressHex: fix.deviceAddressHex,
 			timestamp: fix.timestamp,
 			position: { lat: fix.latitude, lng: fix.longitude }
 		});
@@ -275,7 +273,9 @@ export class AircraftRegistry {
 			);
 
 			// Check if the fix has a registration number
-			const hasRegistration = fix.registration && fix.registration.trim() !== '';
+			const fixWithExtras = fix as FixWithExtras;
+			const hasRegistration =
+				fixWithExtras.registration && fixWithExtras.registration.trim() !== '';
 
 			// Always try to fetch from API if:
 			// 1. allowApiFallback is true, OR
@@ -294,12 +294,13 @@ export class AircraftRegistry {
 			// If still no aircraft, create a minimal one
 			if (!aircraft) {
 				console.log('[REGISTRY] Creating minimal aircraft for fix:', aircraftId);
+				const fixWithExtras = fix as FixWithExtras;
 				aircraft = {
 					id: aircraftId,
 					addressType: '',
-					address: fix.deviceAddressHex || '',
-					aircraftModel: fix.model || '',
-					registration: fix.registration || null,
+					address: fixWithExtras.deviceAddressHex || '',
+					aircraftModel: fixWithExtras.model || '',
+					registration: fixWithExtras.registration || null,
 					competitionNumber: '',
 					tracked: false,
 					identified: false,
@@ -308,6 +309,20 @@ export class AircraftRegistry {
 					updatedAt: new Date().toISOString(),
 					fromOgnDdb: false,
 					fromAdsbxDdb: false,
+					frequencyMhz: null,
+					pilotName: null,
+					homeBaseAirportIdent: null,
+					aircraftTypeOgn: null,
+					lastFixAt: null,
+					trackerDeviceType: null,
+					icaoModelCode: null,
+					countryCode: null,
+					ownerOperator: null,
+					addressCountry: null,
+					latitude: null,
+					longitude: null,
+					adsbEmitterCategory: null,
+					currentFix: null,
 					fixes: []
 				};
 			}

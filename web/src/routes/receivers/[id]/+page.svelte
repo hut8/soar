@@ -80,6 +80,10 @@
 	interface FixWithAircraft extends Fix {
 		aircraft?: Aircraft;
 		rawPacket?: string;
+		// Legacy sourceMetadata fields exposed at top level for backward compatibility
+		snrDb?: number;
+		bitErrorsCorrected?: number;
+		freqOffsetKhz?: number;
 	}
 
 	let receiver = $state<Receiver | null>(null);
