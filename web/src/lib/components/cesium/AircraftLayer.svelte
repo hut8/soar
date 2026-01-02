@@ -2,11 +2,17 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Viewer, Entity } from 'cesium';
 	import { Math as CesiumMath, Rectangle } from 'cesium';
-	import { createAircraftEntity, createClusterEntity } from '$lib/cesium/entities';
+	import {
+		createAircraftEntity,
+		createClusterEntity,
+		createAircraftIconSVG
+	} from '$lib/cesium/entities';
 	import { FixFeed, type FixFeedEvent } from '$lib/services/FixFeed';
 	import type { Aircraft, Fix } from '$lib/types';
 	import { isAircraftItem, isClusterItem } from '$lib/types';
 	import { browser } from '$app/environment';
+	import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
+	import { getAircraftTitle } from '$lib/formatters';
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -445,24 +451,45 @@
 	 */
 	function updateAircraftPosition(aircraft: Aircraft, fix: Fix): void {
 		const existingEntity = aircraftEntities.get(aircraft.id);
-
-		// Check if this entity is currently selected
-		const wasSelected = existingEntity && viewer.selectedEntity === existingEntity;
+		const altitude = fix.altitudeMslFeet || 0;
+		const altitudeMeters = altitude * 0.3048;
 
 		if (existingEntity) {
-			// Remove old entity
-			viewer.entities.remove(existingEntity);
-		}
+			// Update existing entity in place to preserve selection state
+			const { Cartesian3, ConstantProperty } = window.Cesium;
 
-		// Create updated entity with label visibility based on current zoom
-		const showLabels = shouldShowLabels();
-		const entity = createAircraftEntity(aircraft, fix, showLabels);
-		viewer.entities.add(entity);
-		aircraftEntities.set(aircraft.id, entity);
+			// Update position
+			existingEntity.position = Cartesian3.fromDegrees(fix.longitude, fix.latitude, altitudeMeters);
 
-		// Restore selection if it was previously selected
-		if (wasSelected) {
-			viewer.selectedEntity = entity;
+			// Update billboard icon (for heading changes)
+			const color = altitudeToColor(altitude);
+			const iconUrl = createAircraftIconSVG(color, fix.trackDegrees || 0);
+			if (existingEntity.billboard) {
+				existingEntity.billboard.image = new ConstantProperty(iconUrl);
+			}
+
+			// Update label if it exists
+			const { altitudeText } = formatAltitudeWithTime(altitude, fix.timestamp);
+			const displayName = getAircraftTitle(aircraft);
+			if (existingEntity.label) {
+				existingEntity.label.text = new ConstantProperty(`${displayName}\n${altitudeText}`);
+			}
+
+			// Update description
+			existingEntity.description = new ConstantProperty(`
+				<h3>${displayName}</h3>
+				<p><strong>Model:</strong> ${aircraft.aircraftModel || 'Unknown'}</p>
+				<p><strong>Altitude:</strong> ${altitude} ft MSL</p>
+				<p><strong>Speed:</strong> ${fix.groundSpeedKnots || '---'} kts</p>
+				<p><strong>Heading:</strong> ${fix.trackDegrees || '---'}°</p>
+				<p><strong>Last seen:</strong> ${altitudeText}</p>
+			`);
+		} else {
+			// Create new entity for aircraft not yet tracked
+			const showLabels = shouldShowLabels();
+			const entity = createAircraftEntity(aircraft, fix, showLabels);
+			viewer.entities.add(entity);
+			aircraftEntities.set(aircraft.id, entity);
 		}
 	}
 
