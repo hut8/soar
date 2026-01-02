@@ -2,6 +2,7 @@ use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
@@ -96,7 +97,8 @@ impl From<AircraftModelRecord> for AircraftModelView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct ClubView {
     pub id: Uuid,
@@ -105,6 +107,7 @@ pub struct ClubView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_base_airport_ident: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
     pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

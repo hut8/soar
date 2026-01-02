@@ -27,6 +27,10 @@ export type AircraftView = {
 	countryCode: string | null;
 	ownerOperator: string | null;
 	/**
+	 * Country code derived from ICAO address using flydent (for ICAO addresses only)
+	 */
+	addressCountry: string | null;
+	/**
 	 * Latitude of aircraft's last known position (stored in database for quick access)
 	 */
 	latitude: number | null;

@@ -36,6 +36,7 @@ pub struct ClubTowFeeModel {
 /// Insert model for new club tow fees
 #[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::club_tow_fees)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewClubTowFee {
     pub club_id: Uuid,
     pub max_altitude: Option<i32>,
@@ -46,6 +47,7 @@ pub struct NewClubTowFee {
 /// Update model for existing club tow fees
 #[derive(Debug, Clone, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::club_tow_fees)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct UpdateClubTowFee {
     pub max_altitude: Option<i32>,
     pub cost: BigDecimal,

@@ -5,24 +5,10 @@
 	import { DollarSign, Plus, ArrowLeft, Trash2, Edit2, AlertCircle } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import type { ClubView, TowFeeView } from '$lib/types/generated';
 
-	interface Club {
-		id: string;
-		name: string;
-	}
-
-	interface TowFee {
-		id: string;
-		clubId: string;
-		maxAltitude: number | null;
-		cost: string;
-		modifiedBy: string;
-		createdAt: string;
-		updatedAt: string;
-	}
-
-	let club = $state<Club | null>(null);
-	let towFees = $state<TowFee[]>([]);
+	let club = $state<ClubView | null>(null);
+	let towFees = $state<TowFeeView[]>([]);
 	let loadingClub = $state(true);
 	let loadingFees = $state(true);
 	let error = $state('');
@@ -37,8 +23,8 @@
 	let submitting = $state(false);
 
 	// Edit/Delete state
-	let editingFee = $state<TowFee | null>(null);
-	let deletingFee = $state<TowFee | null>(null);
+	let editingFee = $state<TowFeeView | null>(null);
+	let deletingFee = $state<TowFeeView | null>(null);
 
 	let clubId = $derived($page.params.id || '');
 	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
@@ -58,7 +44,7 @@
 		error = '';
 
 		try {
-			const response = await serverCall<{ data: Club }>(`/clubs/${clubId}`);
+			const response = await serverCall<{ data: ClubView }>(`/clubs/${clubId}`);
 			club = response.data;
 		} catch (err) {
 			console.error('Error loading club:', err);
@@ -72,7 +58,7 @@
 		loadingFees = true;
 
 		try {
-			const response = await serverCall<{ data: TowFee[] }>(`/clubs/${clubId}/tow-fees`);
+			const response = await serverCall<{ data: TowFeeView[] }>(`/clubs/${clubId}/tow-fees`);
 			towFees = response.data || [];
 		} catch (err) {
 			console.error('Error loading tow fees:', err);
@@ -94,7 +80,7 @@
 		showAddModal = false;
 	}
 
-	function openEditModal(fee: TowFee) {
+	function openEditModal(fee: TowFeeView) {
 		editingFee = fee;
 		formMaxAltitude = fee.maxAltitude;
 		formCost = fee.cost;
@@ -107,7 +93,7 @@
 		editingFee = null;
 	}
 
-	function openDeleteModal(fee: TowFee) {
+	function openDeleteModal(fee: TowFeeView) {
 		deletingFee = fee;
 		showDeleteModal = true;
 	}

@@ -6,13 +6,9 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { User } from '$lib/types';
+	import type { ClubView } from '$lib/types/generated';
 
-	interface Club {
-		id: string;
-		name: string;
-	}
-
-	let club = $state<Club | null>(null);
+	let club = $state<ClubView | null>(null);
 	let pilots = $state<User[]>([]);
 	let loadingClub = $state(true);
 	let loadingPilots = $state(true);
@@ -44,8 +40,8 @@
 		error = '';
 
 		try {
-			const response = await serverCall<Club>(`/clubs/${clubId}`);
-			club = response;
+			const response = await serverCall<{ data: ClubView }>(`/clubs/${clubId}`);
+			club = response.data;
 		} catch (err) {
 			console.error('Error loading club:', err);
 			error = err instanceof Error ? err.message : 'Failed to load club';

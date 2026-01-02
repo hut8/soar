@@ -6,6 +6,7 @@ use axum::{
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use tracing::error;
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -34,11 +35,14 @@ pub struct UpdateTowFeeRequest {
 }
 
 /// Response model for tow fees
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
 pub struct TowFeeView {
     pub id: String,
     pub club_id: String,
     pub max_altitude: Option<i32>,
+    #[ts(type = "string")]
     pub cost: BigDecimal,
     pub modified_by: String,
     pub created_at: String,
@@ -62,9 +66,19 @@ impl From<ClubTowFee> for TowFeeView {
 /// GET /clubs/{club_id}/tow-fees
 /// Get all tow fee tiers for a club, ordered by altitude
 pub async fn get_club_tow_fees(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a member of this club to view tow fees",
+        )
+        .into_response();
+    }
+
     let repo = ClubTowFeesRepository::new(state.pool);
 
     match repo.get_by_club_id(club_id).await {
@@ -87,6 +101,15 @@ pub async fn create_club_tow_fee(
     Path(club_id): Path<Uuid>,
     Json(request): Json<CreateTowFeeRequest>,
 ) -> impl IntoResponse {
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a member of this club to manage tow fees",
+        )
+        .into_response();
+    }
+
     let user_id = auth_user.0.id;
 
     // Validate cost is non-negative
@@ -160,6 +183,15 @@ pub async fn update_club_tow_fee(
     Path((club_id, fee_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateTowFeeRequest>,
 ) -> impl IntoResponse {
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a member of this club to manage tow fees",
+        )
+        .into_response();
+    }
+
     let user_id = auth_user.0.id;
 
     // Validate cost if provided
@@ -224,10 +256,19 @@ pub async fn update_club_tow_fee(
 /// DELETE /clubs/{club_id}/tow-fees/{fee_id}
 /// Delete a tow fee tier
 pub async fn delete_club_tow_fee(
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path((club_id, fee_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a member of this club to manage tow fees",
+        )
+        .into_response();
+    }
+
     let repo = ClubTowFeesRepository::new(state.pool.clone());
 
     // Verify the fee exists and belongs to this club

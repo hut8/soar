@@ -118,25 +118,6 @@ impl ClubTowFeesRepository {
         Ok(result > 0)
     }
 
-    /// Delete all tow fees for a specific club
-    pub async fn delete_by_club_id(&self, club_id: Uuid) -> Result<usize> {
-        use crate::schema::club_tow_fees::dsl;
-
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let deleted_count = diesel::delete(dsl::club_tow_fees)
-                .filter(dsl::club_id.eq(club_id))
-                .execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(deleted_count)
-        })
-        .await??;
-
-        Ok(result)
-    }
-
     /// Check if a club has a fallback tier (NULL max_altitude)
     pub async fn has_fallback_tier(&self, club_id: Uuid) -> Result<bool> {
         use crate::schema::club_tow_fees::dsl;
