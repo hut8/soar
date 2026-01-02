@@ -1360,6 +1360,18 @@
 		if (fpm === null || fpm === undefined) return 'N/A';
 		return `${fpm.toFixed(0)} fpm`;
 	}
+
+	// Check if aircraft was detected while airborne (no takeoff detected)
+	const wasDetectedAirborne = $derived(!data.flight.takeoffTime);
+
+	// Format geocoded location
+	function formatLocation(city?: string, state?: string): string | null {
+		const parts: string[] = [];
+		if (city) parts.push(city);
+		if (state) parts.push(state);
+		if (!parts.length) return null;
+		return parts.join(', ');
+	}
 </script>
 
 <svelte:head>
@@ -1496,23 +1508,32 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-			<!-- Takeoff -->
+			<!-- Takeoff / Detection -->
 			<div class="flex items-start gap-3">
 				<PlaneTakeoff class="mt-1 h-5 w-5 text-primary-500" />
-				<div>
-					<div class="text-surface-600-300-token text-sm">Takeoff</div>
-					<div class="font-semibold">
-						{#if data.flight.takeoffTime}
+				<div class="space-y-2">
+					<div>
+						<div class="text-surface-600-300-token mb-1 flex items-center gap-2 text-sm">
+							{wasDetectedAirborne ? 'Detected' : 'Takeoff'}
+							{#if wasDetectedAirborne}
+								<span
+									class="chip flex items-center gap-1 preset-filled-warning-500 text-xs"
+									title="Takeoff was not detected. Aircraft was first observed on this flight in the air."
+								>
+									<Info class="h-3 w-3" />
+									Detected while airborne
+								</span>
+							{/if}
+						</div>
+						<div class="font-semibold">
 							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoffTime)}</span>
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.createdAt)}</span>
 							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.takeoffTime)}</span>
-						{:else}
-							Unknown
-						{/if}
+							<span class="hidden md:inline">{formatDateTime(data.flight.createdAt)}</span>
+						</div>
 					</div>
-					<div class="text-surface-600-300-token text-sm">
-						{#if data.flight.departureAirport && data.flight.departureAirportId}
+					{#if data.flight.departureAirport}
+						<div class="text-surface-600-300-token text-sm">
 							{#if data.flight.departureAirportCountry}
 								<img
 									src={getFlagPath(data.flight.departureAirportCountry)}
@@ -1520,22 +1541,29 @@
 									class="mr-1 inline-block h-3.5 rounded-sm"
 								/>
 							{/if}
-							<a href="/airports/{data.flight.departureAirportId}" class="anchor">
+							{#if data.flight.departureAirportId}
+								<a href="/airports/{data.flight.departureAirportId}" class="anchor">
+									{data.flight.departureAirport}
+								</a>
+							{:else}
 								{data.flight.departureAirport}
-							</a>
-						{:else if data.flight.departureAirport}
-							{#if data.flight.departureAirportCountry}
+							{/if}
+						</div>
+					{/if}
+					{#if data.flight.startLocationCity || data.flight.startLocationState}
+						<div class="text-surface-600-300-token flex items-center gap-1 text-sm">
+							{#if data.flight.startLocationCountry}
 								<img
-									src={getFlagPath(data.flight.departureAirportCountry)}
+									src={getFlagPath(data.flight.startLocationCountry)}
 									alt=""
-									class="mr-1 inline-block h-3.5 rounded-sm"
+									class="h-3.5 rounded-sm"
 								/>
 							{/if}
-							{data.flight.departureAirport}
-						{:else}
-							Unknown
-						{/if}
-					</div>
+							<span>
+								{formatLocation(data.flight.startLocationCity, data.flight.startLocationState)}
+							</span>
+						</div>
+					{/if}
 					{#if data.flight.takeoffRunwayIdent}
 						<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
 							<span>Runway {data.flight.takeoffRunwayIdent}</span>
@@ -1549,79 +1577,87 @@
 								</span>
 							{/if}
 						</div>
-					{:else if data.flight.departureAirport}
-						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
 					{/if}
 				</div>
 			</div>
 
-			<!-- Landing / Timeout (hidden for active flights) -->
-			{#if data.flight.state === 'timed_out' || data.flight.landingTime}
+			<!-- Landing / Lost Signal (hidden for active flights) -->
+			{#if data.flight.state !== 'active'}
 				<div class="flex items-start gap-3">
 					<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">
-							{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
+					<div class="space-y-2">
+						<div>
+							<div class="text-surface-600-300-token mb-1 flex items-center gap-2 text-sm">
+								{data.flight.landingTime && data.flight.arrivalAirport ? 'Landed' : 'Lost'}
+								{#if !data.flight.landingTime || !data.flight.arrivalAirport}
+									<span
+										class="chip flex items-center gap-1 preset-filled-warning-500 text-xs"
+										title="Landing was not detected. Aircraft lost contact with receiver."
+									>
+										<Info class="h-3 w-3" />
+										Signal lost
+									</span>
+								{/if}
+							</div>
+							<div class="font-semibold">
+								{#if data.flight.landingTime}
+									<!-- Mobile: relative time only -->
+									<span class="md:hidden">{formatDateTimeMobile(data.flight.landingTime)}</span>
+									<!-- Desktop: relative time with full datetime -->
+									<span class="hidden md:inline">{formatDateTime(data.flight.landingTime)}</span>
+								{:else if data.flight.timedOutAt}
+									<!-- Mobile: relative time only -->
+									<span class="md:hidden">{formatDateTimeMobile(data.flight.timedOutAt)}</span>
+									<!-- Desktop: relative time with full datetime -->
+									<span class="hidden md:inline">{formatDateTime(data.flight.timedOutAt)}</span>
+								{/if}
+							</div>
 						</div>
-						<div class="font-semibold">
-							{#if data.flight.state === 'timed_out' && data.flight.timedOutAt}
-								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.timedOutAt)}</span>
-								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.timedOutAt)}</span>
-							{:else if data.flight.landingTime}
-								<!-- Mobile: relative time only -->
-								<span class="md:hidden">{formatDateTimeMobile(data.flight.landingTime)}</span>
-								<!-- Desktop: relative time with full datetime -->
-								<span class="hidden md:inline">{formatDateTime(data.flight.landingTime)}</span>
-							{/if}
-						</div>
-						<div class="text-surface-600-300-token text-sm">
-							{#if data.flight.state === 'timed_out'}
-								No beacons received for 5+ minutes
-							{:else if data.flight.landingTime}
-								{#if data.flight.arrivalAirport && data.flight.arrivalAirportId}
-									{#if data.flight.arrivalAirportCountry}
-										<img
-											src={getFlagPath(data.flight.arrivalAirportCountry)}
-											alt=""
-											class="mr-1 inline-block h-3.5 rounded-sm"
-										/>
-									{/if}
+						{#if data.flight.arrivalAirport}
+							<div class="text-surface-600-300-token text-sm">
+								{#if data.flight.arrivalAirportCountry}
+									<img
+										src={getFlagPath(data.flight.arrivalAirportCountry)}
+										alt=""
+										class="mr-1 inline-block h-3.5 rounded-sm"
+									/>
+								{/if}
+								{#if data.flight.arrivalAirportId}
 									<a href="/airports/{data.flight.arrivalAirportId}" class="anchor">
 										{data.flight.arrivalAirport}
 									</a>
-								{:else if data.flight.arrivalAirport}
-									{#if data.flight.arrivalAirportCountry}
-										<img
-											src={getFlagPath(data.flight.arrivalAirportCountry)}
-											alt=""
-											class="mr-1 inline-block h-3.5 rounded-sm"
-										/>
-									{/if}
-									{data.flight.arrivalAirport}
 								{:else}
-									Unknown
+									{data.flight.arrivalAirport}
 								{/if}
-							{/if}
-						</div>
-						{#if data.flight.landingTime && data.flight.arrivalAirport}
-							{#if data.flight.landingRunwayIdent}
-								<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-									<span>Runway {data.flight.landingRunwayIdent}</span>
-									{#if data.flight.runwaysInferred === true}
-										<span
-											class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
-											title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
-										>
-											<Info class="h-3 w-3" />
-											Inferred
-										</span>
-									{/if}
-								</div>
-							{:else}
-								<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
-							{/if}
+							</div>
+						{/if}
+						{#if data.flight.endLocationCity || data.flight.endLocationState}
+							<div class="text-surface-600-300-token flex items-center gap-1 text-sm">
+								{#if data.flight.endLocationCountry}
+									<img
+										src={getFlagPath(data.flight.endLocationCountry)}
+										alt=""
+										class="h-3.5 rounded-sm"
+									/>
+								{/if}
+								<span>
+									{formatLocation(data.flight.endLocationCity, data.flight.endLocationState)}
+								</span>
+							</div>
+						{/if}
+						{#if data.flight.landingRunwayIdent}
+							<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
+								<span>Runway {data.flight.landingRunwayIdent}</span>
+								{#if data.flight.runwaysInferred === true}
+									<span
+										class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
+										title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
+									>
+										<Info class="h-3 w-3" />
+										Inferred
+									</span>
+								{/if}
+							</div>
 						{/if}
 					</div>
 				</div>
@@ -1695,21 +1731,6 @@
 					</div>
 				</div>
 			{/if}
-
-			<!-- Recognized at -->
-			<div class="flex items-start gap-3">
-				<Clock class="mt-1 h-5 w-5 text-primary-500" />
-				<div>
-					<div class="text-surface-600-300-token text-sm">Recognized at</div>
-					<div class="font-semibold">
-						<!-- Mobile: relative time only -->
-						<span class="md:hidden">{formatDateTimeMobile(data.flight.createdAt)}</span>
-						<!-- Desktop: relative time with full datetime -->
-						<span class="hidden md:inline">{formatDateTime(data.flight.createdAt)}</span>
-					</div>
-					<div class="text-surface-600-300-token text-sm">When flight was first detected</div>
-				</div>
-			</div>
 
 			<!-- Latest fix (for active flights) -->
 			{#if data.flight.state === 'active' && fixes.length > 0}
