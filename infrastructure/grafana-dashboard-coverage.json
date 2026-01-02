@@ -108,7 +108,7 @@
           },
           "expr": "rate(coverage_api_hexes_requests_total_total[5m])",
           "refId": "A",
-          "legendFormat": "API Requests"
+          "legendFormat": "Hexes API Requests"
         },
         {
           "datasource": {
@@ -117,7 +117,25 @@
           },
           "expr": "rate(coverage_api_hexes_success_total_total[5m])",
           "refId": "B",
-          "legendFormat": "Successful Requests"
+          "legendFormat": "Hexes Successful"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(coverage_api_hex_fixes_requests_total_total[5m])",
+          "refId": "D",
+          "legendFormat": "Hex Fixes API Requests"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(coverage_api_hex_fixes_success_total_total[5m])",
+          "refId": "E",
+          "legendFormat": "Hex Fixes Successful"
         },
         {
           "datasource": {
@@ -126,7 +144,16 @@
           },
           "expr": "rate(coverage_api_errors_total_total[5m])",
           "refId": "C",
-          "legendFormat": "Errors"
+          "legendFormat": "Hexes Errors"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(coverage_api_hex_fixes_errors_total_total[5m])",
+          "refId": "F",
+          "legendFormat": "Hex Fixes Errors"
         }
       ],
       "title": "Coverage API Request Rate",
@@ -359,7 +386,7 @@
           },
           "expr": "histogram_quantile(0.50, rate(coverage_query_hexes_ms_bucket[5m]))",
           "refId": "A",
-          "legendFormat": "p50"
+          "legendFormat": "Hexes p50"
         },
         {
           "datasource": {
@@ -368,7 +395,7 @@
           },
           "expr": "histogram_quantile(0.95, rate(coverage_query_hexes_ms_bucket[5m]))",
           "refId": "B",
-          "legendFormat": "p95"
+          "legendFormat": "Hexes p95"
         },
         {
           "datasource": {
@@ -377,7 +404,34 @@
           },
           "expr": "histogram_quantile(0.99, rate(coverage_query_hexes_ms_bucket[5m]))",
           "refId": "C",
-          "legendFormat": "p99"
+          "legendFormat": "Hexes p99"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, rate(coverage_api_hex_fixes_query_ms_bucket[5m]))",
+          "refId": "D",
+          "legendFormat": "Hex Fixes p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, rate(coverage_api_hex_fixes_query_ms_bucket[5m]))",
+          "refId": "E",
+          "legendFormat": "Hex Fixes p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, rate(coverage_api_hex_fixes_query_ms_bucket[5m]))",
+          "refId": "F",
+          "legendFormat": "Hex Fixes p99"
         }
       ],
       "title": "Coverage Query Latency (Percentiles)",
@@ -388,7 +442,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Average number of hexagons returned per API request",
+      "description": "Average number of hexagons and fixes returned per API request",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -470,7 +524,7 @@
           },
           "expr": "histogram_quantile(0.50, rate(coverage_api_hexes_count_bucket[5m]))",
           "refId": "A",
-          "legendFormat": "p50 Hex Count"
+          "legendFormat": "Hexes p50"
         },
         {
           "datasource": {
@@ -479,7 +533,7 @@
           },
           "expr": "histogram_quantile(0.95, rate(coverage_api_hexes_count_bucket[5m]))",
           "refId": "B",
-          "legendFormat": "p95 Hex Count"
+          "legendFormat": "Hexes p95"
         },
         {
           "datasource": {
@@ -488,10 +542,37 @@
           },
           "expr": "histogram_quantile(0.99, rate(coverage_api_hexes_count_bucket[5m]))",
           "refId": "C",
-          "legendFormat": "p99 Hex Count"
+          "legendFormat": "Hexes p99"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.50, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+          "refId": "D",
+          "legendFormat": "Fixes p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+          "refId": "E",
+          "legendFormat": "Fixes p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+          "refId": "F",
+          "legendFormat": "Fixes p99"
         }
       ],
-      "title": "Hexagons Returned Per Request",
+      "title": "Results Returned Per Request",
       "type": "timeseries"
     },
     {

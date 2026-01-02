@@ -91,15 +91,29 @@ impl CoverageRepository {
             // 1. Create bounding box as PostGIS geography
             // 2. Use h3_polygon_to_cells to get all H3 cells within the bbox
             // 3. Join with receiver_coverage_h3 to get coverage data for those cells
+            //
+            // Note: west can be > east when crossing the International Date Line.
+            // In that case, we split into two bounding boxes: [west, 180] and [-180, east]
 
             // Build SQL - using format! is safe here as all parameters are validated API inputs
             let base_sql = format!(
                 r#"
                 WITH bbox AS (
-                    SELECT ST_MakeEnvelope({}, {}, {}, {}, 4326)::geography AS geog
+                    SELECT UNNEST(
+                        CASE WHEN {} <= {} THEN
+                            -- Normal case: west <= east
+                            ARRAY[ST_MakeEnvelope({}, {}, {}, {}, 4326)::geography]
+                        ELSE
+                            -- Date line crossing: west > east
+                            ARRAY[
+                                ST_MakeEnvelope({}, {}, 180, {}, 4326)::geography,
+                                ST_MakeEnvelope(-180, {}, {}, {}, 4326)::geography
+                            ]
+                        END
+                    ) AS geog
                 ),
                 cells AS (
-                    SELECT h3_polygon_to_cells(bbox.geog, {}) AS h3_idx
+                    SELECT DISTINCT h3_polygon_to_cells(bbox.geog, {}) AS h3_idx
                     FROM bbox
                 )
                 SELECT rch.h3_index, rch.resolution, rch.receiver_id, rch.date,
@@ -112,7 +126,22 @@ impl CoverageRepository {
                   AND rch.date >= '{}'
                   AND rch.date <= '{}'
                 "#,
-                west, south, east, north, resolution, resolution, start_date, end_date
+                west,
+                east, // CASE condition
+                west,
+                south,
+                east,
+                north, // Normal case envelope
+                west,
+                south,
+                north, // Date line crossing: first envelope [west, 180]
+                south,
+                east,
+                north,      // Date line crossing: second envelope [-180, east]
+                resolution, // h3_polygon_to_cells resolution
+                resolution,
+                start_date,
+                end_date // WHERE clause
             );
 
             let mut conditions = Vec::new();

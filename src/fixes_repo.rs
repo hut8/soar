@@ -1212,4 +1212,118 @@ impl FixesRepository {
 
         Ok(result)
     }
+
+    /// Get position fixes within an H3 hexagon cell
+    /// Returns fixes that fall within the spatial boundary of the H3 cell,
+    /// filtered by date range and optional receiver/altitude filters
+    #[allow(clippy::too_many_arguments)]
+    pub async fn get_fixes_in_h3_cell(
+        &self,
+        h3_index: i64,
+        start_date: chrono::NaiveDate,
+        end_date: chrono::NaiveDate,
+        receiver_id_filter: Option<Uuid>,
+        min_altitude: Option<i32>,
+        max_altitude: Option<i32>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Fix>, i64)> {
+        use diesel::sql_types;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Convert H3 index to h3o::CellIndex
+            let cell = h3o::CellIndex::try_from(h3_index as u64)
+                .map_err(|e| anyhow::anyhow!("Invalid H3 index: {}", e))?;
+
+            // Get boundary coordinates
+            let boundary = cell.boundary();
+
+            // Build WKT polygon from boundary points
+            // h3o returns LatLng, but PostGIS expects lng lat order
+            let mut coords: Vec<String> = boundary
+                .iter()
+                .map(|latlng| format!("{} {}", latlng.lng(), latlng.lat()))
+                .collect();
+
+            // Close the polygon by adding first point again
+            let first = boundary.iter().next().unwrap();
+            coords.push(format!("{} {}", first.lng(), first.lat()));
+
+            let polygon_wkt = format!("POLYGON(({}))", coords.join(", "));
+
+            // Build base query for counting
+            let mut count_sql = format!(
+                r#"
+                SELECT COUNT(*)
+                FROM fixes
+                WHERE ST_Within(location_geom, ST_GeomFromText('{}', 4326))
+                  AND received_at >= '{}'::date
+                  AND received_at < '{}'::date + INTERVAL '1 day'
+                "#,
+                polygon_wkt, start_date, end_date
+            );
+
+            // Build base query for selecting fixes
+            let mut select_sql = format!(
+                r#"
+                SELECT id, source, aprs_type, via, timestamp, latitude, longitude,
+                       altitude_msl_feet, altitude_agl_feet, flight_number, squawk,
+                       ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                       source_metadata, flight_id, aircraft_id, received_at, is_active,
+                       receiver_id, raw_message_id, altitude_agl_valid, time_gap_seconds
+                FROM fixes
+                WHERE ST_Within(location_geom, ST_GeomFromText('{}', 4326))
+                  AND received_at >= '{}'::date
+                  AND received_at < '{}'::date + INTERVAL '1 day'
+                "#,
+                polygon_wkt, start_date, end_date
+            );
+
+            // Add optional filters
+            if let Some(rid) = receiver_id_filter {
+                let filter = format!(" AND receiver_id = '{}'", rid);
+                count_sql.push_str(&filter);
+                select_sql.push_str(&filter);
+            }
+
+            if let Some(min_alt) = min_altitude {
+                let filter = format!(" AND altitude_msl_feet >= {}", min_alt);
+                count_sql.push_str(&filter);
+                select_sql.push_str(&filter);
+            }
+
+            if let Some(max_alt) = max_altitude {
+                let filter = format!(" AND altitude_msl_feet <= {}", max_alt);
+                count_sql.push_str(&filter);
+                select_sql.push_str(&filter);
+            }
+
+            // Get total count
+            #[derive(QueryableByName)]
+            struct CountResult {
+                #[diesel(sql_type = sql_types::BigInt)]
+                count: i64,
+            }
+
+            let total: i64 = diesel::sql_query(count_sql)
+                .get_result::<CountResult>(&mut conn)?
+                .count;
+
+            // Add ordering and pagination to select query
+            select_sql.push_str(&format!(
+                " ORDER BY timestamp DESC LIMIT {} OFFSET {}",
+                limit, offset
+            ));
+
+            // Execute select query
+            let fixes_result: Vec<Fix> = diesel::sql_query(select_sql).load(&mut conn)?;
+
+            Ok::<(Vec<Fix>, i64), anyhow::Error>((fixes_result, total))
+        })
+        .await?
+    }
 }

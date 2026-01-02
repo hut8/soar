@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
@@ -11,6 +11,8 @@ use crate::actions::json_error;
 use crate::coverage::CoverageHexFeature;
 use crate::coverage_cache::CoverageCache;
 use crate::coverage_repo::CoverageRepository;
+use crate::fixes::Fix;
+use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
 
 // ============================================================================
@@ -96,10 +98,19 @@ pub async fn get_coverage_hexes(
     let limit = params.limit.unwrap_or(5000).min(10000);
 
     // Validate bounding box
-    if params.north <= params.south || params.west >= params.east {
+    // Note: west can be > east when crossing the International Date Line
+    if params.north <= params.south {
         return json_error(
             StatusCode::BAD_REQUEST,
-            "Invalid bounding box: north must be > south and west must be < east",
+            "Invalid bounding box: north must be > south",
+        )
+        .into_response();
+    }
+
+    if params.west == params.east {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Invalid bounding box: west and east cannot be identical",
         )
         .into_response();
     }
@@ -140,6 +151,113 @@ pub async fn get_coverage_hexes(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 &format!("Failed to get coverage hexes: {}", e),
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Query parameters for hex fixes endpoint
+#[derive(Debug, Deserialize)]
+pub struct HexFixesQueryParams {
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+    pub receiver_id: Option<Uuid>,
+    pub min_altitude: Option<i32>,
+    pub max_altitude: Option<i32>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// Response for fixes within an H3 hexagon
+#[derive(Debug, Serialize)]
+pub struct FixesInHexResponse {
+    pub data: Vec<Fix>,
+    pub total: i64,
+    #[serde(rename = "h3Index")]
+    pub h3_index: String,
+    pub resolution: i16,
+}
+
+/// GET /data/coverage/hexes/{h3_index}/fixes
+/// Get individual position fixes within an H3 hexagon
+pub async fn get_hex_fixes(
+    Path(h3_index_str): Path<String>,
+    Query(params): Query<HexFixesQueryParams>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    metrics::counter!("coverage.api.hex_fixes.requests_total").increment(1);
+    let start_time = std::time::Instant::now();
+
+    // Parse and validate H3 index
+    let h3_index_u64 = match u64::from_str_radix(&h3_index_str, 16) {
+        Ok(idx) => idx,
+        Err(_) => {
+            return json_error(StatusCode::BAD_REQUEST, "Invalid H3 index format").into_response();
+        }
+    };
+
+    // Validate it's a valid H3 index and get resolution
+    let cell = match h3o::CellIndex::try_from(h3_index_u64) {
+        Ok(c) => c,
+        Err(_) => {
+            return json_error(StatusCode::BAD_REQUEST, "Invalid H3 index").into_response();
+        }
+    };
+
+    let resolution = cell.resolution() as i16;
+    let h3_index_i64 = h3_index_u64 as i64;
+
+    // Apply date defaults (same as main coverage endpoint)
+    let end_date = params
+        .end_date
+        .unwrap_or_else(|| chrono::Utc::now().date_naive());
+    let start_date = params
+        .start_date
+        .unwrap_or_else(|| end_date - chrono::Duration::days(30));
+
+    // Validate and cap limit
+    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+
+    // Query fixes
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+    match fixes_repo
+        .get_fixes_in_h3_cell(
+            h3_index_i64,
+            start_date,
+            end_date,
+            params.receiver_id,
+            params.min_altitude,
+            params.max_altitude,
+            limit,
+            offset,
+        )
+        .await
+    {
+        Ok((fixes, total)) => {
+            let duration_ms = start_time.elapsed().as_millis() as f64;
+
+            metrics::counter!("coverage.api.hex_fixes.success_total").increment(1);
+            metrics::histogram!("coverage.api.hex_fixes.count").record(fixes.len() as f64);
+            metrics::histogram!("coverage.api.hex_fixes.query_ms").record(duration_ms);
+
+            (
+                StatusCode::OK,
+                Json(FixesInHexResponse {
+                    data: fixes,
+                    total,
+                    h3_index: h3_index_str,
+                    resolution,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            metrics::counter!("coverage.api.hex_fixes.errors_total").increment(1);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get hex fixes: {}", e),
             )
             .into_response()
         }
