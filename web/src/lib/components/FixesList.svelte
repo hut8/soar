@@ -2,12 +2,12 @@
 	import { Activity } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Fix } from '$lib/types';
+	import type { Fix, FixWithExtras } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
 	interface Props {
-		fixes: Fix[];
+		fixes: FixWithExtras[];
 		loading?: boolean;
 		showHideInactive?: boolean; // Show "hide inactive" checkbox
 		showRaw?: boolean; // Show "show raw" checkbox

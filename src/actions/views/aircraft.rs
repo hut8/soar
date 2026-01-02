@@ -113,14 +113,6 @@ impl From<crate::aircraft_registrations::AircraftRegistrationModel> for Aircraft
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AircraftWithDeviceView {
-    #[serde(flatten)]
-    pub aircraft: AircraftRegistrationView,
-    pub device: Option<AircraftView>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]

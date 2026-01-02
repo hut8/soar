@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment';
-import type { Aircraft, Fix, AircraftSearchResponse } from '$lib/types';
+import type { Aircraft, FixWithExtras, AircraftSearchResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
@@ -9,7 +9,7 @@ export type FixFeedEvent =
 	| { type: 'connection_opened' }
 	| { type: 'connection_closed'; code: number; reason: string }
 	| { type: 'connection_error'; error: Event }
-	| { type: 'fix_received'; fix: Fix }
+	| { type: 'fix_received'; fix: FixWithExtras }
 	| { type: 'aircraft_received'; aircraft: Aircraft }
 	| { type: 'subscription_added'; aircraftId: string }
 	| { type: 'subscription_removed'; aircraftId: string }
@@ -142,23 +142,36 @@ export class FixFeed {
 
 					// Handle different message types based on the "type" field
 					if (rawMessage.type === 'fix') {
-						// Transform WebSocket fix data to match Fix interface
-						const fix: Fix = {
+						// Transform WebSocket fix data to match FixWithExtras interface (includes legacy fields)
+						const fix: FixWithExtras = {
 							id: rawMessage.id,
 							aircraftId: rawMessage.aircraftId,
-							deviceAddressHex: rawMessage.deviceAddressHex,
+							source: rawMessage.source || '',
+							aprsType: rawMessage.aprsType || '',
+							via: rawMessage.via || [],
 							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
 							longitude: rawMessage.longitude,
 							altitudeMslFeet: rawMessage.altitudeMslFeet,
 							altitudeAglFeet: rawMessage.altitudeAglFeet,
+							flightNumber: rawMessage.flightNumber || null,
+							squawk: rawMessage.squawk || null,
 							trackDegrees: rawMessage.trackDegrees,
 							groundSpeedKnots: rawMessage.groundSpeedKnots,
 							climbFpm: rawMessage.climbFpm,
-							registration: rawMessage.registration,
-							model: rawMessage.model,
+							turnRateRot: rawMessage.turnRateRot || null,
+							sourceMetadata: rawMessage.sourceMetadata || null,
 							flightId: rawMessage.flightId,
-							active: rawMessage.active
+							receivedAt: rawMessage.receivedAt || new Date().toISOString(),
+							active: rawMessage.active,
+							receiverId: rawMessage.receiverId || '',
+							rawMessageId: rawMessage.rawMessageId || '',
+							altitudeAglValid: rawMessage.altitudeAglValid ?? false,
+							timeGapSeconds: rawMessage.timeGapSeconds || null,
+							// Legacy fields from FixWithExtras
+							deviceAddressHex: rawMessage.deviceAddressHex,
+							registration: rawMessage.registration,
+							model: rawMessage.model
 						};
 
 						// Add fix to aircraft registry
@@ -433,7 +446,7 @@ export class FixFeed {
 		afterTimestamp?: string, // Expected in ISO 8601 format
 		limit?: number
 	): Promise<AircraftSearchResponse> {
-		if (!browser) return { items: [], total: 0, clustered: false };
+		if (!browser) return { items: [], total: 0n, clustered: false };
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
@@ -450,7 +463,7 @@ export class FixFeed {
 			return response;
 		} catch (error) {
 			console.error('Failed to fetch aircraft in bounding box:', error);
-			return { items: [], total: 0, clustered: false };
+			return { items: [], total: 0n, clustered: false };
 		}
 	}
 }

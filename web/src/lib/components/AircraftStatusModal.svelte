@@ -851,11 +851,11 @@
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
-										<dd>{formatSpeed(latestFix.groundSpeedKnots)}</dd>
+										<dd>{formatSpeed(latestFix.groundSpeedKnots ?? undefined)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
-										<dd>{formatTrack(latestFix.trackDegrees)}</dd>
+										<dd>{formatTrack(latestFix.trackDegrees ?? undefined)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
@@ -867,7 +867,7 @@
 													? 'text-red-600 dark:text-red-400'
 													: 'text-green-600 dark:text-green-400'} font-semibold"
 											>
-												{formatClimbRate(latestFix.climbFpm)}
+												{formatClimbRate(latestFix.climbFpm ?? undefined)}
 											</span>
 										</dd>
 									</div>

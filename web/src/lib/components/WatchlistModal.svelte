@@ -215,10 +215,26 @@
 					competitionNumber: '',
 					tracked: false,
 					identified: false,
+					clubId: null,
 					createdAt: '',
 					updatedAt: '',
 					fromOgnDdb: false,
-					fromAdsbxDdb: false
+					fromAdsbxDdb: false,
+					frequencyMhz: null,
+					pilotName: null,
+					homeBaseAirportIdent: null,
+					aircraftTypeOgn: null,
+					lastFixAt: null,
+					trackerDeviceType: null,
+					icaoModelCode: null,
+					countryCode: null,
+					ownerOperator: null,
+					addressCountry: null,
+					latitude: null,
+					longitude: null,
+					adsbEmitterCategory: null,
+					currentFix: null,
+					fixes: null
 				}
 			};
 		})

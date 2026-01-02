@@ -11,7 +11,7 @@
 	import { Play, Pause, RotateCcw, Camera } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
-	import type { Flight, Fix, DataListResponse } from '$lib/types';
+	import type { Flight, Fix, DataListResponse, AircraftType } from '$lib/types';
 
 	// Props
 	let {
@@ -165,10 +165,26 @@
 				competitionNumber: '',
 				tracked: false,
 				identified: false,
+				clubId: flight.clubId || null,
 				createdAt: flight.createdAt || '',
 				updatedAt: flight.updatedAt || '',
 				fromOgnDdb: false,
-				fromAdsbxDdb: false
+				fromAdsbxDdb: false,
+				frequencyMhz: null,
+				pilotName: null,
+				homeBaseAirportIdent: null,
+				aircraftTypeOgn: (flight.aircraftTypeOgn as AircraftType | null) || null,
+				lastFixAt: flight.latestFixTimestamp || null,
+				trackerDeviceType: null,
+				icaoModelCode: null,
+				countryCode: flight.aircraftCountryCode || null,
+				ownerOperator: null,
+				addressCountry: null,
+				latitude: null,
+				longitude: null,
+				adsbEmitterCategory: null,
+				currentFix: null,
+				fixes: null
 			},
 			fix
 		);

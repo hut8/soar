@@ -4,8 +4,9 @@
 	import { Math as CesiumMath } from 'cesium';
 	import { createAircraftEntity } from '$lib/cesium/entities';
 	import { FixFeed, type FixFeedEvent } from '$lib/services/FixFeed';
-	import type { Aircraft, Fix } from '$lib/types';
+	import type { Aircraft, Fix, FixWithExtras } from '$lib/types';
 	import { isAircraftItem } from '$lib/types';
+	import type { JsonValue } from '../../../../../bindings/serde_json/JsonValue';
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -141,10 +142,14 @@
 				const aircraft = item.data;
 
 				// Get latest fix from currentFix or fall back to fixes array
-				const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
+				// currentFix is JsonValue, fixes array contains Fix objects
+				const latestFix = aircraft.fixes?.[0] || aircraft.currentFix;
 
 				// Skip if no fix data available
 				if (!latestFix) continue;
+
+				// Cast to Fix type (currentFix should be serialized Fix data)
+				const fixData = latestFix as Fix;
 
 				// Update or create entity
 				const existingEntity = aircraftEntities.get(aircraft.id);
@@ -154,7 +159,7 @@
 				}
 
 				// Create new entity with label visibility based on zoom
-				const entity = createAircraftEntity(aircraft, latestFix, showLabels);
+				const entity = createAircraftEntity(aircraft, fixData, showLabels);
 				viewer.entities.add(entity);
 				aircraftEntities.set(aircraft.id, entity);
 				newAircraftIds.add(aircraft.id);
@@ -276,35 +281,50 @@
 			let aircraft = aircraftData.get(aircraftId);
 			if (!aircraft) {
 				// Create minimal aircraft data from fix
+				const fixWithExtras = fix as FixWithExtras;
 				aircraft = {
 					id: aircraftId,
 					addressType: '',
-					address: fix.deviceAddressHex || '',
-					aircraftModel: fix.model || '',
-					registration: fix.registration || null,
+					address: fixWithExtras.deviceAddressHex || '',
+					aircraftModel: fixWithExtras.model || '',
+					registration: fixWithExtras.registration || null,
 					competitionNumber: '',
 					tracked: false,
 					identified: false,
+					clubId: null,
 					createdAt: new Date().toISOString(),
 					updatedAt: new Date().toISOString(),
 					fromOgnDdb: false,
 					fromAdsbxDdb: false,
-					currentFix: fix,
+					frequencyMhz: null,
+					pilotName: null,
+					homeBaseAirportIdent: null,
+					aircraftTypeOgn: null,
+					lastFixAt: null,
+					trackerDeviceType: null,
+					icaoModelCode: null,
+					countryCode: null,
+					ownerOperator: null,
+					addressCountry: null,
+					latitude: null,
+					longitude: null,
+					adsbEmitterCategory: null,
+					currentFix: null,
 					fixes: []
 				};
 				aircraftData.set(aircraftId, aircraft);
 			} else {
 				// Push old currentFix to fixes array if it exists
-				if (aircraft.currentFix) {
-					aircraft.fixes = aircraft.fixes || [];
-					aircraft.fixes.unshift(aircraft.currentFix);
+				// Note: currentFix is JsonValue, not Fix in the typed interface
+				if (aircraft.currentFix && aircraft.fixes) {
+					aircraft.fixes.unshift(fix);
 					// Limit to 100 fixes
 					if (aircraft.fixes.length > 100) {
 						aircraft.fixes = aircraft.fixes.slice(0, 100);
 					}
 				}
-				// Set new currentFix
-				aircraft.currentFix = fix;
+				// Set new currentFix (cast to JsonValue as it's stored as JSON)
+				aircraft.currentFix = fix as unknown as JsonValue;
 			}
 
 			// Update aircraft entity
@@ -315,9 +335,9 @@
 			aircraftData.set(aircraft.id, aircraft);
 
 			// Update entity if aircraft has currentFix or fixes
-			const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
+			const latestFix = aircraft.fixes?.[0] || aircraft.currentFix;
 			if (latestFix) {
-				updateAircraftPosition(aircraft, latestFix);
+				updateAircraftPosition(aircraft, latestFix as Fix);
 			}
 		} else if (event.type === 'connection_opened') {
 			console.log('WebSocket connected - updating area subscriptions');
