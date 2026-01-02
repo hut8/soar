@@ -189,6 +189,10 @@
 						const fixData = latestFix as Fix;
 						// Update or create entity
 						const existingEntity = aircraftEntities.get(aircraft.id);
+
+						// Check if this entity is currently selected
+						const wasSelected = existingEntity && viewer.selectedEntity === existingEntity;
+
 						if (existingEntity) {
 							// Update existing entity (position, label, etc.)
 							viewer.entities.remove(existingEntity);
@@ -199,6 +203,11 @@
 						viewer.entities.add(entity);
 						aircraftEntities.set(aircraft.id, entity);
 						newAircraftIds.add(aircraft.id);
+
+						// Restore selection if it was previously selected
+						if (wasSelected) {
+							viewer.selectedEntity = entity;
+						}
 
 						// Store aircraft data for WebSocket updates
 						aircraftData.set(aircraft.id, aircraft);

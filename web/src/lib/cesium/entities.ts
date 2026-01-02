@@ -197,11 +197,16 @@ export function createAirportEntity(airport: Airport): Entity {
 	const longitude = parseFloat(airport.longitudeDeg || '0');
 	const elevation = (airport.elevationFt || 0) * FEET_TO_METERS;
 
-	// Create simple airport icon SVG
+	// Create airport icon SVG with runway symbol
 	const iconSvg = `
-		<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-			<circle cx="10" cy="10" r="8" fill="#10b981" stroke="white" stroke-width="2"/>
-			<text x="10" y="14" font-size="10" font-weight="bold" fill="white" text-anchor="middle">A</text>
+		<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+			<!-- Outer circle -->
+			<circle cx="16" cy="16" r="14" fill="#10b981" stroke="white" stroke-width="3"/>
+			<!-- Runway cross -->
+			<rect x="14" y="6" width="4" height="20" fill="white" rx="1"/>
+			<rect x="6" y="14" width="20" height="4" fill="white" rx="1"/>
+			<!-- Center dot -->
+			<circle cx="16" cy="16" r="3" fill="white"/>
 		</svg>
 	`;
 	const iconUrl = `data:image/svg+xml;base64,${btoa(iconSvg)}`;
@@ -212,16 +217,18 @@ export function createAirportEntity(airport: Airport): Entity {
 		position: Cartesian3.fromDegrees(longitude, latitude, elevation),
 		billboard: {
 			image: iconUrl,
-			scale: 0.8,
-			verticalOrigin: VerticalOrigin.BOTTOM
+			scale: 1.2,
+			verticalOrigin: VerticalOrigin.CENTER,
+			horizontalOrigin: HorizontalOrigin.CENTER,
+			disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show
 		},
 		label: {
 			text: airport.ident,
-			font: '11px sans-serif',
+			font: 'bold 13px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 2,
-			pixelOffset: { x: 0, y: -25 } as unknown as Cartesian2,
+			outlineWidth: 3,
+			pixelOffset: { x: 0, y: -28 } as unknown as Cartesian2,
 			disableDepthTestDistance: 50000 // Hide when far away
 		},
 		description: `
