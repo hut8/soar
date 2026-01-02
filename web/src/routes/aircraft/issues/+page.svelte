@@ -2,18 +2,9 @@
 	import { AlertTriangle, Radio, ChevronLeft, ChevronRight, Search } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
-	import type { Aircraft } from '$lib/types';
+	import type { Aircraft, PaginatedDataResponse } from '$lib/types';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import { getFlagPath } from '$lib/formatters';
-
-	interface AircraftIssuesResponse {
-		data: Aircraft[];
-		metadata: {
-			page: number;
-			totalPages: number;
-			totalCount: number;
-		};
-	}
 
 	let duplicateDevices = $state<Aircraft[]>([]);
 	let loading = $state(false);
@@ -39,7 +30,7 @@
 				params.hexSearch = search.trim();
 			}
 
-			const response = await serverCall<AircraftIssuesResponse>('/aircraft/issues', {
+			const response = await serverCall<PaginatedDataResponse<Aircraft>>('/aircraft/issues', {
 				method: 'GET',
 				params
 			});
