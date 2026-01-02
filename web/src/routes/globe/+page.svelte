@@ -137,8 +137,8 @@
 						}
 
 						styleTag.textContent = isDark
-							? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; }'
-							: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; }';
+							? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; } * { color: #fff !important; }'
+							: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; } * { color: #000 !important; }';
 					}
 				}
 
@@ -213,7 +213,10 @@
 
 		<!-- Layers - render when viewer is ready -->
 		{#if viewerReady && viewer}
-			<AircraftLayer {viewer} />
+			<!-- Only show live aircraft when NOT in playback mode -->
+			{#if !playbackFlightId}
+				<AircraftLayer {viewer} />
+			{/if}
 			<FlightPathLayer
 				{viewer}
 				bind:flightIds={selectedFlightIds}
@@ -333,6 +336,30 @@
 	:global(.cesium-viewer-toolbar) {
 		top: 10px;
 		right: 10px;
+	}
+
+	/* Cesium toolbar buttons - light mode */
+	:global(.cesium-button) {
+		background-color: rgba(48, 51, 54, 0.8);
+		border-color: rgba(48, 51, 54, 0.9);
+	}
+
+	:global(.cesium-button:hover) {
+		background-color: rgba(73, 76, 79, 0.9);
+	}
+
+	/* Cesium navigation help button and other toolbar items */
+	:global(.cesium-toolbar-button),
+	:global(.cesium-navigationHelpButton-wrapper),
+	:global(.cesium-sceneModePicker-wrapper),
+	:global(.cesium-baseLayerPicker-dropDown) {
+		background-color: rgba(48, 51, 54, 0.8);
+	}
+
+	/* Cesium SVG icons - ensure they're visible in light mode */
+	:global(.cesium-button svg),
+	:global(.cesium-toolbar-button svg) {
+		filter: brightness(0) invert(1);
 	}
 
 	/* Move InfoBox to the left side */
