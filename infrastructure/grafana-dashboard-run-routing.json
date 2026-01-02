@@ -1217,7 +1217,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_consumed_total_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
+          "expr": "rate(aprs_nats_consumed_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
           "legendFormat": "OGN Messages/sec",
           "range": true,
           "refId": "A"
@@ -1308,7 +1308,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_process_error_total_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_decode_error_total_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_receive_error_total_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_ack_error_total_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
+          "expr": "rate(aprs_nats_process_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_decode_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_receive_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval]) or\nrate(aprs_nats_ack_error_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
           "legendFormat": "{{__name__}}",
           "range": true,
           "refId": "A"

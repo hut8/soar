@@ -106,7 +106,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_hexes_requests_total_total[5m])",
+          "expr": "rate(coverage_api_hexes_requests_total[5m])",
           "refId": "A",
           "legendFormat": "Hexes API Requests"
         },
@@ -115,7 +115,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_hexes_success_total_total[5m])",
+          "expr": "rate(coverage_api_hexes_success_total[5m])",
           "refId": "B",
           "legendFormat": "Hexes Successful"
         },
@@ -124,7 +124,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_hex_fixes_requests_total_total[5m])",
+          "expr": "rate(coverage_api_hex_fixes_requests_total[5m])",
           "refId": "D",
           "legendFormat": "Hex Fixes API Requests"
         },
@@ -133,7 +133,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_hex_fixes_success_total_total[5m])",
+          "expr": "rate(coverage_api_hex_fixes_success_total[5m])",
           "refId": "E",
           "legendFormat": "Hex Fixes Successful"
         },
@@ -142,7 +142,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_errors_total_total[5m])",
+          "expr": "rate(coverage_api_errors_total[5m])",
           "refId": "C",
           "legendFormat": "Hexes Errors"
         },
@@ -151,7 +151,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_hex_fixes_errors_total_total[5m])",
+          "expr": "rate(coverage_api_hex_fixes_errors_total[5m])",
           "refId": "F",
           "legendFormat": "Hex Fixes Errors"
         }
@@ -274,7 +274,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_cache_hit_total_total[5m])",
+          "expr": "rate(coverage_cache_hit_total[5m])",
           "refId": "A",
           "legendFormat": "Cache Hits"
         },
@@ -283,7 +283,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_cache_miss_total_total[5m])",
+          "expr": "rate(coverage_cache_miss_total[5m])",
           "refId": "B",
           "legendFormat": "Cache Misses"
         }
@@ -636,7 +636,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * rate(coverage_cache_hit_total_total[5m]) / (rate(coverage_cache_hit_total_total[5m]) + rate(coverage_cache_miss_total_total[5m]))",
+          "expr": "100 * rate(coverage_cache_hit_total[5m]) / (rate(coverage_cache_hit_total[5m]) + rate(coverage_cache_miss_total[5m]))",
           "refId": "A"
         }
       ],
@@ -704,7 +704,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(coverage_api_errors_total_total[5m])",
+          "expr": "rate(coverage_api_errors_total[5m])",
           "refId": "A"
         }
       ],
