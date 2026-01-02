@@ -2,10 +2,10 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Viewer, Entity } from 'cesium';
 	import { Math as CesiumMath } from 'cesium';
-	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
 	import { FixFeed, type FixFeedEvent } from '$lib/services/FixFeed';
 	import type { Aircraft, Fix } from '$lib/types';
+	import { isAircraftItem } from '$lib/types';
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -21,8 +21,12 @@
 	let fixFeed = FixFeed.getInstance();
 	let unsubscribeFixFeed: (() => void) | null = null;
 
-	// Debounce timer for camera movement
+	// Debounce timers
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let areaSubscriptionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Rendering limits (like operations page)
+	const MAX_AIRCRAFT_DISPLAY = 50;
 
 	/**
 	 * Get current camera viewport bounds
@@ -67,7 +71,28 @@
 	}
 
 	/**
-	 * Load aircraft in current viewport
+	 * Get camera height above terrain to determine zoom level
+	 */
+	function getCameraHeight(): number {
+		try {
+			return viewer.camera.positionCartographic.height;
+		} catch (error) {
+			console.error('Error getting camera height:', error);
+			return 10000000; // Default to very high (zoomed out)
+		}
+	}
+
+	/**
+	 * Check if labels should be shown based on zoom level
+	 * Only show labels when zoomed in fairly close (< 500km altitude)
+	 */
+	function shouldShowLabels(): boolean {
+		const height = getCameraHeight();
+		return height < 500000; // 500km
+	}
+
+	/**
+	 * Load aircraft in current viewport using clustering logic from operations page
 	 */
 	async function loadAircraftInViewport(): Promise<void> {
 		const bounds = getVisibleBounds();
@@ -82,23 +107,39 @@
 		lastBounds = bounds;
 
 		try {
-			// Fetch aircraft in bounding box (last hour, with up to 10 recent fixes each)
-			// API returns array directly, not wrapped in object
-			const aircraftList = await serverCall<Aircraft[]>('/aircraft', {
-				params: {
-					latitude_min: bounds.latMin,
-					latitude_max: bounds.latMax,
-					longitude_min: bounds.lonMin,
-					longitude_max: bounds.lonMax,
-					after: new Date(Date.now() - 60 * 60 * 1000).toISOString() // 1 hour ago
-				}
-			});
+			// Fetch aircraft in bounding box using clustering API (like operations page)
+			// Uses south/north/west/east parameters with limit for clustering
+			const response = await fixFeed.fetchAircraftInBoundingBox(
+				bounds.latMin, // south
+				bounds.latMax, // north
+				bounds.lonMin, // west
+				bounds.lonMax, // east
+				undefined, // no after timestamp filter
+				MAX_AIRCRAFT_DISPLAY // limit to trigger clustering if needed
+			);
+
+			const { items, total, clustered } = response;
+
+			console.log(
+				`[GLOBE] Loaded ${items.length} items (total: ${total}, clustered: ${clustered})`
+			);
 
 			// Update aircraft entities
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const newAircraftIds = new Set<string>();
 
-			for (const aircraft of aircraftList) {
+			// Check if we should show labels based on zoom
+			const showLabels = shouldShowLabels();
+
+			for (const item of items) {
+				// Only handle individual aircraft, not clusters (globe doesn't support cluster display yet)
+				if (!isAircraftItem(item)) {
+					console.log('[GLOBE] Skipping cluster item (not yet supported on globe)');
+					continue;
+				}
+
+				const aircraft = item.data;
+
 				// Get latest fix from currentFix or fall back to fixes array
 				const latestFix = aircraft.currentFix || aircraft.fixes?.[0];
 
@@ -112,11 +153,14 @@
 					viewer.entities.remove(existingEntity);
 				}
 
-				// Create new entity
-				const entity = createAircraftEntity(aircraft, latestFix);
+				// Create new entity with label visibility based on zoom
+				const entity = createAircraftEntity(aircraft, latestFix, showLabels);
 				viewer.entities.add(entity);
 				aircraftEntities.set(aircraft.id, entity);
 				newAircraftIds.add(aircraft.id);
+
+				// Store aircraft data for WebSocket updates
+				aircraftData.set(aircraft.id, aircraft);
 			}
 
 			// Remove aircraft that are no longer in viewport
@@ -124,10 +168,11 @@
 				if (!newAircraftIds.has(aircraftId)) {
 					viewer.entities.remove(entity);
 					aircraftEntities.delete(aircraftId);
+					aircraftData.delete(aircraftId);
 				}
 			}
 
-			console.log(`Loaded ${aircraftList.length} aircraft in viewport`);
+			console.log(`[GLOBE] ${aircraftEntities.size} aircraft entities on globe`);
 		} catch (error) {
 			console.error('Error loading aircraft:', error);
 		} finally {
@@ -137,6 +182,7 @@
 
 	/**
 	 * Handle camera movement (debounced)
+	 * Refreshes aircraft from REST API
 	 */
 	function handleCameraMove(): void {
 		if (debounceTimer) {
@@ -145,7 +191,21 @@
 
 		debounceTimer = setTimeout(() => {
 			loadAircraftInViewport();
-		}, 200); // 200ms debounce
+		}, 500); // 500ms debounce
+	}
+
+	/**
+	 * Handle camera movement for area subscriptions (debounced separately)
+	 * Updates WebSocket area subscriptions with reasonable debounce
+	 */
+	function handleCameraMoveForAreaSubscriptions(): void {
+		if (areaSubscriptionDebounceTimer) {
+			clearTimeout(areaSubscriptionDebounceTimer);
+		}
+
+		areaSubscriptionDebounceTimer = setTimeout(() => {
+			updateAreaSubscriptions();
+		}, 1000); // 1 second debounce for area subscriptions
 	}
 
 	/**
@@ -276,8 +336,9 @@
 			viewer.entities.remove(existingEntity);
 		}
 
-		// Create updated entity
-		const entity = createAircraftEntity(aircraft, fix);
+		// Create updated entity with label visibility based on current zoom
+		const showLabels = shouldShowLabels();
+		const entity = createAircraftEntity(aircraft, fix, showLabels);
 		viewer.entities.add(entity);
 		aircraftEntities.set(aircraft.id, entity);
 	}
@@ -295,22 +356,22 @@
 		// Subscribe to area-based updates
 		updateAreaSubscriptions();
 
-		// Listen for camera movement (updates both REST API loads and WebSocket subscriptions)
-		const handleCameraMoveWithSubscriptions = () => {
-			handleCameraMove(); // Load aircraft from API
-			if (debounceTimer) clearTimeout(debounceTimer);
-			debounceTimer = setTimeout(() => {
-				updateAreaSubscriptions(); // Update WebSocket area subscriptions
-			}, 200);
+		// Listen for camera movement - use separate handlers with different debounce times
+		const handleCameraMoveComplete = () => {
+			handleCameraMove(); // Load aircraft from API (500ms debounce)
+			handleCameraMoveForAreaSubscriptions(); // Update WebSocket subscriptions (1s debounce)
 		};
 
-		viewer.camera.moveEnd.addEventListener(handleCameraMoveWithSubscriptions);
+		viewer.camera.moveEnd.addEventListener(handleCameraMoveComplete);
 
 		// Cleanup
 		return () => {
-			viewer.camera.moveEnd.removeEventListener(handleCameraMoveWithSubscriptions);
+			viewer.camera.moveEnd.removeEventListener(handleCameraMoveComplete);
 			if (debounceTimer) {
 				clearTimeout(debounceTimer);
+			}
+			if (areaSubscriptionDebounceTimer) {
+				clearTimeout(areaSubscriptionDebounceTimer);
 			}
 			if (unsubscribeFixFeed) {
 				unsubscribeFixFeed();

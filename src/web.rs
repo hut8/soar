@@ -633,6 +633,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/coverage/hexes",
             get(actions::coverage::get_coverage_hexes),
         )
+        .route(
+            "/coverage/hexes/{h3_index}/fixes",
+            get(actions::coverage::get_hex_fixes),
+        )
         .route("/fixes", get(actions::search_fixes))
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))

@@ -39,7 +39,9 @@ where
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable, TS)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Queryable, QueryableByName, Selectable, Insertable, TS,
+)]
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[diesel(table_name = crate::schema::fixes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]

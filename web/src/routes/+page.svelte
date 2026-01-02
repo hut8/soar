@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Users, Radar, Radio, Antenna, MapPin, Plane } from '@lucide/svelte';
+	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera } from '@lucide/svelte';
 	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
@@ -9,6 +9,7 @@
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
+	const arPath = resolve('/ar');
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -169,6 +170,25 @@
 						</div>
 						<div class="space-y-2">
 							<h2 class="text-2xl font-bold text-white drop-shadow-lg">Flights</h2>
+						</div>
+					</div>
+				</a>
+
+				<!-- AR Tracker Button -->
+				<a
+					href={arPath}
+					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				>
+					<div class="space-y-6 text-center">
+						<div class="flex justify-center">
+							<div
+								class="rounded-full bg-tertiary-500/20 p-4 transition-colors group-hover:bg-tertiary-500/30"
+							>
+								<Camera size={48} class="text-white drop-shadow-lg" />
+							</div>
+						</div>
+						<div class="space-y-2">
+							<h2 class="text-2xl font-bold text-white drop-shadow-lg">AR Tracker</h2>
 						</div>
 					</div>
 				</a>

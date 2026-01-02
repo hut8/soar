@@ -14,7 +14,7 @@ import {
 } from 'cesium';
 import type { Aircraft, Fix, Flight, Airport, Receiver } from '$lib/types';
 import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
-import { formatAircraftAddress } from '$lib/formatters';
+import { getAircraftTitle } from '$lib/formatters';
 
 /**
  * Feet to meters conversion factor
@@ -57,9 +57,14 @@ export function createAircraftIconSVG(color: string, heading: number = 0): strin
  * Create a Cesium Entity for an aircraft
  * @param aircraft - Aircraft data
  * @param fix - Latest fix for the aircraft
+ * @param showLabel - Whether to show the text label (default: true)
  * @returns Cesium Entity configured as aircraft marker
  */
-export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
+export function createAircraftEntity(
+	aircraft: Aircraft,
+	fix: Fix,
+	showLabel: boolean = true
+): Entity {
 	const altitude = fix.altitudeMslFeet || 0;
 	const altitudeMeters = altitude * FEET_TO_METERS;
 
@@ -72,8 +77,7 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 	// Create icon URL with aircraft heading
 	const iconUrl = createAircraftIconSVG(color, fix.trackDegrees || 0);
 
-	const displayName =
-		aircraft.registration || formatAircraftAddress(aircraft.address, aircraft.addressType);
+	const displayName = getAircraftTitle(aircraft);
 
 	return new Entity({
 		id: aircraft.id,
@@ -82,20 +86,22 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 		billboard: {
 			image: iconUrl,
 			scale: 1.0,
-			verticalOrigin: VerticalOrigin.BOTTOM,
+			verticalOrigin: VerticalOrigin.CENTER, // Center the icon so selection box is centered
 			horizontalOrigin: HorizontalOrigin.CENTER,
 			heightReference: HeightReference.NONE // Use absolute altitude
 		},
-		label: {
-			text: `${displayName}\n${altitudeText}`,
-			font: '12px sans-serif',
-			fillColor: Color.WHITE,
-			outlineColor: Color.BLACK,
-			outlineWidth: 3,
-			pixelOffset: { x: 0, y: -40 } as unknown as Cartesian2,
-			heightReference: HeightReference.NONE,
-			disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show label
-		},
+		label: showLabel
+			? {
+					text: `${displayName}\n${altitudeText}`,
+					font: '12px sans-serif',
+					fillColor: Color.WHITE,
+					outlineColor: Color.BLACK,
+					outlineWidth: 3,
+					pixelOffset: { x: 0, y: -30 } as unknown as Cartesian2, // Adjusted offset for centered billboard
+					heightReference: HeightReference.NONE,
+					disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show label
+				}
+			: undefined, // Hide label when showLabel is false
 		description: `
 			<h3>${displayName}</h3>
 			<p><strong>Model:</strong> ${aircraft.aircraftModel || 'Unknown'}</p>
