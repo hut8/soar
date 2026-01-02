@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix, FixWithExtras, DataListResponse, DataResponse } from '$lib/types';
+import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 
@@ -269,62 +269,25 @@ export class AircraftRegistry {
 			console.log(
 				'[REGISTRY] Aircraft not found in cache for fix:',
 				aircraftId,
-				allowApiFallback ? 'attempting to fetch from API' : 'will check if API fetch needed'
+				'attempting to fetch from API'
 			);
 
-			// Check if the fix has a registration number
-			const fixWithExtras = fix as FixWithExtras;
-			const hasRegistration =
-				fixWithExtras.registration && fixWithExtras.registration.trim() !== '';
-
-			// Always try to fetch from API if:
-			// 1. allowApiFallback is true, OR
-			// 2. The fix doesn't have a registration (try to get complete data from backend)
-			if (allowApiFallback || !hasRegistration) {
+			// Always try to fetch from API when we don't have the aircraft
+			// The backend is the source of truth for aircraft data
+			if (allowApiFallback) {
 				try {
-					console.log(
-						`[REGISTRY] Fetching aircraft from API (allowApiFallback: ${allowApiFallback}, hasRegistration: ${hasRegistration})`
-					);
+					console.log(`[REGISTRY] Fetching aircraft from API for:`, aircraftId);
 					aircraft = await this.updateAircraftFromAPI(aircraftId);
 				} catch (error) {
 					console.warn('[REGISTRY] Failed to fetch aircraft from API for:', aircraftId, error);
 				}
 			}
 
-			// If still no aircraft, create a minimal one
+			// If we still don't have aircraft data, we can't show this fix
+			// Don't create "minimal" aircraft - the backend should have all aircraft data
 			if (!aircraft) {
-				console.log('[REGISTRY] Creating minimal aircraft for fix:', aircraftId);
-				const fixWithExtras = fix as FixWithExtras;
-				aircraft = {
-					id: aircraftId,
-					addressType: '',
-					address: fixWithExtras.deviceAddressHex || '',
-					aircraftModel: fixWithExtras.model || '',
-					registration: fixWithExtras.registration || null,
-					competitionNumber: '',
-					tracked: false,
-					identified: false,
-					clubId: null,
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					fromOgnDdb: false,
-					fromAdsbxDdb: false,
-					frequencyMhz: null,
-					pilotName: null,
-					homeBaseAirportIdent: null,
-					aircraftTypeOgn: null,
-					lastFixAt: null,
-					trackerDeviceType: null,
-					icaoModelCode: null,
-					countryCode: null,
-					ownerOperator: null,
-					addressCountry: null,
-					latitude: null,
-					longitude: null,
-					adsbEmitterCategory: null,
-					currentFix: null,
-					fixes: []
-				};
+				console.warn('[REGISTRY] Cannot display fix - aircraft not found in backend:', aircraftId);
+				return null;
 			}
 		} else {
 			console.log('[REGISTRY] Using existing aircraft:', {
