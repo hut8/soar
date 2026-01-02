@@ -187,6 +187,12 @@ pub struct Aircraft {
     pub created_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_fix: Option<serde_json::Value>,
 }
 
 impl Aircraft {
@@ -381,6 +387,9 @@ impl From<AircraftModel> for Aircraft {
             from_adsbx_ddb: Some(model.from_adsbx_ddb),
             created_at: Some(model.created_at),
             updated_at: Some(model.updated_at),
+            latitude: model.latitude,
+            longitude: model.longitude,
+            current_fix: model.current_fix,
         }
     }
 }
@@ -662,6 +671,9 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 from_adsbx_ddb: Some(false),
                                 created_at: None,
                                 updated_at: None,
+                                latitude: None,
+                                longitude: None,
+                                current_fix: None,
                             })
                         }
                         Err(e) => {
@@ -878,6 +890,9 @@ impl AircraftFetcher {
                                     from_adsbx_ddb: Some(false),
                                     created_at: None,
                                     updated_at: None,
+                                    latitude: None,
+                                    longitude: None,
+                                    current_fix: None,
                                 })
                             }
                             Err(e) => {
@@ -1048,6 +1063,9 @@ impl AircraftFetcher {
                         from_adsbx_ddb: Some(false),
                         created_at: None,
                         updated_at: None,
+                        latitude: None,
+                        longitude: None,
+                        current_fix: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -1147,6 +1165,9 @@ mod tests {
             from_adsbx_ddb: Some(false),
             created_at: None,
             updated_at: None,
+            latitude: None,
+            longitude: None,
+            current_fix: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1489,6 +1510,9 @@ mod tests {
             from_adsbx_ddb: Some(false),
             created_at: None,
             updated_at: None,
+            latitude: None,
+            longitude: None,
+            current_fix: None,
         }
     }
 
