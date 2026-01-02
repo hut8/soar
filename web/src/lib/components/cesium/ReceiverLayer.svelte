@@ -67,10 +67,10 @@
 		try {
 			const response = await serverCall<PaginatedDataResponse<Receiver>>('/receivers', {
 				params: {
-					latitude_min: bounds.latMin,
-					latitude_max: bounds.latMax,
-					longitude_min: bounds.lonMin,
-					longitude_max: bounds.lonMax
+					south: bounds.latMin,
+					north: bounds.latMax,
+					west: bounds.lonMin,
+					east: bounds.lonMax
 				}
 			});
 
