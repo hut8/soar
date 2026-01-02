@@ -371,7 +371,10 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").absolute(0);
     metrics::counter!("flight_tracker.coalesce.rejected.callsign_total").absolute(0);
     metrics::counter!("flight_tracker.coalesce.rejected.probable_landing_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.speed_distance_total").absolute(0);
     metrics::histogram!("flight_tracker.coalesce.rejected.distance_km").record(0.0);
+    metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours").record(0.0);
     metrics::histogram!("flight_tracker.coalesce.resumed.distance_km").record(0.0);
     metrics::histogram!("flight_tracker.coalesce.speed_mph").record(0.0);
 

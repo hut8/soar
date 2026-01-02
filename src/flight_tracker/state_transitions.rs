@@ -67,6 +67,50 @@ pub fn should_be_active(fix: &Fix) -> bool {
     false
 }
 
+/// Calculate average ground speed from a list of fixes
+/// Returns average speed in knots, or None if insufficient data
+///
+/// Requires at least 3 fixes with ground speed data to return a valid average
+fn calculate_average_speed(fixes: &[Fix]) -> Option<f64> {
+    let speeds: Vec<f32> = fixes.iter().filter_map(|f| f.ground_speed_knots).collect();
+
+    if speeds.len() < 3 {
+        return None;
+    }
+
+    let sum: f32 = speeds.iter().sum();
+    Some((sum / speeds.len() as f32) as f64)
+}
+
+/// Validate if distance traveled is reasonable given gap duration and pre-timeout speed
+///
+/// Logic: If aircraft averaged X knots before timeout, then reappeared Y hours later,
+/// it should have traveled approximately X * Y nautical miles. We use 75% safety margin
+/// to account for wind, descents, slowing for landing pattern, etc.
+///
+/// Returns true if distance is plausible, false if too short (suspicious)
+///
+/// # Arguments
+/// * `avg_speed_knots` - Average ground speed before timeout (in knots)
+/// * `gap_hours` - Gap duration (in hours)
+/// * `actual_distance_km` - Actual distance traveled (in kilometers)
+fn validate_distance_for_gap(
+    avg_speed_knots: f64,
+    gap_hours: f64,
+    actual_distance_km: f64,
+) -> bool {
+    // Convert expected distance to km
+    // 1 nautical mile = 1.852 km
+    let expected_distance_nm = avg_speed_knots * gap_hours;
+    let expected_distance_km = expected_distance_nm * 1.852;
+
+    // Apply 75% safety margin (aircraft could have slowed down)
+    let min_expected_distance_km = expected_distance_km * 0.75;
+
+    // Distance is valid if actual is at least 75% of expected
+    actual_distance_km >= min_expected_distance_km
+}
+
 /// Process state transition for an aircraft and return updated fix with flight_id
 pub(crate) async fn process_state_transition(
     ctx: &FlightProcessorContext<'_>,
@@ -337,155 +381,213 @@ pub(crate) async fn process_state_transition(
                 };
 
                 if should_coalesce {
-                    // Check 2: Calculate distance between last fix and new fix
-                    let last_fix = ctx
-                        .fixes_repo
-                        .get_last_fix_for_flight(timed_out_flight.id)
-                        .await
-                        .ok()
-                        .flatten();
+                    // Check 2: Calculate gap duration (fractional hours)
+                    let gap_duration = fix.timestamp - timed_out_flight.last_fix_at;
+                    let gap_hours = gap_duration.num_hours() as f64
+                        + (gap_duration.num_minutes() % 60) as f64 / 60.0;
 
-                    let distance_km = if let Some(last) = &last_fix {
-                        crate::flights::haversine_distance(
-                            last.latitude,
-                            last.longitude,
-                            fix.latitude,
-                            fix.longitude,
-                        ) / 1000.0 // Convert meters to km
-                    } else {
-                        0.0
-                    };
-
-                    // Check 3: Phase-based validation - determine if this looks like a landing + new takeoff
-                    // Calculate the gap duration for time-based detection
-                    let gap_hours = (fix.timestamp - timed_out_flight.last_fix_at).num_hours();
-
-                    let looks_like_landing = match timed_out_flight.timeout_phase {
-                        Some(TimeoutPhase::Descending) => {
-                            // Aircraft was descending when it timed out
-                            // This is the canonical "descended out of range while landing" case
-
-                            let new_fix_low_altitude =
-                                fix.altitude_agl_feet.map(|agl| agl < 1000).unwrap_or(false);
-
-                            let new_fix_climbing =
-                                fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
-
-                            let far_apart = distance_km > 100.0; // More than 100km away
-                            let very_long_gap = gap_hours >= 4; // More than 4 hours suggests landing
-
-                            // Detect landing + new takeoff if:
-                            // 1. Classic case: Low altitude, climbing, far away (long cross-country)
-                            // 2. NEW: Long gap with climbing - even if nearby (landed, stayed on ground, took off again)
-                            //    Example: Descended out of range at 17:28, reappeared climbing at 04:46 (11h gap, 32km away)
-                            if very_long_gap && new_fix_climbing {
-                                // Very long gap + climbing = almost certainly landed and took off again
-                                // Even if distance is small (aircraft stayed at nearby airport)
-                                true
-                            } else {
-                                // Standard case: requires all three conditions
-                                new_fix_low_altitude && new_fix_climbing && far_apart
-                            }
-                        }
-                        Some(TimeoutPhase::Cruising) => {
-                            // Aircraft was cruising - only reject if VERY far apart
-                            // This allows trans-Atlantic flights
-                            distance_km > 3000.0 // More than 3000km suggests different flight
-                        }
-                        Some(TimeoutPhase::Climbing) => {
-                            // Climbing phase timeout is unusual, be conservative
-                            distance_km > 500.0
-                        }
-                        Some(TimeoutPhase::Unknown) | None => {
-                            // Unknown phase - use conservative distance threshold
-                            distance_km > 500.0
-                        }
-                    };
-
-                    // Override: Same position always resumes (glider/helicopter case)
-                    let should_resume = distance_km < 1.0 || !looks_like_landing;
-
-                    if !should_resume {
+                    // Check 2a: 18-hour hard limit - NEVER coalesce beyond this threshold
+                    if gap_hours >= 18.0 {
                         info!(
-                            "Aircraft {} NOT coalescing - probable landing detected. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h, New alt AGL: {:?}ft, New climb: {:?}fpm",
-                            fix.aircraft_id,
-                            timed_out_flight.timeout_phase,
-                            distance_km,
-                            gap_hours as f64,
-                            fix.altitude_agl_feet,
-                            fix.climb_fpm
+                            "Aircraft {} NOT coalescing - gap exceeds 18-hour hard limit ({:.1}h)",
+                            fix.aircraft_id, gap_hours
                         );
-                        metrics::counter!(
-                            "flight_tracker.coalesce.rejected.probable_landing_total"
-                        )
-                        .increment(1);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                            .record(distance_km);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours_total")
-                            .record(gap_hours as f64);
-                        // Don't resume - fall through to create new flight
+                        metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
+                            .increment(1);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                            .record(gap_hours);
+                        // Fall through to create new flight (don't resume)
                     } else {
-                        // Resume the timed-out flight
-                        let flight_id = timed_out_flight.id;
-                        info!(
-                            "Aircraft {} resuming flight {} after timeout. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h",
-                            fix.aircraft_id,
-                            flight_id,
-                            timed_out_flight.timeout_phase,
-                            distance_km,
-                            gap_hours as f64
-                        );
-
-                        metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
-                        metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
-                            .record(distance_km);
-
-                        // Calculate and record coalesce speed (distance/time)
-                        if gap_hours > 0 {
-                            let speed_kmh = distance_km / (gap_hours as f64);
-                            let speed_mph = speed_kmh * 0.621371;
-                            metrics::histogram!("flight_tracker.coalesce.speed_mph")
-                                .record(speed_mph);
-                        }
-
-                        // Atomically clear the timeout and update last_fix_at in a single database operation
-                        // This prevents violating the check_timeout_after_last_fix constraint
-                        if let Err(e) = ctx
-                            .flights_repo
-                            .resume_timed_out_flight(flight_id, fix.timestamp)
+                        // Check 3: Calculate distance between last fix and new fix
+                        let last_fix = ctx
+                            .fixes_repo
+                            .get_last_fix_for_flight(timed_out_flight.id)
                             .await
-                        {
-                            error!("Failed to resume timed-out flight {}: {}", flight_id, e);
-                            // If we can't resume the flight, don't continue processing this fix
-                            // Return the fix unmodified so it can be processed again later
+                            .ok()
+                            .flatten();
+
+                        let distance_km = if let Some(last) = &last_fix {
+                            crate::flights::haversine_distance(
+                                last.latitude,
+                                last.longitude,
+                                fix.latitude,
+                                fix.longitude,
+                            ) / 1000.0 // Convert meters to km
+                        } else {
+                            0.0
+                        };
+
+                        // Check 4: Phase-based validation - determine if this looks like a landing + new takeoff
+                        let looks_like_landing = match timed_out_flight.timeout_phase {
+                            Some(TimeoutPhase::Descending) => {
+                                // Aircraft was descending when it timed out
+                                // This is the canonical "descended out of range while landing" case
+
+                                let new_fix_low_altitude =
+                                    fix.altitude_agl_feet.map(|agl| agl < 1000).unwrap_or(false);
+
+                                let new_fix_climbing =
+                                    fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
+
+                                let far_apart = distance_km > 100.0; // More than 100km away
+                                let very_long_gap = gap_hours >= 4.0; // More than 4 hours suggests landing
+
+                                // Detect landing + new takeoff if:
+                                // 1. Classic case: Low altitude, climbing, far away (long cross-country)
+                                // 2. NEW: Long gap with climbing - even if nearby (landed, stayed on ground, took off again)
+                                //    Example: Descended out of range at 17:28, reappeared climbing at 04:46 (11h gap, 32km away)
+                                if very_long_gap && new_fix_climbing {
+                                    // Very long gap + climbing = almost certainly landed and took off again
+                                    // Even if distance is small (aircraft stayed at nearby airport)
+                                    true
+                                } else {
+                                    // Standard case: requires all three conditions
+                                    new_fix_low_altitude && new_fix_climbing && far_apart
+                                }
+                            }
+                            Some(TimeoutPhase::Cruising) => {
+                                // Aircraft was cruising - only reject if VERY far apart
+                                // This allows trans-Atlantic flights
+                                distance_km > 3000.0 // More than 3000km suggests different flight
+                            }
+                            Some(TimeoutPhase::Climbing) => {
+                                // Climbing phase timeout is unusual, be conservative
+                                distance_km > 500.0
+                            }
+                            Some(TimeoutPhase::Unknown) | None => {
+                                // Unknown phase - use conservative distance threshold
+                                distance_km > 500.0
+                            }
+                        };
+
+                        // Check 5: Speed-based distance validation for gaps > 1 hour
+                        // This catches cases where aircraft didn't move far enough given its pre-timeout speed
+                        let speed_distance_check_failed = if gap_hours > 1.0 {
+                            // Fetch last 10 fixes before timeout to calculate average speed
+                            let pre_timeout_fixes = ctx
+                                .fixes_repo
+                                .get_fixes_for_flight(timed_out_flight.id, Some(10))
+                                .await
+                                .ok()
+                                .unwrap_or_default();
+
+                            if let Some(avg_speed) = calculate_average_speed(&pre_timeout_fixes) {
+                                let is_valid =
+                                    validate_distance_for_gap(avg_speed, gap_hours, distance_km);
+
+                                if !is_valid {
+                                    let expected_distance_km = avg_speed * gap_hours * 1.852 * 0.75;
+                                    info!(
+                                        "Aircraft {} speed/distance check FAILED - averaged {:.1} knots before timeout, \
+                                     gap {:.1}h, expected >{:.1}km but only moved {:.1}km",
+                                        fix.aircraft_id,
+                                        avg_speed,
+                                        gap_hours,
+                                        expected_distance_km,
+                                        distance_km
+                                    );
+                                    metrics::counter!(
+                                        "flight_tracker.coalesce.rejected.speed_distance_total"
+                                    )
+                                    .increment(1);
+                                    true // Check failed
+                                } else {
+                                    false // Check passed
+                                }
+                            } else {
+                                false // Insufficient speed data, skip check
+                            }
+                        } else {
+                            false // Gap < 1 hour, skip check
+                        };
+
+                        // Override: Same position always resumes (glider/helicopter case)
+                        // BUT: Also reject if speed/distance check failed
+                        let should_resume = distance_km < 1.0
+                            || (!looks_like_landing && !speed_distance_check_failed);
+
+                        if !should_resume {
+                            info!(
+                                "Aircraft {} NOT coalescing - probable landing detected. \
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h, New alt AGL: {:?}ft, New climb: {:?}fpm",
+                                fix.aircraft_id,
+                                timed_out_flight.timeout_phase,
+                                distance_km,
+                                gap_hours,
+                                fix.altitude_agl_feet,
+                                fix.climb_fpm
+                            );
+                            metrics::counter!(
+                                "flight_tracker.coalesce.rejected.probable_landing_total"
+                            )
+                            .increment(1);
+                            metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
+                                .record(distance_km);
+                            metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                                .record(gap_hours);
+                            // Don't resume - fall through to create new flight
+                        } else {
+                            // Resume the timed-out flight
+                            let flight_id = timed_out_flight.id;
+                            info!(
+                                "Aircraft {} resuming flight {} after timeout. \
+                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h",
+                                fix.aircraft_id,
+                                flight_id,
+                                timed_out_flight.timeout_phase,
+                                distance_km,
+                                gap_hours
+                            );
+
+                            metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
+                            metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
+                                .record(distance_km);
+
+                            // Calculate and record coalesce speed (distance/time)
+                            if gap_hours > 0.0 {
+                                let speed_kmh = distance_km / gap_hours;
+                                let speed_mph = speed_kmh * 0.621371;
+                                metrics::histogram!("flight_tracker.coalesce.speed_mph")
+                                    .record(speed_mph);
+                            }
+
+                            // Atomically clear the timeout and update last_fix_at in a single database operation
+                            // This prevents violating the check_timeout_after_last_fix constraint
+                            if let Err(e) = ctx
+                                .flights_repo
+                                .resume_timed_out_flight(flight_id, fix.timestamp)
+                                .await
+                            {
+                                error!("Failed to resume timed-out flight {}: {}", flight_id, e);
+                                // If we can't resume the flight, don't continue processing this fix
+                                // Return the fix unmodified so it can be processed again later
+                                return Ok(fix);
+                            }
+
+                            // Add flight back to ctx.active_flights map with updated position/altitude
+                            let mut state =
+                                CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                            state.last_altitude_msl_ft = fix.altitude_msl_feet;
+                            state.last_climb_fpm = fix.climb_fpm;
+                            state.last_position = (fix.latitude, fix.longitude);
+                            {
+                                let mut flights = ctx.active_flights.write().await;
+                                flights.insert(fix.aircraft_id, state);
+                            }
+
+                            // Assign fix to the resumed flight
+                            fix.flight_id = Some(flight_id);
+
+                            // Calculate time gap from the last fix in the resumed flight
+                            // This will capture the gap during the timeout period
+                            let time_gap_seconds =
+                                (fix.timestamp - timed_out_flight.last_fix_at).num_seconds() as i32;
+                            fix.time_gap_seconds = Some(time_gap_seconds);
+
+                            // Return the fix with the resumed flight_id
                             return Ok(fix);
                         }
-
-                        // Add flight back to ctx.active_flights map with updated position/altitude
-                        let mut state =
-                            CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                        state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                        state.last_climb_fpm = fix.climb_fpm;
-                        state.last_position = (fix.latitude, fix.longitude);
-                        {
-                            let mut flights = ctx.active_flights.write().await;
-                            flights.insert(fix.aircraft_id, state);
-                        }
-
-                        // Assign fix to the resumed flight
-                        fix.flight_id = Some(flight_id);
-
-                        // Calculate time gap from the last fix in the resumed flight
-                        // This will capture the gap during the timeout period
-                        let time_gap_seconds =
-                            (fix.timestamp - timed_out_flight.last_fix_at).num_seconds() as i32;
-                        fix.time_gap_seconds = Some(time_gap_seconds);
-
-                        // Return the fix with the resumed flight_id
-                        return Ok(fix);
-                    }
+                    } // end of else block for gap < 18 hours
                 }
             }
 
@@ -774,4 +876,115 @@ pub(crate) async fn process_state_transition(
     }
 
     Ok(fix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn test_calculate_average_speed_sufficient_data() {
+        // 3 fixes with speeds: 100, 110, 120 knots
+        // Expected: 110 knots
+        let fixes = vec![
+            create_fix_with_speed(100.0),
+            create_fix_with_speed(110.0),
+            create_fix_with_speed(120.0),
+        ];
+
+        let result = calculate_average_speed(&fixes);
+        assert_eq!(result, Some(110.0));
+    }
+
+    #[test]
+    fn test_calculate_average_speed_insufficient_data() {
+        // Only 2 fixes - should return None
+        let fixes = vec![create_fix_with_speed(100.0), create_fix_with_speed(110.0)];
+
+        let result = calculate_average_speed(&fixes);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_calculate_average_speed_missing_data() {
+        // 3 fixes but only 1 has speed - should return None
+        let fix1 = create_fix_with_speed(100.0);
+        let mut fix2 = create_fix_with_speed(0.0);
+        let mut fix3 = create_fix_with_speed(0.0);
+        fix2.ground_speed_knots = None;
+        fix3.ground_speed_knots = None;
+
+        let fixes = vec![fix1, fix2, fix3];
+
+        let result = calculate_average_speed(&fixes);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_validate_distance_for_gap_pass() {
+        // 100 knots, 5 hours, 800 km moved
+        // Expected: 100 * 5 * 1.852 * 0.75 = 694.5 km minimum
+        // 800 km > 694.5 km → valid
+        let result = validate_distance_for_gap(100.0, 5.0, 800.0);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_validate_distance_for_gap_fail() {
+        // 100 knots, 47 hours, 0.16 km moved (bug scenario)
+        // Expected: 100 * 47 * 1.852 * 0.75 = 6517.8 km minimum
+        // 0.16 km < 6517.8 km → invalid
+        let result = validate_distance_for_gap(100.0, 47.0, 0.16);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_validate_distance_for_gap_edge_case_exactly_75_percent() {
+        // Exactly 75% of expected distance
+        // 100 knots * 1 hour * 1.852 km/NM = 185.2 km expected
+        // 75% = 138.9 km minimum
+        let result = validate_distance_for_gap(100.0, 1.0, 138.9);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_validate_distance_for_gap_slow_speed() {
+        // Slow aircraft (glider thermaling): 20 knots, 2 hours, 50 km
+        // Expected: 20 * 2 * 1.852 * 0.75 = 55.56 km minimum
+        // 50 km < 55.56 km → invalid (but close)
+        let result = validate_distance_for_gap(20.0, 2.0, 50.0);
+        assert!(!result);
+    }
+
+    // Helper function to create a fix with a given speed
+    fn create_fix_with_speed(speed_knots: f32) -> Fix {
+        let base_time = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        Fix {
+            id: Uuid::new_v4(),
+            source: "TEST".to_string(),
+            aprs_type: "position".to_string(),
+            via: vec![],
+            timestamp: base_time,
+            latitude: 42.0,
+            longitude: -122.0,
+            altitude_msl_feet: Some(1000),
+            altitude_agl_feet: None,
+            flight_number: None,
+            squawk: None,
+            ground_speed_knots: Some(speed_knots),
+            track_degrees: None,
+            climb_fpm: None,
+            turn_rate_rot: None,
+            source_metadata: None,
+            flight_id: None,
+            aircraft_id: Uuid::new_v4(),
+            received_at: base_time,
+            is_active: true,
+            receiver_id: Uuid::new_v4(),
+            raw_message_id: Uuid::new_v4(),
+            altitude_agl_valid: false,
+            time_gap_seconds: None,
+        }
+    }
 }

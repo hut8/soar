@@ -156,13 +156,26 @@ pub(crate) async fn timeout_flight(
         flight_id, aircraft_id
     );
 
-    // Get current flight state to determine phase
+    // Fetch recent fixes to calculate climb rate from actual altitude changes
+    let recent_fixes = ctx
+        .fixes_repo
+        .get_fixes_for_flight(flight_id, Some(20))
+        .await
+        .unwrap_or_default();
+
+    // Calculate climb rate from fixes (more reliable than trusting fix.climb_fpm)
+    let calculated_climb = super::calculate_climb_rate_from_fixes(&recent_fixes);
+
+    // Get current flight state and update with calculated climb rate before determining phase
     let flight_phase = {
-        let flights = active_flights.read().await;
-        flights
-            .get(&aircraft_id)
-            .map(|state| state.determine_flight_phase())
-            .unwrap_or(super::FlightPhase::Unknown)
+        let mut flights = active_flights.write().await;
+        if let Some(state) = flights.get_mut(&aircraft_id) {
+            // Update state with calculated climb rate
+            state.calculated_climb_fpm = calculated_climb;
+            state.determine_flight_phase()
+        } else {
+            super::FlightPhase::Unknown
+        }
     };
 
     let timeout_phase = match flight_phase {
