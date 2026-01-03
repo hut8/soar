@@ -235,6 +235,33 @@
 				</ul>
 			</div>
 
+			<div class="space-y-3">
+				<h4 class="text-lg font-semibold">Data License & Attribution</h4>
+				<div class="text-surface-600-300-token space-y-2">
+					<p>
+						Aircraft tracking data provided by the
+						<a
+							href="https://www.glidernet.org/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline"><strong>Open Glider Network (OGN)</strong></a
+						>, a worldwide network of ground stations tracking aircraft equipped with FLARM and OGN
+						trackers.
+					</p>
+					<p>
+						Airport data from OurAirports is licensed under the
+						<a
+							href="https://opendatacommons.org/licenses/odbl/summary/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline"
+							><strong>Open Database License (ODbL)</strong></a
+						>. You are free to copy, distribute, and adapt the data, as long as you credit
+						OurAirports and license your adapted database under ODbL.
+					</p>
+				</div>
+			</div>
+
 			<div class="border-surface-200-700-token mt-6 border-t pt-6">
 				<p class="text-surface-600-300-token text-sm">
 					All metrics dashboards are publicly accessible and update in real-time. The system is

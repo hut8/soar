@@ -36,8 +36,8 @@
 		fixesInChronologicalOrder = true
 	}: Props = $props();
 
-	let showRawData = $state(showRawValue);
-	let useRelativeTime = $state(useRelativeTimes);
+	let showRawData = $derived(showRawValue);
+	let useRelativeTime = $derived(useRelativeTimes);
 	let showTimeIntervals = $state(false);
 
 	function handleHideInactiveChange(event: Event) {

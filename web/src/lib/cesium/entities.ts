@@ -99,8 +99,7 @@ export function createAircraftEntity(
 					outlineColor: Color.BLACK,
 					outlineWidth: 3,
 					pixelOffset: { x: 0, y: -30 } as unknown as Cartesian2, // Adjusted offset for centered billboard
-					heightReference: HeightReference.NONE,
-					disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show label
+					heightReference: HeightReference.NONE
 				}
 			: undefined, // Hide label when showLabel is false
 		description: `
@@ -197,11 +196,16 @@ export function createAirportEntity(airport: Airport): Entity {
 	const longitude = parseFloat(airport.longitudeDeg || '0');
 	const elevation = (airport.elevationFt || 0) * FEET_TO_METERS;
 
-	// Create simple airport icon SVG
+	// Create airport icon SVG with runway symbol
 	const iconSvg = `
-		<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-			<circle cx="10" cy="10" r="8" fill="#10b981" stroke="white" stroke-width="2"/>
-			<text x="10" y="14" font-size="10" font-weight="bold" fill="white" text-anchor="middle">A</text>
+		<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+			<!-- Outer circle -->
+			<circle cx="16" cy="16" r="14" fill="#10b981" stroke="white" stroke-width="3"/>
+			<!-- Runway cross -->
+			<rect x="14" y="6" width="4" height="20" fill="white" rx="1"/>
+			<rect x="6" y="14" width="20" height="4" fill="white" rx="1"/>
+			<!-- Center dot -->
+			<circle cx="16" cy="16" r="3" fill="white"/>
 		</svg>
 	`;
 	const iconUrl = `data:image/svg+xml;base64,${btoa(iconSvg)}`;
@@ -212,16 +216,17 @@ export function createAirportEntity(airport: Airport): Entity {
 		position: Cartesian3.fromDegrees(longitude, latitude, elevation),
 		billboard: {
 			image: iconUrl,
-			scale: 0.8,
-			verticalOrigin: VerticalOrigin.BOTTOM
+			scale: 1.2,
+			verticalOrigin: VerticalOrigin.CENTER,
+			horizontalOrigin: HorizontalOrigin.CENTER
 		},
 		label: {
 			text: airport.ident,
-			font: '11px sans-serif',
+			font: 'bold 13px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 2,
-			pixelOffset: { x: 0, y: -25 } as unknown as Cartesian2,
+			outlineWidth: 3,
+			pixelOffset: { x: 0, y: -28 } as unknown as Cartesian2,
 			disableDepthTestDistance: 50000 // Hide when far away
 		},
 		description: `
@@ -352,42 +357,24 @@ export function createClusterEntity(cluster: AircraftCluster): Entity {
 		Cartesian3.fromDegrees(west, south, 0)
 	];
 
-	// Create airplane SVG icon for cluster
-	const clusterIconSvg = `
-		<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-			<circle cx="16" cy="16" r="14" fill="rgba(59, 130, 246, 0.8)" stroke="white" stroke-width="2"/>
-			<path d="M 16 8 L 12 20 L 16 18 L 20 20 Z" fill="white" stroke="white" stroke-width="1"/>
-		</svg>
-	`;
-	const clusterIconUrl = `data:image/svg+xml;base64,${btoa(clusterIconSvg)}`;
-
 	return new Entity({
 		id: `cluster-${cluster.id}`,
 		name: `${cluster.count} aircraft`,
 		position: Cartesian3.fromDegrees(centerLon, centerLat, 0),
-		billboard: {
-			image: clusterIconUrl,
-			scale: 1.5,
-			verticalOrigin: VerticalOrigin.CENTER,
-			horizontalOrigin: HorizontalOrigin.CENTER,
-			heightReference: HeightReference.CLAMP_TO_GROUND,
-			disableDepthTestDistance: Number.POSITIVE_INFINITY
-		},
 		label: {
 			text: cluster.count.toString(),
-			font: 'bold 16px sans-serif',
+			font: 'bold 20px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
 			outlineWidth: 3,
-			pixelOffset: { x: 0, y: 25 } as unknown as Cartesian2,
-			heightReference: HeightReference.CLAMP_TO_GROUND,
-			disableDepthTestDistance: Number.POSITIVE_INFINITY
+			pixelOffset: { x: 0, y: 0 } as unknown as Cartesian2,
+			heightReference: HeightReference.CLAMP_TO_GROUND
 		},
 		polygon: {
 			hierarchy: new PolygonHierarchy(positions),
-			material: Color.fromCssColorString('rgba(59, 130, 246, 0.1)'),
+			material: Color.fromCssColorString('rgba(239, 68, 68, 0.4)'), // Red with 40% opacity
 			outline: true,
-			outlineColor: Color.fromCssColorString('rgba(59, 130, 246, 0.8)'),
+			outlineColor: Color.fromCssColorString('rgba(220, 38, 38, 0.9)'), // Darker red outline
 			outlineWidth: 3,
 			heightReference: HeightReference.CLAMP_TO_GROUND
 		},

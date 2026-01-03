@@ -36,6 +36,7 @@ pub struct FixesQuery {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlightsQuery {
     /// Page number (1-indexed)
     pub page: Option<i64>,
