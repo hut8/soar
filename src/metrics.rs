@@ -64,8 +64,16 @@ pub fn set_beast_health(health: Arc<RwLock<BeastIngestHealth>>) {
 
 /// Initialize Prometheus metrics exporter
 /// Returns a handle that can be used to render metrics for scraping
-pub fn init_metrics() -> PrometheusHandle {
-    PrometheusBuilder::new()
+/// Optionally adds a component label to all metrics (e.g., "ingest-adsb", "ingest-ogn", "web", "run")
+pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
+    let mut builder = PrometheusBuilder::new();
+
+    // Add component label if provided
+    if let Some(comp) = component {
+        builder = builder.add_global_label("component", comp);
+    }
+
+    builder
         // Configure HTTP request duration as histogram with appropriate buckets
         // Buckets: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s
         .set_buckets_for_metric(
@@ -650,8 +658,9 @@ async fn readiness_check_handler() -> impl IntoResponse {
 
 /// Start a standalone metrics server on the specified port
 /// This is used by the "run" subcommand to expose metrics independently
-pub async fn start_metrics_server(port: u16) {
-    let handle = init_metrics();
+/// The component parameter is used to add a global label to all metrics (e.g., "ingest-adsb", "ingest-ogn", "web", "run")
+pub async fn start_metrics_server(port: u16, component: Option<&str>) {
+    let handle = init_metrics(component);
     METRICS_HANDLE
         .set(handle)
         .expect("Metrics handle already initialized");
@@ -676,6 +685,9 @@ pub async fn start_metrics_server(port: u16) {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting metrics server on http://{}/metrics", addr);
+    if let Some(comp) = component {
+        info!("Metrics will be labeled with component={}", comp);
+    }
     info!("Health check available at http://{}/health", addr);
     info!("Readiness check available at http://{}/ready", addr);
     info!(
