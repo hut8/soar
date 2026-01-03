@@ -120,21 +120,25 @@ fi
 # Define services and timers based on environment
 # Active services that should be enabled and started
 ACTIVE_SERVICES=(
-    "soar-ingest-ogn${SERVICE_SUFFIX}.service"
     "soar-run${SERVICE_SUFFIX}.service"
     "soar-web${SERVICE_SUFFIX}.service"
 )
 
+# Manually-deployed services (installed but not automatically started)
+# These services change infrequently and are deployed via manual GitHub Actions workflows
+MANUAL_SERVICES=(
+    "soar-ingest-ogn${SERVICE_SUFFIX}.service"
+    "soar-ingest-adsb${SERVICE_SUFFIX}.service"
+)
+
 # Timer-invoked services (only installed, not enabled or started)
 # Skip backup services for staging environment
-# NOTE: soar-ingest-adsb.service is disabled by default until ready for production
 if [ "$ENVIRONMENT" = "staging" ]; then
     TIMER_SERVICES=(
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
         "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
-        "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
@@ -150,7 +154,6 @@ else
         "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
-        "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
@@ -168,7 +171,7 @@ TEMPLATE_SERVICES=(
 )
 
 # All services (for stopping and installing)
-ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}" "${TEMPLATE_SERVICES[@]}")
+ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${MANUAL_SERVICES[@]}" "${TIMER_SERVICES[@]}" "${TEMPLATE_SERVICES[@]}")
 
 # Create temporary binary directory with timestamp
 TIMESTAMP=$(date +%s)
@@ -929,28 +932,11 @@ if [ -f "/etc/systemd/system/$TARGET_FILE" ]; then
     systemctl enable "$TARGET_FILE" || log_warn "Failed to enable $TARGET_FILE"
 fi
 
-# Enable and start services - start ogn-ingest first, then others
+# Enable and start services
 log_info "Enabling and starting SOAR services..."
 
-# Start soar-ingest-ogn first
-if [ -f "/etc/systemd/system/soar-ingest-ogn${SERVICE_SUFFIX}.service" ]; then
-    log_info "Enabling soar-ingest-ogn${SERVICE_SUFFIX}.service..."
-    systemctl enable "soar-ingest-ogn${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-ingest-ogn${SERVICE_SUFFIX}.service"
-
-    log_info "Starting soar-ingest-ogn${SERVICE_SUFFIX}.service..."
-    systemctl start "soar-ingest-ogn${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-ingest-ogn${SERVICE_SUFFIX}.service"
-
-    # Give it a moment to initialize
-    sleep 2
-fi
-
-# Start the rest of the active services
+# Start active services
 for service in "${ACTIVE_SERVICES[@]}"; do
-    # Skip ogn-ingest since we already started it
-    if [ "$service" = "soar-ingest-ogn${SERVICE_SUFFIX}.service" ]; then
-        continue
-    fi
-
     if [ -f "/etc/systemd/system/$service" ]; then
         log_info "Enabling $service..."
         systemctl enable "$service" || log_warn "Failed to enable $service"
@@ -959,6 +945,9 @@ for service in "${ACTIVE_SERVICES[@]}"; do
         systemctl start "$service" || log_warn "Failed to start $service"
     fi
 done
+
+# Manual services are installed but not automatically started
+log_info "Manual services (${MANUAL_SERVICES[*]}) are installed but must be started manually"
 
 # Timer-invoked services are installed but not enabled or started
 log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
