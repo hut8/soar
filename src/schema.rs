@@ -828,6 +828,7 @@ diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(airports -> locations (location_id));
 diesel::joinable!(club_tow_fees -> clubs (club_id));
+diesel::joinable!(club_tow_fees -> users (modified_by));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));
