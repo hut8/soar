@@ -80,7 +80,7 @@ impl AprsClient {
         }
     }
 
-    /// Start the APRS client with NATS publisher
+    /// Start the APRS client with NATS publisher (legacy)
     /// This connects to APRS-IS and publishes all messages to NATS
     #[tracing::instrument(skip(self, nats_publisher))]
     pub async fn start(
@@ -93,7 +93,7 @@ impl AprsClient {
             .await
     }
 
-    /// Start the APRS client with NATS publisher and external shutdown signal
+    /// Start the APRS client with NATS publisher and external shutdown signal (legacy)
     /// This connects to APRS-IS and publishes all messages to NATS
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
@@ -397,6 +397,146 @@ impl AprsClient {
 
         // Check if either task panicked
         publisher_result.context("JetStream publisher task panicked")?;
+        connection_result.context("Connection management task panicked or stopped")?;
+
+        Ok(())
+    }
+
+    /// Start the APRS client with persistent queue
+    /// This connects to APRS-IS and sends all messages to the queue
+    /// The queue handles persistence and delivery to soar-run
+    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state))]
+    pub async fn start_with_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<String>>,
+        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+    ) -> Result<()> {
+        // Convert oneshot receiver to a shared Arc<AtomicBool>
+        let shutdown_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let shutdown_flag_for_connection = shutdown_flag.clone();
+
+        // Spawn a task to watch the oneshot and set the flag
+        tokio::spawn(async move {
+            let _ = shutdown_rx.await;
+            shutdown_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
+        let config = self.config.clone();
+
+        // Create bounded channel for raw APRS messages from TCP socket to queue
+        let (raw_message_tx, raw_message_rx) = flume::bounded::<String>(RAW_MESSAGE_QUEUE_SIZE);
+        info!(
+            "Created raw message queue with capacity {} for persistent queue",
+            RAW_MESSAGE_QUEUE_SIZE
+        );
+
+        // Spawn queue feeding task - reads from channel, sends to persistent queue
+        let queue_clone = queue.clone();
+        let queue_handle = tokio::spawn(
+            async move {
+                loop {
+                    match raw_message_rx.recv_async().await {
+                        Ok(message) => {
+                            if let Err(e) = queue_clone.send(message).await {
+                                error!("Failed to send to persistent queue: {}", e);
+                                // Queue overflow or other error - this is critical
+                                metrics::counter!("aprs.queue.send_error_total").increment(1);
+                            }
+                        }
+                        Err(_) => {
+                            // Channel closed, exit
+                            info!("Raw message channel closed, queue feeder exiting");
+                            break;
+                        }
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("aprs_queue_feeder")),
+        );
+
+        // Spawn connection management task
+        let health_for_connection = health_state.clone();
+        let connection_handle = tokio::spawn(
+            async move {
+                let mut retry_count = 0;
+                let mut current_delay = config.retry_delay_seconds;
+
+                loop {
+                    // Check if shutdown was requested
+                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                        info!("Shutdown requested, stopping APRS queue ingestion");
+                        // Mark as disconnected in health state
+                        {
+                            let mut health = health_for_connection.write().await;
+                            health.aprs_connected = false;
+                        }
+                        break;
+                    }
+
+                    if retry_count == 0 {
+                        info!(
+                            "Connecting to APRS server at {}:{}",
+                            config.server, config.port
+                        );
+                    } else {
+                        info!(
+                            "Reconnecting to APRS server at {}:{} (retry attempt {})",
+                            config.server, config.port, retry_count
+                        );
+                    }
+
+                    let connect_result = Self::connect_and_run(
+                        &config,
+                        raw_message_tx.clone(),
+                        health_for_connection.clone(),
+                    )
+                    .await;
+
+                    match connect_result {
+                        ConnectionResult::Success => {
+                            info!("APRS connection completed normally");
+                            retry_count = 0;
+                            current_delay = config.retry_delay_seconds;
+                        }
+                        ConnectionResult::ConnectionFailed(e) => {
+                            error!("APRS connection failed: {}", e);
+                            retry_count += 1;
+                            metrics::counter!("aprs.connection_failed_total").increment(1);
+                        }
+                        ConnectionResult::OperationFailed(e) => {
+                            error!("APRS operation failed: {}", e);
+                            retry_count = 0;
+                            metrics::counter!("aprs.operation_failed_total").increment(1);
+                        }
+                    }
+
+                    // Check again before sleeping
+                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                        info!("Shutdown requested, exiting connection loop");
+                        break;
+                    }
+
+                    // Sleep before retrying
+                    if current_delay > 0 {
+                        info!("Waiting {} seconds before retry", current_delay);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(current_delay)).await;
+
+                        // Exponential backoff
+                        current_delay =
+                            std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                    }
+                }
+
+                info!("APRS connection management task shutting down");
+            }
+            .instrument(tracing::info_span!("aprs_connection")),
+        );
+
+        let (queue_result, connection_result) = tokio::join!(queue_handle, connection_handle);
+
+        // Check if either task panicked
+        queue_result.context("Queue feeder task panicked")?;
         connection_result.context("Connection management task panicked or stopped")?;
 
         Ok(())
