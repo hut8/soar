@@ -8,6 +8,9 @@ pub fn main() {
     // This must run before any other build steps to ensure version is available
     generate_version_info();
 
+    // Compile protobuf definitions
+    compile_protobufs();
+
     println!("cargo:rerun-if-changed=migrations");
     println!("cargo:rerun-if-changed=web/src");
     println!("cargo:rerun-if-changed=web/package.json");
@@ -146,4 +149,21 @@ fn generate_version_info() {
         .expect("Failed to emit version info");
 
     println!("cargo:warning=Version info generated from git");
+}
+
+/// Compile protobuf definitions for queue protocol
+///
+/// Generates Rust code from proto/messages.proto using prost.
+/// The generated code is placed in src/generated/ and included via module.
+fn compile_protobufs() {
+    // Ensure output directory exists
+    fs::create_dir_all("src/generated").expect("Failed to create src/generated directory");
+
+    prost_build::Config::new()
+        .out_dir("src/generated")
+        .compile_protos(&["proto/messages.proto"], &["proto/"])
+        .expect("Failed to compile protobuf definitions");
+
+    println!("cargo:rerun-if-changed=proto/messages.proto");
+    println!("cargo:warning=Compiled protobuf definitions");
 }

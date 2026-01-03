@@ -105,6 +105,10 @@ kml = "0.12"
 hex = "0.4.3"
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.80"
+prost = "0.13"
+prost-types = "0.13"
+crc32fast = "1.4"
+bincode = "1.3"
 
 [dev-dependencies]
 hex-literal = "1.1"
@@ -114,6 +118,7 @@ fs2 = "0.4"
 
 [build-dependencies]
 vergen-git2 = { version = "1.0", features = ["build", "cargo"] }
+prost-build = "0.13"
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast
