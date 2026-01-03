@@ -139,8 +139,8 @@ jobs:
           sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
-          # Install PostgreSQL 17 client and build tools
-          sudo apt-get install -y postgresql-client-17
+          # Install PostgreSQL 17 client, build tools, and protobuf compiler
+          sudo apt-get install -y postgresql-client-17 protobuf-compiler
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -337,8 +337,8 @@ jobs:
           sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update
-          # Install PostgreSQL 17 client and build tools
-          sudo apt-get install -y postgresql-client-17
+          # Install PostgreSQL 17 client, build tools, and protobuf compiler
+          sudo apt-get install -y postgresql-client-17 protobuf-compiler
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -456,6 +456,9 @@ jobs:
         if: steps.cache-cross.outputs.cache-hit != 'true'
         run: cargo install cross --git https://github.com/cross-rs/cross
 
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Build static release binary
         env:
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
@@ -542,6 +545,9 @@ jobs:
       - name: Install cross
         if: steps.cache-cross.outputs.cache-hit != 'true'
         run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Build static release binary (ARM64)
         env:

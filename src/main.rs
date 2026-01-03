@@ -142,10 +142,10 @@ enum Commands {
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
     },
-    /// Ingest ADS-B (Beast) messages into NATS (durable queue service)
+    /// Ingest ADS-B (Beast) messages (uses persistent queue + Unix socket)
     ///
-    /// This service connects to a Beast-format ADS-B server and publishes all messages to NATS.
-    /// It is designed to run independently and survive restarts without dropping messages.
+    /// This service connects to a Beast-format ADS-B server and buffers messages to a persistent queue.
+    /// Messages are sent to soar-run via Unix socket when available.
     IngestAdsb {
         /// Beast server(s) in format "ip:port" (can specify multiple times)
         /// Example: --beast 1.2.3.4:30005 --beast 5.6.7.8:30005
@@ -164,10 +164,6 @@ enum Commands {
         /// Delay between reconnection attempts in seconds
         #[arg(long, default_value = "5")]
         retry_delay: u64,
-
-        /// NATS server URL for JetStream
-        #[arg(long, default_value = "nats://localhost:4222")]
-        nats_url: String,
     },
     /// Run the main APRS processing service (consumes from JetStream durable queue)
     Run {
@@ -978,17 +974,10 @@ async fn main() -> Result<()> {
             sbs,
             max_retries,
             retry_delay,
-            nats_url,
         } => {
-            // IngestAdsb only uses NATS, doesn't need database
-            return handle_ingest_adsb(
-                beast.clone(),
-                sbs.clone(),
-                *max_retries,
-                *retry_delay,
-                nats_url.clone(),
-            )
-            .await;
+            // IngestAdsb uses persistent queue + socket, doesn't need database
+            return handle_ingest_adsb(beast.clone(), sbs.clone(), *max_retries, *retry_delay)
+                .await;
         }
         Commands::DumpUnifiedDdb { output, source } => {
             // DumpUnifiedDdb only downloads and exports data, doesn't need database

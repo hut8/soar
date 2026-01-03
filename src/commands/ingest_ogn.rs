@@ -3,7 +3,7 @@ use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::instance_lock::InstanceLock;
 use std::env;
 use tracing::Instrument;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub async fn handle_ingest_ogn(
     server: String,
@@ -145,72 +145,100 @@ pub async fn handle_ingest_ogn(
         .retry_delay_seconds(retry_delay)
         .build();
 
-    // Retry loop for NATS connection
-    loop {
-        info!("Connecting to NATS at {}...", nats_url);
-        let nats_client_name = soar::nats_client_name("ogn-ingester");
-        let nats_result = async_nats::ConnectOptions::new()
-            .name(&nats_client_name)
-            .client_capacity(65536) // Increase from default 2048 to prevent blocking on publish
-            .subscription_capacity(1024 * 128) // Increase subscription buffer
-            .connect(&nats_url)
-            .await;
+    // Create persistent queue for buffering messages
+    let queue_path = std::path::PathBuf::from("/var/lib/soar/queues/ogn.queue");
+    let queue = std::sync::Arc::new(
+        soar::persistent_queue::PersistentQueue::<String>::new(
+            "ogn".to_string(),
+            queue_path,
+            Some(10 * 1024 * 1024 * 1024), // 10 GB max
+            1000,                          // Memory capacity
+        )
+        .expect("Failed to create persistent queue"),
+    );
 
-        let nats_client = match nats_result {
-            Ok(client) => {
-                info!("Connected to NATS successfully");
-                client
-            }
-            Err(e) => {
-                error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("aprs.nats.connection_failed_total").increment(1);
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                continue;
-            }
-        };
+    info!("Created persistent queue at /var/lib/soar/queues/ogn.queue");
 
-        info!("NATS ready - will publish to subject '{}'", nats_subject);
-
-        // Create NATS publisher for raw OGN messages
-        let nats_publisher =
-            soar::aprs_nats_publisher::NatsPublisher::new(nats_client, nats_subject.to_string());
-
-        let mut client = AprsClient::new(config.clone());
-
-        // Mark NATS as connected in health state
-        {
-            let mut health = health_state.write().await;
-            health.nats_connected = true;
+    // Create socket client for sending to soar-run
+    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
+    let mut socket_client = match soar::socket_client::SocketClient::connect(
+        &socket_path,
+        soar::protocol::IngestSource::Ogn,
+    )
+    .await
+    {
+        Ok(client) => {
+            info!("Connected to soar-run at {:?}", socket_path);
+            client
         }
-
-        info!("Starting OGN (APRS) client for ingestion...");
-
-        // Run OGN (APRS) client with shutdown signal - this will exit immediately on SIGINT/SIGTERM
-        match client
-            .start_with_shutdown(nats_publisher, shutdown_rx, health_state.clone())
+        Err(e) => {
+            warn!(
+                "Failed to connect to soar-run (will buffer to queue): {}",
+                e
+            );
+            // Create client anyway - it will reconnect later
+            soar::socket_client::SocketClient::connect(
+                &socket_path,
+                soar::protocol::IngestSource::Ogn,
+            )
             .await
-        {
-            Ok(_) => {
-                info!("OGN ingestion stopped normally");
-                break;
-            }
-            Err(e) => {
-                error!("OGN ingestion failed: {} - retrying in 1s", e);
-                metrics::counter!("aprs.ingest_failed_total").increment(1);
+            .expect("Failed to create socket client")
+        }
+    };
 
-                // Mark NATS as disconnected
-                {
-                    let mut health = health_state.write().await;
-                    health.nats_connected = false;
+    // Mark socket as connected in health state
+    {
+        let mut health = health_state.write().await;
+        health.nats_connected = socket_client.is_connected(); // Reuse nats_connected field for now
+    }
+
+    // Spawn publisher task: reads from queue → sends to socket
+    let queue_for_publisher = queue.clone();
+    let publisher_handle = tokio::spawn(async move {
+        info!("Publisher task started");
+        loop {
+            match queue_for_publisher.recv().await {
+                Ok(message) => {
+                    // Send to socket
+                    if let Err(e) = socket_client.send(message.into_bytes()).await {
+                        error!("Failed to send to socket: {}", e);
+                        metrics::counter!("aprs.socket.send_error_total").increment(1);
+
+                        // Reconnect and retry
+                        if let Err(e) = socket_client.reconnect().await {
+                            error!("Failed to reconnect to socket: {}", e);
+                        }
+                    }
                 }
-
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                Err(e) => {
+                    error!("Failed to receive from queue: {}", e);
+                    break;
+                }
             }
         }
+        info!("Publisher task stopped");
+    });
 
-        // If we get here, either shutdown was requested or connection failed
-        // In either case, exit the loop
-        break;
+    let mut client = AprsClient::new(config.clone());
+
+    info!("Starting OGN (APRS) client for ingestion...");
+
+    // Run OGN (APRS) client with shutdown signal
+    let client_result = client
+        .start_with_queue(queue.clone(), shutdown_rx, health_state.clone())
+        .await;
+
+    // Wait for publisher to finish
+    let _ = publisher_handle.await;
+
+    match client_result {
+        Ok(_) => {
+            info!("OGN ingestion stopped normally");
+        }
+        Err(e) => {
+            error!("OGN ingestion failed: {}", e);
+            metrics::counter!("aprs.ingest_failed_total").increment(1);
+        }
     }
 
     Ok(())
