@@ -547,8 +547,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         scope.set_tag("operation", "web-server");
     });
 
-    // Initialize Prometheus metrics exporter
-    let metrics_handle = crate::metrics::init_metrics();
+    // Initialize Prometheus metrics exporter with "web" component label
+    let metrics_handle = crate::metrics::init_metrics(Some("web"));
     METRICS_HANDLE
         .set(metrics_handle)
         .expect("Metrics handle already initialized");

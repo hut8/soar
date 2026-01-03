@@ -339,7 +339,7 @@ pub async fn handle_run(
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
             async move {
-                soar::metrics::start_metrics_server(metrics_port).await;
+                soar::metrics::start_metrics_server(metrics_port, Some("run")).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
