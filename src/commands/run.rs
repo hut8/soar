@@ -1,8 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::DateTime;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use futures_util::StreamExt;
 use soar::aircraft::AddressType;
 use soar::aircraft_repo::AircraftRepository;
 use soar::beast::cpr_decoder::CprDecoder;
@@ -32,11 +31,6 @@ const AIRCRAFT_QUEUE_SIZE: usize = 1000;
 const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
 const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
 const SERVER_STATUS_QUEUE_SIZE: usize = 50;
-
-// NATS subscriber capacity
-// Controls how many messages can be buffered per subscription before triggering slow consumer warnings
-// Set to 10,000 messages (from default ~512) to handle bursts during high load
-const NATS_SUBSCRIBER_PENDING_MESSAGES: usize = 10_000;
 
 fn queue_warning_threshold(queue_size: usize) -> usize {
     queue_size / 2
@@ -300,16 +294,10 @@ pub async fn handle_run(
         );
     }
 
-    // Determine environment and use appropriate NATS subject
+    // Determine environment
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
-
-    let nats_subject = if is_production {
-        "ogn.raw"
-    } else {
-        "staging.ogn.raw"
-    };
 
     // Log which consumers are enabled
     info!("Starting run command with:");
@@ -321,9 +309,6 @@ pub async fn handle_run(
         "  ADS-B consumer: {}",
         if no_adsb { "DISABLED" } else { "ENABLED" }
     );
-    if !no_aprs {
-        info!("  APRS NATS subject: {}", nats_subject);
-    }
 
     // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
     // This MUST happen before starting the metrics server to avoid race conditions where
@@ -363,13 +348,14 @@ pub async fn handle_run(
     info!("Elevation processing mode: synchronous (inline)");
 
     info!(
-        "Environment: {}, using NATS subject '{}'",
+        "Environment: {}",
         if is_production {
             "production"
-        } else {
+        } else if is_staging {
             "staging"
-        },
-        nats_subject
+        } else {
+            "development"
+        }
     );
 
     // Create FlightTracker
@@ -570,7 +556,7 @@ pub async fn handle_run(
         None
     };
 
-    // Beast intake queue: buffers raw Beast messages from NATS subscriber
+    // Beast intake queue: buffers raw Beast messages from socket server
     // Only create if ADS-B is enabled
     let beast_intake_opt = if !no_adsb {
         let (tx, rx) = flume::bounded::<Vec<u8>>(BEAST_INTAKE_QUEUE_SIZE);
@@ -583,6 +569,92 @@ pub async fn handle_run(
         info!("ADS-B consumer disabled, skipping Beast intake queue creation");
         None
     };
+
+    // Create Unix socket server for receiving messages from ingesters
+    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
+    let socket_server = soar::socket_server::SocketServer::start(socket_path.clone())
+        .await
+        .context("Failed to start socket server")?;
+    info!("Socket server listening on {:?}", socket_path);
+
+    // Envelope intake queue: buffers messages from socket server before routing
+    const ENVELOPE_INTAKE_QUEUE_SIZE: usize = 10_000;
+    let (envelope_tx, envelope_rx) =
+        flume::bounded::<soar::protocol::Envelope>(ENVELOPE_INTAKE_QUEUE_SIZE);
+    info!(
+        "Created envelope intake queue with capacity {}",
+        ENVELOPE_INTAKE_QUEUE_SIZE
+    );
+
+    // Spawn socket accept loop task
+    tokio::spawn(
+        async move {
+            socket_server.accept_loop(envelope_tx).await;
+        }
+        .instrument(tracing::info_span!("socket_server")),
+    );
+    info!("Spawned socket server accept loop");
+
+    // Spawn envelope router task
+    let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    tokio::spawn(
+        async move {
+            info!("Envelope router task started");
+            while let Ok(envelope) = envelope_rx.recv_async().await {
+                match envelope.source() {
+                    soar::protocol::IngestSource::Ogn => {
+                        if let Some(aprs_tx) = &aprs_intake_tx_for_router {
+                            // Decode bytes to String (OGN messages are UTF-8)
+                            match String::from_utf8(envelope.data) {
+                                Ok(message) => {
+                                    // Add timestamp prefix (microseconds → RFC3339)
+                                    let timestamp = chrono::DateTime::from_timestamp_micros(
+                                        envelope.timestamp_micros,
+                                    )
+                                    .unwrap_or_else(chrono::Utc::now);
+                                    let timestamped =
+                                        format!("{} {}", timestamp.to_rfc3339(), message);
+
+                                    if let Err(e) = aprs_tx.send_async(timestamped).await {
+                                        error!(
+                                            "Failed to send OGN message to APRS intake queue: {}",
+                                            e
+                                        );
+                                        metrics::counter!("socket.router.aprs_send_error_total")
+                                            .increment(1);
+                                    } else {
+                                        metrics::counter!("socket.router.aprs_routed_total")
+                                            .increment(1);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to decode OGN message as UTF-8: {}", e);
+                                    metrics::counter!("socket.router.decode_error_total")
+                                        .increment(1);
+                                }
+                            }
+                        }
+                    }
+                    soar::protocol::IngestSource::Beast | soar::protocol::IngestSource::Sbs => {
+                        if let Some(beast_tx) = &beast_intake_tx_for_router {
+                            // Beast/SBS messages are already binary (timestamp + data)
+                            if let Err(e) = beast_tx.send_async(envelope.data).await {
+                                error!("Failed to send Beast/SBS message to intake queue: {}", e);
+                                metrics::counter!("socket.router.beast_send_error_total")
+                                    .increment(1);
+                            } else {
+                                metrics::counter!("socket.router.beast_routed_total").increment(1);
+                            }
+                        }
+                    }
+                }
+            }
+            info!("Envelope router task stopped");
+        }
+        .instrument(tracing::info_span!("envelope_router")),
+    );
+    info!("Spawned envelope router task");
 
     // Create PacketRouter with per-processor queues and internal worker pool
     const PACKET_ROUTER_WORKERS: usize = 10;
@@ -855,7 +927,7 @@ pub async fn handle_run(
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
                     info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
-                    info!("NATS subscribers will stop reading, allowing queues to drain...");
+                    info!("Socket server will stop accepting connections, allowing queues to drain...");
 
                     // Wait for queues to drain (check every second, max 10 minutes)
                     for i in 1..=600 {
@@ -893,207 +965,12 @@ pub async fn handle_run(
     );
     info!("Graceful shutdown handler configured");
 
-    // Spawn Beast NATS subscriber task (only if ADS-B is enabled)
-    // This runs concurrently with the APRS subscriber
-    if let Some((beast_intake_tx, _)) = beast_intake_opt.as_ref() {
-        let beast_subject = if is_production {
-            "adsb.raw"
-        } else {
-            "staging.adsb.raw"
-        };
-
-        info!("Will subscribe to Beast NATS subject: {}", beast_subject);
-
-        let beast_nats_url = nats_url.clone();
-        let beast_intake_tx_clone = beast_intake_tx.clone();
-        let beast_subject_clone = beast_subject.to_string();
-        tokio::spawn(
-            async move {
-                // Retry loop for Beast NATS subscriber
-                loop {
-                    info!(
-                        "Connecting to NATS for Beast messages at {}...",
-                        beast_nats_url
-                    );
-                    let nats_client_name = soar::nats_client_name("run-beast");
-                    let nats_result = async_nats::ConnectOptions::new()
-                        .name(&nats_client_name)
-                        .subscription_capacity(NATS_SUBSCRIBER_PENDING_MESSAGES)
-                        .connect(&beast_nats_url)
-                        .await;
-
-                    let nats_client = match nats_result {
-                        Ok(client) => {
-                            info!(
-                                "Connected to NATS for Beast messages (subscription capacity: {} messages)",
-                                NATS_SUBSCRIBER_PENDING_MESSAGES
-                            );
-                            client
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to connect to NATS for Beast: {} - retrying in 1s",
-                                e
-                            );
-                            metrics::counter!("beast.run.nats.connection_failed_total").increment(1);
-                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                            continue;
-                        }
-                    };
-
-                    // Subscribe to Beast NATS subject
-                    info!(
-                        "Subscribing to Beast NATS subject '{}'...",
-                        beast_subject_clone
-                    );
-                    let subscriber_result = nats_client.subscribe(beast_subject_clone.clone()).await;
-
-                    let mut subscriber = match subscriber_result {
-                        Ok(sub) => {
-                            info!("Beast NATS subscriber ready, starting message processing...");
-                            sub
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to subscribe to Beast NATS subject: {} - retrying in 1s",
-                                e
-                            );
-                            metrics::counter!("beast.run.nats.subscription_failed_total").increment(1);
-                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                            continue;
-                        }
-                    };
-
-                    info!("Beast subscriber started");
-
-                    // Start consuming Beast messages from NATS and sending them to the Beast intake queue
-                    let intake_tx = beast_intake_tx_clone.clone();
-
-                    while let Some(msg) = subscriber.next().await {
-                        // Beast messages are binary (timestamp + frame)
-                        let message_bytes = msg.payload.to_vec();
-
-                        // Send message to Beast intake queue (blocking send for backpressure)
-                        match intake_tx.send_async(message_bytes).await {
-                            Ok(_) => {
-                                metrics::counter!("beast.run.nats.consumed_total").increment(1);
-                            }
-                            Err(e) => {
-                                // Channel closed - intake processor stopped, likely due to shutdown
-                                warn!(
-                                    "Failed to send Beast message to intake queue (channel closed): {}",
-                                    e
-                                );
-                                break;
-                            }
-                        }
-                    }
-
-                    // If we reach here, the subscriber stream ended (either normally or with error)
-                    warn!("Beast NATS subscriber stopped - reconnecting in 1s");
-                    metrics::counter!("beast.run.nats.subscription_ended_total").increment(1);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            }
-            .instrument(tracing::info_span!("beast_nats_subscriber")),
-        );
-        info!("Spawned Beast NATS subscriber task");
-    }
-
-    // Retry loop for APRS NATS subscriber connection and consumption (only if APRS is enabled)
-    if let Some((nats_intake_tx, _)) = aprs_intake_opt.as_ref() {
-        loop {
-            info!("Connecting to NATS at {}...", nats_url);
-            let nats_client_name = soar::nats_client_name("run");
-            let nats_result = async_nats::ConnectOptions::new()
-                .name(&nats_client_name)
-                .subscription_capacity(NATS_SUBSCRIBER_PENDING_MESSAGES)
-                .connect(&nats_url)
-                .await;
-
-            let nats_client = match nats_result {
-                Ok(client) => {
-                    info!(
-                        "Connected to NATS for APRS messages (subscription capacity: {} messages)",
-                        NATS_SUBSCRIBER_PENDING_MESSAGES
-                    );
-                    client
-                }
-                Err(e) => {
-                    error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                    metrics::counter!("aprs.nats.connection_failed_total").increment(1);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-
-            // Subscribe to APRS NATS subject
-            info!("Subscribing to APRS NATS subject '{}'...", nats_subject);
-            let subscriber_result = nats_client.subscribe(nats_subject.to_string()).await;
-
-            let mut subscriber = match subscriber_result {
-                Ok(sub) => {
-                    info!("APRS NATS subscriber ready, starting message processing...");
-                    sub
-                }
-                Err(e) => {
-                    error!(
-                        "Failed to subscribe to APRS NATS subject: {} - retrying in 1s",
-                        e
-                    );
-                    metrics::counter!("aprs.nats.subscription_failed_total").increment(1);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-
-            info!("APRS client started. Press Ctrl+C to stop.");
-
-            // Start consuming APRS messages from NATS and sending them to the intake queue
-            // The intake queue processor will handle parsing and routing
-            // Blocking sends to the intake queue provide natural backpressure to NATS
-            let intake_tx_clone = nats_intake_tx.clone();
-
-            while let Some(msg) = subscriber.next().await {
-                // Convert message payload to String
-                let message = match String::from_utf8(msg.payload.to_vec()) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        warn!("Failed to decode NATS message as UTF-8: {}", e);
-                        metrics::counter!("aprs.nats.decode_error_total").increment(1);
-                        continue;
-                    }
-                };
-
-                // Send message to intake queue (blocking send for backpressure)
-                // When intake queue is full, this will block and stop reading from NATS
-                match intake_tx_clone.send_async(message).await {
-                    Ok(_) => {
-                        metrics::counter!("aprs.nats.consumed_total").increment(1);
-                    }
-                    Err(e) => {
-                        // Channel closed - intake processor stopped, likely due to shutdown
-                        warn!(
-                            "Failed to send message to intake queue (channel closed): {}",
-                            e
-                        );
-                        break;
-                    }
-                }
-            }
-
-            // If we reach here, the subscriber stream ended (either normally or with error)
-            warn!("APRS NATS subscriber stopped - reconnecting in 1s");
-            metrics::counter!("aprs.nats.subscription_ended_total").increment(1);
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        }
-    } else {
-        // If APRS is disabled, just wait for shutdown signal
-        info!("APRS consumer disabled, waiting for shutdown signal...");
-        tokio::signal::ctrl_c().await?;
-        info!("Received shutdown signal, exiting...");
-        Ok(())
-    }
+    // All processing tasks are now running via socket server and envelope router
+    // Just wait for shutdown signal
+    info!("Main processing loop started. Press Ctrl+C to stop.");
+    tokio::signal::ctrl_c().await?;
+    info!("Received shutdown signal, exiting...");
+    Ok(())
 }
 
 #[cfg(test)]
