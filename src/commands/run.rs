@@ -137,10 +137,11 @@ async fn process_beast_message(
     // Track that we're processing a message
     metrics::counter!("beast.run.process_beast_message.called_total").increment(1);
 
-    // Validate minimum message length (8-byte timestamp + at least 7-byte frame)
-    if message_bytes.len() < 15 {
+    // Validate minimum message length (8-byte SOAR timestamp + 11-byte Beast frame minimum)
+    // Beast frame minimum: 1 (0x1A) + 1 (type) + 6 (timestamp) + 1 (signal) + 2 (Mode A/C payload) = 11 bytes
+    if message_bytes.len() < 19 {
         warn!(
-            "Invalid Beast message: too short ({} bytes, expected at least 15)",
+            "Invalid Beast message: too short ({} bytes, expected at least 19)",
             message_bytes.len()
         );
         metrics::counter!("beast.run.invalid_message_total").increment(1);

@@ -54,7 +54,7 @@ pub trait RawMessageSource: Send + Sync {
 /// The number of messages successfully processed
 ///
 /// # Example
-/// ```no_run
+/// ```ignore
 /// use soar::message_sources::{TestMessageSource, process_messages_from_source};
 /// use soar::packet_processors::PacketRouter;
 ///

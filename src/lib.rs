@@ -67,6 +67,8 @@ pub mod receiver_statuses;
 pub mod receivers;
 pub mod runways;
 pub mod runways_repo;
+pub mod sbs;
+pub mod sbs_nats_publisher;
 pub mod schema;
 pub mod server_messages;
 pub mod server_messages_repo;

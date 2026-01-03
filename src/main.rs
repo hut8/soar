@@ -147,13 +147,15 @@ enum Commands {
     /// This service connects to a Beast-format ADS-B server and publishes all messages to NATS.
     /// It is designed to run independently and survive restarts without dropping messages.
     IngestAdsb {
-        /// Beast server hostname
-        #[arg(long, default_value = "localhost")]
-        server: String,
+        /// Beast server(s) in format "ip:port" (can specify multiple times)
+        /// Example: --beast 1.2.3.4:30005 --beast 5.6.7.8:30005
+        #[arg(long)]
+        beast: Vec<String>,
 
-        /// Beast server port (standard Beast port is 30005)
-        #[arg(long, default_value = "30005")]
-        port: u16,
+        /// SBS (BaseStation/port 30003) server(s) in format "ip:port" (can specify multiple times)
+        /// Example: --sbs data.adsbhub.org:5002
+        #[arg(long)]
+        sbs: Vec<String>,
 
         /// Maximum number of connection retry attempts
         #[arg(long, default_value = "5")]
@@ -972,16 +974,16 @@ async fn main() -> Result<()> {
             .await;
         }
         Commands::IngestAdsb {
-            server,
-            port,
+            beast,
+            sbs,
             max_retries,
             retry_delay,
             nats_url,
         } => {
             // IngestAdsb only uses NATS, doesn't need database
             return handle_ingest_adsb(
-                server.clone(),
-                *port,
+                beast.clone(),
+                sbs.clone(),
                 *max_retries,
                 *retry_delay,
                 nats_url.clone(),
