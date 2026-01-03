@@ -183,6 +183,124 @@ impl SbsClient {
         Ok(())
     }
 
+    /// Start the SBS client with a persistent queue (NEW: NATS replacement)
+    /// This connects to the SBS server and feeds all messages to a persistent queue
+    /// The queue handles buffering when soar-run is disconnected
+    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state))]
+    pub async fn start_with_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
+        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) -> Result<()> {
+        let (internal_shutdown_tx, mut internal_shutdown_rx) =
+            tokio::sync::oneshot::channel::<()>();
+        self.shutdown_tx = Some(internal_shutdown_tx);
+
+        let config = self.config.clone();
+
+        // Use a broadcast channel to share shutdown signal with both feeder and connection loop
+        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
+
+        // Create bounded channel for raw SBS messages from TCP socket
+        let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
+
+        // Spawn queue feeding task that consumes from the raw_message_rx channel and sends to persistent queue
+        let queue_clone = queue.clone();
+        let queue_feeder_handle = tokio::spawn(async move {
+            info!("Starting SBS queue feeding task");
+            while let Ok(message) = raw_message_rx.recv_async().await {
+                if let Err(e) = queue_clone.send(message).await {
+                    error!("Failed to send SBS message to persistent queue: {}", e);
+                    metrics::counter!("sbs.queue.send_error_total").increment(1);
+                }
+            }
+            info!("SBS queue feeding task ended");
+        });
+
+        // Monitor shutdown signal
+        tokio::spawn(async move {
+            if shutdown_rx.await.is_ok() {
+                info!("Received shutdown signal, broadcasting to tasks...");
+                let _ = shutdown_broadcast_tx.send(());
+            }
+        });
+
+        // Connection loop with exponential backoff
+        let mut retry_count = 0;
+        let mut current_delay = config.retry_delay_seconds;
+
+        loop {
+            // Create a new subscription for this iteration
+            let shutdown_rx_for_connection = shutdown_rx_for_loop.resubscribe();
+
+            tokio::select! {
+                _ = &mut internal_shutdown_rx => {
+                    info!("Shutdown signal received, stopping SBS client");
+                    break;
+                }
+                _ = shutdown_rx_for_loop.recv() => {
+                    info!("Shutdown broadcast received, stopping SBS client");
+                    break;
+                }
+                result = Self::connect_and_process(
+                    &config,
+                    &raw_message_tx,
+                    shutdown_rx_for_connection,
+                    health_state.clone(),
+                ) => {
+                    match result {
+                        ConnectionResult::Success => {
+                            info!("SBS connection completed successfully");
+                            break;
+                        }
+                        ConnectionResult::ConnectionFailed(e) => {
+                            retry_count += 1;
+                            if retry_count > config.max_retries {
+                                error!(
+                                    "Max retries ({}) exceeded for SBS connection to {}:{}, giving up: {}",
+                                    config.max_retries, config.server, config.port, e
+                                );
+                                break;
+                            }
+
+                            metrics::counter!("sbs.connection.failed_total").increment(1);
+                            warn!(
+                                "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
+                                config.server, config.port, retry_count, config.max_retries, e, current_delay
+                            );
+
+                            sleep(Duration::from_secs(current_delay)).await;
+
+                            // Exponential backoff with cap
+                            current_delay = std::cmp::min(
+                                current_delay * 2,
+                                config.max_retry_delay_seconds,
+                            );
+                        }
+                        ConnectionResult::OperationFailed(e) => {
+                            metrics::counter!("sbs.connection.operation_failed_total").increment(1);
+                            warn!("SBS connection to {}:{} failed during operation: {} - reconnecting in 1s", config.server, config.port, e);
+                            sleep(Duration::from_secs(1)).await;
+
+                            // Reset retry count on operation failures (connection was successful)
+                            retry_count = 0;
+                            current_delay = config.retry_delay_seconds;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Wait for queue feeder task to complete
+        info!("Waiting for SBS queue feeder task to complete...");
+        let _ = queue_feeder_handle.await;
+        info!("SBS client stopped");
+
+        Ok(())
+    }
+
     /// Connect to SBS server and process messages
     async fn connect_and_process(
         config: &SbsClientConfig,

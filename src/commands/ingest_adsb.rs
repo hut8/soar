@@ -4,7 +4,7 @@ use soar::instance_lock::InstanceLock;
 use soar::sbs::{SbsClient, SbsClientConfig};
 use std::env;
 use tracing::Instrument;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Parse a "host:port" string into (hostname, port)
 fn parse_server_address(addr: &str) -> Result<(String, u16)> {
@@ -27,7 +27,6 @@ pub async fn handle_ingest_adsb(
     sbs_servers: Vec<String>,
     max_retries: u32,
     retry_delay: u64,
-    nats_url: String,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "ingest-adsb");
@@ -40,39 +39,25 @@ pub async fn handle_ingest_adsb(
         ));
     }
 
-    // Determine environment and use appropriate NATS subjects
-    // Production: "adsb.raw" (Beast), "adsb.sbs" (SBS)
-    // Staging: "staging.adsb.raw" (Beast), "staging.adsb.sbs" (SBS)
+    // Determine environment
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let beast_subject = if is_production {
-        "adsb.raw"
-    } else {
-        "staging.adsb.raw"
-    };
-
-    let sbs_subject = if is_production {
-        "adsb.sbs"
-    } else {
-        "staging.adsb.sbs"
-    };
-
     info!(
-        "Starting ADS-B ingestion service - Beast servers: {:?}, SBS servers: {:?}, NATS: {}",
-        beast_servers, sbs_servers, nats_url
+        "Starting ADS-B ingestion service - Beast servers: {:?}, SBS servers: {:?}",
+        beast_servers, sbs_servers
     );
 
     info!(
-        "Environment: {}, Beast subject: '{}', SBS subject: '{}'",
+        "Environment: {}",
         if is_production {
             "production"
-        } else {
+        } else if is_staging {
             "staging"
-        },
-        beast_subject,
-        sbs_subject
+        } else {
+            "development"
+        }
     );
 
     // Initialize health state for this ingester
@@ -157,29 +142,143 @@ pub async fn handle_ingest_adsb(
         let _ = shutdown_tx.send(());
     });
 
-    // Connect to NATS
-    info!("Connecting to NATS at {}...", nats_url);
-    let nats_client_name = soar::nats_client_name("adsb-ingester");
-    let nats_client = async_nats::ConnectOptions::new()
-        .name(&nats_client_name)
-        .connect(&nats_url)
-        .await
-        .context("Failed to connect to NATS")?;
-    info!("Connected to NATS successfully");
+    // Create persistent queues for buffering messages
+    let beast_queue_path = std::path::PathBuf::from("/var/lib/soar/queues/adsb-beast.queue");
+    let beast_queue = std::sync::Arc::new(
+        soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
+            "adsb-beast".to_string(),
+            beast_queue_path,
+            Some(10 * 1024 * 1024 * 1024), // 10 GB max
+            1000,                          // Memory capacity
+        )
+        .expect("Failed to create Beast persistent queue"),
+    );
 
-    // Mark NATS as connected in health state
+    let sbs_queue_path = std::path::PathBuf::from("/var/lib/soar/queues/adsb-sbs.queue");
+    let sbs_queue = std::sync::Arc::new(
+        soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
+            "adsb-sbs".to_string(),
+            sbs_queue_path,
+            Some(10 * 1024 * 1024 * 1024), // 10 GB max
+            1000,                          // Memory capacity
+        )
+        .expect("Failed to create SBS persistent queue"),
+    );
+
+    info!("Created persistent queues at /var/lib/soar/queues/adsb-*.queue");
+
+    // Create socket clients for sending to soar-run
+    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
+    let mut beast_socket_client = match soar::socket_client::SocketClient::connect(
+        &socket_path,
+        soar::protocol::IngestSource::Beast,
+    )
+    .await
+    {
+        Ok(client) => {
+            info!("Beast socket connected to soar-run at {:?}", socket_path);
+            client
+        }
+        Err(e) => {
+            warn!(
+                "Failed to connect Beast socket to soar-run (will buffer to queue): {}",
+                e
+            );
+            // Create client anyway - it will reconnect later
+            soar::socket_client::SocketClient::connect(
+                &socket_path,
+                soar::protocol::IngestSource::Beast,
+            )
+            .await
+            .expect("Failed to create Beast socket client")
+        }
+    };
+
+    let mut sbs_socket_client = match soar::socket_client::SocketClient::connect(
+        &socket_path,
+        soar::protocol::IngestSource::Sbs,
+    )
+    .await
+    {
+        Ok(client) => {
+            info!("SBS socket connected to soar-run at {:?}", socket_path);
+            client
+        }
+        Err(e) => {
+            warn!(
+                "Failed to connect SBS socket to soar-run (will buffer to queue): {}",
+                e
+            );
+            // Create client anyway - it will reconnect later
+            soar::socket_client::SocketClient::connect(
+                &socket_path,
+                soar::protocol::IngestSource::Sbs,
+            )
+            .await
+            .expect("Failed to create SBS socket client")
+        }
+    };
+
+    // Mark socket as connected in health state (reuse nats_connected field for now)
     {
         let mut health = health_state.write().await;
-        health.nats_connected = true;
+        health.nats_connected =
+            beast_socket_client.is_connected() || sbs_socket_client.is_connected();
     }
 
-    // Create publishers
-    let beast_publisher = soar::beast_nats_publisher::NatsPublisher::new(
-        nats_client.clone(),
-        beast_subject.to_string(),
-    );
-    let sbs_publisher =
-        soar::sbs_nats_publisher::SbsNatsPublisher::new(nats_client, sbs_subject.to_string());
+    // Spawn Beast publisher task: reads from queue → sends to socket
+    let beast_queue_for_publisher = beast_queue.clone();
+    let beast_publisher_handle = tokio::spawn(async move {
+        info!("Beast publisher task started");
+        loop {
+            match beast_queue_for_publisher.recv().await {
+                Ok(message) => {
+                    // Send to socket
+                    if let Err(e) = beast_socket_client.send(message).await {
+                        error!("Failed to send Beast message to socket: {}", e);
+                        metrics::counter!("beast.socket.send_error_total").increment(1);
+
+                        // Reconnect and retry
+                        if let Err(e) = beast_socket_client.reconnect().await {
+                            error!("Failed to reconnect Beast socket: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to receive from Beast queue: {}", e);
+                    break;
+                }
+            }
+        }
+        info!("Beast publisher task stopped");
+    });
+
+    // Spawn SBS publisher task: reads from queue → sends to socket
+    let sbs_queue_for_publisher = sbs_queue.clone();
+    let sbs_publisher_handle = tokio::spawn(async move {
+        info!("SBS publisher task started");
+        loop {
+            match sbs_queue_for_publisher.recv().await {
+                Ok(message) => {
+                    // Send to socket
+                    if let Err(e) = sbs_socket_client.send(message).await {
+                        error!("Failed to send SBS message to socket: {}", e);
+                        metrics::counter!("sbs.socket.send_error_total").increment(1);
+
+                        // Reconnect and retry
+                        if let Err(e) = sbs_socket_client.reconnect().await {
+                            error!("Failed to reconnect SBS socket: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to receive from SBS queue: {}", e);
+                    break;
+                }
+            }
+        }
+        info!("SBS publisher task stopped");
+    });
 
     // Create broadcast channel for shutdown signal (multiple tasks need to receive it)
     let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
@@ -205,7 +304,7 @@ pub async fn handle_ingest_adsb(
             max_retry_delay_seconds: 60,
         };
 
-        let publisher = beast_publisher.clone();
+        let queue = beast_queue.clone();
         let health = health_state.clone();
         let shutdown_rx = shutdown_broadcast_tx.subscribe();
         let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -224,7 +323,7 @@ pub async fn handle_ingest_adsb(
             async move {
                 let mut client = BeastClient::new(config);
                 match client
-                    .start_with_shutdown(publisher, client_shutdown_rx, health)
+                    .start_with_queue(queue, client_shutdown_rx, health)
                     .await
                 {
                     Ok(_) => info!("Beast client {}:{} stopped normally", server, port),
@@ -247,7 +346,7 @@ pub async fn handle_ingest_adsb(
             max_retry_delay_seconds: 60,
         };
 
-        let publisher = sbs_publisher.clone();
+        let queue = sbs_queue.clone();
         let health = health_state.clone();
         let shutdown_rx = shutdown_broadcast_tx.subscribe();
         let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
@@ -266,7 +365,7 @@ pub async fn handle_ingest_adsb(
             async move {
                 let mut client = SbsClient::new(config);
                 match client
-                    .start_with_shutdown(publisher, client_shutdown_rx, health)
+                    .start_with_queue(queue, client_shutdown_rx, health)
                     .await
                 {
                     Ok(_) => info!("SBS client {}:{} stopped normally", server, port),
@@ -289,13 +388,13 @@ pub async fn handle_ingest_adsb(
         let _ = handle.await;
     }
 
-    info!("All client tasks completed, shutting down");
+    info!("All client tasks completed, waiting for publisher tasks...");
 
-    // Mark NATS as disconnected
-    {
-        let mut health = health_state.write().await;
-        health.nats_connected = false;
-    }
+    // Wait for publisher tasks to complete
+    let _ = beast_publisher_handle.await;
+    let _ = sbs_publisher_handle.await;
+
+    info!("All tasks completed, shutting down");
 
     Ok(())
 }

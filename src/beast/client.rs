@@ -333,6 +333,103 @@ impl BeastClient {
         Ok(())
     }
 
+    /// Start the Beast client with persistent queue
+    /// This connects to the Beast server and sends all messages to the queue
+    /// The queue handles persistence and delivery to soar-run
+    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state))]
+    pub async fn start_with_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
+        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) -> Result<()> {
+        let (_internal_shutdown_tx, _internal_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        let config = self.config.clone();
+
+        // Use a broadcast channel to share shutdown signal
+        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
+
+        // Create bounded channel for raw Beast messages from TCP socket
+        let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
+
+        // Spawn queue feeding task - reads from channel, sends to persistent queue
+        let queue_clone = queue.clone();
+        let queue_handle = tokio::spawn(async move {
+            loop {
+                match raw_message_rx.recv_async().await {
+                    Ok(message) => {
+                        if let Err(e) = queue_clone.send(message).await {
+                            error!("Failed to send to persistent queue: {}", e);
+                            metrics::counter!("beast.queue.send_error_total").increment(1);
+                        }
+                    }
+                    Err(_) => {
+                        info!("Raw message channel closed, queue feeder exiting");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Bridge oneshot to broadcast
+        tokio::spawn(async move {
+            let _ = shutdown_rx.await;
+            let _ = shutdown_broadcast_tx.send(());
+        });
+
+        // Connection retry loop
+        let mut retry_count = 0;
+        let mut retry_delay = config.retry_delay_seconds;
+
+        loop {
+            if shutdown_rx_for_loop.try_recv().is_ok() {
+                info!("Shutdown requested");
+                break;
+            }
+
+            let result = Self::connect_and_run(
+                &config,
+                raw_message_tx.clone(),
+                health_state.clone(),
+                shutdown_rx_for_loop.resubscribe(),
+            )
+            .await;
+
+            match result {
+                ConnectionResult::Success => {
+                    info!("Beast connection completed normally");
+                    retry_count = 0;
+                    retry_delay = config.retry_delay_seconds;
+                }
+                ConnectionResult::ConnectionFailed(e) => {
+                    error!("Beast connection failed: {}", e);
+                    retry_count += 1;
+                    if retry_count >= config.max_retries {
+                        break;
+                    }
+                    retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
+                    sleep(Duration::from_secs(retry_delay)).await;
+                }
+                ConnectionResult::OperationFailed(e) => {
+                    error!("Beast operation failed: {}", e);
+                    retry_count += 1;
+                    if retry_count >= config.max_retries {
+                        break;
+                    }
+                    sleep(Duration::from_secs(std::cmp::min(retry_delay, 5))).await;
+                }
+            }
+        }
+
+        // Shutdown
+        drop(raw_message_tx);
+        let _ = queue_handle.await;
+
+        Ok(())
+    }
+
     /// Connect to the Beast server and run the message processing loop
     /// Messages are sent to raw_message_tx channel for processing
     #[tracing::instrument(skip(config, raw_message_tx, health_state, shutdown_rx), fields(server = %config.server, port = %config.port))]
