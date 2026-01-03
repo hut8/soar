@@ -222,10 +222,21 @@ mod tests {
     use crate::beast::decoder::decode_beast_frame;
     use hex_literal::hex;
 
+    /// Helper function to wrap a Mode S payload in a Beast frame for testing
+    fn wrap_in_beast_frame(mode_s_payload: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0x1A]; // Start marker
+        frame.push(0x33); // Type byte (Mode S long)
+        frame.extend_from_slice(&[0x00, 0x01, 0x02, 0x03, 0x04, 0x05]); // 6-byte timestamp
+        frame.push(0x80); // Signal level
+        frame.extend_from_slice(mode_s_payload); // Mode S payload
+        frame
+    }
+
     #[test]
     fn test_adsb_to_fix_basic() {
         // Example ADS-B message with ICAO 4BB463
-        let frame = hex!("8d4bb463003d10000000001b5bec");
+        let mode_s_payload = hex!("8d4bb463003d10000000001b5bec");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let receiver_id = Uuid::now_v7();
         let device_id = Uuid::now_v7();
@@ -234,7 +245,7 @@ mod tests {
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
         let fix_result = adsb_message_to_fix(
             &decoded.message,
-            &frame,
+            &mode_s_payload,
             timestamp,
             receiver_id,
             device_id,
@@ -254,7 +265,8 @@ mod tests {
     #[test]
     fn test_extract_icao_address() {
         // ADS-B message with ICAO 4BB463 (hex)
-        let frame = hex!("8d4bb463003d10000000001b5bec");
+        let mode_s_payload = hex!("8d4bb463003d10000000001b5bec");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
 
@@ -273,7 +285,8 @@ mod tests {
     #[test]
     fn test_extract_velocity() {
         // Airborne velocity message (DF=17, BDS 09)
-        let frame = hex!("8D485020994409940838175B284F");
+        let mode_s_payload = hex!("8D485020994409940838175B284F");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
 
@@ -301,7 +314,8 @@ mod tests {
     #[test]
     fn test_extract_callsign() {
         // Aircraft identification message (DF=17, BDS 08)
-        let frame = hex!("8D4840D6202CC371C32CE0576098");
+        let mode_s_payload = hex!("8D4840D6202CC371C32CE0576098");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
 
@@ -312,7 +326,8 @@ mod tests {
     #[test]
     fn test_extract_position_altitude() {
         // Airborne position message (DF=17, BDS 05)
-        let frame = hex!("8D40621D58C382D690C8AC2863A7");
+        let mode_s_payload = hex!("8D40621D58C382D690C8AC2863A7");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
 
@@ -339,7 +354,8 @@ mod tests {
     #[test]
     fn test_adsb_to_fix_with_velocity() {
         // Velocity message should create a Fix
-        let frame = hex!("8D485020994409940838175B284F");
+        let mode_s_payload = hex!("8D485020994409940838175B284F");
+        let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
         let receiver_id = Uuid::now_v7();
         let device_id = Uuid::now_v7();
@@ -348,7 +364,7 @@ mod tests {
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
         let fix_result = adsb_message_to_fix(
             &decoded.message,
-            &frame,
+            &mode_s_payload,
             timestamp,
             receiver_id,
             device_id,

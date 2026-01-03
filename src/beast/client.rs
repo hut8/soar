@@ -624,3 +624,262 @@ impl BeastClient {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// Helper function to process a buffer with escape sequences
+    /// Returns the processed frames and any pending state
+    fn process_buffer_with_escapes(
+        buffer: &[u8],
+        frame_buffer: &mut Vec<u8>,
+        pending_escape: &mut bool,
+    ) -> Vec<Vec<u8>> {
+        let mut frames = Vec::new();
+        let mut i = 0;
+        let n = buffer.len();
+
+        // Handle pending escape from previous buffer
+        if *pending_escape && n > 0 {
+            *pending_escape = false;
+            if buffer[0] == 0x1A {
+                // Escape sequence: the previous 0x1A + this 0x1A = one literal 0x1A
+                // The previous 0x1A is already in frame_buffer, so we just skip the second one
+                i = 1;
+            } else {
+                // Frame boundary: previous 0x1A started a new frame
+                // Publish the previous frame (without the 0x1A which is already in frame_buffer)
+                if frame_buffer.len() > 1 {
+                    // Remove the trailing 0x1A that we added last time
+                    frame_buffer.pop();
+                    if !frame_buffer.is_empty() {
+                        frames.push(frame_buffer.clone());
+                    }
+                }
+                frame_buffer.clear();
+                frame_buffer.push(0x1A);
+                frame_buffer.push(buffer[0]);
+                i = 1;
+            }
+        }
+
+        while i < n {
+            let byte = buffer[i];
+
+            if byte == 0x1A {
+                if i + 1 < n {
+                    // We can peek at the next byte
+                    if buffer[i + 1] == 0x1A {
+                        // Escape sequence: <1A><1A> represents a literal 0x1A
+                        frame_buffer.push(0x1A);
+                        i += 2; // Skip both bytes
+                    } else {
+                        // Frame boundary: publish previous frame and start new one
+                        if !frame_buffer.is_empty() {
+                            frames.push(frame_buffer.clone());
+                        }
+                        frame_buffer.clear();
+                        frame_buffer.push(0x1A);
+                        i += 1;
+                    }
+                } else {
+                    // 0x1A at end of buffer - we need to wait for next byte
+                    frame_buffer.push(0x1A);
+                    *pending_escape = true;
+                    i += 1;
+                }
+            } else {
+                // Regular data byte
+                frame_buffer.push(byte);
+                i += 1;
+            }
+        }
+
+        frames
+    }
+
+    #[test]
+    fn test_escape_sequence_simple() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Buffer with escape sequence: 1A 33 1A 1A 55
+        // Should produce one frame: 1A 33 1A 55 (un-escaped)
+        let buffer = vec![0x1A, 0x33, 0x1A, 0x1A, 0x55];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 0); // No complete frame yet
+        assert_eq!(frame_buffer, vec![0x1A, 0x33, 0x1A, 0x55]);
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_escape_sequence_multiple_frames() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Two frames: [1A 33 1A 1A 55] [1A 44 66]
+        // First frame has escape sequence
+        let buffer = vec![0x1A, 0x33, 0x1A, 0x1A, 0x55, 0x1A, 0x44, 0x66];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0], vec![0x1A, 0x33, 0x1A, 0x55]); // First frame un-escaped
+        assert_eq!(frame_buffer, vec![0x1A, 0x44, 0x66]); // Second frame in progress
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_escape_at_buffer_boundary() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // First buffer ends with 0x1A
+        let buffer1 = vec![0x1A, 0x33, 0x44, 0x1A];
+        let frames1 = process_buffer_with_escapes(&buffer1, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames1.len(), 0);
+        assert_eq!(frame_buffer, vec![0x1A, 0x33, 0x44, 0x1A]);
+        assert!(pending_escape); // We're waiting to see if next byte is 0x1A
+
+        // Second buffer starts with 0x1A (escape sequence)
+        let buffer2 = vec![0x1A, 0x55];
+        let frames2 = process_buffer_with_escapes(&buffer2, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames2.len(), 0);
+        assert_eq!(frame_buffer, vec![0x1A, 0x33, 0x44, 0x1A, 0x55]); // Un-escaped
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_frame_boundary_at_buffer_boundary() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // First buffer ends with 0x1A
+        let buffer1 = vec![0x1A, 0x33, 0x44, 0x1A];
+        let frames1 = process_buffer_with_escapes(&buffer1, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames1.len(), 0);
+        assert!(pending_escape);
+
+        // Second buffer starts with different byte (frame boundary, not escape)
+        let buffer2 = vec![0x55, 0x66];
+        let frames2 = process_buffer_with_escapes(&buffer2, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames2.len(), 1);
+        assert_eq!(frames2[0], vec![0x1A, 0x33, 0x44]); // First frame complete (without trailing 0x1A)
+        assert_eq!(frame_buffer, vec![0x1A, 0x55, 0x66]); // New frame started
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_multiple_escape_sequences() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Buffer: 1A 1A 1A 33 1A 1A 44
+        // Processing:
+        //   1A 1A -> literal 0x1A in buffer
+        //   1A -> frame start, publish previous (just 0x1A), start new frame
+        //   33 1A 1A 44 -> data with escape sequence
+        let buffer = vec![0x1A, 0x1A, 0x1A, 0x33, 0x1A, 0x1A, 0x44];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        // Should produce one frame containing just the first escaped 0x1A
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0], vec![0x1A]);
+        // Current frame should be: 1A 33 1A 44
+        assert_eq!(frame_buffer, vec![0x1A, 0x33, 0x1A, 0x44]);
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_consecutive_frame_boundaries() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Multiple frame starts: 1A 33 1A 44 1A 55
+        // Should produce 2 complete frames
+        let buffer = vec![0x1A, 0x33, 0x1A, 0x44, 0x1A, 0x55];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0], vec![0x1A, 0x33]);
+        assert_eq!(frames[1], vec![0x1A, 0x44]);
+        assert_eq!(frame_buffer, vec![0x1A, 0x55]); // Third frame in progress
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_realistic_beast_frame_with_escape() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Realistic Beast frame with escape in timestamp
+        // 1A (start) + 33 (type) + [00 01 02 1A 1A 03] (6-byte timestamp with escape) + 80 (signal) + [AB CD] (payload)
+        let buffer = vec![
+            0x1A, 0x33, 0x00, 0x01, 0x02, 0x1A, 0x1A, 0x03, 0x80, 0xAB, 0xCD,
+        ];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 0);
+        // Un-escaped frame: 1A 33 00 01 02 1A 03 80 AB CD (11 bytes - minimum valid Beast frame)
+        assert_eq!(
+            frame_buffer,
+            vec![0x1A, 0x33, 0x00, 0x01, 0x02, 0x1A, 0x03, 0x80, 0xAB, 0xCD]
+        );
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_empty_buffer() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        let buffer = vec![];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 0);
+        assert!(frame_buffer.is_empty());
+        assert!(!pending_escape);
+    }
+
+    #[test]
+    fn test_single_0x1a_at_start() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        let buffer = vec![0x1A];
+        let frames = process_buffer_with_escapes(&buffer, &mut frame_buffer, &mut pending_escape);
+
+        assert_eq!(frames.len(), 0);
+        assert_eq!(frame_buffer, vec![0x1A]);
+        assert!(pending_escape); // Waiting for next byte
+    }
+
+    #[test]
+    fn test_escape_sequence_across_three_buffers() {
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+
+        // Buffer 1: data ending with 0x1A
+        let buffer1 = vec![0x1A, 0x33, 0x44, 0x1A];
+        let frames1 = process_buffer_with_escapes(&buffer1, &mut frame_buffer, &mut pending_escape);
+        assert_eq!(frames1.len(), 0);
+        assert!(pending_escape);
+
+        // Buffer 2: starts with 0x1A (escape), then more data ending with 0x1A
+        let buffer2 = vec![0x1A, 0x55, 0x1A];
+        let frames2 = process_buffer_with_escapes(&buffer2, &mut frame_buffer, &mut pending_escape);
+        assert_eq!(frames2.len(), 0);
+        assert_eq!(frame_buffer, vec![0x1A, 0x33, 0x44, 0x1A, 0x55, 0x1A]);
+        assert!(pending_escape);
+
+        // Buffer 3: starts with different byte (frame boundary)
+        let buffer3 = vec![0x66];
+        let frames3 = process_buffer_with_escapes(&buffer3, &mut frame_buffer, &mut pending_escape);
+        assert_eq!(frames3.len(), 1);
+        assert_eq!(frames3[0], vec![0x1A, 0x33, 0x44, 0x1A, 0x55]);
+        assert_eq!(frame_buffer, vec![0x1A, 0x66]);
+    }
+}

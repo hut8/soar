@@ -299,3 +299,227 @@ pub async fn handle_ingest_adsb(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_server_address_valid() {
+        let result = parse_server_address("localhost:30005");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "localhost");
+        assert_eq!(port, 30005);
+    }
+
+    #[test]
+    fn test_parse_server_address_ipv4() {
+        let result = parse_server_address("192.168.1.100:8080");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "192.168.1.100");
+        assert_eq!(port, 8080);
+    }
+
+    #[test]
+    fn test_parse_server_address_hostname() {
+        let result = parse_server_address("data.adsbhub.org:5002");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "data.adsbhub.org");
+        assert_eq!(port, 5002);
+    }
+
+    #[test]
+    fn test_parse_server_address_with_dash() {
+        let result = parse_server_address("my-server.example.com:12345");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "my-server.example.com");
+        assert_eq!(port, 12345);
+    }
+
+    #[test]
+    fn test_parse_server_address_missing_port() {
+        let result = parse_server_address("localhost");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expected format 'host:port'")
+        );
+    }
+
+    #[test]
+    fn test_parse_server_address_invalid_port() {
+        let result = parse_server_address("localhost:invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid port"));
+    }
+
+    #[test]
+    fn test_parse_server_address_port_out_of_range() {
+        let result = parse_server_address("localhost:99999");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_server_address_extra_colons() {
+        let result = parse_server_address("localhost:30005:extra");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expected format 'host:port'")
+        );
+    }
+
+    #[test]
+    fn test_parse_server_address_empty_string() {
+        let result = parse_server_address("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_server_address_only_colon() {
+        let result = parse_server_address(":");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_server_address_empty_host() {
+        let result = parse_server_address(":30005");
+        assert!(result.is_ok()); // Empty host is technically valid (means bind to all interfaces)
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "");
+        assert_eq!(port, 30005);
+    }
+
+    #[test]
+    fn test_parse_server_address_empty_port() {
+        let result = parse_server_address("localhost:");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid port"));
+    }
+
+    #[test]
+    fn test_parse_server_address_port_zero() {
+        let result = parse_server_address("localhost:0");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "localhost");
+        assert_eq!(port, 0);
+    }
+
+    #[test]
+    fn test_parse_server_address_max_port() {
+        let result = parse_server_address("localhost:65535");
+        assert!(result.is_ok());
+        let (host, port) = result.unwrap();
+        assert_eq!(host, "localhost");
+        assert_eq!(port, 65535);
+    }
+
+    #[test]
+    fn test_multiple_beast_servers() {
+        // This test verifies the structure for handling multiple servers
+        let beast_servers = vec![
+            "server1.example.com:30005".to_string(),
+            "server2.example.com:30005".to_string(),
+            "192.168.1.100:30005".to_string(),
+        ];
+
+        let sbs_servers: Vec<String> = vec![];
+
+        // Verify all servers can be parsed
+        for addr in &beast_servers {
+            let result = parse_server_address(addr);
+            assert!(
+                result.is_ok(),
+                "Failed to parse address: {}",
+                result.unwrap_err()
+            );
+        }
+
+        // Verify we have the expected number of servers
+        assert_eq!(beast_servers.len(), 3);
+        assert_eq!(sbs_servers.len(), 0);
+    }
+
+    #[test]
+    fn test_multiple_sbs_servers() {
+        let beast_servers: Vec<String> = vec![];
+        let sbs_servers = vec![
+            "data.adsbhub.org:5002".to_string(),
+            "backup.adsbhub.org:5002".to_string(),
+        ];
+
+        // Verify all servers can be parsed
+        for addr in &sbs_servers {
+            let result = parse_server_address(addr);
+            assert!(
+                result.is_ok(),
+                "Failed to parse address: {}",
+                result.unwrap_err()
+            );
+        }
+
+        assert_eq!(beast_servers.len(), 0);
+        assert_eq!(sbs_servers.len(), 2);
+    }
+
+    #[test]
+    fn test_mixed_beast_and_sbs_servers() {
+        let beast_servers = vec![
+            "radar.example.com:30005".to_string(),
+            "192.168.1.50:30005".to_string(),
+        ];
+        let sbs_servers = vec!["data.adsbhub.org:5002".to_string()];
+
+        // Verify all servers can be parsed
+        for addr in &beast_servers {
+            assert!(parse_server_address(addr).is_ok());
+        }
+        for addr in &sbs_servers {
+            assert!(parse_server_address(addr).is_ok());
+        }
+
+        assert_eq!(beast_servers.len(), 2);
+        assert_eq!(sbs_servers.len(), 1);
+    }
+
+    #[test]
+    fn test_realistic_server_configurations() {
+        // Production-like configuration
+        let configs = vec![
+            // Single Beast server
+            (vec!["radar:41365"], vec![]),
+            // Multiple Beast servers for redundancy
+            (vec!["radar1:30005", "radar2:30005", "radar3:30005"], vec![]),
+            // SBS server only
+            (vec![], vec!["data.adsbhub.org:5002"]),
+            // Mixed configuration
+            (vec!["radar:41365"], vec!["data.adsbhub.org:5002"]),
+        ];
+
+        for (beast, sbs) in configs {
+            for addr in &beast {
+                assert!(
+                    parse_server_address(addr).is_ok(),
+                    "Failed to parse Beast address: {}",
+                    addr
+                );
+            }
+            for addr in &sbs {
+                assert!(
+                    parse_server_address(addr).is_ok(),
+                    "Failed to parse SBS address: {}",
+                    addr
+                );
+            }
+        }
+    }
+}
