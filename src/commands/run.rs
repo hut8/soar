@@ -324,7 +324,7 @@ pub async fn handle_run(
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
             async move {
-                soar::metrics::start_metrics_server(metrics_port).await;
+                soar::metrics::start_metrics_server(metrics_port, Some("run")).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
@@ -608,15 +608,10 @@ pub async fn handle_run(
                             // Decode bytes to String (OGN messages are UTF-8)
                             match String::from_utf8(envelope.data) {
                                 Ok(message) => {
-                                    // Add timestamp prefix (microseconds → RFC3339)
-                                    let timestamp = chrono::DateTime::from_timestamp_micros(
-                                        envelope.timestamp_micros,
-                                    )
-                                    .unwrap_or_else(chrono::Utc::now);
-                                    let timestamped =
-                                        format!("{} {}", timestamp.to_rfc3339(), message);
-
-                                    if let Err(e) = aprs_tx.send_async(timestamped).await {
+                                    // OGN messages already have timestamp prepended by aprs_client
+                                    // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <packet>"
+                                    // Just pass through without adding another timestamp
+                                    if let Err(e) = aprs_tx.send_async(message).await {
                                         error!(
                                             "Failed to send OGN message to APRS intake queue: {}",
                                             e

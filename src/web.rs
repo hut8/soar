@@ -548,11 +548,11 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     });
 
     // Initialize Prometheus metrics exporter
-    let metrics_handle = crate::metrics::init_metrics();
+    let metrics_handle = crate::metrics::init_metrics(Some("web"));
     METRICS_HANDLE
         .set(metrics_handle)
         .expect("Metrics handle already initialized");
-    info!("Prometheus metrics exporter initialized");
+    info!("Prometheus metrics exporter initialized (component=web)");
 
     // Initialize WebSocket metrics to zero so they're always exported to Prometheus
     // even when there are no active connections

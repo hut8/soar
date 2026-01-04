@@ -163,7 +163,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let metrics_port = if soar_env == "staging" { 9102 } else { 9092 };
     tokio::spawn(async move {
-        soar::metrics::start_metrics_server(metrics_port).await;
+        soar::metrics::start_metrics_server(metrics_port, Some("pull-data")).await;
     });
 
     // Create temporary directory with date only (no time)

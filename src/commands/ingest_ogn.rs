@@ -77,7 +77,7 @@ pub async fn handle_ingest_ogn(
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
             async move {
-                soar::metrics::start_metrics_server(metrics_port).await;
+                soar::metrics::start_metrics_server(metrics_port, Some("ingest-ogn")).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
