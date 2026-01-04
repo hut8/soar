@@ -12,6 +12,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
+SyslogIdentifier=soar-ingest-ogn-staging
 ExecStart=/usr/local/bin/soar-staging ingest-ogn
 ExecReload=/bin/kill -s HUP $MAINPID
 

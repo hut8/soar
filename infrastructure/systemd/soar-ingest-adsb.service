@@ -12,6 +12,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
+SyslogIdentifier=soar-ingest-adsb
 ExecStart=/usr/local/bin/soar ingest-adsb --beast radar:41365
 ExecReload=/bin/kill -s HUP $MAINPID
 
