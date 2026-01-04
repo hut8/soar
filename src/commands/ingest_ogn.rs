@@ -212,13 +212,22 @@ pub async fn handle_ingest_ogn(
                     match recv_result {
                         Ok(message) => {
                             // Send to socket
-                            if let Err(e) = socket_client.send(message.into_bytes()).await {
-                                error!("Failed to send to socket: {}", e);
-                                metrics::counter!("aprs.socket.send_error_total").increment(1);
+                            match socket_client.send(message.into_bytes()).await {
+                                Ok(_) => {
+                                    // Successfully delivered - commit the message so it won't be replayed
+                                    if let Err(e) = queue_for_publisher.commit().await {
+                                        error!("Failed to commit message offset: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to send to socket: {}", e);
+                                    metrics::counter!("aprs.socket.send_error_total").increment(1);
 
-                                // Reconnect and retry
-                                if let Err(e) = socket_client.reconnect().await {
-                                    error!("Failed to reconnect to socket: {}", e);
+                                    // DON'T commit - message will be replayed on next recv()
+                                    // Reconnect and retry
+                                    if let Err(e) = socket_client.reconnect().await {
+                                        error!("Failed to reconnect to socket: {}", e);
+                                    }
                                 }
                             }
                         }

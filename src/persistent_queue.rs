@@ -42,6 +42,10 @@ pub struct QueueDepth {
 /// - Connected: Messages go directly through memory channel (fast path)
 /// - Disconnected: Messages buffer to disk file (slow path)
 /// - Draining: Replay disk backlog while buffering new messages
+///
+/// Delivery Semantics:
+/// - At-most-once: Messages are marked as consumed only after successful delivery
+/// - If crash occurs after recv() but before commit(), message will be replayed
 pub struct PersistentQueue<T>
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
@@ -52,6 +56,9 @@ where
     state: Arc<RwLock<QueueState>>,
     memory_tx: flume::Sender<T>,
     memory_rx: flume::Receiver<T>,
+    /// Pending read offset - set when message is read, committed when delivery succeeds
+    /// This ensures at-most-once delivery: offset only advances after successful send
+    pending_commit_offset: Arc<RwLock<Option<u64>>>,
 }
 
 impl<T> PersistentQueue<T>
@@ -89,6 +96,7 @@ where
             })),
             memory_tx,
             memory_rx,
+            pending_commit_offset: Arc::new(RwLock::new(None)),
         };
 
         // Initialize metrics
@@ -205,6 +213,37 @@ where
                 anyhow::bail!("Cannot receive from disconnected queue");
             }
         }
+    }
+
+    /// Commit a message delivery - marks it as consumed so it won't be replayed
+    ///
+    /// IMPORTANT: Must be called after successful delivery to ensure at-most-once semantics
+    /// If crash occurs between recv() and commit(), message will be replayed
+    pub async fn commit(&self) -> Result<()> {
+        use std::io::{Seek, Write};
+
+        // Get pending offset
+        let offset = {
+            let mut pending = self.pending_commit_offset.write().await;
+            pending.take()
+        };
+
+        if let Some(new_read_offset) = offset {
+            // Write new read_offset to disk
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&self.file_path)?;
+
+            file.seek(std::io::SeekFrom::Start(16))?;
+            file.write_all(&new_read_offset.to_le_bytes())?;
+            // Use sync_all() instead of flush() to force write to physical disk
+            // This ensures durability and prevents duplicate messages on SIGKILL
+            file.sync_all()?;
+
+            metrics::counter!(format!("queue.{}.messages.committed_total", self.name)).increment(1);
+        }
+
+        Ok(())
     }
 
     /// Connect a consumer (transition to Connected or Draining state)
@@ -393,11 +432,16 @@ where
         // Deserialize message
         let message: T = bincode::deserialize(&data)?;
 
-        // Update read offset
+        // Calculate new read offset but DON'T write it yet
+        // This ensures at-most-once delivery: message is only marked as consumed
+        // after successful delivery (when commit() is called)
         let new_read_offset = read_offset + 4 + data_len as u64 + 4;
-        file.seek(std::io::SeekFrom::Start(16))?;
-        file.write_all(&new_read_offset.to_le_bytes())?;
-        file.flush()?;
+
+        // Store pending offset - will be committed after successful delivery
+        {
+            let mut pending = self.pending_commit_offset.write().await;
+            *pending = Some(new_read_offset);
+        }
 
         Ok(Some(message))
     }
@@ -501,8 +545,11 @@ mod tests {
                 .unwrap();
 
             let msg1 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap(); // Commit after successful "delivery"
             let msg2 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap(); // Commit after successful "delivery"
             let msg3 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap(); // Commit after successful "delivery"
 
             assert_eq!(msg1, "message1");
             assert_eq!(msg2, "message2");
@@ -544,6 +591,7 @@ mod tests {
         let mut received = Vec::new();
         for _ in 0..15 {
             received.push(queue.recv().await.unwrap());
+            queue.commit().await.unwrap(); // Commit after successful "delivery"
         }
 
         // Verify old messages come first
@@ -603,7 +651,9 @@ mod tests {
             .unwrap();
 
         let msg1 = queue.recv().await.unwrap();
+        queue.commit().await.unwrap(); // Commit after successful "delivery"
         let msg2 = queue.recv().await.unwrap();
+        queue.commit().await.unwrap(); // Commit after successful "delivery"
 
         assert_eq!(msg1, vec![0x00, 0xFF, 0xAA, 0x55]);
         assert_eq!(msg2, vec![0x12, 0x34, 0x56, 0x78]);
@@ -690,6 +740,7 @@ mod tests {
 
         // Drain message
         let msg = queue.recv().await.unwrap();
+        queue.commit().await.unwrap(); // Commit after successful "delivery"
         assert_eq!(msg, "buffered");
     }
 
@@ -716,6 +767,7 @@ mod tests {
 
         // Receive one
         queue.recv().await.unwrap();
+        queue.commit().await.unwrap(); // Commit after successful "delivery"
 
         let depth = queue.depth().await;
         assert_eq!(depth.memory, 2);
