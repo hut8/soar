@@ -98,7 +98,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"ingest-ogn\"}",
+          "expr": "process_uptime_seconds{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -183,7 +183,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_is_up{component=\"ingest-ogn\"}",
+          "expr": "process_is_up{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "SOAR Ingest OGN",
           "range": true,
           "refId": "A"
@@ -256,7 +256,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_memory_bytes{component=\"ingest-ogn\"}",
+          "expr": "process_memory_bytes{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "SOAR Ingest OGN",
           "range": true,
           "refId": "A"
@@ -354,7 +354,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_connected{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_connected{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -451,7 +451,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_established_total{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_established_total{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_failed_total{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_failed_total{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_ended_total{component=\"ingest-ogn\"}",
+          "expr": "aprs_connection_ended_total{component=\"ingest-ogn\",environment=~\"$environment\"}",
           "legendFormat": "Ended",
           "range": true,
           "refId": "C"
@@ -570,7 +570,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_keepalive_sent_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_keepalive_sent_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "Keepalive Messages/min",
           "range": true,
           "refId": "A"
@@ -689,21 +689,10 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-          "legendFormat": "NATS Publish Errors/min",
+          "expr": "(rate(aprs_socket_send_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "Socket Send Errors/min",
           "range": true,
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(rate(aprs_nats_connection_failed_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-          "legendFormat": "NATS Connection Failed/min",
-          "range": true,
-          "refId": "D"
         }
       ],
       "title": "Connection & Ingestion Errors",
@@ -810,7 +799,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_received_server_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_received_server_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "Server Messages/min",
           "range": true,
           "refId": "A"
@@ -821,7 +810,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_received_aprs_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_received_aprs_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "APRS Messages/min",
           "range": true,
           "refId": "B"
@@ -918,7 +907,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queued_server_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_queued_server_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "Server Messages/min",
           "range": true,
           "refId": "A"
@@ -929,7 +918,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queued_aprs_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(aprs_raw_message_queued_aprs_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "APRS Messages/min",
           "range": true,
           "refId": "B"
@@ -948,7 +937,7 @@
       },
       "id": 110,
       "panels": [],
-      "title": "SOAR Ingest OGN - NATS Publishing",
+      "title": "SOAR Ingest OGN - Socket Publishing",
       "type": "row"
     },
     {
@@ -1039,13 +1028,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_published_total{component=\"ingest-ogn\"}[1m]) * 60",
+          "expr": "rate(socket_client_messages_sent_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) * 60",
           "legendFormat": "Messages/min",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Messages Published per Minute",
+      "title": "Messages Sent to Socket per Minute",
       "type": "timeseries"
     },
     {
@@ -1136,13 +1125,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0))",
-          "legendFormat": "Publish Errors",
+          "expr": "(rate(aprs_socket_send_error_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "Socket Send Errors/min",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Publishing Errors",
+      "title": "Socket Send Errors",
       "type": "timeseries"
     },
     {
@@ -1231,7 +1220,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(aprs_nats_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest-ogn\",environment=~\"$environment\"}[5m])) by (le))",
           "legendFormat": "p50",
           "range": true,
           "refId": "A"
@@ -1242,7 +1231,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(aprs_nats_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest-ogn\",environment=~\"$environment\"}[5m])) by (le))",
           "hide": false,
           "legendFormat": "p95",
           "range": true,
@@ -1254,14 +1243,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(aprs_nats_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest-ogn\",environment=~\"$environment\"}[5m])) by (le))",
           "hide": false,
           "legendFormat": "p99",
           "range": true,
           "refId": "C"
         }
       ],
-      "title": "NATS Publish Duration",
+      "title": "Socket Send Duration",
       "type": "timeseries"
     },
     {
@@ -1344,12 +1333,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(rate(aprs_nats_slow_publish_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-          "legendFormat": "Slow Publishes (>100ms)",
+          "expr": "(rate(socket_client_slow_sends_total{component=\"ingest-ogn\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "Slow Socket Sends (>100ms)",
           "refId": "A"
         }
       ],
-      "title": "Slow Publishes per Minute",
+      "title": "Slow Socket Sends per Minute",
       "type": "timeseries"
     },
     {
@@ -1412,9 +1401,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 51
+        "w": 24,
+        "x": 0,
+        "y": 59
       },
       "id": 123,
       "options": {
