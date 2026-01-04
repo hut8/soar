@@ -194,9 +194,10 @@ impl BeastClient {
                         }
 
                         if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
+                            let percent = (queue_depth as f64 / RAW_MESSAGE_QUEUE_SIZE as f64 * 100.0) as usize;
                             warn!(
-                                "Beast NATS publish queue building up: {} messages (80% full)",
-                                queue_depth
+                                "Beast NATS publish queue building up: {}/{} messages ({}% full)",
+                                queue_depth, RAW_MESSAGE_QUEUE_SIZE, percent
                             );
                         }
                     }

@@ -886,21 +886,28 @@ pub async fn handle_run(
 
                 // Warn if queues are building up (50% full)
                 if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {
+                    let percent =
+                        (aircraft_depth as f64 / AIRCRAFT_QUEUE_SIZE as f64 * 100.0) as usize;
                     warn!(
-                        "Aircraft position queue building up: {} messages (50% full)",
-                        aircraft_depth
+                        "Aircraft position queue building up: {}/{} messages ({}% full)",
+                        aircraft_depth, AIRCRAFT_QUEUE_SIZE, percent
                     );
                 }
                 if receiver_status_depth > queue_warning_threshold(RECEIVER_STATUS_QUEUE_SIZE) {
+                    let percent = (receiver_status_depth as f64 / RECEIVER_STATUS_QUEUE_SIZE as f64
+                        * 100.0) as usize;
                     warn!(
-                        "Receiver status queue building up: {} messages (50% full)",
-                        receiver_status_depth
+                        "Receiver status queue building up: {}/{} messages ({}% full)",
+                        receiver_status_depth, RECEIVER_STATUS_QUEUE_SIZE, percent
                     );
                 }
                 if receiver_position_depth > queue_warning_threshold(RECEIVER_POSITION_QUEUE_SIZE) {
+                    let percent = (receiver_position_depth as f64
+                        / RECEIVER_POSITION_QUEUE_SIZE as f64
+                        * 100.0) as usize;
                     warn!(
-                        "Receiver position queue building up: {} messages (50% full)",
-                        receiver_position_depth
+                        "Receiver position queue building up: {}/{} messages ({}% full)",
+                        receiver_position_depth, RECEIVER_POSITION_QUEUE_SIZE, percent
                     );
                 }
             }
