@@ -1,0 +1,12 @@
+# SOAR ADS-B Ingest scrape targets
+# File-based service discovery configuration for Prometheus
+#
+# This file defines the target endpoints for the SOAR ADS-B ingest service in production.
+# Prometheus will automatically reload this file every 30 seconds.
+
+- targets:
+    - 'localhost:9094'
+  labels:
+    instance: 'soar'
+    component: 'ingest-adsb'
+    environment: 'production'

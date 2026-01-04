@@ -46,7 +46,7 @@ pub(crate) async fn create_flight(
         // Mid-flight appearance - no takeoff observed
         let mut flight = Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id);
 
-        // Create start location with Photon reverse geocoding for airborne detection point
+        // Create start location with Pelias reverse geocoding for airborne detection point
         flight.start_location_id = create_start_end_location(
             ctx.locations_repo,
             fix.latitude,
@@ -86,7 +86,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
         // Set start_location_id: use airport's location_id if at airport and it exists,
-        // otherwise create new location with Photon reverse geocoding
+        // otherwise create new location with Pelias reverse geocoding
         let start_location_id = if let Some(airport_id) = departure_airport_id {
             // Check if airport has a location_id
             match get_airport_location_id(ctx.airports_repo, airport_id).await {
@@ -302,7 +302,7 @@ pub(crate) async fn complete_flight(
     let landing_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
 
     // Set end_location_id: use airport's location_id if at airport and it exists,
-    // otherwise create new location with Photon reverse geocoding
+    // otherwise create new location with Pelias reverse geocoding
     let end_location_id = if let Some(airport_id) = arrival_airport_id {
         // Check if airport has a location_id
         match get_airport_location_id(ctx.airports_repo, airport_id).await {

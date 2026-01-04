@@ -464,23 +464,17 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms").record(0.0);
 
-    // Photon reverse geocoding metrics
-    metrics::counter!("flight_tracker.location.photon.success_total").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.failure_total").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.no_structured_data_total").absolute(0);
-    metrics::histogram!("flight_tracker.location.photon.latency_ms").record(0.0);
-    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "exact")
-        .absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "1").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "5").absolute(0);
-    metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => "10")
-        .absolute(0);
-
-    // Pelias reverse geocoding metrics
+    // Pelias reverse geocoding metrics (Photon is no longer used)
     metrics::counter!("flight_tracker.location.pelias.success_total").absolute(0);
     metrics::counter!("flight_tracker.location.pelias.failure_total").absolute(0);
     metrics::counter!("flight_tracker.location.pelias.no_structured_data_total").absolute(0);
     metrics::histogram!("flight_tracker.location.pelias.latency_ms").record(0.0);
+    metrics::counter!("flight_tracker.location.pelias.retry_total", "radius_km" => "exact")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.pelias.retry_total", "radius_km" => "1").absolute(0);
+    metrics::counter!("flight_tracker.location.pelias.retry_total", "radius_km" => "5").absolute(0);
+    metrics::counter!("flight_tracker.location.pelias.retry_total", "radius_km" => "10")
+        .absolute(0);
 
     // Flight location tracking metrics
     metrics::counter!("flight_tracker.location.created_total", "type" => "start_takeoff")

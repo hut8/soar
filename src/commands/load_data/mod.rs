@@ -551,7 +551,7 @@ async fn geocode_aircraft_registration_locations(
                 break;
             }
 
-            // geocode_components will try Photon → Nominatim → Google Maps
+            // geocode_components will try Nominatim → Google Maps (Photon is disabled)
             let geocode_result = geocode_components(
                 location.street1.as_deref(),
                 None, // street2
