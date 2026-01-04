@@ -356,4 +356,12 @@ impl PacketRouter {
             }
         }
     }
+
+    /// Get the current depth of the internal message queue
+    ///
+    /// This returns the number of messages pending processing in the internal worker pool.
+    /// Useful for monitoring backpressure in the packet processing pipeline.
+    pub fn internal_queue_depth(&self) -> usize {
+        self.internal_queue_tx.len()
+    }
 }
