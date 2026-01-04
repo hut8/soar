@@ -184,13 +184,11 @@ pub async fn handle_ingest_adsb(
                 "Failed to connect Beast socket to soar-run (will buffer to queue): {}",
                 e
             );
-            // Create client anyway - it will reconnect later
-            soar::socket_client::SocketClient::connect(
+            // Create disconnected client - it will connect later when soar-run is available
+            soar::socket_client::SocketClient::new(
                 &socket_path,
                 soar::protocol::IngestSource::Beast,
             )
-            .await
-            .expect("Failed to create Beast socket client")
         }
     };
 
@@ -209,13 +207,8 @@ pub async fn handle_ingest_adsb(
                 "Failed to connect SBS socket to soar-run (will buffer to queue): {}",
                 e
             );
-            // Create client anyway - it will reconnect later
-            soar::socket_client::SocketClient::connect(
-                &socket_path,
-                soar::protocol::IngestSource::Sbs,
-            )
-            .await
-            .expect("Failed to create SBS socket client")
+            // Create disconnected client - it will connect later when soar-run is available
+            soar::socket_client::SocketClient::new(&socket_path, soar::protocol::IngestSource::Sbs)
         }
     };
 
@@ -225,6 +218,16 @@ pub async fn handle_ingest_adsb(
         health.nats_connected =
             beast_socket_client.is_connected() || sbs_socket_client.is_connected();
     }
+
+    // Connect consumers to queues (transition from Disconnected to Connected/Draining state)
+    beast_queue
+        .connect_consumer("beast-publisher".to_string())
+        .await
+        .expect("Failed to connect Beast consumer to queue");
+    sbs_queue
+        .connect_consumer("sbs-publisher".to_string())
+        .await
+        .expect("Failed to connect SBS consumer to queue");
 
     // Spawn Beast publisher task: reads from queue → sends to socket
     let beast_queue_for_publisher = beast_queue.clone();

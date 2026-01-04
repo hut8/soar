@@ -21,6 +21,25 @@ pub struct SocketClient {
 }
 
 impl SocketClient {
+    /// Create a new socket client in disconnected state
+    ///
+    /// Use this when soar-run is not yet available. The client will attempt
+    /// to connect when send() is called or when reconnect() is called explicitly.
+    ///
+    /// # Arguments
+    /// * `socket_path` - Path to Unix socket
+    /// * `source` - Source of messages (OGN, Beast, or SBS)
+    pub fn new<P: AsRef<Path>>(socket_path: P, source: IngestSource) -> Self {
+        let socket_path = socket_path.as_ref().to_path_buf();
+        metrics::gauge!("socket.client.connected").set(0.0);
+
+        Self {
+            socket_path,
+            stream: None,
+            source,
+        }
+    }
+
     /// Connect to the soar-run socket server
     ///
     /// # Arguments
