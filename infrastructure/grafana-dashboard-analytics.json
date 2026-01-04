@@ -176,7 +176,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.ogn_aircraft_type = 'glider') as \"Glider Flights\",\n  tow_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
+          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.aircraft_type_ogn = 'glider') as \"Glider Flights\",\n  tow_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
           "refId": "A",
           "sql": {
             "columns": [],

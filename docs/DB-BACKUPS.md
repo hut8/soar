@@ -401,7 +401,7 @@ PG_VERSION=18
 # Note: Use .pgpass for password, not environment variable
 
 # Backup paths
-BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+BACKUP_TEMP_DIR=/storage/soar/backups/base
 BACKUP_LOG_DIR=/var/log/soar
 
 # Backup compression
@@ -1167,7 +1167,7 @@ sudo journalctl -u soar-backup-base.service -f
 
 3. **Insufficient disk space**:
    ```bash
-   df -h /var/lib/soar/backup-temp
+   df -h /storage/soar/backups/base
    ```
 
    **Fix**: Clean temp directory, increase disk space

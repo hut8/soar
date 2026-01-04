@@ -212,10 +212,10 @@ impl AircraftView {
             country_code: device.country_code,
             owner_operator: device.owner_operator,
             address_country,
-            latitude: None,
-            longitude: None,
+            latitude: device.latitude,
+            longitude: device.longitude,
             adsb_emitter_category: device.adsb_emitter_category,
-            current_fix: None,
+            current_fix: device.current_fix,
             fixes: None,
         }
     }

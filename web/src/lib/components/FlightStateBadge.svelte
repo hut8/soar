@@ -11,22 +11,22 @@
 			case 'active':
 				return {
 					classes: 'bg-green-500 text-white',
-					text: 'Active'
+					text: 'Status: Active'
 				};
 			case 'complete':
 				return {
 					classes: 'bg-blue-500 text-white',
-					text: 'Complete'
+					text: 'Status: Complete'
 				};
 			case 'timed_out':
 				return {
 					classes: 'bg-orange-500 text-white',
-					text: 'Timed Out'
+					text: 'Status: Timed Out'
 				};
 			default:
 				return {
 					classes: 'bg-gray-500 text-white',
-					text: 'Unknown'
+					text: 'Status: Unknown'
 				};
 		}
 	});

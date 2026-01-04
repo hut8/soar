@@ -18,7 +18,8 @@ fn fw(s: &str, start_1: usize, end_1: usize) -> &str {
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() {
+    // Filter out empty strings and strings containing only punctuation/whitespace (e.g., ",", ",,")
+    if t.is_empty() || !t.chars().any(|c| c.is_alphanumeric()) {
         None
     } else {
         Some(t.to_string())
@@ -591,6 +592,56 @@ mod tests {
         assert_eq!(
             model.type_certificate_data_holder,
             Some("TEST CERTIFICATE HOLDER".to_string())
+        );
+    }
+
+    #[test]
+    fn test_type_certificate_comma_filtering() {
+        // Test line with type certificate fields containing only commas
+        let mut test_line = String::with_capacity(200);
+
+        // Build minimal valid record with commas in type certificate fields
+        test_line.push_str("ABC");
+        test_line.push_str("12");
+        test_line.push_str("34");
+        test_line.push(' ');
+        test_line.push_str(&format!("{:<30}", "TEST MANUFACTURER"));
+        test_line.push(' ');
+        test_line.push_str(&format!("{:<20}", "TEST MODEL"));
+        test_line.push(' ');
+        test_line.push('4');
+        test_line.push(' ');
+        test_line.push('1');
+        test_line.push(' ');
+        test_line.push(' ');
+        test_line.push('1');
+        test_line.push(' ');
+        test_line.push('0');
+        test_line.push(' ');
+        test_line.push_str(" 1");
+        test_line.push(' ');
+        test_line.push_str("  4");
+        test_line.push(' ');
+        test_line.push_str("1      ");
+        test_line.push(' ');
+        test_line.push_str(" 120");
+        test_line.push(' ');
+        // Positions 90-105: Type Certificate Data Sheet - only commas
+        test_line.push_str(&format!("{:<16}", ","));
+        test_line.push(' ');
+        // Positions 107-157: Type Certificate Data Holder - only commas
+        test_line.push_str(&format!("{:<51}", ",,"));
+
+        let model = AircraftModel::from_fixed_width_line(&test_line).unwrap();
+
+        // Verify that comma-only strings are filtered to None
+        assert_eq!(
+            model.type_certificate_data_sheet, None,
+            "Type certificate data sheet should be None when field contains only commas"
+        );
+        assert_eq!(
+            model.type_certificate_data_holder, None,
+            "Type certificate data holder should be None when field contains only commas"
         );
     }
 }

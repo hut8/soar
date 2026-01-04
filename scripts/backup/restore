@@ -110,7 +110,7 @@ if [[ ! -f "$RCLONE_CONFIG" ]]; then
 fi
 
 # Directories
-TEMP_DIR="${BACKUP_TEMP_DIR:-/var/lib/soar/backup-temp}"
+TEMP_DIR="${BACKUP_TEMP_DIR:-/storage/soar/backups/base}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
 mkdir -p "$TEMP_DIR" "$LOG_DIR"
 

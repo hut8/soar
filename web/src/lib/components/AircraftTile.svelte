@@ -34,13 +34,22 @@
 	});
 
 	// Get country code for flag display
-	// Prioritize addressCountry (from ICAO address via flydent), fall back to countryCode (from FAA registry)
+	// Prefer countryCode (from FAA registry), only use addressCountry if addressType is ICAO ("I")
 	const countryCode = $derived(() => {
-		if (aircraft.addressCountry && aircraft.addressCountry.trim() !== '') {
+		// First preference: countryCode from FAA registry
+		const code = aircraft.countryCode;
+		if (code && code.trim() !== '') {
+			return code.toUpperCase();
+		}
+		// Fallback: addressCountry, but only if addressType is ICAO
+		if (
+			aircraft.addressType === 'I' &&
+			aircraft.addressCountry &&
+			aircraft.addressCountry.trim() !== ''
+		) {
 			return aircraft.addressCountry.toUpperCase();
 		}
-		const code = aircraft.countryCode;
-		return code && code.trim() !== '' ? code.toUpperCase() : null;
+		return null;
 	});
 
 	// Flag SVG URL - use getFlagPath for consistency

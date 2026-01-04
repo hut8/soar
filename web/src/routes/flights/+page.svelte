@@ -5,12 +5,12 @@
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import type { Flight, PaginatedDataResponse } from '$lib/types';
 
-	let flights: Flight[] = [];
-	let totalCount = 0;
-	let currentPage = 1;
+	let flights = $state<Flight[]>([]);
+	let totalCount = $state(0);
+	let currentPage = $state(1);
 	const ITEMS_PER_PAGE = 50;
-	let loading = true;
-	let error = '';
+	let loading = $state(true);
+	let error = $state('');
 	let flightType = $state<'active' | 'completed'>('active');
 
 	function extractErrorMessage(err: unknown): string {
