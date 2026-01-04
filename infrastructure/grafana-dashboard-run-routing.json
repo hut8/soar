@@ -714,6 +714,15 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "expr": "socket_envelope_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
+          "legendFormat": "Envelope Intake Queue",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "editorMode": "code",
           "expr": "aprs_jetstream_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "JetStream Intake Queue (cap: 1K)",
