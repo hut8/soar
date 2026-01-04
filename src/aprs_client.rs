@@ -356,6 +356,11 @@ impl AprsClient {
         let keepalive_interval = Duration::from_secs(20); // Send keepalive every 20 seconds
         let mut last_keepalive = tokio::time::Instant::now();
 
+        // Statistics tracking
+        let mut message_count: u64 = 0;
+        let mut total_messages: u64 = 0;
+        let mut last_stats_log = std::time::Instant::now();
+
         loop {
             line_buffer.clear();
 
@@ -478,6 +483,24 @@ impl AprsClient {
                                                 let mut health = health_state.write().await;
                                                 health.last_message_time =
                                                     Some(std::time::Instant::now());
+                                            }
+
+                                            // Increment message counters for statistics
+                                            message_count += 1;
+                                            total_messages += 1;
+
+                                            // Log statistics every 10 seconds
+                                            if last_stats_log.elapsed().as_secs() >= 10 {
+                                                let elapsed =
+                                                    last_stats_log.elapsed().as_secs_f64();
+                                                let rate = message_count as f64 / elapsed;
+                                                info!(
+                                                    "APRS stats: {:.1} msg/s, {} total messages",
+                                                    rate, total_messages
+                                                );
+                                                metrics::gauge!("aprs.message_rate").set(rate);
+                                                message_count = 0;
+                                                last_stats_log = std::time::Instant::now();
                                             }
                                         }
                                     }
