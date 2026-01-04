@@ -206,9 +206,11 @@ pub(crate) async fn process_state_transition(
                     }
                     Err(e) => {
                         error!(
-                            "Failed to create new flight for device {} after callsign change: {}",
+                            "Failed to create new flight for aircraft {} after callsign change: {}",
                             fix.aircraft_id, e
                         );
+                        // Clear flight_id to prevent FK violation if old flight was deleted
+                        fix.flight_id = None;
                     }
                 }
             } else {
@@ -282,9 +284,11 @@ pub(crate) async fn process_state_transition(
                         }
                         Err(e) => {
                             error!(
-                                "Failed to create new flight for device {} after gap: {}",
+                                "Failed to create new flight for aircraft {} after gap: {}",
                                 fix.aircraft_id, e
                             );
+                            // Clear flight_id to prevent FK violation if old flight was deleted
+                            fix.flight_id = None;
                         }
                     }
 
@@ -674,6 +678,9 @@ pub(crate) async fn process_state_transition(
                             "Failed to create flight for aircraft {}: {}",
                             fix.aircraft_id, e
                         );
+                        // Clear flight_id to prevent FK violation
+                        fix.flight_id = None;
+                        // Remove from active flights since flight creation failed
                         let mut flights = ctx.active_flights.write().await;
                         flights.remove(&fix.aircraft_id);
                     }
@@ -713,6 +720,9 @@ pub(crate) async fn process_state_transition(
                             "Failed to create flight for aircraft {}: {}",
                             fix.aircraft_id, e
                         );
+                        // Clear flight_id to prevent FK violation
+                        fix.flight_id = None;
+                        // Remove from active flights since flight creation failed
                         let mut flights = ctx.active_flights.write().await;
                         flights.remove(&fix.aircraft_id);
                     }

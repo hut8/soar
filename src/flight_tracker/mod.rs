@@ -582,7 +582,7 @@ impl FlightTracker {
             }
             Err(e) => {
                 error!(
-                    "Failed to save fix: device={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
+                    "Failed to save fix: aircraft={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
                     updated_fix.aircraft_id,
                     updated_fix.flight_id,
                     updated_fix.ground_speed_knots,

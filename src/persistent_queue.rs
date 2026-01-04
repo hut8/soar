@@ -100,17 +100,39 @@ where
     /// Send a message to the queue
     ///
     /// Behavior depends on state:
-    /// - Connected: Send directly through memory channel
+    /// - Connected: Try to send through memory channel (non-blocking)
+    ///   - If memory channel is full, overflow to disk
     /// - Disconnected/Draining: Append to disk file
     pub async fn send(&self, message: T) -> Result<()> {
         let state = { self.state.read().await.clone() };
 
         match state {
             QueueState::Connected { .. } => {
-                // Fast path: send through memory channel
-                self.memory_tx.send_async(message).await?;
-                metrics::counter!(format!("queue.{}.messages.sent_total", self.name)).increment(1);
-                Ok(())
+                // Fast path: try to send through memory channel (non-blocking)
+                match self.memory_tx.try_send(message) {
+                    Ok(_) => {
+                        metrics::counter!(format!("queue.{}.messages.sent_total", self.name))
+                            .increment(1);
+                        Ok(())
+                    }
+                    Err(flume::TrySendError::Full(message)) => {
+                        // Memory channel is full (publisher is slow/blocked)
+                        // Overflow to disk to prevent blocking the entire pipeline
+                        warn!(
+                            "Queue {} memory channel full, overflowing to disk (publisher is slow)",
+                            self.name
+                        );
+                        metrics::counter!(format!("queue.{}.overflow_to_disk_total", self.name))
+                            .increment(1);
+                        self.append_to_disk(message).await?;
+                        metrics::counter!(format!("queue.{}.messages.buffered_total", self.name))
+                            .increment(1);
+                        Ok(())
+                    }
+                    Err(flume::TrySendError::Disconnected(_)) => {
+                        Err(anyhow::anyhow!("Memory queue disconnected"))
+                    }
+                }
             }
             QueueState::Disconnected { .. } | QueueState::Draining { .. } => {
                 // Slow path: append to disk
@@ -130,6 +152,33 @@ where
 
         match state {
             QueueState::Connected { .. } => {
+                // Check if there's disk overflow (memory was full and messages went to disk)
+                // This can happen when the publisher is slow/blocked
+                if self.file_path.exists() {
+                    // We have disk overflow - transition to Draining mode to process it
+                    info!(
+                        "Queue '{}' detected disk overflow in Connected state, switching to Draining",
+                        self.name
+                    );
+                    {
+                        let mut state_guard = self.state.write().await;
+                        *state_guard = QueueState::Draining {
+                            drain_started_at: Instant::now(),
+                            messages_drained: 0,
+                            messages_in_backlog: 0,
+                            new_messages_buffered: 0,
+                        };
+                        metrics::gauge!(format!("queue.{}.state", self.name)).set(2.0);
+                    }
+                    // Now drain from disk first
+                    if let Some(message) = self.read_from_disk().await? {
+                        metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
+                            .increment(1);
+                        return Ok(message);
+                    }
+                    // If disk is empty (race condition), fall through to recv from memory
+                }
+
                 // Fast path: receive from memory channel
                 let message = self.memory_rx.recv_async().await?;
                 metrics::counter!(format!("queue.{}.messages.received_total", self.name))
