@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::aircraft_tracker;
 use super::altitude::calculate_altitude_agl;
 use super::altitude::calculate_altitude_offset_ft;
-use super::flight_lifecycle::{complete_flight, create_flight};
+use super::flight_lifecycle::{complete_flight_fast, create_flight_fast};
 use super::towing;
 use super::{CurrentFlightState, FlightProcessorContext};
 
@@ -167,7 +167,7 @@ pub(crate) async fn process_state_transition(
 
             if should_end_flight {
                 // End the current flight
-                if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
+                if let Err(e) = complete_flight_fast(ctx, &aircraft, state.flight_id, &fix).await {
                     error!(
                         "Failed to complete flight {} due to callsign change: {}",
                         state.flight_id, e
@@ -176,7 +176,7 @@ pub(crate) async fn process_state_transition(
 
                 // Create a new flight for this fix
                 let new_flight_id = Uuid::new_v4();
-                match create_flight(
+                match create_flight_fast(
                     ctx,
                     &fix,
                     new_flight_id,
@@ -243,7 +243,9 @@ pub(crate) async fn process_state_transition(
                         .increment(1);
 
                     // End the current flight
-                    if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
+                    if let Err(e) =
+                        complete_flight_fast(ctx, &aircraft, state.flight_id, &fix).await
+                    {
                         error!(
                             "Failed to complete flight {} due to large gap: {}",
                             state.flight_id, e
@@ -258,7 +260,7 @@ pub(crate) async fn process_state_transition(
 
                     // Create a new flight for this fix
                     let new_flight_id = Uuid::new_v4();
-                    match create_flight(ctx, &fix, new_flight_id, false).await {
+                    match create_flight_fast(ctx, &fix, new_flight_id, false).await {
                         Ok(flight_id) => {
                             info!(
                                 "Created new flight {} for device {} after {:.1}h gap",
@@ -646,7 +648,7 @@ pub(crate) async fn process_state_transition(
                 }
 
                 // Create flight WITH airport/runway lookup
-                match create_flight(
+                match create_flight_fast(
                     ctx, &fix, flight_id, false, // DO perform airport/runway lookup
                 )
                 .await
@@ -703,7 +705,7 @@ pub(crate) async fn process_state_transition(
                 }
 
                 // Create flight WITHOUT airport/runway lookup (skip_airport_runway_lookup = true)
-                match create_flight(
+                match create_flight_fast(
                     ctx, &fix, flight_id,
                     true, // SKIP airport/runway lookup for mid-flight appearance
                 )
@@ -812,7 +814,7 @@ pub(crate) async fn process_state_transition(
                         // to prevent race condition where new fixes arrive and get assigned the spurious flight_id
                         // For normal landings, we remove from ctx.active_flights AFTER complete_flight finishes
                         let flight_completed =
-                            match complete_flight(ctx, &aircraft, flight_id, &fix).await {
+                            match complete_flight_fast(ctx, &aircraft, flight_id, &fix).await {
                                 Ok(completed) => completed,
                                 Err(e) => {
                                     warn!("Failed to complete flight {}: {}", flight_id, e);

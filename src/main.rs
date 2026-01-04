@@ -481,14 +481,15 @@ async fn setup_diesel_database(app_name_prefix: &str) -> Result<MigrationResult>
     // - 8 elevation workers
     // - 1 batch writer
     // - Various background tasks and web requests
-    // Reduced from 50 to 20 after Dec 2025 connection exhaustion incident
+    // Increased to 30 (with pgbouncer in front for connection pooling)
+    // Previous: 50 (connection exhaustion) → 20 (too conservative) → 30 (balanced with pgbouncer)
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
-        .max_size(20)
+        .max_size(30)
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 20)");
+    info!("Successfully created Diesel connection pool (max connections: 30)");
 
     // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");

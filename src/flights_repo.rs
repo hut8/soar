@@ -44,6 +44,72 @@ impl FlightsRepository {
         Ok(())
     }
 
+    /// Update flight with takeoff enrichment data (runway, locations)
+    /// Used by background enrichment task after flight is created
+    pub async fn update_flight_takeoff_enrichment(
+        &self,
+        flight_id: Uuid,
+        takeoff_runway_ident_param: Option<String>,
+        start_location_id_param: Option<Uuid>,
+        takeoff_location_id_param: Option<Uuid>,
+    ) -> Result<()> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    takeoff_runway_ident.eq(&takeoff_runway_ident_param),
+                    start_location_id.eq(&start_location_id_param),
+                    takeoff_location_id.eq(&takeoff_location_id_param),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
+    /// Update flight with landing enrichment data (runway, locations)
+    /// Used by background enrichment task after flight is completed
+    pub async fn update_flight_landing_enrichment(
+        &self,
+        flight_id: Uuid,
+        landing_runway_ident_param: Option<String>,
+        runways_inferred_param: Option<bool>,
+        end_location_id_param: Option<Uuid>,
+        landing_location_id_param: Option<Uuid>,
+    ) -> Result<()> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    landing_runway_ident.eq(&landing_runway_ident_param),
+                    runways_inferred.eq(&runways_inferred_param),
+                    end_location_id.eq(&end_location_id_param),
+                    landing_location_id.eq(&landing_location_id_param),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
     /// Update flight with landing information
     #[allow(clippy::too_many_arguments)]
     pub async fn update_flight_landing(

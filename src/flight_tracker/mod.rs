@@ -594,6 +594,12 @@ impl FlightTracker {
         };
         metrics::histogram!("aprs.aircraft.fix_db_insert_ms")
             .record(fix_insert_start.elapsed().as_micros() as f64 / 1000.0);
+
+        // Increment counter for stats logging
+        if result.is_some() {
+            metrics::counter!("flight_tracker.fixes_processed_total").increment(1);
+        }
+
         result
     }
 

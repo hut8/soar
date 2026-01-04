@@ -372,6 +372,13 @@ pub fn initialize_run_metrics() {
     // Flight tracker metrics
     metrics::counter!("flight_tracker_timeouts_detected_total").absolute(0);
     metrics::gauge!("flight_tracker_active_aircraft").set(0.0);
+    metrics::counter!("flight_tracker.fixes_processed_total").absolute(0);
+
+    // Fast-path flight operations metrics
+    metrics::histogram!("flight_tracker.create_flight_fast.latency_ms").record(0.0);
+    metrics::histogram!("flight_tracker.complete_flight_fast.latency_ms").record(0.0);
+    metrics::histogram!("flight_tracker.enrich_flight_on_creation.latency_ms").record(0.0);
+    metrics::histogram!("flight_tracker.enrich_flight_on_completion.latency_ms").record(0.0);
 
     // Flight coalescing metrics
     metrics::counter!("flight_tracker.coalesce.resumed_total").absolute(0);

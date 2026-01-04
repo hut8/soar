@@ -1,0 +1,335 @@
+#!/bin/bash
+set -euo pipefail
+
+# SOAR PgBouncer Setup Script
+#
+# This script installs and configures PgBouncer as a connection pooler
+# for PostgreSQL to reduce connection overhead and improve performance.
+#
+# Usage:
+#   sudo ./scripts/setup-pgbouncer [production|staging]
+#
+# What this does:
+# - Installs PgBouncer package
+# - Creates configuration optimized for SOAR workload
+# - Sets up systemd service
+# - Configures authentication with PostgreSQL
+# - Creates separate pools for production and staging databases
+
+ENVIRONMENT="${1:-production}"
+
+if [[ "$ENVIRONMENT" != "production" && "$ENVIRONMENT" != "staging" ]]; then
+    echo "Error: Environment must be 'production' or 'staging'"
+    echo "Usage: sudo $0 [production|staging]"
+    exit 1
+fi
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root (use sudo)"
+   exit 1
+fi
+
+echo "========================================="
+echo "SOAR PgBouncer Setup - $ENVIRONMENT"
+echo "========================================="
+echo
+
+# Install PgBouncer
+echo "Installing PgBouncer..."
+apt-get update -qq
+apt-get install -y pgbouncer
+
+# Stop pgbouncer if running (we'll reconfigure it)
+systemctl stop pgbouncer || true
+
+# Create pgbouncer user if it doesn't exist
+if ! id -u pgbouncer >/dev/null 2>&1; then
+    echo "Creating pgbouncer user..."
+    useradd -r -s /bin/false pgbouncer
+fi
+
+# Create directories
+mkdir -p /etc/pgbouncer
+mkdir -p /var/log/pgbouncer
+mkdir -p /var/run/pgbouncer
+chown -R pgbouncer:pgbouncer /var/log/pgbouncer
+chown -R pgbouncer:pgbouncer /var/run/pgbouncer
+
+# Get PostgreSQL credentials from environment file
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    ENV_FILE="/etc/soar/env"
+    DB_NAME="soar"
+    PGBOUNCER_PORT=6432
+else
+    ENV_FILE="/etc/soar/env-staging"
+    DB_NAME="soar_staging"
+    PGBOUNCER_PORT=6433
+fi
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Error: Environment file $ENV_FILE not found"
+    exit 1
+fi
+
+# Source environment file to get DATABASE_URL
+set +u  # Temporarily allow unset variables
+source "$ENV_FILE"
+set -u
+
+if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "Error: DATABASE_URL not set in $ENV_FILE"
+    exit 1
+fi
+
+# Parse DATABASE_URL (format: postgresql://user:password@host:port/database)
+if [[ "$DATABASE_URL" =~ postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+) ]]; then
+    DB_USER="${BASH_REMATCH[1]}"
+    DB_PASSWORD="${BASH_REMATCH[2]}"
+    DB_HOST="${BASH_REMATCH[3]}"
+    DB_PORT="${BASH_REMATCH[4]}"
+    DB_NAME_FROM_URL="${BASH_REMATCH[5]}"
+else
+    echo "Error: Could not parse DATABASE_URL"
+    exit 1
+fi
+
+echo "Database configuration:"
+echo "  Host: $DB_HOST"
+echo "  Port: $DB_PORT"
+echo "  Database: $DB_NAME_FROM_URL"
+echo "  User: $DB_USER"
+echo "  PgBouncer Port: $PGBOUNCER_PORT"
+echo
+
+# Create userlist.txt with authentication
+echo "Creating authentication file..."
+cat > /etc/pgbouncer/userlist.txt <<EOF
+"$DB_USER" "$DB_PASSWORD"
+EOF
+chown pgbouncer:pgbouncer /etc/pgbouncer/userlist.txt
+chmod 600 /etc/pgbouncer/userlist.txt
+
+# Create pgbouncer.ini
+echo "Creating pgbouncer.ini configuration..."
+cat > /etc/pgbouncer/pgbouncer.ini <<EOF
+;; SOAR PgBouncer Configuration - $ENVIRONMENT
+;; Generated: $(date)
+
+[databases]
+; Database aliases for connection pooling
+; Format: dbname = host=hostname port=port dbname=database
+$DB_NAME_FROM_URL = host=$DB_HOST port=$DB_PORT dbname=$DB_NAME_FROM_URL
+
+[pgbouncer]
+;;; Administrative settings
+logfile = /var/log/pgbouncer/pgbouncer.log
+pidfile = /var/run/pgbouncer/pgbouncer.pid
+
+;;; Connection settings
+listen_addr = 127.0.0.1
+listen_port = $PGBOUNCER_PORT
+
+; Authentication
+auth_type = md5
+auth_file = /etc/pgbouncer/userlist.txt
+
+; Admin users (can connect to pgbouncer console)
+admin_users = $DB_USER
+
+; Stats users (can view stats)
+stats_users = $DB_USER
+
+;;; Pooling mode
+; transaction = Connection returned after each transaction (recommended for web apps)
+; session = Connection held for entire client session
+; statement = Connection returned after each statement (most aggressive)
+pool_mode = transaction
+
+;;; Connection limits
+; Maximum number of client connections allowed
+max_client_conn = 500
+
+; Maximum number of server connections per database+user pair
+; SOAR has 30 connections in pool, allow some headroom for multiple instances
+default_pool_size = 50
+
+; Minimum pool size (always keep this many connections open)
+min_pool_size = 10
+
+; How many additional connections to allow in case of sudden load
+reserve_pool_size = 10
+
+; Maximum time a connection can be idle before being closed (seconds)
+server_idle_timeout = 600
+
+; How long to wait when closing connections on SIGHUP (seconds)
+server_lifetime = 3600
+
+; How long to wait for a connection from the pool (seconds)
+; If no connection available, client waits this long before timing out
+query_wait_timeout = 120
+
+;;; Logging
+log_connections = 0
+log_disconnections = 0
+log_pooler_errors = 1
+
+; Syslog settings
+syslog = 0
+syslog_facility = daemon
+
+;;; Performance tuning
+; Disable SSL between pgbouncer and PostgreSQL (assumes localhost/trusted network)
+; SOAR connects to localhost PostgreSQL, no need for SSL overhead
+server_tls_sslmode = disable
+
+; Packet buffer size (default is fine for most cases)
+pkt_buf = 4096
+
+; Maximum packet size
+max_packet_size = 2147483647
+
+; DNS lookup caching
+dns_max_ttl = 15
+dns_nxdomain_ttl = 15
+
+;;; Timeouts
+; TCP keepalive settings
+tcp_keepalive = 1
+tcp_keepidle = 60
+tcp_keepintvl = 10
+tcp_keepcnt = 5
+
+; Cancel query timeout
+query_timeout = 0
+
+; Client idle timeout (close idle client connections after this time)
+client_idle_timeout = 0
+
+; Disable server_reset_query for transaction pooling mode
+; In transaction mode, we want clean state between transactions
+server_reset_query = DISCARD ALL
+
+; Server connection check query (used to verify server is alive)
+server_check_query = SELECT 1
+
+; How often to run server_check_query on idle connections
+server_check_delay = 30
+
+;;; Security
+; Reject connections with unknown database or user
+ignore_startup_parameters = extra_float_digits
+
+; Application name passthrough
+application_name_add_host = 1
+EOF
+
+chown pgbouncer:pgbouncer /etc/pgbouncer/pgbouncer.ini
+chmod 644 /etc/pgbouncer/pgbouncer.ini
+
+# Create systemd service file
+echo "Creating systemd service..."
+cat > /etc/systemd/system/pgbouncer-$ENVIRONMENT.service <<EOF
+[Unit]
+Description=PgBouncer PostgreSQL Connection Pooler ($ENVIRONMENT)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=forking
+User=pgbouncer
+Group=pgbouncer
+
+# Configuration file
+Environment=PGBOUNCER_CONFIG=/etc/pgbouncer/pgbouncer.ini
+
+# Start command
+ExecStart=/usr/sbin/pgbouncer -d /etc/pgbouncer/pgbouncer.ini
+
+# Reload command (SIGHUP)
+ExecReload=/bin/kill -HUP \$MAINPID
+
+# Stop command
+KillSignal=SIGINT
+KillMode=mixed
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=65536
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/pgbouncer /var/run/pgbouncer
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+echo "Enabling and starting pgbouncer-$ENVIRONMENT service..."
+systemctl daemon-reload
+systemctl enable pgbouncer-$ENVIRONMENT
+systemctl start pgbouncer-$ENVIRONMENT
+
+# Wait a moment for service to start
+sleep 2
+
+# Check status
+if systemctl is-active --quiet pgbouncer-$ENVIRONMENT; then
+    echo
+    echo "========================================="
+    echo "✓ PgBouncer installed and running!"
+    echo "========================================="
+    echo
+    echo "Connection details:"
+    echo "  Listen address: 127.0.0.1:$PGBOUNCER_PORT"
+    echo "  Database: $DB_NAME_FROM_URL"
+    echo "  Pooling mode: transaction"
+    echo "  Pool size: 50 (default)"
+    echo
+    echo "To connect via PgBouncer:"
+    echo "  postgresql://$DB_USER:PASSWORD@localhost:$PGBOUNCER_PORT/$DB_NAME_FROM_URL"
+    echo
+    echo "Management commands:"
+    echo "  systemctl status pgbouncer-$ENVIRONMENT"
+    echo "  systemctl restart pgbouncer-$ENVIRONMENT"
+    echo "  systemctl stop pgbouncer-$ENVIRONMENT"
+    echo "  journalctl -u pgbouncer-$ENVIRONMENT -f"
+    echo
+    echo "PgBouncer console:"
+    echo "  psql -h localhost -p $PGBOUNCER_PORT -U $DB_USER pgbouncer"
+    echo "  Commands: SHOW POOLS; SHOW STATS; SHOW DATABASES;"
+    echo
+    echo "Log file:"
+    echo "  /var/log/pgbouncer/pgbouncer.log"
+    echo
+    echo "========================================="
+    echo "Next steps:"
+    echo "========================================="
+    echo "1. Update DATABASE_URL in $ENV_FILE to use pgbouncer:"
+    echo "   DATABASE_URL=postgresql://$DB_USER:PASSWORD@localhost:$PGBOUNCER_PORT/$DB_NAME_FROM_URL"
+    echo
+    echo "2. Restart SOAR services to use new connection:"
+    echo "   sudo systemctl restart soar-run-$ENVIRONMENT"
+    echo
+    echo "3. Monitor pgbouncer stats:"
+    echo "   psql -h localhost -p $PGBOUNCER_PORT -U $DB_USER pgbouncer -c 'SHOW POOLS'"
+    echo
+else
+    echo
+    echo "========================================="
+    echo "✗ PgBouncer failed to start"
+    echo "========================================="
+    echo
+    echo "Check logs:"
+    echo "  journalctl -u pgbouncer-$ENVIRONMENT -n 50"
+    echo "  tail -n 50 /var/log/pgbouncer/pgbouncer.log"
+    exit 1
+fi
