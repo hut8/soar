@@ -12,6 +12,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
+SyslogIdentifier=soar-run
 ExecStart=/usr/local/bin/soar run --archive --no-adsb
 ExecReload=/bin/kill -s HUP $MAINPID
 

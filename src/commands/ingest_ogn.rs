@@ -176,13 +176,8 @@ pub async fn handle_ingest_ogn(
                 "Failed to connect to soar-run (will buffer to queue): {}",
                 e
             );
-            // Create client anyway - it will reconnect later
-            soar::socket_client::SocketClient::connect(
-                &socket_path,
-                soar::protocol::IngestSource::Ogn,
-            )
-            .await
-            .expect("Failed to create socket client")
+            // Create disconnected client - it will connect later when soar-run is available
+            soar::socket_client::SocketClient::new(&socket_path, soar::protocol::IngestSource::Ogn)
         }
     };
 
@@ -191,6 +186,12 @@ pub async fn handle_ingest_ogn(
         let mut health = health_state.write().await;
         health.nats_connected = socket_client.is_connected(); // Reuse nats_connected field for now
     }
+
+    // Connect consumer to queue (transition from Disconnected to Connected/Draining state)
+    queue
+        .connect_consumer("ogn-publisher".to_string())
+        .await
+        .expect("Failed to connect consumer to queue");
 
     // Spawn publisher task: reads from queue → sends to socket
     let queue_for_publisher = queue.clone();

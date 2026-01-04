@@ -49,6 +49,15 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **NEVER attempt to deploy or restart services without explicit instructions** - Only build/check code, do not deploy
 - **Use `cargo check` for validation** - Do not run deployment scripts or restart systemd services unless instructed
 - **Ask before any service modifications** - This includes systemctl restart, deployment scripts, or copying binaries to production locations
+- **CRITICAL: Updating running binaries** - You CANNOT copy over a running binary (will fail with "Text file busy"). Always delete the binary first, then copy:
+  ```bash
+  # WRONG: This will fail if service is running
+  sudo cp target/debug/soar /usr/local/bin/soar-staging
+
+  # CORRECT: Delete first, then copy
+  sudo rm -f /usr/local/bin/soar-staging
+  sudo cp target/debug/soar /usr/local/bin/soar-staging
+  ```
 
 ### DATABASE SAFETY RULES (CRITICAL)
 - **Development Database**: `soar_dev` - This is where you work
