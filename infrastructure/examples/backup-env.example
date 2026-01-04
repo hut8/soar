@@ -113,7 +113,7 @@ PG_VERSION=18
 # Temporary directory for staging backups during creation
 # Needs space for ~150GB compressed backup during upload
 # Will be automatically created if it doesn't exist
-BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+BACKUP_TEMP_DIR=/storage/soar/backups/base
 
 # Directory for backup logs
 # Will be automatically created if it doesn't exist
