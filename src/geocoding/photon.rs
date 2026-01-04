@@ -245,7 +245,9 @@ impl PhotonClient {
                     Some(10.0) => "10",
                     _ => "other",
                 };
-                metrics::counter!("flight_tracker.location.photon.retry_total", "radius_km" => radius_label)
+                // Note: Using pelias metric name even though this is photon.rs
+                // because Photon is disabled and Pelias is the actual geocoding service
+                metrics::counter!("flight_tracker.location.pelias.retry_total", "radius_km" => radius_label)
                     .increment(1);
 
                 if let Some(r) = radius {
