@@ -12,7 +12,6 @@ pub async fn handle_ingest_ogn(
     filter: Option<String>,
     max_retries: u32,
     retry_delay: u64,
-    nats_url: String,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "ingest-ogn");
@@ -25,32 +24,23 @@ pub async fn handle_ingest_ogn(
         port = 10152;
     }
 
-    // Determine environment and use appropriate NATS subject
-    // Production: "ogn.raw"
-    // Staging: "staging.ogn.raw"
+    // Determine environment for metrics and instance locking
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let nats_subject = if is_production {
-        "ogn.raw"
-    } else {
-        "staging.ogn.raw"
-    };
-
     info!(
-        "Starting OGN ingestion service - server: {}:{}, NATS: {}, subject: {}",
-        server, port, nats_url, nats_subject
+        "Starting OGN ingestion service - server: {}:{}, socket: /var/run/soar/run.sock",
+        server, port
     );
 
     info!(
-        "Environment: {}, using NATS subject '{}'",
+        "Environment: {}",
         if is_production {
             "production"
         } else {
             "staging"
-        },
-        nats_subject
+        }
     );
 
     // Initialize health state for this ingester
@@ -67,8 +57,8 @@ pub async fn handle_ingest_ogn(
     // Start metrics server in production/staging mode (AFTER metrics are initialized)
     if is_production || is_staging {
         // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
-        // Auto-assign default based on environment: production=9093, staging=9094
-        let default_port = if is_staging { 9094 } else { 9093 };
+        // Auto-assign default based on environment: production=9093, staging=9194
+        let default_port = if is_staging { 9194 } else { 9093 };
         let metrics_port = env::var("METRICS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
@@ -186,7 +176,7 @@ pub async fn handle_ingest_ogn(
     // Mark socket as connected in health state
     {
         let mut health = health_state.write().await;
-        health.nats_connected = socket_client.is_connected(); // Reuse nats_connected field for now
+        health.socket_connected = socket_client.is_connected();
     }
 
     // Connect consumer to queue (transition from Disconnected to Connected/Draining state)

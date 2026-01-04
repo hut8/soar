@@ -13,7 +13,7 @@ const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
 /// Enable reverse geocoding for start/end locations using Pelias
 /// When true, create_start_end_location() will use Pelias city-level reverse geocoding
 /// When false, start_location_id and end_location_id will be null
-const GEOCODING_ENABLED_FOR_START_END: bool = false;
+const GEOCODING_ENABLED_FOR_START_END: bool = true;
 
 /// Find nearest airport within 2km of given coordinates
 /// Returns the airport ID (not the identifier string)

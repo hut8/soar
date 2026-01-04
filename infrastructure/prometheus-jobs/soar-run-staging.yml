@@ -9,7 +9,7 @@ scrape_configs:
     scrape_timeout: 1s
     static_configs:
       - targets:
-          - 'localhost:9092'
+          - 'localhost:9192'
         labels:
           instance: 'soar-staging'
           component: 'run'

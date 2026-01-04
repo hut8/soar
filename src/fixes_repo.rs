@@ -1021,15 +1021,15 @@ impl FixesRepository {
             let updated_count = if let Some(end_time) = end_time {
                 diesel::update(fixes)
                     .filter(aircraft_id.eq(aircraft_id_param))
-                    .filter(timestamp.ge(start_time))
-                    .filter(timestamp.le(end_time))
+                    .filter(received_at.ge(start_time))
+                    .filter(received_at.le(end_time))
                     .filter(flight_id.is_null())
                     .set(flight_id.eq(flight_id_param))
                     .execute(&mut conn)?
             } else {
                 diesel::update(fixes)
                     .filter(aircraft_id.eq(aircraft_id_param))
-                    .filter(timestamp.ge(start_time))
+                    .filter(received_at.ge(start_time))
                     .filter(flight_id.is_null())
                     .set(flight_id.eq(flight_id_param))
                     .execute(&mut conn)?
@@ -1062,7 +1062,7 @@ impl FixesRepository {
 
             let results = fixes
                 .filter(flight_id.eq(flight_id_param))
-                .order(timestamp.asc())
+                .order(received_at.asc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
@@ -1200,8 +1200,8 @@ impl FixesRepository {
 
             let fix_row: Option<Fix> = fixes
                 .filter(flight_id.eq(flight_id_val))
-                .filter(timestamp.ge(cutoff_time))
-                .order(timestamp.desc())
+                .filter(received_at.ge(cutoff_time))
+                .order(received_at.desc())
                 .select(Fix::as_select())
                 .first(&mut conn)
                 .optional()?;

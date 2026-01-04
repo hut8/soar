@@ -514,22 +514,59 @@ if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     log_info "Installing Prometheus job configuration files..."
     mkdir -p /etc/prometheus/jobs
 
-    # Remove old SOAR Prometheus job files that aren't in the deployment
+    # Remove old SOAR Prometheus job files for this environment
     if [ -d "/etc/prometheus/jobs" ]; then
-        log_info "Cleaning up old Prometheus job files..."
+        log_info "Cleaning up old Prometheus job files for $ENVIRONMENT..."
         for old_job in /etc/prometheus/jobs/soar-*.yml; do
             if [ -f "$old_job" ]; then
                 job_basename=$(basename "$old_job")
-                if [ ! -f "$DEPLOY_DIR/prometheus-jobs/$job_basename" ]; then
-                    log_info "Removing obsolete Prometheus job: $job_basename"
-                    rm -f "$old_job"
+
+                # Check if this file matches the current environment
+                if [ "$ENVIRONMENT" = "staging" ]; then
+                    # In staging, remove only staging files that aren't in deployment
+                    if [[ "$job_basename" =~ -staging\.yml$ ]]; then
+                        if [ ! -f "$DEPLOY_DIR/prometheus-jobs/$job_basename" ]; then
+                            log_info "Removing obsolete Prometheus job: $job_basename"
+                            rm -f "$old_job"
+                        fi
+                    fi
+                else
+                    # In production, remove only production files (no -staging suffix) that aren't in deployment
+                    if [[ ! "$job_basename" =~ -staging\.yml$ ]]; then
+                        if [ ! -f "$DEPLOY_DIR/prometheus-jobs/$job_basename" ]; then
+                            log_info "Removing obsolete Prometheus job: $job_basename"
+                            rm -f "$old_job"
+                        fi
+                    fi
                 fi
             fi
         done
     fi
 
-    cp "$DEPLOY_DIR/prometheus-jobs"/*.yml /etc/prometheus/jobs/
-    chmod 644 /etc/prometheus/jobs/*.yml
+    # Copy only environment-appropriate Prometheus job configs
+    if [ "$ENVIRONMENT" = "staging" ]; then
+        log_info "Installing staging Prometheus job configs (*-staging.yml)..."
+        for job_file in "$DEPLOY_DIR/prometheus-jobs"/*-staging.yml; do
+            if [ -f "$job_file" ]; then
+                cp "$job_file" /etc/prometheus/jobs/
+                chmod 644 "/etc/prometheus/jobs/$(basename "$job_file")"
+                log_info "  Installed: $(basename "$job_file")"
+            fi
+        done
+    else
+        log_info "Installing production Prometheus job configs (not *-staging.yml)..."
+        for job_file in "$DEPLOY_DIR/prometheus-jobs"/*.yml; do
+            if [ -f "$job_file" ]; then
+                job_basename=$(basename "$job_file")
+                # Skip staging files in production deployment
+                if [[ ! "$job_basename" =~ -staging\.yml$ ]]; then
+                    cp "$job_file" /etc/prometheus/jobs/
+                    chmod 644 "/etc/prometheus/jobs/$job_basename"
+                    log_info "  Installed: $job_basename"
+                fi
+            fi
+        done
+    fi
 
     # Set ownership to prometheus user if it exists
     if id "prometheus" &>/dev/null; then

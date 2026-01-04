@@ -319,8 +319,8 @@ pub async fn handle_run(
 
     // Start metrics server in the background (AFTER metrics are initialized)
     if is_production || is_staging {
-        // Auto-assign port based on environment: production=9091, staging=9092
-        let metrics_port = if is_staging { 9092 } else { 9091 };
+        // Auto-assign port based on environment: production=9091, staging=9192
+        let metrics_port = if is_staging { 9192 } else { 9091 };
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
             async move {
