@@ -598,6 +598,7 @@ pub async fn handle_run(
     // Spawn envelope router task
     let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
     tokio::spawn(
         async move {
             info!("Envelope router task started");
@@ -846,6 +847,7 @@ pub async fn handle_run(
 
     // Spawn queue depth and system metrics reporter
     // Reports the depth of all processing queues and DB pool state to Prometheus every 10 seconds
+    let metrics_packet_router = packet_router.clone();
     let metrics_aircraft_rx = aircraft_rx.clone();
     let metrics_receiver_status_rx = receiver_status_rx.clone();
     let metrics_receiver_position_rx = receiver_position_rx.clone();
@@ -860,6 +862,8 @@ pub async fn handle_run(
                 interval.tick().await;
 
                 // Sample queue depths (lock-free with flume!)
+                let envelope_intake_depth = metrics_envelope_rx.len();
+                let internal_queue_depth = metrics_packet_router.internal_queue_depth();
                 let aircraft_depth = metrics_aircraft_rx.len();
                 let receiver_status_depth = metrics_receiver_status_rx.len();
                 let receiver_position_depth = metrics_receiver_position_rx.len();
@@ -870,6 +874,9 @@ pub async fn handle_run(
                 let active_connections = pool_state.connections - pool_state.idle_connections;
 
                 // Report queue depths to Prometheus
+                metrics::gauge!("socket.envelope_intake_queue.depth")
+                    .set(envelope_intake_depth as f64);
+                metrics::gauge!("aprs.router.internal_queue.depth").set(internal_queue_depth as f64);
                 metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
                 metrics::gauge!("aprs.receiver_status_queue.depth")
                     .set(receiver_status_depth as f64);
@@ -884,7 +891,29 @@ pub async fn handle_run(
                 metrics::gauge!("aprs.db_pool.idle_connections")
                     .set(pool_state.idle_connections as f64);
 
-                // Warn if queues are building up (50% full)
+                // Warn if queues are building up
+                // Envelope intake queue: 80% threshold (critical - first point of backpressure)
+                if envelope_intake_depth > (ENVELOPE_INTAKE_QUEUE_SIZE * 80 / 100) {
+                    let percent = (envelope_intake_depth as f64 / ENVELOPE_INTAKE_QUEUE_SIZE as f64
+                        * 100.0) as usize;
+                    warn!(
+                        "Envelope intake queue building up: {}/{} messages ({}% full) - socket reads may slow down",
+                        envelope_intake_depth, ENVELOPE_INTAKE_QUEUE_SIZE, percent
+                    );
+                }
+
+                // Internal router queue: 50% threshold
+                const INTERNAL_QUEUE_SIZE: usize = 1_000;
+                if internal_queue_depth > queue_warning_threshold(INTERNAL_QUEUE_SIZE) {
+                    let percent =
+                        (internal_queue_depth as f64 / INTERNAL_QUEUE_SIZE as f64 * 100.0) as usize;
+                    warn!(
+                        "PacketRouter internal queue building up: {}/{} messages ({}% full)",
+                        internal_queue_depth, INTERNAL_QUEUE_SIZE, percent
+                    );
+                }
+
+                // Aircraft position queue: 50% threshold
                 if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {
                     let percent =
                         (aircraft_depth as f64 / AIRCRAFT_QUEUE_SIZE as f64 * 100.0) as usize;
