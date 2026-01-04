@@ -74,8 +74,8 @@ pub async fn handle_ingest_adsb(
     // Start metrics server in production/staging mode (AFTER metrics are initialized)
     if is_production || is_staging {
         // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
-        // Auto-assign default based on environment: production=9094, staging=9096
-        let default_port = if is_staging { 9096 } else { 9094 };
+        // Auto-assign default based on environment: production=9094, staging=9196
+        let default_port = if is_staging { 9196 } else { 9094 };
         let metrics_port = env::var("METRICS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
@@ -218,10 +218,10 @@ pub async fn handle_ingest_adsb(
         }
     };
 
-    // Mark socket as connected in health state (reuse nats_connected field for now)
+    // Mark socket as connected in health state
     {
         let mut health = health_state.write().await;
-        health.nats_connected =
+        health.socket_connected =
             beast_socket_client.is_connected() || sbs_socket_client.is_connected();
     }
 

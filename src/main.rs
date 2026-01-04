@@ -109,10 +109,10 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         countries: Option<Vec<String>>,
     },
-    /// Ingest OGN (APRS) messages into NATS (durable queue service)
+    /// Ingest OGN (APRS) messages (uses persistent queue + Unix socket)
     ///
-    /// This service connects to OGN APRS-IS and publishes all messages to NATS.
-    /// It is designed to run independently and survive restarts without dropping messages.
+    /// This service connects to OGN APRS-IS and buffers messages to a persistent queue.
+    /// Messages are sent to soar-run via Unix socket when available.
     IngestOgn {
         /// APRS server hostname
         #[arg(long, default_value = "aprs.glidernet.org")]
@@ -137,10 +137,6 @@ enum Commands {
         /// Delay between reconnection attempts in seconds
         #[arg(long, default_value = "5")]
         retry_delay: u64,
-
-        /// NATS server URL for JetStream
-        #[arg(long, default_value = "nats://localhost:4222")]
-        nats_url: String,
     },
     /// Ingest ADS-B (Beast) messages (uses persistent queue + Unix socket)
     ///
@@ -956,9 +952,8 @@ async fn main() -> Result<()> {
             filter,
             max_retries,
             retry_delay,
-            nats_url,
         } => {
-            // IngestOgn only uses NATS, doesn't need database
+            // IngestOgn uses persistent queue + Unix socket, doesn't need database
             return handle_ingest_ogn(
                 server.clone(),
                 *port,
@@ -966,7 +961,6 @@ async fn main() -> Result<()> {
                 filter.clone(),
                 *max_retries,
                 *retry_delay,
-                nats_url.clone(),
             )
             .await;
         }

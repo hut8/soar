@@ -159,9 +159,9 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     info!("Starting pull-data operation");
 
     // Start metrics server for profiling during data pull
-    // Auto-assign port based on environment to avoid conflicts: production=9092, staging=9102
+    // Auto-assign port based on environment to avoid conflicts: production=9092, staging=9202
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
-    let metrics_port = if soar_env == "staging" { 9102 } else { 9092 };
+    let metrics_port = if soar_env == "staging" { 9202 } else { 9092 };
     tokio::spawn(async move {
         soar::metrics::start_metrics_server(metrics_port, Some("pull-data")).await;
     });

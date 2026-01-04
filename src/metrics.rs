@@ -14,7 +14,7 @@ static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 #[derive(Clone, Debug, Default)]
 pub struct AprsIngestHealth {
     pub aprs_connected: bool,
-    pub nats_connected: bool,
+    pub socket_connected: bool,
     pub last_message_time: Option<Instant>,
 }
 
@@ -40,7 +40,7 @@ pub fn set_aprs_health(health: Arc<RwLock<AprsIngestHealth>>) {
 #[derive(Clone, Debug, Default)]
 pub struct BeastIngestHealth {
     pub beast_connected: bool,
-    pub nats_connected: bool,
+    pub socket_connected: bool,
     pub last_message_time: Option<Instant>,
     pub last_error: Option<String>,
 }
@@ -106,13 +106,44 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
         // Covers: stationary gliders, normal glider speeds, high-speed aircraft, anomalies
         .set_buckets_for_metric(
             metrics_exporter_prometheus::Matcher::Full(
-                "flight_tracker_coalesce_speed_mph".to_string(),
+                "flight_tracker.coalesce.speed_mph".to_string(),
             ),
             &[
                 0.0, 5.0, 10.0, 20.0, 30.0, 50.0, 100.0, 200.0, 500.0, 1000.0,
             ],
         )
-        .expect("failed to set buckets for flight_tracker_coalesce_speed_mph")
+        .expect("failed to set buckets for flight_tracker.coalesce.speed_mph")
+        // Configure coalesce distance histograms with km buckets
+        // Buckets: 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500 km
+        // Covers: close GPS dropouts (100m), nearby coalesces, moderate distances, long-distance resumes
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "flight_tracker.coalesce.resumed.distance_km".to_string(),
+            ),
+            &[
+                0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0,
+            ],
+        )
+        .expect("failed to set buckets for flight_tracker.coalesce.resumed.distance_km")
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "flight_tracker.coalesce.rejected.distance_km".to_string(),
+            ),
+            &[
+                0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0,
+            ],
+        )
+        .expect("failed to set buckets for flight_tracker.coalesce.rejected.distance_km")
+        // Configure coalesce gap duration histogram with hour buckets
+        // Buckets: 0.1, 0.5, 1, 2, 4, 6, 12, 18, 24 hours
+        // Covers: short gaps (minutes), medium gaps (1-4h), large gaps (4h+), hard limit (18h), edge cases (24h+)
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "flight_tracker.coalesce.rejected.gap_hours".to_string(),
+            ),
+            &[0.1, 0.5, 1.0, 2.0, 4.0, 6.0, 12.0, 18.0, 24.0],
+        )
+        .expect("failed to set buckets for flight_tracker.coalesce.rejected.gap_hours")
         .install_recorder()
         .expect("failed to install Prometheus recorder")
 }
@@ -303,6 +334,9 @@ pub fn initialize_aprs_ingest_metrics() {
     metrics::counter!("aprs.nats.slow_publish_total").absolute(0);
     metrics::histogram!("aprs.nats.publish_duration_ms").record(0.0);
 
+    // Socket send metrics (ingest-ogn → soar-run via Unix socket)
+    metrics::counter!("aprs.socket.send_error_total").absolute(0);
+
     // Connection timeout metric
     metrics::counter!("aprs.connection.timeout_total").absolute(0);
 }
@@ -333,6 +367,9 @@ pub fn initialize_beast_ingest_metrics() {
     metrics::gauge!("beast.nats.queue_depth").set(0.0);
     metrics::gauge!("beast.nats.in_flight").set(0.0);
     metrics::histogram!("beast.nats.publish_duration_ms").record(0.0);
+
+    // Socket send metrics (ingest-adsb → soar-run via Unix socket)
+    metrics::counter!("beast.socket.send_error_total").absolute(0);
 
     // General ingestion metrics
     metrics::counter!("beast.ingest_failed_total").absolute(0);
@@ -454,6 +491,25 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.messages.processed.receiver_position_total").absolute(0);
     metrics::counter!("aprs.messages.processed.server_total").absolute(0);
     metrics::counter!("aprs.messages.processed.total_total").absolute(0);
+
+    // APRS parsing metrics
+    metrics::counter!("aprs.parse.success_total").absolute(0);
+    metrics::counter!("aprs.parse.failed_total").absolute(0);
+
+    // Fix filtering metrics
+    metrics::counter!("aprs.fixes.suppressed_total").absolute(0);
+    metrics::counter!("aprs.fixes.skipped_aircraft_type_total").absolute(0);
+
+    // Router metrics
+    metrics::counter!("aprs.router.internal_queue_disconnected_total").absolute(0);
+
+    // Socket router metrics
+    metrics::counter!("socket.router.aprs_routed_total").absolute(0);
+    metrics::counter!("socket.router.aprs_send_error_total").absolute(0);
+    metrics::counter!("socket.router.beast_routed_total").absolute(0);
+    metrics::counter!("socket.router.beast_send_error_total").absolute(0);
+    metrics::counter!("socket.router.decode_error_total").absolute(0);
+    metrics::gauge!("socket.envelope_intake_queue.depth").set(0.0);
 
     // Aircraft position processing latency metrics
     metrics::histogram!("aprs.aircraft.lookup_ms").record(0.0);
@@ -586,8 +642,8 @@ async fn health_check_handler() -> impl IntoResponse {
     if let Some(health) = get_aprs_health() {
         let health_state = health.read().await;
 
-        // Service is healthy if both APRS and NATS are connected
-        let is_healthy = health_state.aprs_connected && health_state.nats_connected;
+        // Service is healthy if both APRS and socket are connected
+        let is_healthy = health_state.aprs_connected && health_state.socket_connected;
 
         // Check if we've received messages recently (within last 60 seconds)
         let has_recent_messages = health_state
@@ -606,8 +662,8 @@ async fn health_check_handler() -> impl IntoResponse {
             (StatusCode::OK, status_msg)
         } else {
             let status_msg = format!(
-                "unhealthy - aprs_connected: {}, nats_connected: {}",
-                health_state.aprs_connected, health_state.nats_connected
+                "unhealthy - aprs_connected: {}, socket_connected: {}",
+                health_state.aprs_connected, health_state.socket_connected
             );
             warn!("Health check failed: {}", status_msg);
             (StatusCode::SERVICE_UNAVAILABLE, status_msg)
@@ -635,15 +691,15 @@ async fn readiness_check_handler() -> impl IntoResponse {
             .unwrap_or(false);
 
         let is_ready =
-            health_state.aprs_connected && health_state.nats_connected && has_recent_messages;
+            health_state.aprs_connected && health_state.socket_connected && has_recent_messages;
 
         if is_ready {
             info!("Readiness check: ready");
             (StatusCode::OK, "ready".to_string())
         } else {
             let status_msg = format!(
-                "not ready - aprs: {}, nats: {}, recent_messages: {}",
-                health_state.aprs_connected, health_state.nats_connected, has_recent_messages
+                "not ready - aprs: {}, socket: {}, recent_messages: {}",
+                health_state.aprs_connected, health_state.socket_connected, has_recent_messages
             );
             warn!("Readiness check failed: {}", status_msg);
             (StatusCode::SERVICE_UNAVAILABLE, status_msg)
