@@ -77,7 +77,7 @@ if ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:$"; then
 fi
 
 # Directories
-TEMP_DIR="${BACKUP_TEMP_DIR:-/var/lib/soar/backup-temp}"
+TEMP_DIR="${BACKUP_TEMP_DIR:-/storage/soar/backups/base}"
 mkdir -p "$TEMP_DIR"
 
 # Database connection

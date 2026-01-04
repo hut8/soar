@@ -642,7 +642,7 @@ sudo mkdir -p /var/soar/archive
 sudo mkdir -p /var/soar/elevation
 sudo mkdir -p /etc/soar
 sudo mkdir -p /var/lib/nats/jetstream
-sudo mkdir -p /var/lib/soar/backup-temp
+sudo mkdir -p /storage/soar/backups/base
 
 # Set ownership for soar user
 echo -e "${BLUE}Setting ownership for soar user...${NC}"
@@ -653,8 +653,8 @@ sudo chmod 755 /home/soar
 
 # Set ownership for backup temp directory (used by postgres user)
 echo -e "${BLUE}Setting ownership for backup temp directory...${NC}"
-sudo chown -R postgres:postgres /var/lib/soar/backup-temp
-sudo chmod 750 /var/lib/soar/backup-temp
+sudo chown -R postgres:postgres /storage/soar/backups/base
+sudo chmod 750 /storage/soar/backups/base
 
 # Download elevation data with rclone
 echo -e "${BLUE}Setting up elevation data...${NC}"

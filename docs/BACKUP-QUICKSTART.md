@@ -9,7 +9,7 @@ For comprehensive documentation, see [DB-BACKUPS.md](./DB-BACKUPS.md).
 - PostgreSQL 17 with 420GB `soar` database
 - rclone installed (`apt install rclone`)
 - Cloud storage account (Wasabi recommended)
-- ~150GB free disk space in `/var/lib/soar/backup-temp`
+- ~150GB free disk space in `/storage/soar/backups/base`
 
 ## Step 1: Set Up Cloud Storage (5 minutes)
 
@@ -279,11 +279,11 @@ du -sh /var/lib/postgresql/18/main/pg_wal/
 
 ### Disk Space Running Low
 
-**Symptom**: `/var/lib/soar/backup-temp` filling up
+**Symptom**: `/storage/soar/backups/base` filling up
 
 **Fix**:
-1. Check for stuck backups: `ls -lh /var/lib/soar/backup-temp/`
-2. Clean old temp files: `sudo rm -rf /var/lib/soar/backup-temp/*`
+1. Check for stuck backups: `ls -lh /storage/soar/backups/base/`
+2. Clean old temp files: `sudo rm -rf /storage/soar/backups/base/*`
 3. Ensure base backup completed: `sudo journalctl -u soar-backup-base.service -n 100`
 
 ### Base Backup Taking Too Long
