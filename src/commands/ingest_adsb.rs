@@ -252,13 +252,22 @@ pub async fn handle_ingest_adsb(
                     match recv_result {
                         Ok(message) => {
                             // Send to socket
-                            if let Err(e) = beast_socket_client.send(message).await {
-                                error!("Failed to send Beast message to socket: {}", e);
-                                metrics::counter!("beast.socket.send_error_total").increment(1);
+                            match beast_socket_client.send(message).await {
+                                Ok(_) => {
+                                    // Successfully delivered - commit the message so it won't be replayed
+                                    if let Err(e) = beast_queue_for_publisher.commit().await {
+                                        error!("Failed to commit Beast message offset: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to send Beast message to socket: {}", e);
+                                    metrics::counter!("beast.socket.send_error_total").increment(1);
 
-                                // Reconnect and retry
-                                if let Err(e) = beast_socket_client.reconnect().await {
-                                    error!("Failed to reconnect Beast socket: {}", e);
+                                    // DON'T commit - message will be replayed on next recv()
+                                    // Reconnect and retry
+                                    if let Err(e) = beast_socket_client.reconnect().await {
+                                        error!("Failed to reconnect Beast socket: {}", e);
+                                    }
                                 }
                             }
                         }
@@ -290,13 +299,22 @@ pub async fn handle_ingest_adsb(
                     match recv_result {
                         Ok(message) => {
                             // Send to socket
-                            if let Err(e) = sbs_socket_client.send(message).await {
-                                error!("Failed to send SBS message to socket: {}", e);
-                                metrics::counter!("sbs.socket.send_error_total").increment(1);
+                            match sbs_socket_client.send(message).await {
+                                Ok(_) => {
+                                    // Successfully delivered - commit the message so it won't be replayed
+                                    if let Err(e) = sbs_queue_for_publisher.commit().await {
+                                        error!("Failed to commit SBS message offset: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to send SBS message to socket: {}", e);
+                                    metrics::counter!("sbs.socket.send_error_total").increment(1);
 
-                                // Reconnect and retry
-                                if let Err(e) = sbs_socket_client.reconnect().await {
-                                    error!("Failed to reconnect SBS socket: {}", e);
+                                    // DON'T commit - message will be replayed on next recv()
+                                    // Reconnect and retry
+                                    if let Err(e) = sbs_socket_client.reconnect().await {
+                                        error!("Failed to reconnect SBS socket: {}", e);
+                                    }
                                 }
                             }
                         }
