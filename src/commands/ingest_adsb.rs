@@ -103,6 +103,10 @@ pub async fn handle_ingest_adsb(
     // Set up signal handling for immediate shutdown
     info!("Setting up shutdown handlers...");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let (beast_publisher_shutdown_tx, beast_publisher_shutdown_rx) =
+        tokio::sync::oneshot::channel::<()>();
+    let (sbs_publisher_shutdown_tx, sbs_publisher_shutdown_rx) =
+        tokio::sync::oneshot::channel::<()>();
 
     // Spawn signal handler task for both SIGINT and SIGTERM
     tokio::spawn(async move {
@@ -138,8 +142,10 @@ pub async fn handle_ingest_adsb(
             }
         }
 
-        // Signal shutdown
+        // Signal shutdown to clients and publishers
         let _ = shutdown_tx.send(());
+        let _ = beast_publisher_shutdown_tx.send(());
+        let _ = sbs_publisher_shutdown_tx.send(());
     });
 
     // Create persistent queues for buffering messages
@@ -231,25 +237,36 @@ pub async fn handle_ingest_adsb(
 
     // Spawn Beast publisher task: reads from queue → sends to socket
     let beast_queue_for_publisher = beast_queue.clone();
+    let mut beast_publisher_shutdown_rx_inner = beast_publisher_shutdown_rx;
     let beast_publisher_handle = tokio::spawn(async move {
         info!("Beast publisher task started");
         loop {
-            match beast_queue_for_publisher.recv().await {
-                Ok(message) => {
-                    // Send to socket
-                    if let Err(e) = beast_socket_client.send(message).await {
-                        error!("Failed to send Beast message to socket: {}", e);
-                        metrics::counter!("beast.socket.send_error_total").increment(1);
+            tokio::select! {
+                // Check for shutdown signal first (biased)
+                _ = &mut beast_publisher_shutdown_rx_inner => {
+                    info!("Beast publisher task received shutdown signal, exiting...");
+                    break;
+                }
+                // Process queue messages
+                recv_result = beast_queue_for_publisher.recv() => {
+                    match recv_result {
+                        Ok(message) => {
+                            // Send to socket
+                            if let Err(e) = beast_socket_client.send(message).await {
+                                error!("Failed to send Beast message to socket: {}", e);
+                                metrics::counter!("beast.socket.send_error_total").increment(1);
 
-                        // Reconnect and retry
-                        if let Err(e) = beast_socket_client.reconnect().await {
-                            error!("Failed to reconnect Beast socket: {}", e);
+                                // Reconnect and retry
+                                if let Err(e) = beast_socket_client.reconnect().await {
+                                    error!("Failed to reconnect Beast socket: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to receive from Beast queue: {}", e);
+                            break;
                         }
                     }
-                }
-                Err(e) => {
-                    error!("Failed to receive from Beast queue: {}", e);
-                    break;
                 }
             }
         }
@@ -258,25 +275,36 @@ pub async fn handle_ingest_adsb(
 
     // Spawn SBS publisher task: reads from queue → sends to socket
     let sbs_queue_for_publisher = sbs_queue.clone();
+    let mut sbs_publisher_shutdown_rx_inner = sbs_publisher_shutdown_rx;
     let sbs_publisher_handle = tokio::spawn(async move {
         info!("SBS publisher task started");
         loop {
-            match sbs_queue_for_publisher.recv().await {
-                Ok(message) => {
-                    // Send to socket
-                    if let Err(e) = sbs_socket_client.send(message).await {
-                        error!("Failed to send SBS message to socket: {}", e);
-                        metrics::counter!("sbs.socket.send_error_total").increment(1);
+            tokio::select! {
+                // Check for shutdown signal first (biased)
+                _ = &mut sbs_publisher_shutdown_rx_inner => {
+                    info!("SBS publisher task received shutdown signal, exiting...");
+                    break;
+                }
+                // Process queue messages
+                recv_result = sbs_queue_for_publisher.recv() => {
+                    match recv_result {
+                        Ok(message) => {
+                            // Send to socket
+                            if let Err(e) = sbs_socket_client.send(message).await {
+                                error!("Failed to send SBS message to socket: {}", e);
+                                metrics::counter!("sbs.socket.send_error_total").increment(1);
 
-                        // Reconnect and retry
-                        if let Err(e) = sbs_socket_client.reconnect().await {
-                            error!("Failed to reconnect SBS socket: {}", e);
+                                // Reconnect and retry
+                                if let Err(e) = sbs_socket_client.reconnect().await {
+                                    error!("Failed to reconnect SBS socket: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to receive from SBS queue: {}", e);
+                            break;
                         }
                     }
-                }
-                Err(e) => {
-                    error!("Failed to receive from SBS queue: {}", e);
-                    break;
                 }
             }
         }

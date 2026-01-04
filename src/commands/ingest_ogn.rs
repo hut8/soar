@@ -96,6 +96,7 @@ pub async fn handle_ingest_ogn(
     // Set up signal handling for immediate shutdown
     info!("Setting up shutdown handlers...");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let (publisher_shutdown_tx, publisher_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     // Spawn signal handler task for both SIGINT and SIGTERM
     tokio::spawn(async move {
@@ -131,8 +132,9 @@ pub async fn handle_ingest_ogn(
             }
         }
 
-        // Signal shutdown
+        // Signal shutdown to both client and publisher
         let _ = shutdown_tx.send(());
+        let _ = publisher_shutdown_tx.send(());
     });
 
     // Create OGN (APRS) client config
@@ -195,25 +197,36 @@ pub async fn handle_ingest_ogn(
 
     // Spawn publisher task: reads from queue → sends to socket
     let queue_for_publisher = queue.clone();
+    let mut publisher_shutdown_rx_inner = publisher_shutdown_rx;
     let publisher_handle = tokio::spawn(async move {
         info!("Publisher task started");
         loop {
-            match queue_for_publisher.recv().await {
-                Ok(message) => {
-                    // Send to socket
-                    if let Err(e) = socket_client.send(message.into_bytes()).await {
-                        error!("Failed to send to socket: {}", e);
-                        metrics::counter!("aprs.socket.send_error_total").increment(1);
+            tokio::select! {
+                // Check for shutdown signal first (biased)
+                _ = &mut publisher_shutdown_rx_inner => {
+                    info!("Publisher task received shutdown signal, exiting...");
+                    break;
+                }
+                // Process queue messages
+                recv_result = queue_for_publisher.recv() => {
+                    match recv_result {
+                        Ok(message) => {
+                            // Send to socket
+                            if let Err(e) = socket_client.send(message.into_bytes()).await {
+                                error!("Failed to send to socket: {}", e);
+                                metrics::counter!("aprs.socket.send_error_total").increment(1);
 
-                        // Reconnect and retry
-                        if let Err(e) = socket_client.reconnect().await {
-                            error!("Failed to reconnect to socket: {}", e);
+                                // Reconnect and retry
+                                if let Err(e) = socket_client.reconnect().await {
+                                    error!("Failed to reconnect to socket: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to receive from queue: {}", e);
+                            break;
                         }
                     }
-                }
-                Err(e) => {
-                    error!("Failed to receive from queue: {}", e);
-                    break;
                 }
             }
         }
