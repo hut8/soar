@@ -236,7 +236,9 @@ where
 
             file.seek(std::io::SeekFrom::Start(16))?;
             file.write_all(&new_read_offset.to_le_bytes())?;
-            file.flush()?;
+            // Use sync_all() instead of flush() to force write to physical disk
+            // This ensures durability and prevents duplicate messages on SIGKILL
+            file.sync_all()?;
 
             metrics::counter!(format!("queue.{}.messages.committed_total", self.name)).increment(1);
         }
