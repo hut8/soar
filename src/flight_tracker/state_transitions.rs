@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
 use super::flight_lifecycle::{create_flight_fast, spawn_complete_flight};
+use super::geometry::haversine_distance;
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
 
@@ -131,18 +132,98 @@ pub(crate) async fn process_state_transition(
                     }
                 }
             } else {
-                // Continue existing flight
-                fix.flight_id = Some(flight_id);
-
-                // Calculate time gap
-                if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
-                    && let Some(last_fix_time) = state.last_fix_timestamp()
+                // Check for long time/distance gap that indicates aircraft landed
+                // NOTE: Current fix has already been added to state, so we check the PREVIOUS fix
+                let should_end_due_to_gap = if let Some(state) =
+                    ctx.aircraft_states.get(&fix.aircraft_id)
                 {
-                    let gap_seconds = (fix.timestamp - last_fix_time).num_seconds() as i32;
-                    fix.time_gap_seconds = Some(gap_seconds);
-                }
+                    if let Some(prev_fix_time) = state.previous_fix_timestamp() {
+                        let gap_seconds = (fix.timestamp - prev_fix_time).num_seconds();
 
-                update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
+                        // Only check if gap is significant (>30 minutes)
+                        if gap_seconds > 1800 {
+                            if let Some(prev_fix) = state.previous_fix() {
+                                let actual_distance_m = haversine_distance(
+                                    prev_fix.lat,
+                                    prev_fix.lng,
+                                    fix.latitude,
+                                    fix.longitude,
+                                );
+                                let last_speed_knots =
+                                    prev_fix.ground_speed_knots.unwrap_or(0.0) as f64;
+
+                                // If aircraft was flying (>25 knots)
+                                if last_speed_knots > 25.0 {
+                                    let last_speed_ms = last_speed_knots * 0.514444;
+                                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
+                                    let min_expected_distance_m = expected_distance_m * 0.3;
+
+                                    // Aircraft moved way too little for the time/speed - must have landed
+                                    if actual_distance_m < min_expected_distance_m {
+                                        info!(
+                                            "Ending flight {}: moved too little ({:.1}km in {:.1}h at {:.0} knots, expected min {:.1}km)",
+                                            flight_id,
+                                            actual_distance_m / 1000.0,
+                                            gap_seconds as f64 / 3600.0,
+                                            last_speed_knots,
+                                            min_expected_distance_m / 1000.0
+                                        );
+                                        metrics::counter!(
+                                            "flight_tracker.flight_ended.gap_suggests_landing_total"
+                                        )
+                                        .increment(1);
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if should_end_due_to_gap {
+                    // End current flight, start new one
+                    spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
+
+                    let new_flight_id = Uuid::now_v7();
+                    match create_flight_fast(ctx, &fix, new_flight_id, false).await {
+                        Ok(flight_id) => {
+                            fix.flight_id = Some(flight_id);
+                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                                state.current_flight_id = Some(flight_id);
+                                state.current_callsign = fix.flight_number.clone();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to create new flight after gap: {}", e);
+                            fix.flight_id = None;
+                        }
+                    }
+                } else {
+                    // Continue existing flight
+                    fix.flight_id = Some(flight_id);
+
+                    // Calculate time gap
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                        && let Some(last_fix_time) = state.last_fix_timestamp()
+                    {
+                        let gap_seconds = (fix.timestamp - last_fix_time).num_seconds() as i32;
+                        fix.time_gap_seconds = Some(gap_seconds);
+                    }
+
+                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
+                }
 
                 // Check for tow release (towtugs only)
                 if is_towtug
@@ -205,7 +286,7 @@ pub(crate) async fn process_state_transition(
                 let gap_hours = gap_seconds as f64 / 3600.0;
 
                 // Check callsign mismatch
-                let should_coalesce = match (&timed_out_callsign, &fix.flight_number) {
+                let callsign_matches = match (&timed_out_callsign, &fix.flight_number) {
                     (Some(prev), Some(new)) if prev != new => {
                         metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
                             .increment(1);
@@ -213,6 +294,76 @@ pub(crate) async fn process_state_transition(
                     }
                     _ => true,
                 };
+
+                // Check position/distance reasonableness based on time and speed
+                let position_reasonable = if let Some(state) =
+                    ctx.aircraft_states.get(&fix.aircraft_id)
+                    && let Some((last_lat, last_lng)) = state.last_position()
+                {
+                    let actual_distance_m =
+                        haversine_distance(last_lat, last_lng, fix.latitude, fix.longitude);
+
+                    // Get last known ground speed to estimate expected travel distance
+                    let last_speed_knots = state
+                        .last_fix()
+                        .and_then(|f| f.ground_speed_knots)
+                        .unwrap_or(0.0) as f64;
+
+                    // Convert knots to m/s (1 knot = 0.514444 m/s)
+                    let last_speed_ms = last_speed_knots * 0.514444;
+
+                    // Calculate expected distance if aircraft continued at last speed
+                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
+
+                    // Calculate minimum expected distance (aircraft could slow down but not stop if flying)
+                    // If aircraft was flying (>25 knots), it should have traveled at least 30% of expected distance
+                    // (accounting for slowdowns, holding patterns, but not landing)
+                    let min_expected_distance_m = if last_speed_knots > 25.0 {
+                        expected_distance_m * 0.3
+                    } else {
+                        0.0
+                    };
+
+                    // Calculate absolute max based on typical GA aircraft max speed (~300 knots)
+                    let absolute_max_distance_m = gap_seconds as f64 * 300.0 * 0.514444;
+
+                    // Check for impossible/unlikely scenarios
+                    if actual_distance_m > absolute_max_distance_m {
+                        // Teleported - distance impossible even at max GA speed
+                        trace!(
+                            "Flight resumption rejected: teleported {:.1}km in {:.1}h (max possible: {:.1}km)",
+                            actual_distance_m / 1000.0,
+                            gap_hours,
+                            absolute_max_distance_m / 1000.0
+                        );
+                        metrics::counter!(
+                            "flight_tracker.coalesce.rejected.distance_impossible_total"
+                        )
+                        .increment(1);
+                        false
+                    } else if last_speed_knots > 25.0 && actual_distance_m < min_expected_distance_m
+                    {
+                        // Aircraft was flying fast but moved way too little - must have landed
+                        trace!(
+                            "Flight resumption rejected: moved too little ({:.1}km in {:.1}h, was going {:.0} knots, expected min {:.1}km)",
+                            actual_distance_m / 1000.0,
+                            gap_hours,
+                            last_speed_knots,
+                            min_expected_distance_m / 1000.0
+                        );
+                        metrics::counter!("flight_tracker.coalesce.rejected.likely_landed_total")
+                            .increment(1);
+                        false
+                    } else {
+                        // Distance is reasonable for the time gap and last known speed
+                        true
+                    }
+                } else {
+                    // No position data - can't validate distance
+                    true
+                };
+
+                let should_coalesce = callsign_matches && position_reasonable;
 
                 if should_coalesce && gap_hours < 18.0 {
                     // Resume the flight

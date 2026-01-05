@@ -203,6 +203,25 @@ impl AircraftState {
         self.recent_fixes.back().map(|f| f.timestamp)
     }
 
+    /// Get the timestamp of the second-to-last fix (before the current one)
+    /// Useful for calculating time gaps when the current fix has already been added to history
+    pub fn previous_fix_timestamp(&self) -> Option<DateTime<Utc>> {
+        if self.recent_fixes.len() >= 2 {
+            self.recent_fixes.iter().rev().nth(1).map(|f| f.timestamp)
+        } else {
+            None
+        }
+    }
+
+    /// Get the last fix before the current one (for gap calculations)
+    pub fn previous_fix(&self) -> Option<&CompactFix> {
+        if self.recent_fixes.len() >= 2 {
+            self.recent_fixes.iter().rev().nth(1)
+        } else {
+            None
+        }
+    }
+
     /// Get the last known position (lat, lng)
     pub fn last_position(&self) -> Option<(f64, f64)> {
         self.recent_fixes.back().map(|f| (f.lat, f.lng))
