@@ -28,7 +28,7 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::Instrument;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Represents the flight state when timeout occurs
@@ -136,9 +136,14 @@ impl FlightTracker {
 
     /// Initialize the flight tracker on startup:
     /// 1. Timeout old incomplete flights (where last_fix_at is older than timeout_duration)
+    /// 2. Restore aircraft states from database for all active flights
     ///
-    /// Note: With the new unified state design, we don't pre-load flights into memory.
-    /// Aircraft states are created lazily as fixes arrive.
+    /// This restores the in-memory state by loading recent fixes for each active flight,
+    /// which is critical for:
+    /// - Takeoff detection (needs last 3 fixes)
+    /// - Landing detection (needs last 5 fixes)
+    /// - Flight coalescing (needs flight phase from recent fixes)
+    /// - Tow release detection (needs recent fixes for climb rate)
     ///
     /// Returns number of flights timed out
     pub async fn initialize_from_database(
@@ -163,7 +168,66 @@ impl FlightTracker {
             info!("No old incomplete flights to timeout");
         }
 
+        // Restore aircraft states from active flights
+        info!("Restoring aircraft states from database...");
+        let active_flights = self
+            .flights_repo
+            .get_active_flights_for_tracker(timeout_duration)
+            .await?;
+
+        info!("Found {} active flights to restore", active_flights.len());
+
+        let mut restored_count = 0;
+        for flight in active_flights {
+            // Skip flights without aircraft_id (shouldn't happen but be defensive)
+            let aircraft_id = match flight.aircraft_id {
+                Some(id) => id,
+                None => {
+                    warn!(
+                        "Flight {} has no aircraft_id, skipping state restore",
+                        flight.id
+                    );
+                    continue;
+                }
+            };
+
+            // Get last 10 fixes for this flight
+            let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
+            let fixes = self
+                .fixes_repo
+                .get_fixes_for_flight(flight.id, Some(10), start_time, None)
+                .await
+                .unwrap_or_default();
+
+            if fixes.is_empty() {
+                continue;
+            }
+
+            // Create aircraft state with the oldest fix first
+            let first_fix = &fixes[fixes.len() - 1];
+            let is_active = state_transitions::should_be_active(first_fix);
+            let mut state = aircraft_state::AircraftState::new(first_fix, is_active);
+            state.current_flight_id = Some(flight.id);
+
+            // Add remaining fixes in chronological order (oldest to newest)
+            for fix in fixes.iter().rev().skip(1) {
+                let is_active = state_transitions::should_be_active(fix);
+                state.add_fix(fix, is_active);
+            }
+
+            // Insert into map
+            self.aircraft_states.insert(aircraft_id, state);
+            restored_count += 1;
+        }
+
+        info!(
+            "Restored state for {} aircraft with active flights",
+            restored_count
+        );
+
         // Update metrics
+        metrics::counter!("flight_tracker.startup.aircraft_states_restored_total")
+            .increment(restored_count);
         utils::update_flight_tracker_metrics(&self.aircraft_states);
 
         Ok(timed_out_count)
