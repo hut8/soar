@@ -1,9 +1,15 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
+use crate::aircraft_repo::AircraftRepository;
+use crate::airports_repo::AirportsRepository;
+use crate::fixes_repo::FixesRepository;
 use crate::flights::{Flight, TimeoutPhase};
+use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationsRepository;
+use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use dashmap::DashMap;
-use std::sync::Arc;
+use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -15,6 +21,9 @@ use super::location::{
     get_airport_location_id,
 };
 use super::runway::determine_runway_identifier;
+use crate::elevation::ElevationDB;
+
+type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 /// Create a new flight FAST without blocking on slow operations (runway detection, geocoding)
 /// Returns flight_id immediately and spawns background task to enrich the flight record
@@ -307,8 +316,6 @@ pub(crate) async fn timeout_flight(
 /// Complete flight FAST without blocking on slow operations (runway detection, geocoding)
 /// Returns immediately and spawns background task to enrich the flight record
 ///
-/// This is the primary entry point for flight completion - it ensures fix processing isn't blocked
-/// by slow database queries or HTTP API calls.
 /// Spawn flight completion as a background task (non-blocking)
 /// This prevents flight completion (which can take 30+ seconds due to geocoding)
 /// from blocking the fix processing pipeline
@@ -332,22 +339,21 @@ pub(crate) fn spawn_complete_flight(
     let fix_clone = fix.clone();
 
     tokio::spawn(async move {
-        // Create empty aircraft_states Arc (not needed for completion but required for context)
-        let empty_states = Arc::new(DashMap::new());
-
-        let ctx = FlightProcessorContext {
-            flights_repo: &flights_repo,
-            aircraft_repo: &aircraft_repo,
-            airports_repo: &airports_repo,
-            locations_repo: &locations_repo,
-            runways_repo: &runways_repo,
-            fixes_repo: &fixes_repo,
-            elevation_db: &elevation_db,
-            aircraft_states: &empty_states,
+        if let Err(e) = complete_flight_in_background(
+            &fixes_repo,
+            &flights_repo,
+            &aircraft_repo,
+            &airports_repo,
+            &locations_repo,
+            &runways_repo,
+            &elevation_db,
             pool,
-        };
-
-        if let Err(e) = complete_flight_fast(&ctx, &device_clone, flight_id, &fix_clone).await {
+            &device_clone,
+            flight_id,
+            &fix_clone,
+        )
+        .await
+        {
             error!(
                 "Background flight completion failed for flight {}: {}",
                 flight_id, e
@@ -356,8 +362,16 @@ pub(crate) fn spawn_complete_flight(
     });
 }
 
-async fn complete_flight_fast(
-    ctx: &FlightProcessorContext<'_>,
+#[allow(clippy::too_many_arguments)]
+async fn complete_flight_in_background(
+    fixes_repo: &FixesRepository,
+    flights_repo: &FlightsRepository,
+    _aircraft_repo: &AircraftRepository,
+    airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
+    runways_repo: &RunwaysRepository,
+    elevation_db: &ElevationDB,
+    pool: PgPool,
     device: &Aircraft,
     flight_id: Uuid,
     fix: &Fix,
@@ -366,20 +380,18 @@ async fn complete_flight_fast(
 
     // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
     let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
-    let flight_fixes = ctx
-        .fixes_repo
+    let flight_fixes = fixes_repo
         .get_fixes_for_flight(flight_id, None, start_time, None)
         .await?;
 
     // Quick airport lookup (fast - spatial index)
-    let arrival_airport_id =
-        find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
+    let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
     // Calculate altitude offset (fast - elevation db)
-    let landing_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
+    let landing_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
 
     // Fetch the flight to compute distance metrics
-    let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await {
+    let flight = match flights_repo.get_flight_by_id(flight_id).await {
         Ok(Some(f)) => f,
         Ok(None) => {
             error!("Flight {} not found when completing", flight_id);
@@ -391,7 +403,7 @@ async fn complete_flight_fast(
         }
     };
 
-    // Check if this is a spurious flight (same logic as complete_flight)
+    // Check if this is a spurious flight
     if let Some(takeoff_time) = flight.takeoff_time {
         let duration_seconds = (fix.timestamp - takeoff_time).num_seconds();
 
@@ -460,7 +472,7 @@ async fn complete_flight_fast(
             || has_excessive_speed;
 
         if is_spurious {
-            // Delete spurious flight (same logic as complete_flight)
+            // Delete spurious flight
             let mut reasons = Vec::new();
             if duration_seconds < 120 {
                 reasons.push(format!("duration too short ({}s < 120s)", duration_seconds));
@@ -494,18 +506,16 @@ async fn complete_flight_fast(
                 reasons.join(", ")
             );
 
-            // CRITICAL: Clear current_flight_id FIRST to prevent race condition
-            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                state.current_flight_id = None;
-            }
+            // NOTE: current_flight_id is already cleared by the caller (in state_transitions.rs)
+            // before spawning this background task, so we don't need to touch aircraft_states here
 
             // Clear flight_id from all associated fixes
-            if let Err(e) = ctx.fixes_repo.clear_flight_id(flight_id).await {
+            if let Err(e) = fixes_repo.clear_flight_id(flight_id).await {
                 error!("Failed to clear flight_id from fixes: {}", e);
             }
 
             // Delete the flight
-            ctx.flights_repo.delete_flight(flight_id).await?;
+            flights_repo.delete_flight(flight_id).await?;
 
             metrics::counter!("flight_tracker.spurious_flights_deleted_total").increment(1);
 
@@ -515,20 +525,20 @@ async fn complete_flight_fast(
 
     // Calculate total distance flown (using cached fixes for performance)
     let total_distance_meters = flight
-        .total_distance(ctx.fixes_repo, Some(&flight_fixes))
+        .total_distance(fixes_repo, Some(&flight_fixes))
         .await
         .ok()
         .flatten();
 
     // Calculate maximum displacement from takeoff (using cached fixes for performance)
     let maximum_displacement_meters = flight
-        .maximum_displacement(ctx.fixes_repo, ctx.airports_repo, Some(&flight_fixes))
+        .maximum_displacement(fixes_repo, airports_repo, Some(&flight_fixes))
         .await
         .ok()
         .flatten();
 
     // Update flight with MINIMAL landing data (NO runway, NO geocoded locations yet)
-    ctx.flights_repo
+    flights_repo
         .update_flight_landing(
             flight_id,
             fix.timestamp, // landing_time
@@ -545,7 +555,7 @@ async fn complete_flight_fast(
         .await?;
 
     // Calculate and update bounding box now that flight is complete
-    ctx.flights_repo
+    flights_repo
         .calculate_and_update_bounding_box(flight_id)
         .await?;
 
@@ -558,10 +568,19 @@ async fn complete_flight_fast(
     );
 
     // Spawn background task to enrich flight with runway/location data (SLOW operations)
-    spawn_flight_enrichment_on_completion(ctx, fix.clone(), device.clone(), flight_id);
+    spawn_flight_enrichment_on_completion_direct(
+        fixes_repo,
+        flights_repo,
+        airports_repo,
+        locations_repo,
+        runways_repo,
+        fix.clone(),
+        device.clone(),
+        flight_id,
+    );
 
-    // Spawn email notification task (same as complete_flight)
-    let pool_clone = ctx.pool.clone();
+    // Spawn email notification task
+    let pool_clone = pool.clone();
     let device_id_opt = device.id;
     let device_address = device.address;
 
@@ -706,17 +725,24 @@ async fn complete_flight_fast(
 
 /// Spawn background task to enrich flight with runway and location data on completion
 /// This runs AFTER the flight is completed and fix is processed, so it doesn't block the pipeline
-fn spawn_flight_enrichment_on_completion(
-    ctx: &FlightProcessorContext<'_>,
+/// Direct version of spawn_flight_enrichment_on_completion that takes individual repos
+/// Used by complete_flight_in_background to avoid context reconstruction
+#[allow(clippy::too_many_arguments)]
+fn spawn_flight_enrichment_on_completion_direct(
+    fixes_repo: &FixesRepository,
+    flights_repo: &FlightsRepository,
+    airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
+    runways_repo: &RunwaysRepository,
     fix: Fix,
     aircraft: Aircraft,
     flight_id: Uuid,
 ) {
-    let flights_repo = ctx.flights_repo.clone();
-    let fixes_repo = ctx.fixes_repo.clone();
-    let runways_repo = ctx.runways_repo.clone();
-    let airports_repo = ctx.airports_repo.clone();
-    let locations_repo = ctx.locations_repo.clone();
+    let flights_repo = flights_repo.clone();
+    let fixes_repo = fixes_repo.clone();
+    let runways_repo = runways_repo.clone();
+    let airports_repo = airports_repo.clone();
+    let locations_repo = locations_repo.clone();
 
     tokio::spawn(async move {
         let start = std::time::Instant::now();
@@ -768,7 +794,7 @@ fn spawn_flight_enrichment_on_completion(
                         &locations_repo,
                         fix.latitude,
                         fix.longitude,
-                        "end (landing)",
+                        "end (no airport location)",
                     )
                     .await
                 }
@@ -778,43 +804,35 @@ fn spawn_flight_enrichment_on_completion(
                 &locations_repo,
                 fix.latitude,
                 fix.longitude,
-                "end (landing)",
+                "end (no airport)",
             )
             .await
         };
 
-        let landing_location_id = create_or_find_location(
-            &airports_repo,
-            &locations_repo,
-            fix.latitude,
-            fix.longitude,
-            arrival_airport_id,
-        )
-        .await;
-
-        // Update flight with enriched data
+        // Update flight with enriched landing data
         if let Err(e) = flights_repo
             .update_flight_landing_enrichment(
                 flight_id,
                 landing_runway,
                 landing_runway_inferred,
                 end_location_id,
-                landing_location_id,
+                None, // landing_location_id - not set during enrichment
             )
             .await
         {
             error!(
-                "Failed to update flight {} with landing enrichment data: {}",
+                "Failed to update flight {} with enriched landing data: {}",
                 flight_id, e
             );
         }
 
-        metrics::histogram!("flight_tracker.enrich_flight_on_completion.latency_ms")
+        metrics::histogram!("flight_tracker.enrichment.landing.latency_ms")
             .record(start.elapsed().as_micros() as f64 / 1000.0);
 
         debug!(
-            "Enriched flight {} with landing runway/location data in background",
-            flight_id
+            "Flight {} landing enrichment completed in {:.2}s",
+            flight_id,
+            start.elapsed().as_secs_f64()
         );
     });
 }
