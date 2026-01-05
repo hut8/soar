@@ -231,27 +231,27 @@ pub(crate) async fn timeout_flight(
 
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
-    // Fetch last fix to get coordinates for reverse geocoding
-    let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
-    let last_fix = ctx
-        .fixes_repo
-        .get_fixes_for_flight(flight_id, Some(1), start_time, None)
-        .await?
-        .into_iter()
-        .next();
-
-    // Create end location with reverse geocoding if we have the last fix
-    let end_location_id = if let Some(fix) = last_fix {
-        create_start_end_location(
-            ctx.locations_repo,
-            fix.latitude,
-            fix.longitude,
-            "end (timeout)",
-        )
-        .await
+    // Get last fix from in-memory state for reverse geocoding
+    // No need to query database - we already have the last fix in aircraft state
+    let end_location_id = if let Some(state) = ctx.aircraft_states.get(&aircraft_id) {
+        if let Some(last_fix) = state.last_fix() {
+            create_start_end_location(
+                ctx.locations_repo,
+                last_fix.lat,
+                last_fix.lng,
+                "end (timeout)",
+            )
+            .await
+        } else {
+            debug!(
+                "No fixes in aircraft state for timed out flight {}, skipping end location creation",
+                flight_id
+            );
+            None
+        }
     } else {
         debug!(
-            "No fixes found for timed out flight {}, skipping end location creation",
+            "No aircraft state found for timed out flight {}, skipping end location creation",
             flight_id
         );
         None
