@@ -1284,8 +1284,10 @@ impl FlightsRepository {
         Ok(rows_affected)
     }
 
-    /// Get all flights for tracker initialization (not landed, last_fix_at within timeout_duration)
-    /// Returns both active and timed-out flights that should be loaded into the flight tracker on startup
+    /// Get all flights for tracker initialization
+    /// Returns:
+    /// - Active flights (timed_out_at IS NULL) from last `timeout_duration` (e.g., 1 hour)
+    /// - Timed-out flights (timed_out_at IS NOT NULL) from last 18 hours (for resumption)
     pub async fn get_active_flights_for_tracker(
         &self,
         timeout_duration: chrono::Duration,
@@ -1293,18 +1295,28 @@ impl FlightsRepository {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
-        let cutoff_time = Utc::now() - timeout_duration;
+        let active_cutoff = Utc::now() - timeout_duration;
+        let timed_out_cutoff = Utc::now() - chrono::Duration::hours(18);
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Get flights where:
-            // - landing_time is NULL (not landed)
-            // - last_fix_at is within the timeout window (recent enough to track)
-            // This includes both active (timed_out_at is NULL) and timed-out flights
+            // Get flights where landing_time is NULL and either:
+            // 1. Active (timed_out_at IS NULL) with last_fix_at within timeout_duration
+            // 2. Timed-out (timed_out_at IS NOT NULL) with last_fix_at within 18 hours
+            //
+            // We need the longer window for timed-out flights to support resumption
+            // (state_transitions.rs has an 18-hour hard limit for resuming timed-out flights)
             let flight_models: Vec<FlightModel> = flights
                 .filter(landing_time.is_null())
-                .filter(last_fix_at.ge(cutoff_time))
+                .filter(
+                    timed_out_at
+                        .is_null()
+                        .and(last_fix_at.ge(active_cutoff))
+                        .or(timed_out_at
+                            .is_not_null()
+                            .and(last_fix_at.ge(timed_out_cutoff))),
+                )
                 .order(last_fix_at.desc())
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
