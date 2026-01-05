@@ -42,6 +42,115 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "msg/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 9999,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_message_rate{component=\"ingest-ogn\",environment=\"$environment\"}",
+          "legendFormat": "OGN/APRS (msg/s)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_message_rate{component=\"ingest-adsb\",environment=\"$environment\"}",
+          "legendFormat": "ADS-B/Beast (msg/s)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Ingestion Message Rates",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "thresholds"
           },
           "mappings": [],
@@ -68,7 +177,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2,
+        "y": 11,
         "w": 24,
         "h": 8
       },
@@ -155,7 +264,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 28,
         "w": 24,
         "h": 8
       },
@@ -252,7 +361,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 53,
         "w": 24,
         "h": 8
       },
@@ -390,7 +499,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 77,
+        "y": 86,
         "w": 24,
         "h": 8
       },
@@ -604,7 +713,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 119,
+        "y": 128,
         "w": 24,
         "h": 8
       },
@@ -688,7 +797,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 169,
+        "y": 178,
         "w": 24,
         "h": 8
       },
@@ -785,7 +894,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 228,
+        "y": 237,
         "w": 24,
         "h": 8
       },
@@ -986,7 +1095,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 295,
+        "y": 304,
         "w": 24,
         "h": 8
       },
@@ -1189,7 +1298,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 371,
+        "y": 380,
         "w": 24,
         "h": 8
       },
@@ -1314,7 +1423,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 455,
+        "y": 464,
         "w": 24,
         "h": 8
       },
@@ -1363,7 +1472,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 548
+        "y": 557
       },
       "id": 1011,
       "options": {
@@ -1454,7 +1563,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 645,
+        "y": 654,
         "w": 24,
         "h": 8
       },
@@ -1509,7 +1618,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 653
+        "y": 662
       },
       "id": 1013,
       "panels": [],
@@ -1592,7 +1701,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 655,
+        "y": 664,
         "w": 24,
         "h": 8
       },
@@ -1749,7 +1858,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 672,
+        "y": 681,
         "w": 24,
         "h": 8
       },
@@ -1887,7 +1996,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 697,
+        "y": 706,
         "w": 24,
         "h": 8
       },
@@ -2014,7 +2123,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 730,
+        "y": 739,
         "w": 24,
         "h": 8
       },
@@ -2154,7 +2263,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 772,
+        "y": 781,
         "w": 24,
         "h": 8
       },
@@ -2317,7 +2426,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 822,
+        "y": 831,
         "w": 24,
         "h": 8
       },
@@ -2443,7 +2552,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 880,
+        "y": 889,
         "w": 24,
         "h": 8
       },
@@ -2562,7 +2671,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 954,
+        "y": 963,
         "w": 24,
         "h": 8
       },
@@ -2653,7 +2762,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1036,
+        "y": 1045,
         "w": 24,
         "h": 8
       },
@@ -2744,7 +2853,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1126,
+        "y": 1135,
         "w": 24,
         "h": 8
       },
@@ -2846,7 +2955,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1224,
+        "y": 1233,
         "w": 24,
         "h": 8
       },
@@ -2970,7 +3079,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1330,
+        "y": 1339,
         "w": 24,
         "h": 8
       },
@@ -3061,7 +3170,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1444,
+        "y": 1453,
         "w": 24,
         "h": 8
       },
@@ -3185,7 +3294,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1566,
+        "y": 1575,
         "w": 24,
         "h": 8
       },
@@ -3287,7 +3396,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1696,
+        "y": 1705,
         "w": 24,
         "h": 8
       },
@@ -3380,7 +3489,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1764,
+        "y": 1773,
         "w": 24,
         "h": 8
       },
@@ -3425,7 +3534,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1772
+        "y": 1781
       },
       "id": 1030,
       "panels": [],
@@ -3491,7 +3600,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1774,
+        "y": 1783,
         "w": 24,
         "h": 8
       },
@@ -3565,7 +3674,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1791,
+        "y": 1800,
         "w": 24,
         "h": 8
       },
@@ -3662,7 +3771,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1816,
+        "y": 1825,
         "w": 24,
         "h": 8
       },
@@ -3788,7 +3897,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1850,
+        "y": 1859,
         "w": 24,
         "h": 8
       },
@@ -3898,7 +4007,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1892,
+        "y": 1901,
         "w": 24,
         "h": 8
       },
@@ -4027,7 +4136,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1942,
+        "y": 1951,
         "w": 24,
         "h": 8
       },
@@ -4095,7 +4204,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1950
+        "y": 1959
       },
       "id": 1037,
       "panels": [],
@@ -4136,7 +4245,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1952,
+        "y": 1961,
         "w": 24,
         "h": 8
       },
@@ -4235,7 +4344,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1969,
+        "y": 1978,
         "w": 24,
         "h": 8
       },
@@ -4334,7 +4443,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1994,
+        "y": 2003,
         "w": 24,
         "h": 8
       },
@@ -4442,7 +4551,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2028,
+        "y": 2037,
         "w": 24,
         "h": 8
       },
@@ -4599,7 +4708,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2070,
+        "y": 2079,
         "w": 24,
         "h": 8
       },
@@ -4701,7 +4810,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2120,
+        "y": 2129,
         "w": 24,
         "h": 8
       },
@@ -4817,7 +4926,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2178,
+        "y": 2187,
         "w": 24,
         "h": 8
       },
@@ -4893,7 +5002,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 2245
+        "y": 2254
       },
       "id": 1045,
       "options": {
@@ -4969,7 +5078,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2325,
+        "y": 2334,
         "w": 24,
         "h": 8
       },
@@ -5068,7 +5177,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SOAR Run - Combined Metrics",
+  "title": "SOAR Run",
   "uid": "soar-run-combined",
   "version": 19,
   "description": "System-level metrics, database, and message publishing"
