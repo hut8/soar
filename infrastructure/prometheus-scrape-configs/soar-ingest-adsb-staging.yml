@@ -5,7 +5,7 @@
 # Prometheus will automatically reload this file every 30 seconds.
 
 - targets:
-    - 'localhost:9096'
+    - 'localhost:9196'
   labels:
     instance: 'soar-staging'
     component: 'ingest-adsb'

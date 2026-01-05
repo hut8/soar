@@ -217,9 +217,11 @@ pub(crate) async fn timeout_flight(
     );
 
     // Fetch recent fixes to calculate climb rate from actual altitude changes
+    // Use 18-hour window to match coalescing hard timeout
+    let start_time = chrono::Utc::now() - chrono::Duration::hours(18);
     let recent_fixes = ctx
         .fixes_repo
-        .get_fixes_for_flight(flight_id, Some(20))
+        .get_fixes_for_flight(flight_id, Some(20), start_time, None)
         .await
         .unwrap_or_default();
 
@@ -247,26 +249,18 @@ pub(crate) async fn timeout_flight(
 
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
-    // Fetch last fix to get coordinates for reverse geocoding
-    let last_fix = ctx
-        .fixes_repo
-        .get_fixes_for_flight(flight_id, Some(1))
-        .await?
-        .into_iter()
-        .next();
+    // Get last known position from flight state (avoid extra database query)
+    let last_position = {
+        let flights = active_flights.read().await;
+        flights.get(&aircraft_id).map(|state| state.last_position)
+    };
 
-    // Create end location with reverse geocoding if we have the last fix
-    let end_location_id = if let Some(fix) = last_fix {
-        create_start_end_location(
-            ctx.locations_repo,
-            fix.latitude,
-            fix.longitude,
-            "end (timeout)",
-        )
-        .await
+    // Create end location with reverse geocoding if we have the last position
+    let end_location_id = if let Some((latitude, longitude)) = last_position {
+        create_start_end_location(ctx.locations_repo, latitude, longitude, "end (timeout)").await
     } else {
         debug!(
-            "No fixes found for timed out flight {}, skipping end location creation",
+            "No last position found for timed out flight {}, skipping end location creation",
             flight_id
         );
         None
@@ -330,7 +324,12 @@ pub(crate) async fn complete_flight_fast(
     let start = std::time::Instant::now();
 
     // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
-    let flight_fixes = ctx.fixes_repo.get_fixes_for_flight(flight_id, None).await?;
+    // Use 18-hour window to match coalescing hard timeout
+    let start_time = chrono::Utc::now() - chrono::Duration::hours(18);
+    let flight_fixes = ctx
+        .fixes_repo
+        .get_fixes_for_flight(flight_id, None, start_time, None)
+        .await?;
 
     // Quick airport lookup (fast - spatial index)
     let arrival_airport_id =
