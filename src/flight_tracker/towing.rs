@@ -13,7 +13,9 @@ use super::AircraftStatesMap;
 use super::geometry::haversine_distance;
 
 const VICINITY_RADIUS_METERS: f64 = 500.0; // 0.5 km
+#[allow(dead_code)]
 const INITIAL_SEARCH_DELAY_SECS: u64 = 10;
+#[allow(dead_code)]
 const RETRY_SEARCH_DELAY_SECS: u64 = 10;
 
 /// Information about a towing operation
@@ -25,7 +27,13 @@ pub struct TowingInfo {
 }
 
 /// Spawn a task to detect towing after a towplane takes off
-/// This waits 10 seconds, then looks for gliders in the vicinity
+///
+/// DISABLED: This feature has been temporarily disabled due to performance issues.
+/// The previous implementation queried the database for every active aircraft to check
+/// if they were gliders (2 DB queries per aircraft * N active flights = very expensive).
+///
+/// TODO: Re-implement with a more efficient approach (e.g., spatial index, caching)
+#[allow(unused_variables)]
 pub fn spawn_towing_detection_task(
     towplane_aircraft_id: Uuid,
     towplane_flight_id: Uuid,
@@ -34,52 +42,18 @@ pub fn spawn_towing_detection_task(
     aircraft_repo: AircraftRepository,
     aircraft_states: AircraftStatesMap,
 ) {
-    tokio::spawn(async move {
-        // Wait 10 seconds for towplane to get airborne and for glider to appear
-        sleep(Duration::from_secs(INITIAL_SEARCH_DELAY_SECS)).await;
-
-        // Try to find a glider being towed
-        match find_towed_glider(
-            towplane_aircraft_id,
-            &fixes_repo,
-            &flights_repo,
-            &aircraft_repo,
-            &aircraft_states,
-        )
-        .await
-        {
-            Ok(Some(towing_info)) => {
-                info!(
-                    "Towing detected: towplane {} (flight {}) is towing glider {} (flight {})",
-                    towplane_aircraft_id,
-                    towplane_flight_id,
-                    towing_info.glider_device_id,
-                    towing_info.glider_flight_id
-                );
-
-                // Update the towplane's state with towing info
-                if let Some(mut state) = aircraft_states.get_mut(&towplane_aircraft_id) {
-                    state.towing_info = Some(towing_info);
-                }
-            }
-            Ok(None) => {
-                debug!(
-                    "No glider found for towplane {} - may be repositioning",
-                    towplane_aircraft_id
-                );
-            }
-            Err(e) => {
-                warn!(
-                    "Error detecting towing for towplane {}: {}",
-                    towplane_aircraft_id, e
-                );
-            }
-        }
-    });
+    // DISABLED - do nothing
+    debug!(
+        "Towing detection is currently disabled for towplane {} (flight {})",
+        towplane_aircraft_id, towplane_flight_id
+    );
 }
 
 /// Find a glider being towed by the given towplane
 /// Returns None if no glider found or multiple gliders found (after retries)
+///
+/// DISABLED - see spawn_towing_detection_task
+#[allow(dead_code)]
 async fn find_towed_glider(
     towplane_aircraft_id: Uuid,
     fixes_repo: &FixesRepository,
@@ -177,6 +151,21 @@ async fn find_towed_glider(
 }
 
 /// Find gliders with active flights near the towplane
+///
+/// DISABLED - see spawn_towing_detection_task
+///
+/// This implementation was problematic because it:
+/// 1. Iterated over ALL active aircraft (could be 100+)
+/// 2. Made 2 database queries PER aircraft:
+///    - get_latest_fix_for_aircraft (fixes table query)
+///    - get_aircraft_by_id (aircraft table query)
+/// 3. For 100 active flights, that's 200 DB queries just to detect one tow!
+///
+/// TODO: Reimplement using:
+/// - Spatial index on fixes table
+/// - Cached aircraft type in memory (not in DB)
+/// - Only query for gliders within bounding box of towplane
+#[allow(dead_code)]
 async fn find_nearby_gliders(
     towplane_fix: &Fix,
     towplane_aircraft_id: Uuid,

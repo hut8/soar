@@ -97,11 +97,10 @@ pub(crate) async fn process_state_transition(
     match (current_flight_id, is_active) {
         // Case 1: Has active flight AND fix is active -> Continue flight
         (Some(flight_id), true) => {
-            // Check for callsign change
+            // Check for callsign change (using in-memory state, not DB)
             let should_end_flight = if let Some(new_callsign) = &fix.flight_number {
-                if let Ok(Some(current_flight)) = ctx.flights_repo.get_flight_by_id(flight_id).await
-                {
-                    if let Some(current_callsign) = &current_flight.callsign {
+                if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                    if let Some(current_callsign) = &state.current_callsign {
                         current_callsign != new_callsign
                     } else {
                         false
@@ -123,6 +122,7 @@ pub(crate) async fn process_state_transition(
                         fix.flight_id = Some(flight_id);
                         if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
                             state.current_flight_id = Some(flight_id);
+                            state.current_callsign = fix.flight_number.clone();
                         }
                     }
                     Err(e) => {
@@ -171,16 +171,41 @@ pub(crate) async fn process_state_transition(
             }
         }
 
-        // Case 2: No active flight AND fix is active -> Create new flight
+        // Case 2: No active flight AND fix is active -> Create new flight or resume timed-out
         (None, true) => {
-            // Check if we should resume a timed-out flight
-            if let Ok(Some(timed_out_flight)) = ctx
-                .flights_repo
-                .find_recent_timed_out_flight(fix.aircraft_id)
-                .await
-            {
+            // Check if we should resume a timed-out flight (using in-memory state)
+            let timed_out_info = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                if let Some(flight_id) = state.last_timed_out_flight_id {
+                    Some((
+                        flight_id,
+                        state.last_timed_out_callsign.clone(),
+                        state.last_timed_out_at,
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some((timed_out_flight_id, timed_out_callsign, timed_out_at)) = timed_out_info {
+                // Calculate gap from when it timed out
+                let gap_seconds = if let Some(timed_out_time) = timed_out_at {
+                    (fix.timestamp - timed_out_time).num_seconds()
+                } else {
+                    // No timeout timestamp - use last fix timestamp
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                        && let Some(last_fix_time) = state.last_fix_timestamp()
+                    {
+                        (fix.timestamp - last_fix_time).num_seconds()
+                    } else {
+                        i64::MAX // Unknown - don't resume
+                    }
+                };
+                let gap_hours = gap_seconds as f64 / 3600.0;
+
                 // Check callsign mismatch
-                let should_coalesce = match (&timed_out_flight.callsign, &fix.flight_number) {
+                let should_coalesce = match (&timed_out_callsign, &fix.flight_number) {
                     (Some(prev), Some(new)) if prev != new => {
                         metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
                             .increment(1);
@@ -189,38 +214,39 @@ pub(crate) async fn process_state_transition(
                     _ => true,
                 };
 
-                if should_coalesce {
-                    let gap_seconds = (fix.timestamp - timed_out_flight.last_fix_at).num_seconds();
-                    let gap_hours = gap_seconds as f64 / 3600.0;
+                if should_coalesce && gap_hours < 18.0 {
+                    // Resume the flight
+                    info!(
+                        "Resuming timed-out flight {} after {:.1}h gap",
+                        timed_out_flight_id, gap_hours
+                    );
 
-                    if gap_hours >= 18.0 {
-                        // Too long - create new flight
-                        metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
-                            .increment(1);
-                    } else {
-                        // Resume the flight
-                        info!(
-                            "Resuming timed-out flight {} after {:.1}h gap",
-                            timed_out_flight.id, gap_hours
-                        );
+                    fix.flight_id = Some(timed_out_flight_id);
 
-                        fix.flight_id = Some(timed_out_flight.id);
+                    // Clear timeout and update last_fix_at in database
+                    let _ = ctx
+                        .flights_repo
+                        .resume_timed_out_flight(timed_out_flight_id, fix.timestamp)
+                        .await;
 
-                        // Clear timeout and update last_fix_at
-                        let _ = ctx
-                            .flights_repo
-                            .resume_timed_out_flight(timed_out_flight.id, fix.timestamp)
-                            .await;
-
-                        // Update state
-                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                            state.current_flight_id = Some(timed_out_flight.id);
-                        }
-
-                        metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
-                        return Ok(fix);
+                    // Update state - move from timed_out to current
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.current_flight_id = Some(timed_out_flight_id);
+                        state.current_callsign = timed_out_callsign;
+                        state.last_timed_out_flight_id = None;
+                        state.last_timed_out_callsign = None;
+                        state.last_timed_out_at = None;
                     }
+
+                    metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
+                    return Ok(fix);
+                } else if gap_hours >= 18.0 {
+                    // Too long - create new flight
+                    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
+                        .increment(1);
+                    // Fall through to create new flight
                 }
+                // If callsign mismatch and shouldn't coalesce, fall through to create new flight
             }
 
             // Create new flight - check if takeoff or mid-flight

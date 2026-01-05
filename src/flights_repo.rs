@@ -1284,8 +1284,8 @@ impl FlightsRepository {
         Ok(rows_affected)
     }
 
-    /// Get all active flights (no landing_time, no timed_out_at, last_fix_at within timeout_duration)
-    /// Returns flights that should be loaded into the flight tracker on startup
+    /// Get all flights for tracker initialization (not landed, last_fix_at within timeout_duration)
+    /// Returns both active and timed-out flights that should be loaded into the flight tracker on startup
     pub async fn get_active_flights_for_tracker(
         &self,
         timeout_duration: chrono::Duration,
@@ -1299,11 +1299,10 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             // Get flights where:
-            // - timed_out_at is NULL (not timed out)
             // - landing_time is NULL (not landed)
-            // - last_fix_at is within the timeout window (recent enough to be active)
+            // - last_fix_at is within the timeout window (recent enough to track)
+            // This includes both active (timed_out_at is NULL) and timed-out flights
             let flight_models: Vec<FlightModel> = flights
-                .filter(timed_out_at.is_null())
                 .filter(landing_time.is_null())
                 .filter(last_fix_at.ge(cutoff_time))
                 .order(last_fix_at.desc())

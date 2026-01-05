@@ -168,17 +168,20 @@ impl FlightTracker {
             info!("No old incomplete flights to timeout");
         }
 
-        // Restore aircraft states from active flights
+        // Restore aircraft states from active and timed-out flights
         info!("Restoring aircraft states from database...");
-        let active_flights = self
+        let flights = self
             .flights_repo
             .get_active_flights_for_tracker(timeout_duration)
             .await?;
 
-        info!("Found {} active flights to restore", active_flights.len());
+        info!(
+            "Found {} flights to restore (active and timed-out)",
+            flights.len()
+        );
 
         let mut restored_count: usize = 0;
-        for flight in active_flights {
+        for flight in flights {
             // Skip flights without aircraft_id (shouldn't happen but be defensive)
             let aircraft_id = match flight.aircraft_id {
                 Some(id) => id,
@@ -207,7 +210,18 @@ impl FlightTracker {
             let first_fix = &fixes[fixes.len() - 1];
             let is_active = state_transitions::should_be_active(first_fix);
             let mut state = aircraft_state::AircraftState::new(first_fix, is_active);
-            state.current_flight_id = Some(flight.id);
+
+            // Determine if this is an active or timed-out flight
+            if flight.timed_out_at.is_some() {
+                // Timed-out flight - track separately for potential resumption
+                state.last_timed_out_flight_id = Some(flight.id);
+                state.last_timed_out_callsign = flight.callsign.clone();
+                state.last_timed_out_at = flight.timed_out_at;
+            } else {
+                // Active flight - set as current flight
+                state.current_flight_id = Some(flight.id);
+                state.current_callsign = flight.callsign.clone();
+            }
 
             // Add remaining fixes in chronological order (oldest to newest)
             for fix in fixes.iter().rev().skip(1) {

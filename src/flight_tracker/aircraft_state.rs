@@ -49,6 +49,14 @@ pub struct AircraftState {
     /// Current flight ID, if aircraft is flying
     pub current_flight_id: Option<Uuid>,
 
+    /// Current flight callsign (for detecting callsign changes without DB query)
+    pub current_callsign: Option<String>,
+
+    /// Last timed-out flight info (for resumption without DB query)
+    pub last_timed_out_flight_id: Option<Uuid>,
+    pub last_timed_out_callsign: Option<String>,
+    pub last_timed_out_at: Option<DateTime<Utc>>, // When the flight timed out
+
     /// Wall clock time of last update (for cleanup and timeout detection)
     pub last_update_time: DateTime<Utc>,
 
@@ -68,6 +76,10 @@ impl AircraftState {
         Self {
             recent_fixes,
             current_flight_id: None,
+            current_callsign: None,
+            last_timed_out_flight_id: None,
+            last_timed_out_callsign: None,
+            last_timed_out_at: None,
             last_update_time: Utc::now(),
             towing_info: None,
             takeoff_runway_inferred: None,
