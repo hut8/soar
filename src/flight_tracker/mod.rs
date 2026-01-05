@@ -145,11 +145,11 @@ impl FlightTracker {
     /// - Flight coalescing (needs flight phase from recent fixes)
     /// - Tow release detection (needs recent fixes for climb rate)
     ///
-    /// Returns number of flights timed out
+    /// Returns (timed_out_count, restored_states_count)
     pub async fn initialize_from_database(
         &self,
         timeout_duration: chrono::Duration,
-    ) -> Result<usize> {
+    ) -> Result<(usize, usize)> {
         info!(
             "Timing out incomplete flights older than {} hours...",
             timeout_duration.num_hours()
@@ -177,7 +177,7 @@ impl FlightTracker {
 
         info!("Found {} active flights to restore", active_flights.len());
 
-        let mut restored_count = 0;
+        let mut restored_count: usize = 0;
         for flight in active_flights {
             // Skip flights without aircraft_id (shouldn't happen but be defensive)
             let aircraft_id = match flight.aircraft_id {
@@ -227,10 +227,10 @@ impl FlightTracker {
 
         // Update metrics
         metrics::counter!("flight_tracker.startup.aircraft_states_restored_total")
-            .increment(restored_count);
+            .increment(restored_count as u64);
         utils::update_flight_tracker_metrics(&self.aircraft_states);
 
-        Ok(timed_out_count)
+        Ok((timed_out_count, restored_count))
     }
 
     /// Get a reference to the elevation database

@@ -371,10 +371,10 @@ pub async fn handle_run(
         .initialize_from_database(timeout_duration)
         .await
     {
-        Ok(timed_out) => {
+        Ok((timed_out, restored)) => {
             info!(
-                "Flight tracker initialized: {} flights timed out",
-                timed_out
+                "Flight tracker initialized: {} flights timed out, {} aircraft states restored",
+                timed_out, restored
             );
         }
         Err(e) => {
