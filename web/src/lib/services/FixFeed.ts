@@ -1,5 +1,5 @@
 import { browser, dev } from '$app/environment';
-import type { Aircraft, FixWithExtras, AircraftSearchResponse } from '$lib/types';
+import type { Aircraft, Fix, AircraftSearchResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
@@ -9,7 +9,7 @@ export type FixFeedEvent =
 	| { type: 'connection_opened' }
 	| { type: 'connection_closed'; code: number; reason: string }
 	| { type: 'connection_error'; error: Event }
-	| { type: 'fix_received'; fix: FixWithExtras }
+	| { type: 'fix_received'; fix: Fix }
 	| { type: 'aircraft_received'; aircraft: Aircraft }
 	| { type: 'subscription_added'; aircraftId: string }
 	| { type: 'subscription_removed'; aircraftId: string }
@@ -142,8 +142,8 @@ export class FixFeed {
 
 					// Handle different message types based on the "type" field
 					if (rawMessage.type === 'fix') {
-						// Transform WebSocket fix data to match FixWithExtras interface (includes legacy fields)
-						const fix: FixWithExtras = {
+						// Transform WebSocket fix data to match Fix interface
+						const fix: Fix = {
 							id: rawMessage.id,
 							aircraftId: rawMessage.aircraftId,
 							source: rawMessage.source || '',
@@ -167,11 +167,7 @@ export class FixFeed {
 							receiverId: rawMessage.receiverId || '',
 							rawMessageId: rawMessage.rawMessageId || '',
 							altitudeAglValid: rawMessage.altitudeAglValid ?? false,
-							timeGapSeconds: rawMessage.timeGapSeconds || null,
-							// Legacy fields from FixWithExtras
-							deviceAddressHex: rawMessage.deviceAddressHex,
-							registration: rawMessage.registration,
-							model: rawMessage.model
+							timeGapSeconds: rawMessage.timeGapSeconds || null
 						};
 
 						// Add fix to aircraft registry

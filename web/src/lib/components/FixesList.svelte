@@ -2,12 +2,17 @@
 	import { Activity } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Fix, FixWithExtras } from '$lib/types';
+	import type { Fix } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
+	// Local type to extend Fix with optional rawPacket field for display purposes
+	type FixWithRawPacket = Fix & {
+		rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
+	};
+
 	interface Props {
-		fixes: FixWithExtras[];
+		fixes: FixWithRawPacket[];
 		loading?: boolean;
 		showHideInactive?: boolean; // Show "hide inactive" checkbox
 		showRaw?: boolean; // Show "show raw" checkbox

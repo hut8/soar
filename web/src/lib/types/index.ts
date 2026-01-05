@@ -209,16 +209,6 @@ export type AircraftPartial = Partial<Aircraft> & {
 	id: string; // ID is always required
 };
 
-// Extended Fix interface for WebSocket/legacy responses that include extra fields not in the generated Rust Fix type
-// Note: New code should avoid using these extra fields and rely on proper joins instead
-export interface FixWithExtras extends Fix {
-	deviceAddressHex?: string; // Legacy field, prefer aircraftId with proper join
-	registration?: string; // Aircraft registration (joined, not in Rust Fix)
-	model?: string; // Aircraft model (joined, not in Rust Fix)
-	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
-	flight?: Flight; // Full flight information if part of an active flight (from websocket)
-}
-
 // User authentication and profile (now includes pilot fields)
 export interface User {
 	id: string;
