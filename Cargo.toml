@@ -76,7 +76,7 @@ tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "fs", "sync
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
-ts-rs = { version = "10.0", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
+ts-rs = { version = "11.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.19", features = ["v4", "v7", "serde"] }
@@ -105,10 +105,10 @@ kml = "0.12"
 hex = "0.4.3"
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.80"
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 crc32fast = "1.4"
-bincode = "=1.3.3"
+bincode = "=3.0.0"
 
 [dev-dependencies]
 hex-literal = "1.1"
@@ -118,7 +118,7 @@ fs2 = "0.4"
 
 [build-dependencies]
 vergen-git2 = { version = "1.0", features = ["build", "cargo"] }
-prost-build = "0.13"
+prost-build = "0.14"
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast
