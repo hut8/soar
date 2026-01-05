@@ -7,7 +7,7 @@ use tracing::{error, info, trace};
 use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
-use super::flight_lifecycle::{complete_flight_fast, create_flight_fast};
+use super::flight_lifecycle::{create_flight_fast, spawn_complete_flight};
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
 
@@ -114,8 +114,8 @@ pub(crate) async fn process_state_transition(
             };
 
             if should_end_flight {
-                // End current flight, start new one
-                let _ = complete_flight_fast(ctx, &aircraft, flight_id, &fix).await;
+                // End current flight (non-blocking), start new one
+                spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
 
                 let new_flight_id = Uuid::now_v7();
                 match create_flight_fast(ctx, &fix, new_flight_id, false).await {
@@ -302,13 +302,10 @@ pub(crate) async fn process_state_transition(
                     };
 
                     if should_land {
-                        // Landing confirmed - complete flight
+                        // Landing confirmed - complete flight (non-blocking)
                         fix.flight_id = Some(flight_id);
 
-                        if let Err(e) = complete_flight_fast(ctx, &aircraft, flight_id, &fix).await
-                        {
-                            error!("Failed to complete flight on landing: {}", e);
-                        }
+                        spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
 
                         // Clear current_flight_id
                         if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {

@@ -2,6 +2,8 @@ use crate::Fix;
 use crate::aircraft::Aircraft;
 use crate::flights::{Flight, TimeoutPhase};
 use anyhow::Result;
+use dashmap::DashMap;
+use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -307,7 +309,54 @@ pub(crate) async fn timeout_flight(
 ///
 /// This is the primary entry point for flight completion - it ensures fix processing isn't blocked
 /// by slow database queries or HTTP API calls.
-pub(crate) async fn complete_flight_fast(
+/// Spawn flight completion as a background task (non-blocking)
+/// This prevents flight completion (which can take 30+ seconds due to geocoding)
+/// from blocking the fix processing pipeline
+pub(crate) fn spawn_complete_flight(
+    ctx: &FlightProcessorContext<'_>,
+    device: &Aircraft,
+    flight_id: Uuid,
+    fix: &Fix,
+) {
+    // Clone everything needed for the background task
+    let fixes_repo = ctx.fixes_repo.clone();
+    let flights_repo = ctx.flights_repo.clone();
+    let aircraft_repo = ctx.aircraft_repo.clone();
+    let airports_repo = ctx.airports_repo.clone();
+    let locations_repo = ctx.locations_repo.clone();
+    let runways_repo = ctx.runways_repo.clone();
+    let elevation_db = ctx.elevation_db.clone();
+    let pool = ctx.pool.clone();
+
+    let device_clone = device.clone();
+    let fix_clone = fix.clone();
+
+    tokio::spawn(async move {
+        // Create empty aircraft_states Arc (not needed for completion but required for context)
+        let empty_states = Arc::new(DashMap::new());
+
+        let ctx = FlightProcessorContext {
+            flights_repo: &flights_repo,
+            aircraft_repo: &aircraft_repo,
+            airports_repo: &airports_repo,
+            locations_repo: &locations_repo,
+            runways_repo: &runways_repo,
+            fixes_repo: &fixes_repo,
+            elevation_db: &elevation_db,
+            aircraft_states: &empty_states,
+            pool,
+        };
+
+        if let Err(e) = complete_flight_fast(&ctx, &device_clone, flight_id, &fix_clone).await {
+            error!(
+                "Background flight completion failed for flight {}: {}",
+                flight_id, e
+            );
+        }
+    });
+}
+
+async fn complete_flight_fast(
     ctx: &FlightProcessorContext<'_>,
     device: &Aircraft,
     flight_id: Uuid,
