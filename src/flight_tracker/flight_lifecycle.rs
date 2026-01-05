@@ -5,7 +5,6 @@ use anyhow::Result;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use super::ActiveFlightsMap;
 use super::FlightProcessorContext;
 use super::altitude::calculate_altitude_offset_ft;
 use super::geometry::haversine_distance;
@@ -207,7 +206,6 @@ fn spawn_flight_enrichment_on_creation(
 /// Sets timed_out_at to the last_fix_at value from the flight
 pub(crate) async fn timeout_flight(
     ctx: &FlightProcessorContext<'_>,
-    active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
     aircraft_id: Uuid,
 ) -> Result<()> {
@@ -216,26 +214,12 @@ pub(crate) async fn timeout_flight(
         flight_id, aircraft_id
     );
 
-    // Fetch recent fixes to calculate climb rate from actual altitude changes
-    let recent_fixes = ctx
-        .fixes_repo
-        .get_fixes_for_flight(flight_id, Some(20))
-        .await
-        .unwrap_or_default();
-
-    // Calculate climb rate from fixes (more reliable than trusting fix.climb_fpm)
-    let calculated_climb = super::calculate_climb_rate_from_fixes(&recent_fixes);
-
-    // Get current flight state and update with calculated climb rate before determining phase
-    let flight_phase = {
-        let mut flights = active_flights.write().await;
-        if let Some(state) = flights.get_mut(&aircraft_id) {
-            // Update state with calculated climb rate
-            state.calculated_climb_fpm = calculated_climb;
-            state.determine_flight_phase()
-        } else {
-            super::FlightPhase::Unknown
-        }
+    // Get current flight phase from in-memory state
+    // Climb rate is already calculated and stored in AircraftState
+    let flight_phase = if let Some(state) = ctx.aircraft_states.get(&aircraft_id) {
+        state.determine_flight_phase()
+    } else {
+        super::FlightPhase::Unknown
     };
 
     let timeout_phase = match flight_phase {
@@ -285,9 +269,10 @@ pub(crate) async fn timeout_flight(
                 .calculate_and_update_bounding_box(flight_id)
                 .await?;
 
-            // Remove from active flights
-            let mut flights = active_flights.write().await;
-            flights.remove(&aircraft_id);
+            // Clear current_flight_id from aircraft state (but keep the state for 18 hours)
+            if let Some(mut state) = ctx.aircraft_states.get_mut(&aircraft_id) {
+                state.current_flight_id = None;
+            }
 
             metrics::counter!("flight_tracker.flight_ended.timed_out_total").increment(1);
             let phase_label = match timeout_phase {
@@ -455,10 +440,9 @@ pub(crate) async fn complete_flight_fast(
                 reasons.join(", ")
             );
 
-            // CRITICAL: Remove from active_flights FIRST to prevent race condition
-            {
-                let mut flights = ctx.active_flights.write().await;
-                flights.remove(&fix.aircraft_id);
+            // CRITICAL: Clear current_flight_id FIRST to prevent race condition
+            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                state.current_flight_id = None;
             }
 
             // Clear flight_id from all associated fixes

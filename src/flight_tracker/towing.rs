@@ -9,8 +9,7 @@ use tokio::time::{Duration, sleep};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use super::AircraftTrackersMap;
-use super::aircraft_tracker;
+use super::AircraftStatesMap;
 use super::geometry::haversine_distance;
 
 const VICINITY_RADIUS_METERS: f64 = 500.0; // 0.5 km
@@ -33,8 +32,7 @@ pub fn spawn_towing_detection_task(
     fixes_repo: FixesRepository,
     flights_repo: FlightsRepository,
     aircraft_repo: AircraftRepository,
-    active_flights: super::ActiveFlightsMap,
-    aircraft_trackers: AircraftTrackersMap,
+    aircraft_states: AircraftStatesMap,
 ) {
     tokio::spawn(async move {
         // Wait 10 seconds for towplane to get airborne and for glider to appear
@@ -46,8 +44,7 @@ pub fn spawn_towing_detection_task(
             &fixes_repo,
             &flights_repo,
             &aircraft_repo,
-            &active_flights,
-            &aircraft_trackers,
+            &aircraft_states,
         )
         .await
         {
@@ -60,12 +57,9 @@ pub fn spawn_towing_detection_task(
                     towing_info.glider_flight_id
                 );
 
-                // Update the towplane's tracker with towing info
-                {
-                    let mut trackers = aircraft_trackers.write().await;
-                    if let Some(tracker) = trackers.get_mut(&towplane_aircraft_id) {
-                        tracker.towing_info = Some(towing_info);
-                    }
+                // Update the towplane's state with towing info
+                if let Some(mut state) = aircraft_states.get_mut(&towplane_aircraft_id) {
+                    state.towing_info = Some(towing_info);
                 }
             }
             Ok(None) => {
@@ -91,8 +85,7 @@ async fn find_towed_glider(
     fixes_repo: &FixesRepository,
     flights_repo: &FlightsRepository,
     aircraft_repo: &AircraftRepository,
-    active_flights: &super::ActiveFlightsMap,
-    aircraft_trackers: &AircraftTrackersMap,
+    aircraft_states: &AircraftStatesMap,
 ) -> Result<Option<TowingInfo>> {
     // Get the latest fix for the towplane
     let towplane_fix = match fixes_repo
@@ -125,8 +118,7 @@ async fn find_towed_glider(
         let candidate_gliders = find_nearby_gliders(
             &towplane_fix,
             towplane_aircraft_id,
-            active_flights,
-            aircraft_trackers,
+            aircraft_states,
             fixes_repo,
             aircraft_repo,
         )
@@ -188,28 +180,30 @@ async fn find_towed_glider(
 async fn find_nearby_gliders(
     towplane_fix: &Fix,
     towplane_aircraft_id: Uuid,
-    active_flights: &super::ActiveFlightsMap,
-    _aircraft_trackers: &AircraftTrackersMap,
+    aircraft_states: &AircraftStatesMap,
     fixes_repo: &FixesRepository,
     aircraft_repo: &AircraftRepository,
 ) -> Result<Vec<(Uuid, Uuid)>> {
     let mut candidate_gliders = Vec::new();
 
-    // Get all active aircraft with flights
-    let active_aircraft: Vec<(Uuid, Uuid)> = {
-        let flights = active_flights.read().await;
-        flights
-            .iter()
-            .filter_map(|(aircraft_id, state)| {
-                // Skip the towplane itself
-                if *aircraft_id == towplane_aircraft_id {
-                    return None;
-                }
-                // Get the flight_id from the active flight state
-                Some((*aircraft_id, state.flight_id))
-            })
-            .collect()
-    };
+    // Get all aircraft with active flights
+    let active_aircraft: Vec<(Uuid, Uuid)> = aircraft_states
+        .iter()
+        .filter_map(|entry| {
+            let aircraft_id = *entry.key();
+            let state = entry.value();
+
+            // Skip aircraft without active flights
+            let flight_id = state.current_flight_id?;
+
+            // Skip the towplane itself
+            if aircraft_id == towplane_aircraft_id {
+                return None;
+            }
+
+            Some((aircraft_id, flight_id))
+        })
+        .collect();
 
     // Check each aircraft to see if it's a glider near the towplane
     for (aircraft_id, flight_id) in active_aircraft {
@@ -261,39 +255,58 @@ async fn find_nearby_gliders(
 /// Check if a towplane has released its tow based on climb rate transition
 /// Returns true if release detected
 #[allow(dead_code)]
-pub fn check_tow_release(
-    tracker: &aircraft_tracker::AircraftTracker,
-    current_climb_fpm: Option<f32>,
-) -> bool {
-    // Only check if we have towing info and climb rate history
-    let _towing_info = match &tracker.towing_info {
+pub fn check_tow_release(state: &super::AircraftState, current_climb_fpm: Option<i32>) -> bool {
+    // Only check if we have towing info
+    let _towing_info = match &state.towing_info {
         Some(info) => info,
         None => return false,
     };
 
-    // Need at least 5 samples for moving average
-    if tracker.climb_rate_history.len() < 5 {
+    // Calculate average climb rate from recent fixes (last 5 with altitude data)
+    let recent_altitudes: Vec<(chrono::DateTime<chrono::Utc>, i32)> = state
+        .recent_fixes
+        .iter()
+        .rev()
+        .filter_map(|f| Some((f.timestamp, f.altitude_msl_ft?)))
+        .take(5)
+        .collect();
+
+    if recent_altitudes.len() < 2 {
         return false;
     }
 
-    // Calculate moving average of last 5 climb rates
-    let avg_climb_rate: f32 =
-        tracker.climb_rate_history.iter().sum::<f32>() / tracker.climb_rate_history.len() as f32;
+    // Calculate average climb rate from recent fixes
+    let mut climb_rates = Vec::new();
+    for i in 1..recent_altitudes.len() {
+        let (t1, alt1) = recent_altitudes[i - 1];
+        let (t2, alt2) = recent_altitudes[i];
+        let time_diff_secs = (t2 - t1).num_seconds();
+        if time_diff_secs > 0 {
+            let climb_rate_fpm = ((alt2 - alt1) as f64 / time_diff_secs as f64) * 60.0;
+            climb_rates.push(climb_rate_fpm as f32);
+        }
+    }
+
+    if climb_rates.is_empty() {
+        return false;
+    }
+
+    let avg_climb_rate: f32 = climb_rates.iter().sum::<f32>() / climb_rates.len() as f32;
 
     // Was climbing (avg > 100 fpm) and now descending (current < -100 fpm)
     // This indicates the towplane has released the glider and is descending back
     let was_climbing = avg_climb_rate > 100.0;
-    let now_descending = current_climb_fpm.map(|rate| rate < -100.0).unwrap_or(false);
+    let now_descending = current_climb_fpm.map(|rate| rate < -100).unwrap_or(false);
 
     if was_climbing && now_descending {
         info!(
             "Tow release detected: towplane {} was climbing (avg: {:.0} fpm) now descending ({:.0} fpm)",
-            tracker
+            state
                 .current_flight_id
                 .map(|id| id.to_string())
                 .unwrap_or_else(|| "unknown".to_string()),
             avg_climb_rate,
-            current_climb_fpm.unwrap_or(0.0)
+            current_climb_fpm.unwrap_or(0)
         );
         return true;
     }
