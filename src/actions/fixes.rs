@@ -614,9 +614,31 @@ async fn get_fixes_by_flight_id(
     limit: Option<i64>,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
-    let fixes_repo = FixesRepository::new(pool);
+    let fixes_repo = FixesRepository::new(pool.clone());
+    let flights_repo = crate::flights_repo::FlightsRepository::new(pool);
 
-    match fixes_repo.get_fixes_for_flight(flight_id, limit).await {
+    // Fetch flight record to get start time and last_fix_at for partition pruning
+    let (start_time, end_time) = match flights_repo.get_flight_by_id(flight_id).await {
+        Ok(Some(flight)) => {
+            // Use takeoff_time if available, otherwise fall back to created_at
+            let start = flight.takeoff_time.unwrap_or(flight.created_at);
+            (start, Some(flight.last_fix_at))
+        }
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response();
+        }
+        Err(e) => {
+            error!("Failed to fetch flight record: {}", e);
+            // Fall back to 18-hour window if flight lookup fails
+            let start = chrono::Utc::now() - chrono::Duration::hours(18);
+            (start, None)
+        }
+    };
+
+    match fixes_repo
+        .get_fixes_for_flight(flight_id, limit, start_time, end_time)
+        .await
+    {
         Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
             error!("Failed to get fixes by flight ID: {}", e);

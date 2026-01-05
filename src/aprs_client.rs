@@ -86,17 +86,17 @@ impl AprsClient {
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
-        // Convert oneshot receiver to a shared Arc<AtomicBool>
-        let shutdown_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let shutdown_flag_for_connection = shutdown_flag.clone();
+        let config = self.config.clone();
 
-        // Spawn a task to watch the oneshot and set the flag
+        // Use a broadcast channel to share shutdown signal with connection tasks
+        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
+
+        // Bridge oneshot to broadcast
         tokio::spawn(async move {
             let _ = shutdown_rx.await;
-            shutdown_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            let _ = shutdown_broadcast_tx.send(());
         });
-
-        let config = self.config.clone();
 
         // Create bounded channel for raw APRS messages from TCP socket to queue
         let (raw_message_tx, raw_message_rx) = flume::bounded::<String>(RAW_MESSAGE_QUEUE_SIZE);
@@ -138,7 +138,7 @@ impl AprsClient {
 
                 loop {
                     // Check if shutdown was requested
-                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                    if shutdown_rx_for_loop.try_recv().is_ok() {
                         info!("Shutdown requested, stopping APRS queue ingestion");
                         // Mark as disconnected in health state
                         {
@@ -164,6 +164,7 @@ impl AprsClient {
                         &config,
                         raw_message_tx.clone(),
                         health_for_connection.clone(),
+                        shutdown_rx_for_loop.resubscribe(),
                     )
                     .await;
 
@@ -186,7 +187,7 @@ impl AprsClient {
                     }
 
                     // Check again before sleeping
-                    if shutdown_flag_for_connection.load(std::sync::atomic::Ordering::SeqCst) {
+                    if shutdown_rx_for_loop.try_recv().is_ok() {
                         info!("Shutdown requested, exiting connection loop");
                         break;
                     }
@@ -226,11 +227,12 @@ impl AprsClient {
 
     /// Connect to the APRS server and run the message processing loop
     /// Messages are sent to raw_message_tx channel for processing
-    #[tracing::instrument(skip(config, raw_message_tx, health_state), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, raw_message_tx, health_state, shutdown_rx), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
         raw_message_tx: flume::Sender<String>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+        shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -292,6 +294,7 @@ impl AprsClient {
                         health_state,
                         connection_start,
                         addr.to_string(),
+                        shutdown_rx,
                     )
                     .await;
                 }
@@ -312,7 +315,7 @@ impl AprsClient {
     }
 
     /// Process an established APRS connection
-    #[tracing::instrument(skip(stream, config, raw_message_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
+    #[tracing::instrument(skip(stream, config, raw_message_tx, health_state, connection_start, shutdown_rx), fields(peer_addr = %peer_addr_str))]
     async fn process_connection(
         stream: TcpStream,
         config: &AprsClientConfig,
@@ -320,6 +323,7 @@ impl AprsClient {
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
         connection_start: std::time::Instant,
         peer_addr_str: String,
+        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!("Processing connection to APRS server at {}", peer_addr_str);
 
@@ -400,24 +404,37 @@ impl AprsClient {
             }
 
             // Use timeout to detect if no message received within 5 minutes
-            match timeout(
-                message_timeout,
-                Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
-            )
-            .await
-            {
-                Ok(read_result) => {
+            // Also check for shutdown signal
+            tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    info!("APRS connection received shutdown signal, closing connection");
+                    metrics::gauge!("aprs.connection.connected").set(0.0);
+
+                    // Mark as disconnected in health state
+                    {
+                        let mut health = health_state.write().await;
+                        health.aprs_connected = false;
+                    }
+
+                    return ConnectionResult::Success;
+                }
+                read_result = timeout(
+                    message_timeout,
+                    Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
+                ) => {
                     match read_result {
-                        Ok(0) => {
-                            let duration = connection_start.elapsed();
-                            warn!(
-                                "Connection closed by server (IP: {}) after {:.1}s",
-                                peer_addr_str,
-                                duration.as_secs_f64()
-                            );
-                            break;
-                        }
-                        Ok(_) => {
+                        Ok(inner_result) => {
+                            match inner_result {
+                                Ok(0) => {
+                                    let duration = connection_start.elapsed();
+                                    warn!(
+                                        "Connection closed by server (IP: {}) after {:.1}s",
+                                        peer_addr_str,
+                                        duration.as_secs_f64()
+                                    );
+                                    break;
+                                }
+                                Ok(_) => {
                             // Convert buffer to string, handling invalid UTF-8
                             let line = match String::from_utf8(line_buffer.clone()) {
                                 Ok(valid_line) => valid_line,
@@ -534,27 +551,29 @@ impl AprsClient {
                                 }
                             }
                         }
-                        Err(e) => {
+                                Err(e) => {
+                                    let duration = connection_start.elapsed();
+                                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                        "Connection error after {:.1}s: {}",
+                                        duration.as_secs_f64(),
+                                        e
+                                    ));
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // Timeout occurred - no message received for 5 minutes
                             let duration = connection_start.elapsed();
+                            error!(
+                                "No message received from APRS server for 5 minutes (total connection time: {:.1}s), disconnecting and reconnecting",
+                                duration.as_secs_f64()
+                            );
                             return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                                "Connection error after {:.1}s: {}",
-                                duration.as_secs_f64(),
-                                e
+                                "Message timeout after {:.1}s - no data received for 5 minutes",
+                                duration.as_secs_f64()
                             ));
                         }
                     }
-                }
-                Err(_) => {
-                    // Timeout occurred - no message received for 5 minutes
-                    let duration = connection_start.elapsed();
-                    error!(
-                        "No message received from APRS server for 5 minutes (total connection time: {:.1}s), disconnecting and reconnecting",
-                        duration.as_secs_f64()
-                    );
-                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "Message timeout after {:.1}s - no data received for 5 minutes",
-                        duration.as_secs_f64()
-                    ));
                 }
             }
         }

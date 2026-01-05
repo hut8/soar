@@ -232,9 +232,10 @@ pub(crate) async fn timeout_flight(
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
     // Fetch last fix to get coordinates for reverse geocoding
+    let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
     let last_fix = ctx
         .fixes_repo
-        .get_fixes_for_flight(flight_id, Some(1))
+        .get_fixes_for_flight(flight_id, Some(1), start_time, None)
         .await?
         .into_iter()
         .next();
@@ -315,7 +316,11 @@ pub(crate) async fn complete_flight_fast(
     let start = std::time::Instant::now();
 
     // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
-    let flight_fixes = ctx.fixes_repo.get_fixes_for_flight(flight_id, None).await?;
+    let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
+    let flight_fixes = ctx
+        .fixes_repo
+        .get_fixes_for_flight(flight_id, None, start_time, None)
+        .await?;
 
     // Quick airport lookup (fast - spatial index)
     let arrival_airport_id =

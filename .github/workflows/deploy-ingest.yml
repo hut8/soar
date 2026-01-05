@@ -1,5 +1,8 @@
 name: Deploy Ingest Services
 
+permissions:
+  contents: read
+
 # Manual workflow for deploying ingest-* services to staging or production
 # These services change infrequently and don't need to be deployed with every push
 
