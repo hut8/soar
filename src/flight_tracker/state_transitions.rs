@@ -324,14 +324,15 @@ pub(crate) async fn process_state_transition(
                         0.0
                     };
 
-                    // Calculate absolute max based on typical GA aircraft max speed (~300 knots)
-                    let absolute_max_distance_m = gap_seconds as f64 * 300.0 * 0.514444;
+                    // Calculate absolute max based on generous upper limit (700 mph for jets)
+                    // 700 mph = 312.928 m/s
+                    let absolute_max_distance_m = gap_seconds as f64 * 312.928;
 
                     // Check for impossible/unlikely scenarios
                     if actual_distance_m > absolute_max_distance_m {
-                        // Teleported - distance impossible even at max GA speed
+                        // Teleported - distance impossible even at 700 mph
                         trace!(
-                            "Flight resumption rejected: teleported {:.1}km in {:.1}h (max possible: {:.1}km)",
+                            "Flight resumption rejected: teleported {:.1}km in {:.1}h (max possible at 700mph: {:.1}km)",
                             actual_distance_m / 1000.0,
                             gap_hours,
                             absolute_max_distance_m / 1000.0
