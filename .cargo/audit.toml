@@ -1,2 +1,49 @@
+# Cargo audit configuration
+# https://github.com/rustsec/rustsec/tree/main/cargo-audit
+
 [advisories]
-ignore = ["RUSTSEC-2023-0071"] # Marvin attack in RSA; sqlx does not have a version with fixed dependencies and we don't use RSA.
+# Ignore list for known false positives
+ignore = [
+    # RUSTSEC-2026-0001: rkyv 0.7.45 vulnerability in rust_decimal
+    #
+    # FALSE POSITIVE - Vulnerable code is NOT compiled into our binary
+    #
+    # Background:
+    #   - rust_decimal 1.39.0 declares rkyv 0.7.45 as an OPTIONAL dependency
+    #   - The 'rkyv' feature must be explicitly enabled to use it
+    #   - None of our dependencies enable this feature
+    #
+    # Verification (2026-01-05):
+    #   1. cargo metadata: rkyv feature is NOT in activated features list for rust_decimal
+    #   2. cargo tree -i rkyv@0.7.45: Shows "nothing to print" (not in dep graph)
+    #   3. cargo tree --duplicates: rkyv is not listed (only one version used: none)
+    #   4. nm target/debug/soar | grep rkyv: No rkyv symbols in compiled binary
+    #   5. strings target/debug/soar | grep rkyv: No rkyv strings in binary
+    #
+    # Dependencies using rust_decimal:
+    #   - soar: features = ["std", "serde", "borsh"] (no rkyv)
+    #   - ogn-parser: default-features = false, features = ["std", "serde"] (no rkyv)
+    #   - google_maps: default features = ["serde", "std"] (no rkyv)
+    #
+    # Conclusion: The vulnerable rkyv 0.7.45 code is in Cargo.lock but never compiled.
+    #             This is a cargo audit false positive due to feature resolution.
+    "RUSTSEC-2026-0001",
+
+    # RUSTSEC-2023-0071: rsa 0.9.9 Marvin Attack timing sidechannel
+    #
+    # ACCEPTED RISK - Used for JWT signature verification only
+    #
+    # Background:
+    #   - rsa crate has a timing sidechannel in RSA decryption (Marvin attack)
+    #   - We use rsa via jsonwebtoken for JWT signature VERIFICATION only, not decryption
+    #   - The vulnerability affects RSA decryption operations, not signature verification
+    #   - No fixed version available as of 2026-01-05
+    #
+    # Mitigation:
+    #   - We do not use RSA for decryption/encryption operations
+    #   - Only used for JWT signature verification (public key operations)
+    #   - The timing attack requires access to private key operations
+    #
+    # TODO: Monitor for fixed version of rsa crate and upgrade when available
+    "RUSTSEC-2023-0071",
+]

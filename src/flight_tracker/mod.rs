@@ -1,3 +1,4 @@
+mod aircraft_state;
 mod aircraft_tracker;
 pub mod altitude;
 mod flight_lifecycle;
@@ -9,6 +10,7 @@ mod towing;
 pub(crate) mod utils;
 
 // Re-export should_be_active for use in fix_processor
+pub use aircraft_state::{AircraftState, CompactFix};
 pub use state_transitions::should_be_active;
 
 use crate::Fix;
@@ -20,14 +22,13 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tracing::Instrument;
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Represents the flight state when timeout occurs
@@ -44,154 +45,13 @@ pub(crate) enum FlightPhase {
     Unknown,
 }
 
-/// Calculate climb rate from recent fixes within the last 60 seconds
-/// Returns climb rate in feet per minute, or None if insufficient data
-///
-/// Algorithm:
-/// 1. Filter fixes to last 60 seconds (based on most recent fix timestamp)
-/// 2. Require at least 2 fixes with altitude data
-/// 3. Use first and last fix to calculate rate: (alt_delta / time_delta_seconds) * 60
-/// 4. Return None if time delta < 5 seconds (too noisy)
-pub(crate) fn calculate_climb_rate_from_fixes(fixes: &[Fix]) -> Option<i32> {
-    if fixes.is_empty() {
-        return None;
-    }
-
-    // Get the most recent timestamp
-    let most_recent_timestamp = fixes.iter().map(|f| f.timestamp).max()?;
-
-    // Filter to fixes within last 60 seconds that have altitude data
-    let mut recent_fixes_with_altitude: Vec<&Fix> = fixes
-        .iter()
-        .filter(|f| {
-            let age = most_recent_timestamp.signed_duration_since(f.timestamp);
-            age.num_seconds() <= 60 && f.altitude_msl_feet.is_some()
-        })
-        .collect();
-
-    // Need at least 2 fixes with altitude
-    if recent_fixes_with_altitude.len() < 2 {
-        return None;
-    }
-
-    // Sort by timestamp to get first and last
-    recent_fixes_with_altitude.sort_by_key(|f| f.timestamp);
-
-    let first_fix = recent_fixes_with_altitude.first()?;
-    let last_fix = recent_fixes_with_altitude.last()?;
-
-    let first_alt = first_fix.altitude_msl_feet?;
-    let last_alt = last_fix.altitude_msl_feet?;
-
-    let time_delta_seconds = (last_fix.timestamp - first_fix.timestamp).num_seconds();
-
-    // Require at least 5 seconds between fixes to avoid noise
-    if time_delta_seconds < 5 {
-        return None;
-    }
-
-    // Calculate climb rate: (altitude_change_ft / time_delta_seconds) * 60 seconds/minute
-    let altitude_change_ft = last_alt - first_alt;
-    let climb_rate_fpm = (altitude_change_ft as f64 / time_delta_seconds as f64) * 60.0;
-
-    Some(climb_rate_fpm.round() as i32)
-}
-
-/// Tracks the current flight state for a device
-#[derive(Debug, Clone)]
-pub(crate) struct CurrentFlightState {
-    /// The flight ID for the current active flight
-    pub flight_id: Uuid,
-    /// Timestamp of the last fix received for this flight
-    pub last_fix_timestamp: DateTime<Utc>,
-    /// Wall-clock time when we last updated this flight state
-    pub last_update_time: DateTime<Utc>,
-    /// History of the last 5 fixes' is_active status (most recent last)
-    /// Used to detect takeoff (inactive -> active transition) and landing debounce
-    pub recent_fix_history: VecDeque<bool>,
-    /// Last known altitude MSL in feet (for phase determination)
-    pub last_altitude_msl_ft: Option<i32>,
-    /// Last known climb rate in fpm from fix data (untrusted - for reference only)
-    pub last_climb_fpm: Option<i32>,
-    /// Calculated climb rate in fpm based on altitude changes over time (trusted)
-    /// Used for phase determination instead of last_climb_fpm when available
-    pub calculated_climb_fpm: Option<i32>,
-    /// Last known position (latitude, longitude) for distance calculations
-    pub last_position: (f64, f64),
-}
-
-impl CurrentFlightState {
-    /// Create a new CurrentFlightState with initial fix activity
-    pub fn new(flight_id: Uuid, fix_timestamp: DateTime<Utc>, is_active: bool) -> Self {
-        let mut history = VecDeque::with_capacity(5);
-        history.push_back(is_active);
-        Self {
-            flight_id,
-            last_fix_timestamp: fix_timestamp,
-            last_update_time: Utc::now(),
-            recent_fix_history: history,
-            last_altitude_msl_ft: None,
-            last_climb_fpm: None,
-            calculated_climb_fpm: None,
-            last_position: (0.0, 0.0), // Will be updated with first fix
-        }
-    }
-
-    /// Update state with a new fix
-    pub fn update(&mut self, fix_timestamp: DateTime<Utc>, is_active: bool) {
-        self.last_fix_timestamp = fix_timestamp;
-        self.last_update_time = Utc::now();
-
-        // Keep only last 5 fixes
-        if self.recent_fix_history.len() >= 5 {
-            self.recent_fix_history.pop_front();
-        }
-        self.recent_fix_history.push_back(is_active);
-    }
-
-    /// Check if we have 5 consecutive inactive fixes (for landing debounce)
-    pub fn has_five_consecutive_inactive(&self) -> bool {
-        self.recent_fix_history.len() >= 5 && self.recent_fix_history.iter().all(|&active| !active)
-    }
-
-    /// Determine the flight phase based on current state
-    /// Used to decide coalescing behavior when flight times out
-    /// Prefers calculated_climb_fpm over last_climb_fpm for accuracy
-    pub fn determine_flight_phase(&self) -> FlightPhase {
-        // Use calculated climb rate if available, otherwise fall back to last_climb_fpm
-        let climb = self.calculated_climb_fpm.or(self.last_climb_fpm);
-
-        // Check climb rate first (most specific indicator)
-        if let Some(climb_rate) = climb {
-            if climb_rate > 300 {
-                return FlightPhase::Climbing;
-            }
-            if climb_rate < -300 {
-                return FlightPhase::Descending;
-            }
-        }
-
-        // If at high altitude with stable or gentle climb/descent, assume cruising
-        if let Some(alt) = self.last_altitude_msl_ft
-            && alt > 10_000
-            && climb.map(|c| c.abs() < 500).unwrap_or(true)
-        {
-            return FlightPhase::Cruising;
-        }
-
-        // Insufficient data to determine phase
-        FlightPhase::Unknown
-    }
-}
-
-/// Type alias for active flights map: aircraft_id -> CurrentFlightState
-pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>>;
+/// Unified aircraft state map using DashMap for concurrent per-aircraft locking
+/// Tracks all aircraft with fixes in the last 18 hours
+pub(crate) type AircraftStatesMap = Arc<DashMap<Uuid, AircraftState>>;
 
 /// Type alias for device locks map: aircraft_id -> Arc<Mutex<()>>
-pub(crate) type AircraftLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
-
-/// Type alias for aircraft trackers map: aircraft_id -> AircraftTracker
-pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker::AircraftTracker>>>;
+/// Still needed for serializing operations on the same aircraft
+pub(crate) type AircraftLocksMap = Arc<DashMap<Uuid, Arc<Mutex<()>>>>;
 
 /// Context for flight processing operations
 /// Contains all repositories and state needed for flight lifecycle management
@@ -203,9 +63,7 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub runways_repo: &'a RunwaysRepository,
     pub fixes_repo: &'a FixesRepository,
     pub elevation_db: &'a ElevationDB,
-    pub active_flights: &'a ActiveFlightsMap,
-    pub aircraft_locks: &'a AircraftLocksMap,
-    pub aircraft_trackers: &'a AircraftTrackersMap,
+    pub aircraft_states: &'a AircraftStatesMap,
     pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
 }
 
@@ -219,12 +77,11 @@ pub struct FlightTracker {
     fixes_repo: FixesRepository,
     locations_repo: LocationsRepository,
     elevation_db: ElevationDB,
-    // Simple map: aircraft_id -> (flight_id, last_fix_timestamp, last_update_time)
-    active_flights: ActiveFlightsMap,
+    // Unified aircraft state map: all aircraft seen in last 18 hours
+    // DashMap provides concurrent per-key locking so one aircraft update doesn't block another
+    aircraft_states: AircraftStatesMap,
     // Per-device mutexes to ensure sequential processing per device
     device_locks: AircraftLocksMap,
-    // Aircraft trackers for towplane towing detection
-    aircraft_trackers: AircraftTrackersMap,
 }
 
 impl Clone for FlightTracker {
@@ -238,9 +95,8 @@ impl Clone for FlightTracker {
             fixes_repo: self.fixes_repo.clone(),
             locations_repo: self.locations_repo.clone(),
             elevation_db: self.elevation_db.clone(),
-            active_flights: Arc::clone(&self.active_flights),
+            aircraft_states: Arc::clone(&self.aircraft_states),
             device_locks: Arc::clone(&self.device_locks),
-            aircraft_trackers: Arc::clone(&self.aircraft_trackers),
         }
     }
 }
@@ -257,9 +113,8 @@ impl FlightTracker {
             fixes_repo: FixesRepository::new(pool.clone()),
             locations_repo: LocationsRepository::new(pool.clone()),
             elevation_db,
-            active_flights: Arc::new(RwLock::new(HashMap::new())),
-            device_locks: Arc::new(RwLock::new(HashMap::new())),
-            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            aircraft_states: Arc::new(DashMap::new()),
+            device_locks: Arc::new(DashMap::new()),
         }
     }
 
@@ -274,23 +129,27 @@ impl FlightTracker {
             runways_repo: &self.runways_repo,
             fixes_repo: &self.fixes_repo,
             elevation_db: &self.elevation_db,
-            active_flights: &self.active_flights,
-            aircraft_locks: &self.device_locks,
-            aircraft_trackers: &self.aircraft_trackers,
+            aircraft_states: &self.aircraft_states,
             pool: self.pool.clone(),
         }
     }
 
     /// Initialize the flight tracker on startup:
     /// 1. Timeout old incomplete flights (where last_fix_at is older than timeout_duration)
-    /// 2. Load active flights from the database into the in-memory tracker
+    /// 2. Restore aircraft states from database for all active flights
     ///
-    /// Returns (number of flights timed out, number of flights loaded)
+    /// This restores the in-memory state by loading recent fixes for each active flight,
+    /// which is critical for:
+    /// - Takeoff detection (needs last 3 fixes)
+    /// - Landing detection (needs last 5 fixes)
+    /// - Flight coalescing (needs flight phase from recent fixes)
+    /// - Tow release detection (needs recent fixes for climb rate)
+    ///
+    /// Returns (timed_out_count, restored_states_count)
     pub async fn initialize_from_database(
         &self,
         timeout_duration: chrono::Duration,
     ) -> Result<(usize, usize)> {
-        // Phase 1: Timeout old incomplete flights
         info!(
             "Timing out incomplete flights older than {} hours...",
             timeout_duration.num_hours()
@@ -309,65 +168,83 @@ impl FlightTracker {
             info!("No old incomplete flights to timeout");
         }
 
-        // Phase 2: Load active flights into the tracker
-        info!(
-            "Loading active flights from the last {} hours into tracker...",
-            timeout_duration.num_hours()
-        );
-        let active_flights_from_db = self
+        // Restore aircraft states from active and timed-out flights
+        info!("Restoring aircraft states from database...");
+        let flights = self
             .flights_repo
             .get_active_flights_for_tracker(timeout_duration)
             .await?;
 
-        let loaded_count = active_flights_from_db.len();
+        info!(
+            "Found {} flights to restore (active and timed-out)",
+            flights.len()
+        );
 
-        // Populate the active_flights map
-        if !active_flights_from_db.is_empty() {
-            let mut active_flights = self.active_flights.write().await;
-
-            for flight in active_flights_from_db {
-                // We need the aircraft_id to populate the map
-                if let Some(aircraft_id) = flight.aircraft_id {
-                    // Create a CurrentFlightState from the database flight
-                    // Initialize with empty history - it will be populated as new fixes arrive
-                    let mut history = VecDeque::with_capacity(5);
-                    // Assume the flight was active (since it's in our active flights list)
-                    history.push_back(true);
-
-                    let state = CurrentFlightState {
-                        flight_id: flight.id,
-                        last_fix_timestamp: flight.last_fix_at,
-                        last_update_time: Utc::now(),
-                        recent_fix_history: history,
-                        last_altitude_msl_ft: None,
-                        last_climb_fpm: None,
-                        calculated_climb_fpm: None,
-                        last_position: (0.0, 0.0), // Will be updated when next fix arrives
-                    };
-
-                    active_flights.insert(aircraft_id, state);
-                    trace!(
-                        "Loaded flight {} for device {} into tracker (last fix: {})",
-                        flight.id, aircraft_id, flight.last_fix_at
+        let mut restored_count: usize = 0;
+        for flight in flights {
+            // Skip flights without aircraft_id (shouldn't happen but be defensive)
+            let aircraft_id = match flight.aircraft_id {
+                Some(id) => id,
+                None => {
+                    warn!(
+                        "Flight {} has no aircraft_id, skipping state restore",
+                        flight.id
                     );
+                    continue;
                 }
+            };
+
+            // Get last 10 fixes for this flight
+            let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
+            let fixes = self
+                .fixes_repo
+                .get_fixes_for_flight(flight.id, Some(10), start_time, None)
+                .await
+                .unwrap_or_default();
+
+            if fixes.is_empty() {
+                continue;
             }
 
-            info!(
-                "Loaded {} active flights into tracker from database",
-                loaded_count
-            );
-        } else {
-            info!("No active flights to load into tracker");
+            // Create aircraft state with the oldest fix first
+            let first_fix = &fixes[fixes.len() - 1];
+            let is_active = state_transitions::should_be_active(first_fix);
+            let mut state = aircraft_state::AircraftState::new(first_fix, is_active);
+
+            // Determine if this is an active or timed-out flight
+            if flight.timed_out_at.is_some() {
+                // Timed-out flight - track separately for potential resumption
+                state.last_timed_out_flight_id = Some(flight.id);
+                state.last_timed_out_callsign = flight.callsign.clone();
+                state.last_timed_out_at = flight.timed_out_at;
+            } else {
+                // Active flight - set as current flight
+                state.current_flight_id = Some(flight.id);
+                state.current_callsign = flight.callsign.clone();
+            }
+
+            // Add remaining fixes in chronological order (oldest to newest)
+            for fix in fixes.iter().rev().skip(1) {
+                let is_active = state_transitions::should_be_active(fix);
+                state.add_fix(fix, is_active);
+            }
+
+            // Insert into map
+            self.aircraft_states.insert(aircraft_id, state);
+            restored_count += 1;
         }
+
+        info!(
+            "Restored state for {} aircraft with active flights",
+            restored_count
+        );
 
         // Update metrics
-        {
-            let active_flights = self.active_flights.read().await;
-            utils::update_flight_tracker_metrics(&active_flights);
-        }
+        metrics::counter!("flight_tracker.startup.aircraft_states_restored_total")
+            .increment(restored_count as u64);
+        utils::update_flight_tracker_metrics(&self.aircraft_states);
 
-        Ok((timed_out_count, loaded_count))
+        Ok((timed_out_count, restored_count))
     }
 
     /// Get a reference to the elevation database
@@ -398,6 +275,60 @@ impl FlightTracker {
         );
     }
 
+    /// Start a background task to periodically clean up stale aircraft states (older than 18 hours)
+    pub fn start_state_cleanup(&self, check_interval_secs: u64) {
+        let tracker = self.clone();
+        tokio::spawn(
+            async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
+                // Skip the first tick (immediate execution)
+                interval.tick().await;
+
+                loop {
+                    interval.tick().await;
+                    tracker.cleanup_stale_aircraft_states().await;
+                }
+            }
+            .instrument(tracing::info_span!("aircraft_state_cleanup")),
+        );
+        info!(
+            "Started aircraft state cleanup (every {} seconds)",
+            check_interval_secs
+        );
+    }
+
+    /// Clean up aircraft states that haven't been updated in 18+ hours
+    async fn cleanup_stale_aircraft_states(&self) {
+        let cleanup_threshold = chrono::Duration::hours(18);
+        let now = chrono::Utc::now();
+
+        let mut removed_count = 0;
+        self.aircraft_states.retain(|aircraft_id, state| {
+            let elapsed = now.signed_duration_since(state.last_update_time);
+            if elapsed > cleanup_threshold {
+                debug!(
+                    "Removing stale aircraft state for {} (last update {} hours ago)",
+                    aircraft_id,
+                    elapsed.num_hours()
+                );
+                removed_count += 1;
+                false // Remove this entry
+            } else {
+                true // Keep this entry
+            }
+        });
+
+        if removed_count > 0 {
+            info!("Cleaned up {} stale aircraft states", removed_count);
+            metrics::counter!("flight_tracker.state_cleanup.removed_total")
+                .increment(removed_count);
+        }
+
+        // Update metrics after cleanup
+        utils::update_flight_tracker_metrics(&self.aircraft_states);
+    }
+
     /// Calculate altitude AGL and update the fix in the database asynchronously
     #[tracing::instrument(skip(self, fix, fixes_repo), fields(fix_id = %fix_id))]
     pub async fn calculate_and_update_agl_async(
@@ -412,58 +343,56 @@ impl FlightTracker {
     /// Clean up the device lock for a specific device
     /// This should be called when a flight completes or times out
     pub async fn cleanup_device_lock(&self, aircraft_id: Uuid) {
-        let mut locks = self.device_locks.write().await;
-        if locks.remove(&aircraft_id).is_some() {
+        if self.device_locks.remove(&aircraft_id).is_some() {
             trace!("Cleaned up device lock for device {}", aircraft_id);
         }
     }
 
-    /// Check all active flights and timeout any that haven't received beacons for 1+ hours
+    /// Check all aircraft with active flights and timeout any that haven't received fixes for 1+ hours
     #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
         let timeout_threshold = chrono::Duration::hours(1);
         let now = chrono::Utc::now();
 
         // Collect flights that need to be timed out
-        let flights_to_timeout: Vec<(Uuid, Uuid)> = {
-            let active_flights = self.active_flights.read().await;
-            active_flights
-                .iter()
-                .filter_map(|(aircraft_id, state)| {
-                    let elapsed = now.signed_duration_since(state.last_update_time);
-                    if elapsed > timeout_threshold {
-                        info!(
-                            "Flight {} for device {} is stale (last update {} seconds ago)",
-                            state.flight_id,
-                            aircraft_id,
-                            elapsed.num_seconds()
-                        );
-                        return Some((state.flight_id, *aircraft_id));
-                    }
-                    None
-                })
-                .collect()
-        };
+        let flights_to_timeout: Vec<(Uuid, Uuid)> = self
+            .aircraft_states
+            .iter()
+            .filter_map(|entry| {
+                let aircraft_id = *entry.key();
+                let state = entry.value();
+
+                // Only check aircraft with active flights
+                let flight_id = state.current_flight_id?;
+
+                let elapsed = now.signed_duration_since(state.last_update_time);
+                if elapsed > timeout_threshold {
+                    info!(
+                        "Flight {} for device {} is stale (last update {} seconds ago)",
+                        flight_id,
+                        aircraft_id,
+                        elapsed.num_seconds()
+                    );
+                    return Some((flight_id, aircraft_id));
+                }
+                None
+            })
+            .collect();
 
         // Update continuous metrics before processing timeouts
-        {
-            let active_flights = self.active_flights.read().await;
-            crate::flight_tracker::utils::update_flight_tracker_metrics(&active_flights);
-        }
+        crate::flight_tracker::utils::update_flight_tracker_metrics(&self.aircraft_states);
 
         let timeout_count = flights_to_timeout.len();
 
         // Timeout each stale flight
         for (flight_id, aircraft_id) in flights_to_timeout {
-            // Double-check that the flight still exists in the map before timing it out
-            // (it may have already landed and been removed)
-            let should_timeout = {
-                let active_flights = self.active_flights.read().await;
-                active_flights
-                    .get(&aircraft_id)
-                    .map(|state| state.flight_id == flight_id)
-                    .unwrap_or(false)
-            };
+            // Double-check that the flight still exists before timing it out
+            let should_timeout = self
+                .aircraft_states
+                .get(&aircraft_id)
+                .and_then(|state| state.current_flight_id)
+                .map(|fid| fid == flight_id)
+                .unwrap_or(false);
 
             if !should_timeout {
                 // Flight was already removed (probably landed), skip timeout
@@ -471,24 +400,9 @@ impl FlightTracker {
             }
 
             // Create context for timeout processing
-            let ctx = FlightProcessorContext {
-                flights_repo: &self.flights_repo,
-                fixes_repo: &self.fixes_repo,
-                aircraft_repo: &self.device_repo,
-                airports_repo: &self.airports_repo,
-                runways_repo: &self.runways_repo,
-                locations_repo: &self.locations_repo,
-                elevation_db: &self.elevation_db,
-                active_flights: &self.active_flights,
-                aircraft_locks: &self.device_locks,
-                aircraft_trackers: &self.aircraft_trackers,
-                pool: self.pool.clone(),
-            };
+            let ctx = self.context();
 
-            if let Err(e) =
-                flight_lifecycle::timeout_flight(&ctx, &self.active_flights, flight_id, aircraft_id)
-                    .await
-            {
+            if let Err(e) = flight_lifecycle::timeout_flight(&ctx, flight_id, aircraft_id).await {
                 error!(
                     "Failed to timeout flight {} for device {}: {}",
                     flight_id, aircraft_id, e
@@ -513,35 +427,26 @@ impl FlightTracker {
         fix: Fix,
         fixes_repo: &FixesRepository,
     ) -> Option<Fix> {
-        // Get or create the per-device lock
-        let device_lock = {
-            let locks_read = self.device_locks.read().await;
-            if let Some(lock) = locks_read.get(&fix.aircraft_id) {
-                Arc::clone(lock)
-            } else {
-                drop(locks_read);
-                let mut locks_write = self.device_locks.write().await;
-                locks_write
-                    .entry(fix.aircraft_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone()
-            }
-        };
+        // Get or create the per-device lock (DashMap provides automatic concurrent access)
+        let device_lock = self
+            .device_locks
+            .entry(fix.aircraft_id)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
 
         // Acquire the per-device lock - ensures sequential processing
         let _guard = device_lock.lock().await;
 
         // Check for duplicate fixes (within 1 second)
-        let is_duplicate = {
-            let active_flights = self.active_flights.read().await;
-            if let Some(state) = active_flights.get(&fix.aircraft_id) {
-                let time_diff = fix
-                    .timestamp
-                    .signed_duration_since(state.last_fix_timestamp);
+        let is_duplicate = if let Some(state) = self.aircraft_states.get(&fix.aircraft_id) {
+            if let Some(last_fix_time) = state.last_fix_timestamp() {
+                let time_diff = fix.timestamp.signed_duration_since(last_fix_time);
                 time_diff.num_seconds().abs() < 1
             } else {
                 false
             }
+        } else {
+            false
         };
 
         if is_duplicate {
@@ -624,7 +529,7 @@ impl FlightTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use chrono::{DateTime, TimeZone, Utc};
 
     // Helper function to create a test fix
     fn create_test_fix(timestamp: DateTime<Utc>, altitude_msl: Option<i32>) -> Fix {
@@ -662,12 +567,13 @@ mod tests {
         // Expected: +600 FPM
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
 
-        let fixes = vec![
-            create_test_fix(base_time, Some(1000)),
-            create_test_fix(base_time + chrono::Duration::seconds(60), Some(1600)),
-        ];
+        let fix1 = create_test_fix(base_time, Some(1000));
+        let fix2 = create_test_fix(base_time + chrono::Duration::seconds(60), Some(1600));
 
-        let result = calculate_climb_rate_from_fixes(&fixes);
+        let mut state = aircraft_state::AircraftState::new(&fix1, true);
+        state.add_fix(&fix2, true);
+
+        let result = state.calculate_climb_rate();
         assert_eq!(result, Some(600));
     }
 
@@ -677,12 +583,13 @@ mod tests {
         // Expected: -1000 FPM
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
 
-        let fixes = vec![
-            create_test_fix(base_time, Some(5000)),
-            create_test_fix(base_time + chrono::Duration::seconds(60), Some(4000)),
-        ];
+        let fix1 = create_test_fix(base_time, Some(5000));
+        let fix2 = create_test_fix(base_time + chrono::Duration::seconds(60), Some(4000));
 
-        let result = calculate_climb_rate_from_fixes(&fixes);
+        let mut state = aircraft_state::AircraftState::new(&fix1, true);
+        state.add_fix(&fix2, true);
+
+        let result = state.calculate_climb_rate();
         assert_eq!(result, Some(-1000));
     }
 
@@ -691,12 +598,13 @@ mod tests {
         // Only 1 fix with altitude - should return None
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
 
-        let fixes = vec![
-            create_test_fix(base_time, Some(1000)),
-            create_test_fix(base_time + chrono::Duration::seconds(60), None),
-        ];
+        let fix1 = create_test_fix(base_time, Some(1000));
+        let fix2 = create_test_fix(base_time + chrono::Duration::seconds(60), None);
 
-        let result = calculate_climb_rate_from_fixes(&fixes);
+        let mut state = aircraft_state::AircraftState::new(&fix1, true);
+        state.add_fix(&fix2, true);
+
+        let result = state.calculate_climb_rate();
         assert_eq!(result, None);
     }
 
@@ -705,12 +613,13 @@ mod tests {
         // Fixes only 2 seconds apart - should return None
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
 
-        let fixes = vec![
-            create_test_fix(base_time, Some(1000)),
-            create_test_fix(base_time + chrono::Duration::seconds(2), Some(1020)),
-        ];
+        let fix1 = create_test_fix(base_time, Some(1000));
+        let fix2 = create_test_fix(base_time + chrono::Duration::seconds(2), Some(1020));
 
-        let result = calculate_climb_rate_from_fixes(&fixes);
+        let mut state = aircraft_state::AircraftState::new(&fix1, true);
+        state.add_fix(&fix2, true);
+
+        let result = state.calculate_climb_rate();
         assert_eq!(result, None);
     }
 }

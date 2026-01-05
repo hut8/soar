@@ -258,7 +258,7 @@ pub(crate) async fn create_start_end_location(
         Err(e) => {
             metrics::counter!("flight_tracker.location.pelias.failure_total").increment(1);
             warn!(
-                "Reverse geocoding failed for {} location at coordinates ({}, {}): {}",
+                "Reverse geocoding failed for {} location at coordinates ({}, {}): {:?}",
                 context, latitude, longitude, e
             );
             None

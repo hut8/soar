@@ -1,21 +1,18 @@
 use crate::Fix;
-use crate::flights::TimeoutPhase;
 use crate::flights_repo::FlightsRepository;
 use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
-use super::aircraft_tracker;
 use super::altitude::calculate_altitude_agl;
-use super::altitude::calculate_altitude_offset_ft;
-use super::flight_lifecycle::{complete_flight_fast, create_flight_fast};
+use super::flight_lifecycle::{create_flight_fast, spawn_complete_flight};
+use super::geometry::haversine_distance;
 use super::towing;
-use super::{CurrentFlightState, FlightProcessorContext};
+use super::{AircraftState, FlightProcessorContext};
 
 /// Helper function to update last_fix_at timestamp in database
-/// Logs error if update fails but doesn't propagate the error
 async fn update_flight_timestamp(
     flights_repo: &FlightsRepository,
     flight_id: Uuid,
@@ -33,82 +30,32 @@ async fn update_flight_timestamp(
 }
 
 /// Determine if aircraft should be active based on fix data
-/// This checks ground speed first, then altitude (if available)
 pub fn should_be_active(fix: &Fix) -> bool {
     // Special case: If no altitude data and speed < 80 knots, consider inactive
-    // This handles cases where altitude data is missing but we can still infer ground state from speed
     if fix.altitude_agl_feet.is_none() && fix.altitude_msl_feet.is_none() {
         let speed_knots = fix.ground_speed_knots.unwrap_or(0.0);
         if speed_knots < 80.0 {
-            // No altitude data and slow speed - likely on ground
             return false;
         }
-        // No altitude data but high speed - assume active/airborne
         return true;
     }
 
     // Check ground speed - >= 25 knots means active
-    let speed_indicates_active = fix.ground_speed_knots.map(|s| s >= 25.0).unwrap_or(false);
-
-    if speed_indicates_active {
-        return true;
-    }
-
-    // Speed is low - check altitude to see if still airborne
-    // Don't register landing if AGL altitude is >= 250 feet (hovering helicopter, slow glider)
-    if let Some(altitude_agl) = fix.altitude_agl_feet
-        && altitude_agl >= 250
+    if let Some(speed) = fix.ground_speed_knots
+        && speed >= 25.0
     {
-        // Still too high to land - remain active
         return true;
     }
 
-    // Speed is low and either altitude is unavailable or < 250 feet AGL
-    false
-}
-
-/// Calculate average ground speed from a list of fixes
-/// Returns average speed in knots, or None if insufficient data
-///
-/// Requires at least 3 fixes with ground speed data to return a valid average
-fn calculate_average_speed(fixes: &[Fix]) -> Option<f64> {
-    let speeds: Vec<f32> = fixes.iter().filter_map(|f| f.ground_speed_knots).collect();
-
-    if speeds.len() < 3 {
-        return None;
+    // Check AGL altitude - >= 250 ft means active (airborne)
+    if let Some(agl) = fix.altitude_agl_feet
+        && agl >= 250
+    {
+        return true;
     }
 
-    let sum: f32 = speeds.iter().sum();
-    Some((sum / speeds.len() as f32) as f64)
-}
-
-/// Validate if distance traveled is reasonable given gap duration and pre-timeout speed
-///
-/// Logic: If aircraft averaged X knots before timeout, then reappeared Y hours later,
-/// it should have traveled approximately X * Y nautical miles. We use 75% safety margin
-/// to account for wind, descents, slowing for landing pattern, etc.
-///
-/// Returns true if distance is plausible, false if too short (suspicious)
-///
-/// # Arguments
-/// * `avg_speed_knots` - Average ground speed before timeout (in knots)
-/// * `gap_hours` - Gap duration (in hours)
-/// * `actual_distance_km` - Actual distance traveled (in kilometers)
-fn validate_distance_for_gap(
-    avg_speed_knots: f64,
-    gap_hours: f64,
-    actual_distance_km: f64,
-) -> bool {
-    // Convert expected distance to km
-    // 1 nautical mile = 1.852 km
-    let expected_distance_nm = avg_speed_knots * gap_hours;
-    let expected_distance_km = expected_distance_nm * 1.852;
-
-    // Apply 75% safety margin (aircraft could have slowed down)
-    let min_expected_distance_km = expected_distance_km * 0.75;
-
-    // Distance is valid if actual is at least 75% of expected
-    actual_distance_km >= min_expected_distance_km
+    // Low speed and low/no altitude = inactive (on ground)
+    false
 }
 
 /// Process state transition for an aircraft and return updated fix with flight_id
@@ -118,7 +65,7 @@ pub(crate) async fn process_state_transition(
 ) -> Result<Fix> {
     let is_active = should_be_active(&fix);
 
-    // Fetch aircraft once for use throughout the function
+    // Fetch aircraft
     let aircraft_lookup_start = std::time::Instant::now();
     let aircraft = ctx
         .aircraft_repo
@@ -130,880 +77,437 @@ pub(crate) async fn process_state_transition(
 
     let is_towtug = aircraft.aircraft_type_ogn == Some(AircraftType::TowTug);
 
-    // Get current flight state
-    let current_flight_state = {
-        let flights = ctx.active_flights.read().await;
-        flights.get(&fix.aircraft_id).cloned()
+    // Get or create aircraft state, add this fix to history
+    let current_flight_id = {
+        let mut state = ctx
+            .aircraft_states
+            .entry(fix.aircraft_id)
+            .or_insert_with(|| AircraftState::new(&fix, is_active));
+
+        // Add fix to history (if not the initial fix that created the state)
+        if state.recent_fixes.len() > 1
+            || (state.recent_fixes.len() == 1
+                && state.recent_fixes.back().unwrap().timestamp != fix.timestamp)
+        {
+            state.add_fix(&fix, is_active);
+        }
+
+        state.current_flight_id
     };
 
-    match (current_flight_state, is_active) {
-        // Case 1: Active flight exists and current fix is active
-        (Some(mut state), true) => {
-            // Check if callsign has changed - if both current flight and new fix have callsigns
-            // and they differ, this indicates a different aircraft/flight. End current flight and create new one.
+    match (current_flight_id, is_active) {
+        // Case 1: Has active flight AND fix is active -> Continue flight
+        (Some(flight_id), true) => {
+            // Check for callsign change (using in-memory state, not DB)
             let should_end_flight = if let Some(new_callsign) = &fix.flight_number {
-                if let Ok(Some(current_flight)) =
-                    ctx.flights_repo.get_flight_by_id(state.flight_id).await
-                {
-                    if let Some(current_callsign) = &current_flight.callsign {
-                        if current_callsign != new_callsign {
-                            info!(
-                                "Aircraft {} active flight {} has callsign '{}' but new fix has callsign '{}' - ending flight and creating new one",
-                                fix.aircraft_id, state.flight_id, current_callsign, new_callsign
-                            );
-                            true
-                        } else {
-                            false
-                        }
+                if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                    if let Some(current_callsign) = &state.current_callsign {
+                        current_callsign != new_callsign
                     } else {
-                        false // Current flight has no callsign, OK to continue
+                        false
                     }
                 } else {
-                    false // Couldn't fetch flight, continue anyway
+                    false
                 }
             } else {
-                false // New fix has no callsign, OK to continue
+                false
             };
 
             if should_end_flight {
-                // End the current flight
-                if let Err(e) = complete_flight_fast(ctx, &aircraft, state.flight_id, &fix).await {
-                    error!(
-                        "Failed to complete flight {} due to callsign change: {}",
-                        state.flight_id, e
-                    );
-                }
+                // End current flight (non-blocking), start new one
+                spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
 
-                // Create a new flight for this fix
-                let new_flight_id = Uuid::new_v4();
-                match create_flight_fast(
-                    ctx,
-                    &fix,
-                    new_flight_id,
-                    false, // Don't skip airport lookup - this is a new flight
-                )
-                .await
-                {
+                let new_flight_id = Uuid::now_v7();
+                match create_flight_fast(ctx, &fix, new_flight_id, false).await {
                     Ok(flight_id) => {
-                        info!(
-                            "Created new flight {} for device {} with callsign {:?}",
-                            flight_id, fix.aircraft_id, fix.flight_number
-                        );
-
-                        // Assign the new flight_id to this fix
                         fix.flight_id = Some(flight_id);
-
-                        // Create new active flight state
-                        let mut new_state =
-                            CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                        new_state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                        new_state.last_climb_fpm = fix.climb_fpm;
-                        new_state.last_position = (fix.latitude, fix.longitude);
-
-                        // Add to active flights
-                        let mut flights = ctx.active_flights.write().await;
-                        flights.insert(fix.aircraft_id, new_state);
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = Some(flight_id);
+                            state.current_callsign = fix.flight_number.clone();
+                        }
                     }
                     Err(e) => {
-                        error!(
-                            "Failed to create new flight for aircraft {} after callsign change: {}",
-                            fix.aircraft_id, e
-                        );
-                        // Clear flight_id to prevent FK violation if old flight was deleted
+                        error!("Failed to create new flight after callsign change: {}", e);
                         fix.flight_id = None;
                     }
                 }
             } else {
-                // Callsign hasn't changed (or not applicable), continue existing flight
-                trace!(
-                    "Aircraft {} has active flight {} - continuing flight",
-                    fix.aircraft_id, state.flight_id
-                );
+                // Check for long time/distance gap that indicates aircraft landed
+                // NOTE: Current fix has already been added to state, so we check the PREVIOUS fix
+                let should_end_due_to_gap = if let Some(state) =
+                    ctx.aircraft_states.get(&fix.aircraft_id)
+                {
+                    if let Some(prev_fix_time) = state.previous_fix_timestamp() {
+                        let gap_seconds = (fix.timestamp - prev_fix_time).num_seconds();
 
-                // Assign existing flight_id to this fix
-                fix.flight_id = Some(state.flight_id);
+                        // Only check if gap is significant (>30 minutes)
+                        if gap_seconds > 1800 {
+                            if let Some(prev_fix) = state.previous_fix() {
+                                let actual_distance_m = haversine_distance(
+                                    prev_fix.lat,
+                                    prev_fix.lng,
+                                    fix.latitude,
+                                    fix.longitude,
+                                );
+                                let last_speed_knots =
+                                    prev_fix.ground_speed_knots.unwrap_or(0.0) as f64;
 
-                // Calculate time gap from last fix in the same flight
-                let time_gap_seconds =
-                    (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
-                fix.time_gap_seconds = Some(time_gap_seconds);
+                                // If aircraft was flying (>25 knots)
+                                if last_speed_knots > 25.0 {
+                                    let last_speed_ms = last_speed_knots * 0.514444;
+                                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
+                                    let min_expected_distance_m = expected_distance_m * 0.3;
 
-                // Check for large gap that indicates landing + new takeoff
-                let gap_hours = time_gap_seconds as f64 / 3600.0;
-                let large_gap = gap_hours >= 4.0; // 4+ hours suggests aircraft landed
-                let currently_climbing = fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
-
-                if large_gap && currently_climbing {
-                    // Large gap + climbing = likely landed and took off again
-                    info!(
-                        "Aircraft {} has {:.1}h gap and is climbing - ending flight {} and creating new flight",
-                        fix.aircraft_id, gap_hours, state.flight_id
-                    );
-                    metrics::counter!("flight_tracker.coalesce.rejected.gap_hours_total")
-                        .increment(1);
-
-                    // End the current flight
-                    if let Err(e) =
-                        complete_flight_fast(ctx, &aircraft, state.flight_id, &fix).await
-                    {
-                        error!(
-                            "Failed to complete flight {} due to large gap: {}",
-                            state.flight_id, e
-                        );
+                                    // Aircraft moved way too little for the time/speed - must have landed
+                                    if actual_distance_m < min_expected_distance_m {
+                                        info!(
+                                            "Ending flight {}: moved too little ({:.1}km in {:.1}h at {:.0} knots, expected min {:.1}km)",
+                                            flight_id,
+                                            actual_distance_m / 1000.0,
+                                            gap_seconds as f64 / 3600.0,
+                                            last_speed_knots,
+                                            min_expected_distance_m / 1000.0
+                                        );
+                                        metrics::counter!(
+                                            "flight_tracker.flight_ended.gap_suggests_landing_total"
+                                        )
+                                        .increment(1);
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
                     }
+                } else {
+                    false
+                };
 
-                    // Remove from active flights
-                    {
-                        let mut flights = ctx.active_flights.write().await;
-                        flights.remove(&fix.aircraft_id);
-                    }
+                if should_end_due_to_gap {
+                    // End current flight, start new one
+                    spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
 
-                    // Create a new flight for this fix
-                    let new_flight_id = Uuid::new_v4();
+                    let new_flight_id = Uuid::now_v7();
                     match create_flight_fast(ctx, &fix, new_flight_id, false).await {
                         Ok(flight_id) => {
-                            info!(
-                                "Created new flight {} for device {} after {:.1}h gap",
-                                flight_id, fix.aircraft_id, gap_hours
-                            );
-
-                            // Assign the new flight_id to this fix
                             fix.flight_id = Some(flight_id);
-
-                            // Create new active flight state
-                            let mut new_state =
-                                CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                            new_state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                            new_state.last_climb_fpm = fix.climb_fpm;
-                            new_state.last_position = (fix.latitude, fix.longitude);
-
-                            // Add to active flights
-                            let mut flights = ctx.active_flights.write().await;
-                            flights.insert(fix.aircraft_id, new_state);
-
-                            metrics::counter!("flight_tracker.flight_created.gap_split_total")
-                                .increment(1);
+                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                                state.current_flight_id = Some(flight_id);
+                                state.current_callsign = fix.flight_number.clone();
+                            }
                         }
                         Err(e) => {
-                            error!(
-                                "Failed to create new flight for aircraft {} after gap: {}",
-                                fix.aircraft_id, e
-                            );
-                            // Clear flight_id to prevent FK violation if old flight was deleted
+                            error!("Failed to create new flight after gap: {}", e);
                             fix.flight_id = None;
                         }
                     }
+                } else {
+                    // Continue existing flight
+                    fix.flight_id = Some(flight_id);
 
-                    // Early return - don't continue with normal flow
-                    return Ok(fix);
+                    // Calculate time gap
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                        && let Some(last_fix_time) = state.last_fix_timestamp()
+                    {
+                        let gap_seconds = (fix.timestamp - last_fix_time).num_seconds() as i32;
+                        fix.time_gap_seconds = Some(gap_seconds);
+                    }
+
+                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
                 }
 
-                // Update last_fix_at in database
-                update_flight_timestamp(ctx.flights_repo, state.flight_id, fix.timestamp).await;
+                // Check for tow release (towtugs only)
+                if is_towtug
+                    && let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                    && towing::check_tow_release(&state, fix.climb_fpm)
+                {
+                    // Record tow release
+                    if let Some(towing_info) = &state.towing_info
+                        && let Some(altitude_ft) = fix.altitude_msl_feet
+                    {
+                        let _ = ctx
+                            .flights_repo
+                            .update_tow_release(
+                                towing_info.glider_flight_id,
+                                altitude_ft,
+                                fix.timestamp,
+                            )
+                            .await;
+                    }
 
-                // For towplanes: track climb rate and check for tow release
-                if is_towtug && let Some(climb_fpm) = fix.climb_fpm {
-                    // Update aircraft tracker with climb rate and check for release
-                    let mut trackers = ctx.aircraft_trackers.write().await;
-                    let tracker = trackers.entry(fix.aircraft_id).or_insert_with(|| {
-                        aircraft_tracker::AircraftTracker::new(
-                            aircraft_tracker::AircraftState::Active,
-                        )
-                    });
-
-                    let climb_fpm_f32 = climb_fpm as f32;
-                    tracker.update_climb_rate(climb_fpm_f32);
-                    tracker.current_flight_id = Some(state.flight_id);
-
-                    // Check if tow has been released
-                    if towing::check_tow_release(tracker, Some(climb_fpm_f32)) {
-                        // Record the release
-                        if let Some(towing_info) = &tracker.towing_info {
-                            if let Some(altitude_ft) = fix.altitude_msl_feet {
-                                info!(
-                                    "Recording tow release for glider {} at {}ft MSL",
-                                    towing_info.glider_device_id, altitude_ft
-                                );
-
-                                if let Err(e) = ctx
-                                    .flights_repo
-                                    .update_tow_release(
-                                        towing_info.glider_flight_id,
-                                        altitude_ft,
-                                        fix.timestamp,
-                                    )
-                                    .await
-                                {
-                                    error!(
-                                        "Failed to record tow release for glider {}: {}",
-                                        towing_info.glider_device_id, e
-                                    );
-                                }
-                            }
-
-                            // Clear towing info after release
-                            tracker.towing_info = None;
-                            tracker.climb_rate_history.clear();
-                        }
+                    // Clear towing info
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.towing_info = None;
                     }
                 }
-
-                // Update the state with this fix
-                state.update(fix.timestamp, is_active);
-                state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                state.last_climb_fpm = fix.climb_fpm;
-                state.last_position = (fix.latitude, fix.longitude);
-
-                // Write back updated state
-                let mut flights = ctx.active_flights.write().await;
-                flights.insert(fix.aircraft_id, state);
             }
         }
 
-        // Case 2: No flight and fix is active - need to create a flight
+        // Case 2: No active flight AND fix is active -> Create new flight or resume timed-out
         (None, true) => {
-            // First, check if we should resume a recently timed-out flight (flight coalescing).
-            // This handles the case where an aircraft temporarily goes out of receiver range
-            // (e.g., trans-atlantic flight) and then comes back into range. Without coalescing,
-            // we would create two separate flights. With coalescing, we resume the original flight.
-            if let Ok(Some(timed_out_flight)) = ctx
-                .flights_repo
-                .find_recent_timed_out_flight(fix.aircraft_id)
-                .await
-            {
-                // Check if callsigns differ - if both flights have callsigns and they differ,
-                // do NOT coalesce (this indicates a different aircraft/flight)
-                let should_coalesce = match (&timed_out_flight.callsign, &fix.flight_number) {
-                    (Some(prev_callsign), Some(new_callsign)) if prev_callsign != new_callsign => {
-                        debug!(
-                            "Aircraft {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
-                            fix.aircraft_id, prev_callsign, new_callsign
-                        );
+            // Check if we should resume a timed-out flight (using in-memory state)
+            let timed_out_info = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                if let Some(flight_id) = state.last_timed_out_flight_id {
+                    Some((
+                        flight_id,
+                        state.last_timed_out_callsign.clone(),
+                        state.last_timed_out_at,
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some((timed_out_flight_id, timed_out_callsign, timed_out_at)) = timed_out_info {
+                // Calculate gap from when it timed out
+                let gap_seconds = if let Some(timed_out_time) = timed_out_at {
+                    (fix.timestamp - timed_out_time).num_seconds()
+                } else {
+                    // No timeout timestamp - use last fix timestamp
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                        && let Some(last_fix_time) = state.last_fix_timestamp()
+                    {
+                        (fix.timestamp - last_fix_time).num_seconds()
+                    } else {
+                        i64::MAX // Unknown - don't resume
+                    }
+                };
+                let gap_hours = gap_seconds as f64 / 3600.0;
+
+                // Check callsign mismatch
+                let callsign_matches = match (&timed_out_callsign, &fix.flight_number) {
+                    (Some(prev), Some(new)) if prev != new => {
                         metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
                             .increment(1);
                         false
                     }
-                    _ => true, // Coalesce if either has no callsign, or callsigns match
+                    _ => true,
                 };
 
-                if should_coalesce {
-                    // Check 2: Calculate gap duration (fractional hours)
-                    let gap_duration = fix.timestamp - timed_out_flight.last_fix_at;
-                    let gap_hours = gap_duration.num_hours() as f64
-                        + (gap_duration.num_minutes() % 60) as f64 / 60.0;
+                // Check position/distance reasonableness based on time and speed
+                let position_reasonable = if let Some(state) =
+                    ctx.aircraft_states.get(&fix.aircraft_id)
+                    && let Some((last_lat, last_lng)) = state.last_position()
+                {
+                    let actual_distance_m =
+                        haversine_distance(last_lat, last_lng, fix.latitude, fix.longitude);
 
-                    // Check 2a: 18-hour hard limit - NEVER coalesce beyond this threshold
-                    if gap_hours >= 18.0 {
-                        info!(
-                            "Aircraft {} NOT coalescing - gap exceeds 18-hour hard limit ({:.1}h)",
-                            fix.aircraft_id, gap_hours
-                        );
-                        metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
-                            .increment(1);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                            .record(gap_hours);
-                        // Fall through to create new flight (don't resume)
+                    // Get last known ground speed to estimate expected travel distance
+                    let last_speed_knots = state
+                        .last_fix()
+                        .and_then(|f| f.ground_speed_knots)
+                        .unwrap_or(0.0) as f64;
+
+                    // Convert knots to m/s (1 knot = 0.514444 m/s)
+                    let last_speed_ms = last_speed_knots * 0.514444;
+
+                    // Calculate expected distance if aircraft continued at last speed
+                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
+
+                    // Calculate minimum expected distance (aircraft could slow down but not stop if flying)
+                    // If aircraft was flying (>25 knots), it should have traveled at least 30% of expected distance
+                    // (accounting for slowdowns, holding patterns, but not landing)
+                    let min_expected_distance_m = if last_speed_knots > 25.0 {
+                        expected_distance_m * 0.3
                     } else {
-                        // Check 3: Calculate distance between last fix and new fix
-                        let last_fix = ctx
-                            .fixes_repo
-                            .get_last_fix_for_flight(timed_out_flight.id)
-                            .await
-                            .ok()
-                            .flatten();
+                        0.0
+                    };
 
-                        let distance_km = if let Some(last) = &last_fix {
-                            crate::flights::haversine_distance(
-                                last.latitude,
-                                last.longitude,
-                                fix.latitude,
-                                fix.longitude,
-                            ) / 1000.0 // Convert meters to km
-                        } else {
-                            0.0
-                        };
+                    // Calculate absolute max based on typical GA aircraft max speed (~300 knots)
+                    let absolute_max_distance_m = gap_seconds as f64 * 300.0 * 0.514444;
 
-                        // Check 4: Phase-based validation - determine if this looks like a landing + new takeoff
-                        let looks_like_landing = match timed_out_flight.timeout_phase {
-                            Some(TimeoutPhase::Descending) => {
-                                // Aircraft was descending when it timed out
-                                // This is the canonical "descended out of range while landing" case
-
-                                let new_fix_low_altitude =
-                                    fix.altitude_agl_feet.map(|agl| agl < 1000).unwrap_or(false);
-
-                                let new_fix_climbing =
-                                    fix.climb_fpm.map(|climb| climb > 300).unwrap_or(false);
-
-                                let far_apart = distance_km > 100.0; // More than 100km away
-                                let very_long_gap = gap_hours >= 4.0; // More than 4 hours suggests landing
-
-                                // Detect landing + new takeoff if:
-                                // 1. Classic case: Low altitude, climbing, far away (long cross-country)
-                                // 2. NEW: Long gap with climbing - even if nearby (landed, stayed on ground, took off again)
-                                //    Example: Descended out of range at 17:28, reappeared climbing at 04:46 (11h gap, 32km away)
-                                if very_long_gap && new_fix_climbing {
-                                    // Very long gap + climbing = almost certainly landed and took off again
-                                    // Even if distance is small (aircraft stayed at nearby airport)
-                                    true
-                                } else {
-                                    // Standard case: requires all three conditions
-                                    new_fix_low_altitude && new_fix_climbing && far_apart
-                                }
-                            }
-                            Some(TimeoutPhase::Cruising) => {
-                                // Aircraft was cruising - only reject if VERY far apart
-                                // This allows trans-Atlantic flights
-                                distance_km > 3000.0 // More than 3000km suggests different flight
-                            }
-                            Some(TimeoutPhase::Climbing) => {
-                                // Climbing phase timeout is unusual, be conservative
-                                distance_km > 500.0
-                            }
-                            Some(TimeoutPhase::Unknown) | None => {
-                                // Unknown phase - use conservative distance threshold
-                                distance_km > 500.0
-                            }
-                        };
-
-                        // Check 5: Speed-based distance validation for gaps > 1 hour
-                        // This catches cases where aircraft didn't move far enough given its pre-timeout speed
-                        let speed_distance_check_failed = if gap_hours > 1.0 {
-                            // Fetch last 10 fixes before timeout to calculate average speed
-                            // Use 18-hour window to match coalescing hard timeout
-                            let start_time = chrono::Utc::now() - chrono::Duration::hours(18);
-                            let pre_timeout_fixes = ctx
-                                .fixes_repo
-                                .get_fixes_for_flight(
-                                    timed_out_flight.id,
-                                    Some(10),
-                                    start_time,
-                                    None,
-                                )
-                                .await
-                                .ok()
-                                .unwrap_or_default();
-
-                            if let Some(avg_speed) = calculate_average_speed(&pre_timeout_fixes) {
-                                let is_valid =
-                                    validate_distance_for_gap(avg_speed, gap_hours, distance_km);
-
-                                if !is_valid {
-                                    let expected_distance_km = avg_speed * gap_hours * 1.852 * 0.75;
-                                    info!(
-                                        "Aircraft {} speed/distance check FAILED - averaged {:.1} knots before timeout, \
-                                     gap {:.1}h, expected >{:.1}km but only moved {:.1}km",
-                                        fix.aircraft_id,
-                                        avg_speed,
-                                        gap_hours,
-                                        expected_distance_km,
-                                        distance_km
-                                    );
-                                    metrics::counter!(
-                                        "flight_tracker.coalesce.rejected.speed_distance_total"
-                                    )
-                                    .increment(1);
-                                    true // Check failed
-                                } else {
-                                    false // Check passed
-                                }
-                            } else {
-                                false // Insufficient speed data, skip check
-                            }
-                        } else {
-                            false // Gap < 1 hour, skip check
-                        };
-
-                        // Override: Same position always resumes (glider/helicopter case)
-                        // BUT: Also reject if speed/distance check failed
-                        let should_resume = distance_km < 1.0
-                            || (!looks_like_landing && !speed_distance_check_failed);
-
-                        if !should_resume {
-                            info!(
-                                "Aircraft {} NOT coalescing - probable landing detected. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h, New alt AGL: {:?}ft, New climb: {:?}fpm",
-                                fix.aircraft_id,
-                                timed_out_flight.timeout_phase,
-                                distance_km,
-                                gap_hours,
-                                fix.altitude_agl_feet,
-                                fix.climb_fpm
-                            );
-                            metrics::counter!(
-                                "flight_tracker.coalesce.rejected.probable_landing_total"
-                            )
+                    // Check for impossible/unlikely scenarios
+                    if actual_distance_m > absolute_max_distance_m {
+                        // Teleported - distance impossible even at max GA speed
+                        trace!(
+                            "Flight resumption rejected: teleported {:.1}km in {:.1}h (max possible: {:.1}km)",
+                            actual_distance_m / 1000.0,
+                            gap_hours,
+                            absolute_max_distance_m / 1000.0
+                        );
+                        metrics::counter!(
+                            "flight_tracker.coalesce.rejected.distance_impossible_total"
+                        )
+                        .increment(1);
+                        false
+                    } else if last_speed_knots > 25.0 && actual_distance_m < min_expected_distance_m
+                    {
+                        // Aircraft was flying fast but moved way too little - must have landed
+                        trace!(
+                            "Flight resumption rejected: moved too little ({:.1}km in {:.1}h, was going {:.0} knots, expected min {:.1}km)",
+                            actual_distance_m / 1000.0,
+                            gap_hours,
+                            last_speed_knots,
+                            min_expected_distance_m / 1000.0
+                        );
+                        metrics::counter!("flight_tracker.coalesce.rejected.likely_landed_total")
                             .increment(1);
-                            metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                                .record(distance_km);
-                            metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                                .record(gap_hours);
-                            // Don't resume - fall through to create new flight
-                        } else {
-                            // Resume the timed-out flight
-                            let flight_id = timed_out_flight.id;
-                            info!(
-                                "Aircraft {} resuming flight {} after timeout. \
-                             Phase: {:?}, Distance: {:.1}km, Gap: {:.1}h",
-                                fix.aircraft_id,
-                                flight_id,
-                                timed_out_flight.timeout_phase,
-                                distance_km,
-                                gap_hours
-                            );
+                        false
+                    } else {
+                        // Distance is reasonable for the time gap and last known speed
+                        true
+                    }
+                } else {
+                    // No position data - can't validate distance
+                    true
+                };
 
-                            metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
-                            metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
-                                .record(distance_km);
+                let should_coalesce = callsign_matches && position_reasonable;
 
-                            // Calculate and record coalesce speed (distance/time)
-                            if gap_hours > 0.0 {
-                                let speed_kmh = distance_km / gap_hours;
-                                let speed_mph = speed_kmh * 0.621371;
-                                metrics::histogram!("flight_tracker.coalesce.speed_mph")
-                                    .record(speed_mph);
-                            }
+                if should_coalesce && gap_hours < 18.0 {
+                    // Resume the flight
+                    info!(
+                        "Resuming timed-out flight {} after {:.1}h gap",
+                        timed_out_flight_id, gap_hours
+                    );
 
-                            // Atomically clear the timeout and update last_fix_at in a single database operation
-                            // This prevents violating the check_timeout_after_last_fix constraint
-                            if let Err(e) = ctx
-                                .flights_repo
-                                .resume_timed_out_flight(flight_id, fix.timestamp)
-                                .await
-                            {
-                                error!("Failed to resume timed-out flight {}: {}", flight_id, e);
-                                // If we can't resume the flight, don't continue processing this fix
-                                // Return the fix unmodified so it can be processed again later
-                                return Ok(fix);
-                            }
+                    fix.flight_id = Some(timed_out_flight_id);
 
-                            // Add flight back to ctx.active_flights map with updated position/altitude
-                            let mut state =
-                                CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                            state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                            state.last_climb_fpm = fix.climb_fpm;
-                            state.last_position = (fix.latitude, fix.longitude);
-                            {
-                                let mut flights = ctx.active_flights.write().await;
-                                flights.insert(fix.aircraft_id, state);
-                            }
+                    // Clear timeout and update last_fix_at in database
+                    let _ = ctx
+                        .flights_repo
+                        .resume_timed_out_flight(timed_out_flight_id, fix.timestamp)
+                        .await;
 
-                            // Assign fix to the resumed flight
-                            fix.flight_id = Some(flight_id);
+                    // Update state - move from timed_out to current
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.current_flight_id = Some(timed_out_flight_id);
+                        state.current_callsign = timed_out_callsign;
+                        state.last_timed_out_flight_id = None;
+                        state.last_timed_out_callsign = None;
+                        state.last_timed_out_at = None;
+                    }
 
-                            // Calculate time gap from the last fix in the resumed flight
-                            // This will capture the gap during the timeout period
-                            let time_gap_seconds =
-                                (fix.timestamp - timed_out_flight.last_fix_at).num_seconds() as i32;
-                            fix.time_gap_seconds = Some(time_gap_seconds);
-
-                            // Return the fix with the resumed flight_id
-                            return Ok(fix);
-                        }
-                    } // end of else block for gap < 18 hours
+                    metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
+                    return Ok(fix);
+                } else if gap_hours >= 18.0 {
+                    // Too long - create new flight
+                    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
+                        .increment(1);
+                    // Fall through to create new flight
                 }
+                // If callsign mismatch and shouldn't coalesce, fall through to create new flight
             }
 
-            // No recent timed-out flight to resume, so create a new flight
-            // Check if this is a takeoff or mid-flight appearance
-            // We need to query recent fixes to determine this
-            metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
-            let recent_fixes = ctx
-                .fixes_repo
-                .get_fixes_for_aircraft(fix.aircraft_id, Some(3), None)
-                .await
-                .unwrap_or_default();
-
-            // Calculate AGL altitude to determine if we're on the ground
-            let agl_altitude = calculate_altitude_agl(ctx.elevation_db, &fix).await;
-
-            // Determine if this is a takeoff:
-            // 1. If we have 3+ recent fixes and they're all inactive, it's a takeoff
-            // 2. If the current fix is at ground level (AGL < 100 ft), it's a takeoff
-            let is_takeoff = (recent_fixes.len() >= 3
-                && recent_fixes.iter().all(|f| !should_be_active(f)))
-                || agl_altitude.map(|agl| agl < 100).unwrap_or(false);
+            // Create new flight - check if takeoff or mid-flight
+            let is_takeoff = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                // Check last 3 fixes - if all inactive, it's a takeoff
+                state.last_n_inactive(3)
+            } else {
+                // No recent fixes - check AGL
+                calculate_altitude_agl(ctx.elevation_db, &fix)
+                    .await
+                    .map(|agl| agl < 100)
+                    .unwrap_or(false)
+            };
 
             let flight_id = Uuid::now_v7();
 
-            if is_takeoff {
-                // Case 2a: Taking off - last fixes were inactive
-                debug!(
-                    "Aircraft {} is taking off (recent fixes were inactive) - creating flight {} with airport lookup",
-                    fix.aircraft_id, flight_id
-                );
+            match create_flight_fast(ctx, &fix, flight_id, !is_takeoff).await {
+                Ok(flight_id) => {
+                    fix.flight_id = Some(flight_id);
 
-                // Calculate altitude offset and check if reasonable for takeoff
-                let altitude_offset = calculate_altitude_offset_ft(ctx.elevation_db, &fix).await;
-                if let Some(offset) = altitude_offset
-                    && offset.abs() > 250
-                {
-                    info!(
-                        "Flight is initialized while airborne: {} ft for device {} at ({:.6}, {:.6}). Aircraft should be on ground at takeoff.",
-                        offset, fix.aircraft_id, fix.latitude, fix.longitude
-                    );
-                }
+                    // Update state
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.current_flight_id = Some(flight_id);
+                    }
 
-                // Create flight state and add to map BEFORE creating in database
-                let mut state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                state.last_climb_fpm = fix.climb_fpm;
-                state.last_position = (fix.latitude, fix.longitude);
-                {
-                    let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.aircraft_id, state);
-                }
-
-                // Create flight WITH airport/runway lookup
-                match create_flight_fast(
-                    ctx, &fix, flight_id, false, // DO perform airport/runway lookup
-                )
-                .await
-                {
-                    Ok(_) => {
-                        fix.flight_id = Some(flight_id);
+                    if is_takeoff {
                         metrics::counter!("flight_tracker.flight_created.takeoff_total")
                             .increment(1);
 
-                        // If this is a towplane taking off, spawn towing detection task
+                        // Spawn towing detection for towtugs
                         if is_towtug {
-                            debug!(
-                                "Towplane {} taking off - spawning towing detection task",
-                                fix.aircraft_id
-                            );
                             towing::spawn_towing_detection_task(
                                 fix.aircraft_id,
                                 flight_id,
                                 ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
                                 ctx.aircraft_repo.clone(),
-                                Arc::clone(ctx.active_flights),
-                                Arc::clone(ctx.aircraft_trackers),
+                                Arc::clone(ctx.aircraft_states),
                             );
                         }
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to create flight for aircraft {}: {}",
-                            fix.aircraft_id, e
-                        );
-                        // Clear flight_id to prevent FK violation
-                        fix.flight_id = None;
-                        // Remove from active flights since flight creation failed
-                        let mut flights = ctx.active_flights.write().await;
-                        flights.remove(&fix.aircraft_id);
-                    }
-                }
-            } else {
-                // Case 2b: First fix is active OR recent fixes were also active - appearing mid-flight
-                debug!(
-                    "Aircraft {} appearing in-flight (first fix or recent fixes active) - creating flight {} without airport lookup (ground speed: {:?} kts, altitude MSL: {:?} ft)",
-                    fix.aircraft_id, flight_id, fix.ground_speed_knots, fix.altitude_msl_feet
-                );
-
-                // Create flight state and add to map
-                let mut state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                state.last_climb_fpm = fix.climb_fpm;
-                state.last_position = (fix.latitude, fix.longitude);
-                {
-                    let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.aircraft_id, state);
-                }
-
-                // Create flight WITHOUT airport/runway lookup (skip_airport_runway_lookup = true)
-                match create_flight_fast(
-                    ctx, &fix, flight_id,
-                    true, // SKIP airport/runway lookup for mid-flight appearance
-                )
-                .await
-                {
-                    Ok(_) => {
-                        fix.flight_id = Some(flight_id);
-                        metrics::counter!("flight_tracker.flight_created.airborne_total")
+                    } else {
+                        metrics::counter!("flight_tracker.flight_created.mid_flight_total")
                             .increment(1);
-                        // Note: last_fix_at is already set during flight creation
                     }
-                    Err(e) => {
-                        error!(
-                            "Failed to create flight for aircraft {}: {}",
-                            fix.aircraft_id, e
-                        );
-                        // Clear flight_id to prevent FK violation
-                        fix.flight_id = None;
-                        // Remove from active flights since flight creation failed
-                        let mut flights = ctx.active_flights.write().await;
-                        flights.remove(&fix.aircraft_id);
-                    }
+                }
+                Err(e) => {
+                    error!("Failed to create flight: {}", e);
+                    fix.flight_id = None;
                 }
             }
         }
 
-        // Case 3a: No flight and fix is inactive - idle aircraft on ground
-        (None, false) => {
-            trace!(
-                "Aircraft {} is idle on ground with no active flight",
-                fix.aircraft_id
-            );
-            // Just save the fix without a flight_id
-        }
-
-        // Case 3b: Flight exists but fix is inactive - landing or still airborne?
-        (Some(mut state), false) => {
-            let flight_id = state.flight_id;
-
-            // Calculate AGL to determine if we're actually landing or just slow at altitude
+        // Case 3: Has active flight BUT fix is inactive -> Check if landing
+        (Some(flight_id), false) => {
+            // Calculate AGL to determine if actually landing or just slow at altitude
             let agl = calculate_altitude_agl(ctx.elevation_db, &fix).await;
 
             match agl {
                 Some(altitude_agl) if altitude_agl >= 250 => {
-                    // Case 3b2: Still airborne (>= 250 ft AGL) - slow moving aircraft
-                    let speed_knots = fix.ground_speed_knots.unwrap_or(0.0);
-                    info!(
-                        "Aircraft {} slow but still airborne at {} ft AGL ({:.1} knots) - continuing flight {}",
-                        fix.aircraft_id, altitude_agl, speed_knots, flight_id
-                    );
-
-                    // Keep the flight active, assign flight_id to fix
+                    // Still airborne - continue flight
                     fix.flight_id = Some(flight_id);
 
-                    // Calculate time gap from last fix in the same flight
-                    let time_gap_seconds =
-                        (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
-                    fix.time_gap_seconds = Some(time_gap_seconds);
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                        && let Some(last_fix_time) = state.last_fix_timestamp()
+                    {
+                        fix.time_gap_seconds =
+                            Some((fix.timestamp - last_fix_time).num_seconds() as i32);
+                    }
 
-                    // Update last_fix_at in database
                     update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
-
-                    // Update altitude_agl_feet on the fix
-                    fix.altitude_agl_feet = Some(altitude_agl);
-
-                    // Update state (still treat as active even though speed is low)
-                    state.update(fix.timestamp, true); // Force active since airborne
-                    state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                    state.last_climb_fpm = fix.climb_fpm;
-                    state.last_position = (fix.latitude, fix.longitude);
-
-                    let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.aircraft_id, state);
                 }
                 _ => {
-                    // Case 3b1: Landing (< 250 ft AGL OR elevation unknown)
-                    // Update state with inactive fix
-                    state.update(fix.timestamp, false);
-                    state.last_altitude_msl_ft = fix.altitude_msl_feet;
-                    state.last_climb_fpm = fix.climb_fpm;
-                    state.last_position = (fix.latitude, fix.longitude);
-
-                    // Check if we have 5 consecutive inactive fixes
-                    if state.has_five_consecutive_inactive() {
-                        debug!(
-                            "Aircraft {} landing after 5 consecutive inactive fixes (AGL: {:?} ft) - completing flight {}",
-                            fix.aircraft_id, agl, flight_id
-                        );
-
-                        // Assign flight_id to this landing fix
-                        fix.flight_id = Some(flight_id);
-
-                        // Calculate time gap from last fix in the same flight
-                        let time_gap_seconds =
-                            (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
-                        fix.time_gap_seconds = Some(time_gap_seconds);
-
-                        // Update altitude_agl_feet if we have it
-                        if let Some(altitude_agl) = agl {
-                            fix.altitude_agl_feet = Some(altitude_agl);
-                        }
-
-                        // Complete flight (includes airport/runway lookup for landing)
-                        // Note: complete_flight will update both landing fields AND last_fix_at in a single UPDATE
-                        // IMPORTANT: For spurious flights, complete_flight will remove from ctx.active_flights BEFORE deleting
-                        // to prevent race condition where new fixes arrive and get assigned the spurious flight_id
-                        // For normal landings, we remove from ctx.active_flights AFTER complete_flight finishes
-                        let flight_completed =
-                            match complete_flight_fast(ctx, &aircraft, flight_id, &fix).await {
-                                Ok(completed) => completed,
-                                Err(e) => {
-                                    warn!("Failed to complete flight {}: {}", flight_id, e);
-                                    true // Assume completed on error to proceed with cleanup
-                                }
-                            };
-
-                        // If flight was deleted as spurious, clear the flight_id from the fix
-                        if !flight_completed {
-                            info!(
-                                "Flight {} was spurious - clearing flight_id from landing fix for device {}",
-                                flight_id, fix.aircraft_id
-                            );
-                            fix.flight_id = None;
-                        }
-
-                        // Remove from active flights map AFTER complete_flight finishes (for normal landings)
-                        // Note: For spurious flights, this was already done inside complete_flight
-                        {
-                            let mut flights = ctx.active_flights.write().await;
-                            flights.remove(&fix.aircraft_id);
-                        }
-
-                        // Clean up the aircraft lock after flight completion
-                        {
-                            let mut locks = ctx.aircraft_locks.write().await;
-                            if locks.remove(&fix.aircraft_id).is_some() {
-                                trace!(
-                                    "Cleaned up aircraft lock for aircraft {} after landing",
-                                    fix.aircraft_id
-                                );
-                            }
-                        }
+                    // Low altitude or unknown - check for 5 consecutive inactive
+                    let should_land = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                    {
+                        state.has_five_consecutive_inactive()
                     } else {
-                        // Not enough consecutive inactive fixes yet - keep flight active
-                        debug!(
-                            "Aircraft {} inactive (AGL: {:?} ft) but waiting for more inactive fixes ({}/5) - continuing flight {}",
-                            fix.aircraft_id,
-                            agl,
-                            state
-                                .recent_fix_history
-                                .iter()
-                                .filter(|&&active| !active)
-                                .count(),
-                            flight_id
-                        );
+                        false
+                    };
 
-                        // Assign flight_id to this fix
+                    if should_land {
+                        // Landing confirmed - complete flight (non-blocking)
                         fix.flight_id = Some(flight_id);
 
-                        // Calculate time gap from last fix in the same flight
-                        let time_gap_seconds =
-                            (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
-                        fix.time_gap_seconds = Some(time_gap_seconds);
+                        spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
 
-                        // Update last_fix_at in database
-                        update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
-
-                        // Update altitude_agl_feet if we have it
-                        if let Some(altitude_agl) = agl {
-                            fix.altitude_agl_feet = Some(altitude_agl);
+                        // Clear current_flight_id
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = None;
                         }
 
-                        // Keep the updated state in the map
-                        let mut flights = ctx.active_flights.write().await;
-                        flights.insert(fix.aircraft_id, state);
+                        metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
+                    } else {
+                        // Not yet 5 inactive - keep flight active
+                        fix.flight_id = Some(flight_id);
+                        update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
                     }
                 }
             }
         }
+
+        // Case 4: No active flight AND fix is inactive -> Aircraft on ground, do nothing
+        (None, false) => {
+            trace!(
+                "Aircraft {} on ground (inactive fix, no flight)",
+                fix.aircraft_id
+            );
+            // Just save the fix without a flight_id
+        }
     }
 
     Ok(fix)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeZone;
-
-    #[test]
-    fn test_calculate_average_speed_sufficient_data() {
-        // 3 fixes with speeds: 100, 110, 120 knots
-        // Expected: 110 knots
-        let fixes = vec![
-            create_fix_with_speed(100.0),
-            create_fix_with_speed(110.0),
-            create_fix_with_speed(120.0),
-        ];
-
-        let result = calculate_average_speed(&fixes);
-        assert_eq!(result, Some(110.0));
-    }
-
-    #[test]
-    fn test_calculate_average_speed_insufficient_data() {
-        // Only 2 fixes - should return None
-        let fixes = vec![create_fix_with_speed(100.0), create_fix_with_speed(110.0)];
-
-        let result = calculate_average_speed(&fixes);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_calculate_average_speed_missing_data() {
-        // 3 fixes but only 1 has speed - should return None
-        let fix1 = create_fix_with_speed(100.0);
-        let mut fix2 = create_fix_with_speed(0.0);
-        let mut fix3 = create_fix_with_speed(0.0);
-        fix2.ground_speed_knots = None;
-        fix3.ground_speed_knots = None;
-
-        let fixes = vec![fix1, fix2, fix3];
-
-        let result = calculate_average_speed(&fixes);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_validate_distance_for_gap_pass() {
-        // 100 knots, 5 hours, 800 km moved
-        // Expected: 100 * 5 * 1.852 * 0.75 = 694.5 km minimum
-        // 800 km > 694.5 km → valid
-        let result = validate_distance_for_gap(100.0, 5.0, 800.0);
-        assert!(result);
-    }
-
-    #[test]
-    fn test_validate_distance_for_gap_fail() {
-        // 100 knots, 47 hours, 0.16 km moved (bug scenario)
-        // Expected: 100 * 47 * 1.852 * 0.75 = 6517.8 km minimum
-        // 0.16 km < 6517.8 km → invalid
-        let result = validate_distance_for_gap(100.0, 47.0, 0.16);
-        assert!(!result);
-    }
-
-    #[test]
-    fn test_validate_distance_for_gap_edge_case_exactly_75_percent() {
-        // Exactly 75% of expected distance
-        // 100 knots * 1 hour * 1.852 km/NM = 185.2 km expected
-        // 75% = 138.9 km minimum
-        let result = validate_distance_for_gap(100.0, 1.0, 138.9);
-        assert!(result);
-    }
-
-    #[test]
-    fn test_validate_distance_for_gap_slow_speed() {
-        // Slow aircraft (glider thermaling): 20 knots, 2 hours, 50 km
-        // Expected: 20 * 2 * 1.852 * 0.75 = 55.56 km minimum
-        // 50 km < 55.56 km → invalid (but close)
-        let result = validate_distance_for_gap(20.0, 2.0, 50.0);
-        assert!(!result);
-    }
-
-    // Helper function to create a fix with a given speed
-    fn create_fix_with_speed(speed_knots: f32) -> Fix {
-        let base_time = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
-        Fix {
-            id: Uuid::new_v4(),
-            source: "TEST".to_string(),
-            aprs_type: "position".to_string(),
-            via: vec![],
-            timestamp: base_time,
-            latitude: 42.0,
-            longitude: -122.0,
-            altitude_msl_feet: Some(1000),
-            altitude_agl_feet: None,
-            flight_number: None,
-            squawk: None,
-            ground_speed_knots: Some(speed_knots),
-            track_degrees: None,
-            climb_fpm: None,
-            turn_rate_rot: None,
-            source_metadata: None,
-            flight_id: None,
-            aircraft_id: Uuid::new_v4(),
-            received_at: base_time,
-            is_active: true,
-            receiver_id: Uuid::new_v4(),
-            raw_message_id: Uuid::new_v4(),
-            altitude_agl_valid: false,
-            time_gap_seconds: None,
-        }
-    }
 }

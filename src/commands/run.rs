@@ -362,17 +362,21 @@ pub async fn handle_run(
     let flight_tracker = FlightTracker::new(&diesel_pool);
 
     // Initialize flight tracker from database:
-    // 1. Timeout old incomplete flights (older than 1 hour)
-    // 2. Load recent active flights into memory
+    // 1. Timeout old incomplete flights (last_fix_at older than 1 hour)
+    // 2. Restore aircraft states:
+    //    - Active flights: last_fix_at within last 1 hour
+    //    - Timed-out flights: last_fix_at within last 18 hours (for resumption)
+    //    - Loads last 10 fixes per aircraft to rebuild in-memory state
+    //    - Critical for correct takeoff/landing detection and flight coalescing
     let timeout_duration = chrono::Duration::hours(1);
     match flight_tracker
         .initialize_from_database(timeout_duration)
         .await
     {
-        Ok((timed_out, loaded)) => {
+        Ok((timed_out, restored)) => {
             info!(
-                "Flight tracker initialized: {} flights timed out, {} flights loaded",
-                timed_out, loaded
+                "Flight tracker initialized: {} flights timed out, {} aircraft states restored",
+                timed_out, restored
             );
         }
         Err(e) => {
@@ -382,6 +386,10 @@ pub async fn handle_run(
 
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);
+
+    // Start aircraft state cleanup (every hour)
+    // Removes aircraft states older than 18 hours
+    flight_tracker.start_state_cleanup(3600);
 
     // Log suppressed APRS types if any
     if !suppress_aprs_types.is_empty() {

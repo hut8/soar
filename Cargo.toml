@@ -26,6 +26,7 @@ http-body-util = "0.1"
 pin-project = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
+dashmap = "6.1"
 dotenvy = { version = "0.15" }
 fake = { version = "4.4.0", features = ["derive", "chrono", "uuid"] }
 google_maps = { version = "3.9.1", features = [
@@ -89,7 +90,7 @@ sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls", "reqwest
 # Tracking issue: https://github.com/getsentry/sentry-rust/issues
 # For now, use performance monitoring (traces_sample_rate) and Sentry's server-side profiling
 postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
-rust_decimal = "1.39"
+rust_decimal = { version = "1.39", default-features = false, features = ["std", "serde", "borsh"] }
 zip = "7"
 flydent = "0.6.0"
 flume = { version = "0.12", features = ["async"] }
