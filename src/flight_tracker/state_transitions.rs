@@ -470,9 +470,16 @@ pub(crate) async fn process_state_transition(
                         // This catches cases where aircraft didn't move far enough given its pre-timeout speed
                         let speed_distance_check_failed = if gap_hours > 1.0 {
                             // Fetch last 10 fixes before timeout to calculate average speed
+                            // Use 18-hour window to match coalescing hard timeout
+                            let start_time = chrono::Utc::now() - chrono::Duration::hours(18);
                             let pre_timeout_fixes = ctx
                                 .fixes_repo
-                                .get_fixes_for_flight(timed_out_flight.id, Some(10))
+                                .get_fixes_for_flight(
+                                    timed_out_flight.id,
+                                    Some(10),
+                                    start_time,
+                                    None,
+                                )
                                 .await
                                 .ok()
                                 .unwrap_or_default();
