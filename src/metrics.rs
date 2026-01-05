@@ -101,6 +101,17 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
             ],
         )
         .expect("failed to set buckets for beast_nats_publish_duration_ms")
+        // Configure socket client send duration histogram with millisecond buckets
+        // Buckets: 0.5ms, 1ms, 2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1000ms
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "socket_client_send_duration_ms".to_string(),
+            ),
+            &[
+                0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0,
+            ],
+        )
+        .expect("failed to set buckets for socket_client_send_duration_ms")
         // Configure coalesce speed histogram with mph buckets
         // Buckets: 0, 5, 10, 20, 30, 50, 100, 200, 500, 1000 mph
         // Covers: stationary gliders, normal glider speeds, high-speed aircraft, anomalies

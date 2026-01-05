@@ -725,7 +725,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "JetStream Intake Queue (cap: 1K)",
+          "legendFormat": "JetStream Intake Queue",
           "range": true,
           "refId": "Z"
         },
@@ -736,7 +736,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Aircraft Queue (cap: 50K)",
+          "legendFormat": "Aircraft Queue",
           "range": true,
           "refId": "B"
         },
@@ -747,7 +747,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_receiver_status_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Receiver Status Queue (cap: 10K)",
+          "legendFormat": "Receiver Status Queue",
           "range": true,
           "refId": "C"
         },
@@ -758,7 +758,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_receiver_position_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Receiver Position Queue (cap: 5K)",
+          "legendFormat": "Receiver Position Queue",
           "range": true,
           "refId": "D"
         },
@@ -769,7 +769,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_server_status_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Server Status Queue (cap: 1K)",
+          "legendFormat": "Server Status Queue",
           "range": true,
           "refId": "E"
         },
@@ -780,7 +780,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_elevation_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Elevation Queue (async mode, cap: 100K)",
+          "legendFormat": "Elevation Queue (async mode)",
           "range": true,
           "refId": "F"
         }
