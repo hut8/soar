@@ -362,8 +362,9 @@ pub async fn handle_run(
     let flight_tracker = FlightTracker::new(&diesel_pool);
 
     // Initialize flight tracker from database:
-    // Timeout old incomplete flights (older than 1 hour)
-    // Note: Aircraft states are created lazily as fixes arrive
+    // 1. Timeout old incomplete flights (older than 1 hour)
+    // 2. Restore aircraft states for active flights (last 10 fixes per aircraft)
+    //    This is critical for correct takeoff/landing detection and flight coalescing
     let timeout_duration = chrono::Duration::hours(1);
     match flight_tracker
         .initialize_from_database(timeout_duration)
