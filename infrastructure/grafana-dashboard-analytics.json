@@ -176,7 +176,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.aircraft_type_ogn = 'glider') as \"Glider Flights\",\n  tow_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
+          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.aircraft_type_ogn = 'glider') as \"Glider Flights\",\n  tow_flight_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -464,7 +464,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_aircraft as \"Active Aircraft\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
+          "rawSql": "SELECT\n  hour as time,\n  flight_count as \"Flights\",\n  active_devices as \"Active Devices\",\n  active_clubs as \"Active Clubs\"\nFROM flight_analytics_hourly\nWHERE hour >= NOW() - INTERVAL '30 days'\nORDER BY hour ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -988,7 +988,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  MAX(club_name) as \"Club\",\n  SUM(flight_count) as \"Total Flights\",\n  SUM(tow_count) as \"Tow Flights\",\n  COUNT(DISTINCT date) as \"Active Days\",\n  SUM(active_aircraft) / COUNT(*) as \"Avg Active Aircraft\",\n  SUM(total_airtime_seconds) / 3600.0 as \"Total Airtime (hrs)\"\nFROM club_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nGROUP BY club_id\nORDER BY SUM(flight_count) DESC",
+          "rawSql": "SELECT\n  MAX(club_name) as \"Club\",\n  SUM(flight_count) as \"Total Flights\",\n  SUM(tow_count) as \"Tow Flights\",\n  COUNT(DISTINCT date) as \"Active Days\",\n  SUM(active_devices) / COUNT(*) as \"Avg Active Devices\",\n  SUM(total_airtime_seconds) / 3600.0 as \"Total Airtime (hrs)\"\nFROM club_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nGROUP BY club_id\nORDER BY SUM(flight_count) DESC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -1054,7 +1054,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  flight_type,\n  COUNT(*) as count\nFROM (\n  SELECT\n    CASE\n      WHEN takeoff_airport_id IS NULL OR landing_airport_id IS NULL THEN 'Truncated'\n      WHEN takeoff_airport_id = landing_airport_id THEN 'Local'\n      ELSE 'Cross-Country'\n    END as flight_type\n  FROM flights\n  WHERE takeoff_time >= NOW() - INTERVAL '30 days'\n) AS categorized\nGROUP BY flight_type",
+          "rawSql": "SELECT\n  flight_type,\n  COUNT(*) as count\nFROM (\n  SELECT\n    CASE\n      WHEN departure_airport_id IS NULL OR arrival_airport_id IS NULL THEN 'Truncated'\n      WHEN departure_airport_id = arrival_airport_id THEN 'Local'\n      ELSE 'Cross-Country'\n    END as flight_type\n  FROM flights\n  WHERE takeoff_time >= NOW() - INTERVAL '30 days'\n) AS categorized\nGROUP BY flight_type",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -1157,7 +1157,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  d.registration || ' (' || d.address || ')' as \"Aircraft\",\n  d.model as \"Model\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC",
+          "rawSql": "SELECT\n  d.registration || ' (' || d.address || ')' as \"Aircraft\",\n  d.aircraft_model as \"Model\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC",
           "refId": "A",
           "sql": {
             "columns": [],
