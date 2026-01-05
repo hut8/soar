@@ -506,6 +506,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_id_not_found() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);
@@ -645,6 +646,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_by_ids_empty_list() {
         let pool = create_test_pool();
         cleanup_test_data(&pool);

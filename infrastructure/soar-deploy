@@ -349,6 +349,16 @@ if [ $ELAPSED -ge $MAX_WAIT ]; then
     exit 1
 fi
 
+# Track which manual services were running before stopping them
+# We'll restart these after deployment completes successfully
+MANUAL_SERVICES_TO_RESTART=()
+for service in "${MANUAL_SERVICES[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_info "Recording $service as running (will restart after deployment)"
+        MANUAL_SERVICES_TO_RESTART+=("$service")
+    fi
+done
+
 # Now stop ALL remaining services (migrations are complete)
 log_info "Stopping remaining SOAR services..."
 for service in "${ALL_SERVICES[@]}"; do
@@ -1020,8 +1030,22 @@ for service in "${ACTIVE_SERVICES[@]}"; do
     fi
 done
 
-# Manual services are installed but not automatically started
-log_info "Manual services (${MANUAL_SERVICES[*]}) are installed but must be started manually"
+# Restart manual services that were running before deployment
+if [ ${#MANUAL_SERVICES_TO_RESTART[@]} -gt 0 ]; then
+    log_info "Restarting manual services that were previously running..."
+    for service in "${MANUAL_SERVICES_TO_RESTART[@]}"; do
+        if [ -f "/etc/systemd/system/$service" ]; then
+            log_info "Enabling $service..."
+            systemctl enable "$service" || log_warn "Failed to enable $service"
+
+            log_info "Starting $service..."
+            systemctl start "$service" || log_warn "Failed to start $service"
+        fi
+    done
+else
+    log_info "No manual services were running before deployment, none will be restarted"
+    log_info "Manual services (${MANUAL_SERVICES[*]}) are installed but must be started manually if needed"
+fi
 
 # Timer-invoked services are installed but not enabled or started
 log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
@@ -1052,6 +1076,7 @@ sleep 5
 log_info "Checking service status..."
 ALL_HEALTHY=true
 
+# Check active services (always started)
 for service in "${ACTIVE_SERVICES[@]}"; do
     if systemctl is-active --quiet "$service"; then
         log_info "$service: ${GREEN}ACTIVE${NC}"
@@ -1064,6 +1089,23 @@ for service in "${ACTIVE_SERVICES[@]}"; do
         journalctl -u "$service" --no-pager --lines=10 || true
     fi
 done
+
+# Check manual services that were restarted
+if [ ${#MANUAL_SERVICES_TO_RESTART[@]} -gt 0 ]; then
+    log_info "Checking restarted manual services..."
+    for service in "${MANUAL_SERVICES_TO_RESTART[@]}"; do
+        if systemctl is-active --quiet "$service"; then
+            log_info "$service: ${GREEN}ACTIVE${NC}"
+        else
+            log_error "$service: ${RED}FAILED${NC}"
+            ALL_HEALTHY=false
+
+            # Show recent logs for failed service
+            log_info "Recent logs for $service:"
+            journalctl -u "$service" --no-pager --lines=10 || true
+        fi
+    done
+fi
 
 # Check timer-invoked services are not running (they should be stopped)
 for service in "${TIMER_SERVICES[@]}"; do
