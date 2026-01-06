@@ -158,11 +158,12 @@ pub(crate) async fn create_start_end_location(
         return None;
     }
 
-    // Validate coordinates - skip if (0, 0) which indicates missing/incomplete ADS-B position data
-    // ADS-B messages without CPR-decoded position default to (0, 0) and should not be geocoded
+    // Validate coordinates - skip if (0, 0) which indicates missing/incomplete position data
+    // NOTE: This should not happen in normal operation (as of fix in src/beast/adsb_to_fix.rs),
+    // but kept as a defensive check to prevent wasted geocoding attempts if bad data gets through
     if latitude.abs() < 0.001 && longitude.abs() < 0.001 {
-        debug!(
-            "Skipping geocoding for {} location: invalid coordinates ({}, {}) likely from incomplete ADS-B CPR decoding",
+        warn!(
+            "DEFENSIVE CHECK: Skipping geocoding for {} location: invalid coordinates ({}, {}) - this should not happen!",
             context, latitude, longitude
         );
         metrics::counter!("flight_tracker.location.invalid_coordinates_skipped_total").increment(1);
