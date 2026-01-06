@@ -243,7 +243,7 @@ impl BeastClient {
                     info!("Beast client received external shutdown signal");
                     break;
                 }
-                result = Self::connect_and_run(&config, raw_message_tx.clone(), health_state.clone(), shutdown_broadcast_tx.subscribe()) => {
+                result = Self::connect_and_run(&config, raw_message_tx.clone(), health_state.clone()) => {
                     match result {
                         ConnectionResult::Success => {
                             info!("Beast connection completed successfully");
@@ -337,21 +337,14 @@ impl BeastClient {
     /// Start the Beast client with persistent queue
     /// This connects to the Beast server and sends all messages to the queue
     /// The queue handles persistence and delivery to soar-run
-    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state, stats_counter))]
+    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
     pub async fn start_with_queue(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
-        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     ) -> Result<()> {
-        let (_internal_shutdown_tx, _internal_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-
         let config = self.config.clone();
-
-        // Use a broadcast channel to share shutdown signal
-        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
 
         // Create bounded channel for raw Beast messages from TCP socket
         let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
@@ -378,29 +371,13 @@ impl BeastClient {
             }
         });
 
-        // Bridge oneshot to broadcast
-        tokio::spawn(async move {
-            let _ = shutdown_rx.await;
-            let _ = shutdown_broadcast_tx.send(());
-        });
-
         // Connection retry loop
         let mut retry_count = 0;
         let mut retry_delay = config.retry_delay_seconds;
 
         loop {
-            if shutdown_rx_for_loop.try_recv().is_ok() {
-                info!("Shutdown requested");
-                break;
-            }
-
-            let result = Self::connect_and_run(
-                &config,
-                raw_message_tx.clone(),
-                health_state.clone(),
-                shutdown_rx_for_loop.resubscribe(),
-            )
-            .await;
+            let result =
+                Self::connect_and_run(&config, raw_message_tx.clone(), health_state.clone()).await;
 
             match result {
                 ConnectionResult::Success => {
@@ -437,12 +414,11 @@ impl BeastClient {
 
     /// Connect to the Beast server and run the message processing loop
     /// Messages are sent to raw_message_tx channel for processing
-    #[tracing::instrument(skip(config, raw_message_tx, health_state, shutdown_rx), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, raw_message_tx, health_state), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &BeastClientConfig,
         raw_message_tx: flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
-        shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!(
             "Connecting to Beast server {}:{}",
@@ -502,7 +478,6 @@ impl BeastClient {
                         health_state,
                         connection_start,
                         addr.to_string(),
-                        shutdown_rx,
                     )
                     .await;
                 }
@@ -524,14 +499,13 @@ impl BeastClient {
 
     /// Process an established Beast connection
     /// Reads raw Beast frames and publishes them to JetStream
-    #[tracing::instrument(skip(stream, raw_message_tx, health_state, connection_start, shutdown_rx), fields(peer_addr = %peer_addr_str))]
+    #[tracing::instrument(skip(stream, raw_message_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
     async fn process_connection(
         mut stream: TcpStream,
         raw_message_tx: flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         connection_start: std::time::Instant,
         peer_addr_str: String,
-        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!("Processing connection to Beast server at {}", peer_addr_str);
 
@@ -543,21 +517,8 @@ impl BeastClient {
         let mut last_stats_log = std::time::Instant::now();
 
         loop {
-            tokio::select! {
-                _ = shutdown_rx.recv() => {
-                    info!("Beast connection received shutdown signal, closing connection");
-                    metrics::gauge!("beast.connection.connected").set(0.0);
-
-                    // Mark as disconnected in health state
-                    {
-                        let mut health = health_state.write().await;
-                        health.beast_connected = false;
-                    }
-
-                    return ConnectionResult::Success;
-                }
-                read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)) => {
-                    match read_result {
+            let read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)).await;
+            match read_result {
                 Ok(Ok(0)) => {
                     // Connection closed
                     let duration = connection_start.elapsed();
@@ -603,7 +564,8 @@ impl BeastClient {
                                 // Remove the trailing 0x1A that we added last time
                                 frame_buffer.pop();
                                 if !frame_buffer.is_empty() {
-                                    Self::publish_frame(&raw_message_tx, frame_buffer.clone()).await;
+                                    Self::publish_frame(&raw_message_tx, frame_buffer.clone())
+                                        .await;
                                     message_count += 1;
                                 }
                             }
@@ -627,7 +589,8 @@ impl BeastClient {
                                 } else {
                                     // Frame boundary: publish previous frame and start new one
                                     if !frame_buffer.is_empty() {
-                                        Self::publish_frame(&raw_message_tx, frame_buffer.clone()).await;
+                                        Self::publish_frame(&raw_message_tx, frame_buffer.clone())
+                                            .await;
                                         message_count += 1;
                                     }
                                     frame_buffer.clear();
@@ -692,8 +655,6 @@ impl BeastClient {
                         "No data received for {} seconds",
                         message_timeout.as_secs()
                     ));
-                }
-                    }
                 }
             }
         }
