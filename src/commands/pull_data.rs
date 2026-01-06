@@ -153,9 +153,6 @@ async fn download_text_file_atomically(
 }
 
 pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "pull-data");
-    });
     info!("Starting pull-data operation");
 
     // Start metrics server for profiling during data pull

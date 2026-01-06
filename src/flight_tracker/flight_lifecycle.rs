@@ -678,13 +678,6 @@ async fn complete_flight_in_background(
                                     }
                                     Err(e) => {
                                         tracing::error!("Failed to send email to {}: {}", email, e);
-                                        sentry::capture_message(
-                                            &format!(
-                                                "Failed to send flight completion email to {}: {}",
-                                                email, e
-                                            ),
-                                            sentry::Level::Error,
-                                        );
                                         metrics::counter!("watchlist.emails.failed_total")
                                             .increment(1);
                                     }
@@ -706,13 +699,6 @@ async fn complete_flight_in_background(
             }
             Err(e) => {
                 tracing::error!("Failed to get watchlist users: {}", e);
-                sentry::capture_message(
-                    &format!(
-                        "Failed to get watchlist users for flight completion notifications: {}",
-                        e
-                    ),
-                    sentry::Level::Error,
-                );
                 metrics::counter!("watchlist.emails.failed_total").increment(1);
             }
         }

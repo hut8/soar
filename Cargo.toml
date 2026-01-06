@@ -85,10 +85,13 @@ zstd = "0.13"
 csv = "1.3"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
-sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls", "reqwest", "backtrace", "contexts", "debug-images", "panic", "release-health"], default-features = false }
-# Note: Continuous profiling for Rust is not yet available in sentry-rust 0.45.0
-# Tracking issue: https://github.com/getsentry/sentry-rust/issues
-# For now, use performance monitoring (traces_sample_rate) and Sentry's server-side profiling
+# OpenTelemetry for distributed tracing and observability
+# Using v0.27 for compatibility with tracing-opentelemetry v0.28
+opentelemetry = { version = "0.27", features = ["trace", "metrics", "logs"] }
+opentelemetry-otlp = { version = "0.27", features = ["trace", "metrics", "logs", "tonic", "grpc-tonic"] }
+opentelemetry_sdk = { version = "0.27", features = ["trace", "metrics", "logs", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.27"
+tracing-opentelemetry = "0.28"
 postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
 rust_decimal = { version = "1.39", default-features = false, features = ["std", "serde", "borsh"] }
 zip = "7"
@@ -139,9 +142,9 @@ codegen-units = 256        # Maximum parallelism for faster compilation
 opt-level = 3
 
 [profile.release]
-# Optimize for faster builds while maintaining Sentry symbolication
+# Optimize for faster builds while maintaining debug symbols for stack traces
 debug = 1           # Line numbers only (vs debug = 2 full symbols) - faster to compile
-strip = "none"      # Keep symbols in binary for profiling and Sentry
+strip = "none"      # Keep symbols in binary for profiling and better stack traces in Tempo
 lto = "thin"        # Thin LTO for better optimization without full rebuild cost
 codegen-units = 16  # Balance between compile time and runtime performance
 incremental = false # Disable for release builds (incompatible with LTO)

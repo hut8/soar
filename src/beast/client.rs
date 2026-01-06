@@ -162,10 +162,7 @@ impl BeastClient {
                                     metrics::counter!("beast.nats.publish_timeout_total").increment(1);
 
                                     // Report timeout to Sentry (throttled)
-                                    sentry::capture_message(
-                                        "Beast NATS publish timed out after 5 seconds",
-                                        sentry::Level::Error
-                                    );
+
                                 }
                             }
                         });

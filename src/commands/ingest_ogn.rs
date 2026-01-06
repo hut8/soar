@@ -13,10 +13,6 @@ pub async fn handle_ingest_ogn(
     max_retries: u32,
     retry_delay: u64,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "ingest-ogn");
-    });
-
     // Automatically switch to port 10152 for full feed if no filter specified
     // Port 14580 requires a filter, port 10152 provides the full global feed
     if filter.is_none() && port == 14580 {

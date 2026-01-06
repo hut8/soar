@@ -39,9 +39,6 @@ pub async fn handle_pull_airspaces(
     incremental: bool,
     countries: Option<Vec<String>>,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "pull-airspaces");
-    });
     info!("Starting pull-airspaces operation");
 
     // Get OpenAIP API key from environment

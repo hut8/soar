@@ -538,10 +538,7 @@ impl AprsClient {
                                         metrics::counter!("aprs.queue_send_timeout_total")
                                             .increment(1);
 
-                                        sentry::capture_message(
-                                            "APRS queue send timed out - JetStream publisher stuck",
-                                            sentry::Level::Error,
-                                        );
+
 
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Queue send timeout after {:.1}s - publisher stuck",

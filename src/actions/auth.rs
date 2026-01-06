@@ -58,13 +58,6 @@ pub async fn register_user(
                                 .await
                             {
                                 error!("Failed to send email verification: {}", e);
-                                sentry::capture_message(
-                                    &format!(
-                                        "Failed to send email verification to {}: {}",
-                                        email, e
-                                    ),
-                                    sentry::Level::Error,
-                                );
                                 return json_error(
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     "Failed to send email verification",
@@ -74,10 +67,6 @@ pub async fn register_user(
                         }
                         Err(e) => {
                             error!("Email service initialization failed: {}", e);
-                            sentry::capture_message(
-                                &format!("Email service initialization failed: {}", e),
-                                sentry::Level::Error,
-                            );
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Email service not configured",
@@ -132,13 +121,6 @@ pub async fn login_user(
                                 .await
                         {
                             error!("Failed to send email verification: {}", e);
-                            sentry::capture_message(
-                                &format!(
-                                    "Failed to send email verification to {} during login: {}",
-                                    email, e
-                                ),
-                                sentry::Level::Error,
-                            );
                         }
                         return json_error(
                             StatusCode::FORBIDDEN,
@@ -296,10 +278,6 @@ pub async fn request_password_reset(
                             .await
                         {
                             error!("Failed to send password reset email: {}", e);
-                            sentry::capture_message(
-                                &format!("Failed to send password reset email to {}: {}", email, e),
-                                sentry::Level::Error,
-                            );
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to send password reset email",
@@ -307,10 +285,6 @@ pub async fn request_password_reset(
                             .into_response();
                         }
                     } else {
-                        sentry::capture_message(
-                            "Email service not configured for password reset",
-                            sentry::Level::Error,
-                        );
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Email service not configured",

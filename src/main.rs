@@ -11,6 +11,7 @@ use tracing::{info, warn};
 
 mod commands;
 mod migration_email_reporter;
+mod telemetry;
 
 use commands::{
     handle_archive, handle_dump_unified_ddb, handle_ingest_adsb, handle_ingest_ogn,
@@ -653,109 +654,61 @@ async fn main() -> Result<()> {
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    // Initialize Sentry for error tracking (errors only, no performance monitoring)
-    let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        // Skip Sentry initialization if DSN is empty or invalid
-        if sentry_dsn.is_empty() {
-            info!("SENTRY_DSN is empty, Sentry disabled");
-            None
-        } else if let Ok(parsed_dsn) = sentry_dsn.parse() {
-            info!("Initializing Sentry with DSN");
-
-            // Use SENTRY_RELEASE env var if set (for deployed versions),
-            // otherwise fall back to VERGEN_GIT_DESCRIBE (git-derived version from build.rs)
-            let release = env::var("SENTRY_RELEASE")
-                .ok()
-                .or_else(|| Some(env!("VERGEN_GIT_DESCRIBE").to_string()))
-                .map(Into::into);
-
-            if let Some(ref r) = release {
-                info!("Sentry release version: {}", r);
-            }
-
-            Some(sentry::init(sentry::ClientOptions {
-                dsn: Some(parsed_dsn),
-                sample_rate: 0.05,       // Sample 5% of error events
-                traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
-                attach_stacktrace: true,
-                release,
-                enable_logs: true,
-                environment: env::var("SOAR_ENV").ok().map(Into::into),
-                session_mode: sentry::SessionMode::Request,
-                auto_session_tracking: true,
-                // Note: Continuous profiling not available in sentry-rust 0.45.0
-                // Using increased traces_sample_rate for better performance visibility
-                before_send: Some(std::sync::Arc::new(
-                    move |event: sentry::protocol::Event<'static>| {
-                        // Always capture error-level events
-                        if event.level >= sentry::Level::Error {
-                            Some(event)
-                        } else {
-                            // For non-error events, only capture in production/staging
-                            if is_production || is_staging {
-                                Some(event)
-                            } else {
-                                None
-                            }
-                        }
-                    },
-                )),
-                ..Default::default()
-            }))
-        } else {
-            eprintln!("WARNING: Invalid SENTRY_DSN format, Sentry disabled");
-            None
-        }
-    } else {
-        if is_production || is_staging {
-            eprintln!(
-                "ERROR: SENTRY_DSN environment variable is required in production and staging modes"
-            );
-            std::process::exit(1);
-        }
-        info!("SENTRY_DSN not configured, Sentry disabled");
-        None
-    };
-
-    // Test Sentry integration if enabled
-    if _guard.is_some() {
-        info!("Sentry initialized successfully");
-
-        // Set up panic hook to capture panics in Sentry
-        std::panic::set_hook(Box::new(|panic_info| {
-            let panic_msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-                (*s).to_string()
-            } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "Unknown panic".to_string()
-            };
-
-            let location = if let Some(location) = panic_info.location() {
-                format!(
-                    "{}:{}:{}",
-                    location.file(),
-                    location.line(),
-                    location.column()
-                )
-            } else {
-                "Unknown location".to_string()
-            };
-
-            sentry::configure_scope(|scope| {
-                scope.set_tag("panic.location", location);
-            });
-
-            sentry::capture_message(&format!("Panic: {panic_msg}"), sentry::Level::Fatal);
-
-            // Flush Sentry before the process exits
-            if let Some(client) = sentry::Hub::current().client() {
-                let _ = client.flush(Some(std::time::Duration::from_secs(2)));
-            }
-        }));
-    }
+    // Initialize OpenTelemetry for distributed tracing and observability
+    // Note: Tracer initialization is deferred until after CLI parsing to get the component name
+    // See tracer setup in each subcommand handler below
 
     let cli = Cli::parse();
+
+    // Determine component name for OpenTelemetry service identification
+    let component_name = match &cli.command {
+        Commands::Run { .. } => "run",
+        Commands::Web { .. } => "web",
+        Commands::IngestOgn { .. } => "ingest-ogn",
+        Commands::IngestAdsb { .. } => "ingest-adsb",
+        Commands::Migrate { .. } => "migrate",
+        Commands::LoadData { .. } => "load-data",
+        Commands::PullData { .. } => "pull-data",
+        Commands::PullAirspaces { .. } => "pull-airspaces",
+        Commands::Sitemap { .. } => "sitemap",
+        Commands::Archive { .. } => "archive",
+        Commands::Resurrect { .. } => "resurrect",
+        Commands::VerifyRuntime { .. } => "verify-runtime",
+        Commands::DumpUnifiedDdb { .. } => "dump-unified-ddb",
+        Commands::SeedTestData { .. } => "seed-test-data",
+        Commands::AggregateCoverage { .. } => "aggregate-coverage",
+    };
+
+    // Initialize OpenTelemetry tracer with component name
+    // This enables distributed tracing across SOAR services via OTLP export to Tempo
+    let version = env!("VERGEN_GIT_DESCRIBE");
+    if let Ok(_tracer) = telemetry::init_tracer(&soar_env, component_name, version) {
+        info!("OpenTelemetry tracer initialized successfully - exporting traces to OTLP collector");
+        // Note: Tracing-subscriber integration pending due to type system complexities
+        // Traces are being exported to Tempo, but not yet integrated with tracing spans
+        // TODO: Integrate tracing-opentelemetry layer once type issues are resolved
+    }
+
+    // Optionally initialize OpenTelemetry meter provider for OTLP metrics export
+    // This runs alongside Prometheus metrics export
+    if let Ok(_meter_provider) = telemetry::init_meter_provider(&soar_env, component_name, version)
+    {
+        info!(
+            "OpenTelemetry OTLP metrics export initialized for {}",
+            component_name
+        );
+    }
+
+    // Optionally initialize OpenTelemetry logger provider for log export
+    // This is disabled by default - set OTEL_LOGS_EXPORT_ENABLED=true to enable
+    if let Ok(_logger_provider) =
+        telemetry::init_logger_provider(&soar_env, component_name, version)
+    {
+        info!(
+            "OpenTelemetry OTLP log export initialized for {}",
+            component_name
+        );
+    }
 
     // Initialize tracing/tokio-console based on subcommand
     use tracing_subscriber::{EnvFilter, filter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -794,32 +747,14 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry
-                        .with(fmt_layer)
-                        .with(console_layer)
-                        .with(sentry_layer)
-                        .init();
-                } else {
-                    registry.with(fmt_layer).with(console_layer).init();
-                }
+                registry.with(fmt_layer).with(console_layer).init();
 
                 info!(
                     "tokio-console subscriber initialized on port 6669 - connect with `tokio-console http://localhost:6669`"
                 );
             } else {
                 // No tokio-console overhead
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry.with(fmt_layer).with(sentry_layer).init();
-                } else {
-                    registry.with(fmt_layer).init();
-                }
+                registry.with(fmt_layer).init();
             }
         }
         Commands::VerifyRuntime {
@@ -834,32 +769,14 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry
-                        .with(fmt_layer)
-                        .with(console_layer)
-                        .with(sentry_layer)
-                        .init();
-                } else {
-                    registry.with(fmt_layer).with(console_layer).init();
-                }
+                registry.with(fmt_layer).with(console_layer).init();
 
                 info!(
                     "tokio-console subscriber initialized on port 7779 - connect with `tokio-console http://localhost:7779`"
                 );
             } else {
                 // No tokio-console overhead
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry.with(fmt_layer).with(sentry_layer).init();
-                } else {
-                    registry.with(fmt_layer).init();
-                }
+                registry.with(fmt_layer).init();
             }
         }
         Commands::Web {
@@ -871,14 +788,7 @@ async fn main() -> Result<()> {
 
             if is_test_mode {
                 // Test mode: skip console subscriber
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry.with(fmt_layer).with(sentry_layer).init();
-                } else {
-                    registry.with(fmt_layer).init();
-                }
+                registry.with(fmt_layer).init();
                 info!("Running in test mode - console subscriber disabled");
             } else if *enable_tokio_console {
                 // Production/development mode with tokio-console enabled
@@ -889,44 +799,19 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry
-                        .with(fmt_layer)
-                        .with(console_layer)
-                        .with(sentry_layer)
-                        .init();
-                } else {
-                    registry.with(fmt_layer).with(console_layer).init();
-                }
+                registry.with(fmt_layer).with(console_layer).init();
 
                 info!(
                     "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
                 );
             } else {
                 // No tokio-console overhead
-                if let Some(sentry_layer) = _guard
-                    .as_ref()
-                    .map(|_| sentry::integrations::tracing::layer())
-                {
-                    registry.with(fmt_layer).with(sentry_layer).init();
-                } else {
-                    registry.with(fmt_layer).init();
-                }
+                registry.with(fmt_layer).init();
             }
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
-            if let Some(sentry_layer) = _guard
-                .as_ref()
-                .map(|_| sentry::integrations::tracing::layer())
-            {
-                registry.with(fmt_layer).with(sentry_layer).init();
-            } else {
-                registry.with(fmt_layer).init();
-            }
+            registry.with(fmt_layer).init();
         }
     }
 
@@ -936,7 +821,6 @@ async fn main() -> Result<()> {
             enable_tokio_console,
         } => {
             info!("Runtime verification successful:");
-            info!("  ✓ Sentry integration initialized");
             info!("  ✓ Tracing subscriber initialized");
             if *enable_tokio_console {
                 info!("  ✓ tokio-console layer initialized (port 7779)");
@@ -1082,23 +966,6 @@ async fn main() -> Result<()> {
                     );
                 }
 
-                // Send Sentry error event
-                if sentry::Hub::current().client().is_some() {
-                    sentry::configure_scope(|scope| {
-                        scope.set_tag("migration", "true");
-                        scope.set_tag("environment", env::var("SOAR_ENV").unwrap_or_default());
-                        scope.set_tag("type", "database_migration");
-                    });
-                    sentry::capture_message(
-                        &format!(
-                            "Database migration failed for {} (error: {})",
-                            env::var("SOAR_ENV").unwrap_or_else(|_| "development".to_string()),
-                            error_message
-                        ),
-                        sentry::Level::Error,
-                    );
-                }
-
                 return Err(e);
             }
         }
@@ -1240,7 +1107,7 @@ async fn main() -> Result<()> {
         }
         Commands::Migrate {} => {
             // Migrations are already run by setup_diesel_database()
-            // Send email notification and Sentry event
+            // Send email notification
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
 
@@ -1275,7 +1142,7 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Send success notifications (email and Sentry)
+            // Send success notification (email)
             if let Ok(email_config) = MigrationEmailConfig::from_env() {
                 let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
                 let report = MigrationReport::success(applied_migrations, duration_secs);
@@ -1285,9 +1152,6 @@ async fn main() -> Result<()> {
             } else {
                 warn!("Email configuration not available, skipping migration email notification");
             }
-
-            // Don't send Sentry message for successful migrations - email notification is sufficient
-            // Sentry is for errors and issues, not routine success notifications
 
             Ok(())
         }

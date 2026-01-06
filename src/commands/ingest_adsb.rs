@@ -28,10 +28,6 @@ pub async fn handle_ingest_adsb(
     max_retries: u32,
     retry_delay: u64,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "ingest-adsb");
-    });
-
     // Validate that at least one server is specified
     if beast_servers.is_empty() && sbs_servers.is_empty() {
         return Err(anyhow::anyhow!(

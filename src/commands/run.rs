@@ -283,10 +283,6 @@ pub async fn handle_run(
     no_adsb: bool,
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "run");
-    });
-
     // Validate that at least one consumer is enabled
     if no_aprs && no_adsb {
         anyhow::bail!(

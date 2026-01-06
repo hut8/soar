@@ -292,13 +292,6 @@ pub async fn send_pilot_invitation(
                 .await
             {
                 error!("Failed to send pilot invitation email: {}", e);
-                sentry::capture_message(
-                    &format!(
-                        "Failed to send pilot invitation email to {}: {}",
-                        payload.email, e
-                    ),
-                    sentry::Level::Error,
-                );
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to send invitation email",
