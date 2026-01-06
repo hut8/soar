@@ -704,16 +704,17 @@ pub async fn handle_run(
     }
 
     // Spawn Beast intake queue workers (only if ADS-B is enabled)
-    // Multiple workers for parallel processing of Beast messages
+    // Multiple workers for parallel processing of Beast and SBS messages
+    // Both Beast and SBS formats are routed to this same intake queue (see envelope router)
     // Beast message processing involves database operations (aircraft lookup, raw message storage)
     // and CPR decoding, so we need multiple workers to handle high traffic volumes.
-    // Using 40 workers (half of aircraft workers) as Beast traffic is typically lower than OGN
+    // Using 100 workers as ADS-B traffic volume is MUCH higher than OGN traffic
     if let (
         Some((beast_aircraft_repo, beast_repo_clone, beast_cpr_decoder, beast_receiver_id)),
         Some((_, beast_intake_rx)),
     ) = (beast_infrastructure.as_ref(), beast_intake_opt.as_ref())
     {
-        let num_beast_workers = 40;
+        let num_beast_workers = 100;
         info!("Spawning {} Beast intake queue workers", num_beast_workers);
 
         for worker_id in 0..num_beast_workers {
