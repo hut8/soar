@@ -708,13 +708,14 @@ pub async fn handle_run(
     // Both Beast and SBS formats are routed to this same intake queue (see envelope router)
     // Beast message processing involves database operations (aircraft lookup, raw message storage)
     // and CPR decoding, so we need multiple workers to handle high traffic volumes.
-    // Using 100 workers as ADS-B traffic volume is MUCH higher than OGN traffic
+    // Using 200 workers: ADS-B traffic is ~30,000 msg/sec vs OGN's ~300 msg/sec (100x more)
+    // With 200 workers at ~150 msg/sec per worker, we can handle up to 30k msg/sec
     if let (
         Some((beast_aircraft_repo, beast_repo_clone, beast_cpr_decoder, beast_receiver_id)),
         Some((_, beast_intake_rx)),
     ) = (beast_infrastructure.as_ref(), beast_intake_opt.as_ref())
     {
-        let num_beast_workers = 100;
+        let num_beast_workers = 200;
         info!("Spawning {} Beast intake queue workers", num_beast_workers);
 
         for worker_id in 0..num_beast_workers {
