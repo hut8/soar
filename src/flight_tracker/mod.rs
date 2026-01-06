@@ -520,9 +520,24 @@ impl FlightTracker {
     pub async fn update_flight_callsign(
         &self,
         flight_id: Uuid,
+        aircraft_id: Uuid,
         callsign: Option<String>,
     ) -> Result<bool> {
-        self.flights_repo.update_callsign(flight_id, callsign).await
+        // Update database
+        let result = self
+            .flights_repo
+            .update_callsign(flight_id, callsign.clone())
+            .await;
+
+        // Update in-memory state to keep it in sync with database
+        // This prevents callsign mismatch bugs where DB has one value but memory has another
+        if result.is_ok()
+            && let Some(mut state) = self.aircraft_states.get_mut(&aircraft_id)
+        {
+            state.current_callsign = callsign;
+        }
+
+        result
     }
 }
 

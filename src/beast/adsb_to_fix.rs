@@ -7,22 +7,25 @@ use uuid::Uuid;
 use crate::beast::cpr_decoder::CprDecoder;
 use crate::fixes::Fix;
 
-/// Convert a decoded ADS-B message to a Fix if it contains position information
+/// Convert a decoded ADS-B message to a Fix if it contains valid position information
 ///
-/// This function can work in two modes:
-/// 1. **With CPR decoder**: Full lat/lon position decoding via even/odd frame pairing
-/// 2. **Without CPR decoder**: Only velocity, altitude, and callsign extraction
+/// **IMPORTANT**: A "fix" is a position fix - this function REQUIRES valid position data.
+/// It will return an error if position cannot be decoded (incomplete CPR decoding).
 ///
 /// The CPR decoder maintains state to pair even/odd position frames and decode
-/// full latitude/longitude coordinates. Without it, positions will have lat=0, lon=0.
+/// full latitude/longitude coordinates. Without valid position data, this function
+/// returns an error rather than creating a fix with invalid (0, 0) coordinates.
 ///
 /// Extracts:
 /// - ICAO address → device identifier
-/// - Position (lat/lon/alt) - if CPR decoder provided and frames are available
-/// - Velocity information (ground speed, track, vertical rate)
-/// - Identification (callsign)
+/// - Position (lat/lon/alt) - REQUIRED via CPR decoder
+/// - Velocity information (ground speed, track, vertical rate) - optional
+/// - Identification (callsign) - optional
 ///
-/// Returns None if the message doesn't contain useful fix information.
+/// Returns:
+/// - `Ok(Some(Fix))` if valid position data is available
+/// - `Ok(None)` if message type doesn't produce fixes (shouldn't happen for position messages)
+/// - `Err` if position data is required but unavailable (incomplete CPR decoding)
 pub fn adsb_message_to_fix(
     message: &Message,
     raw_frame: &[u8],
@@ -60,10 +63,11 @@ pub fn adsb_message_to_fix(
     // Extract identification
     let callsign = extract_callsign(message);
 
-    // We need at least position OR velocity to create a fix
-    if position_info.is_none() && velocity_info.is_none() {
-        return Ok(None);
-    }
+    // A "fix" is a position fix - we MUST have valid position data to create one
+    // Don't create fixes with (0, 0) coordinates from velocity-only messages
+    let position = position_info.ok_or_else(|| {
+        anyhow::anyhow!("Cannot create fix without valid position data (CPR decoding incomplete or no position message)")
+    })?;
 
     // Build source_metadata for ADS-B-specific fields
     let source_metadata = build_adsb_metadata(message);
@@ -81,9 +85,9 @@ pub fn adsb_message_to_fix(
         aprs_type: "ADSB".to_string(), // ADS-B messages don't have APRS-style "to" field
         via: vec![],                   // ADS-B is direct from aircraft
         timestamp,
-        latitude: position_info.as_ref().map(|p| p.latitude).unwrap_or(0.0),
-        longitude: position_info.as_ref().map(|p| p.longitude).unwrap_or(0.0),
-        altitude_msl_feet: position_info.and_then(|p| p.altitude_feet),
+        latitude: position.latitude,
+        longitude: position.longitude,
+        altitude_msl_feet: position.altitude_feet,
         altitude_agl_feet: None, // Will be calculated later
         flight_number: callsign,
         squawk: extract_squawk(message),
@@ -253,12 +257,15 @@ mod tests {
             None, // No CPR decoder for this basic test
         );
 
-        // For now, this will return None since we haven't implemented
-        // position/velocity extraction yet
-        assert!(fix_result.is_ok());
+        // Should return error when no valid position data (CPR decoding required)
+        // A "fix" is a position fix - we cannot create one without coordinates
+        assert!(fix_result.is_err());
         assert!(
-            fix_result.unwrap().is_none(),
-            "Should return None when no position/velocity data"
+            fix_result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot create fix without valid position data"),
+            "Should error when no position data available"
         );
     }
 
@@ -353,7 +360,8 @@ mod tests {
 
     #[test]
     fn test_adsb_to_fix_with_velocity() {
-        // Velocity message should create a Fix
+        // Velocity-only message without position data should NOT create a Fix
+        // A "fix" is a position fix - velocity alone is not sufficient
         let mode_s_payload = hex!("8D485020994409940838175B284F");
         let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
@@ -372,14 +380,15 @@ mod tests {
             None, // No CPR decoder for this test
         );
 
-        assert!(fix_result.is_ok());
-        let fix_opt = fix_result.unwrap();
-        assert!(fix_opt.is_some(), "Should create Fix for velocity message");
-
-        let fix = fix_opt.unwrap();
-        assert_eq!(fix.source, "485020", "ICAO should be 485020");
-        assert!(fix.ground_speed_knots.is_some(), "Should have ground speed");
-        assert!(fix.track_degrees.is_some(), "Should have track");
-        assert!(fix.climb_fpm.is_some(), "Should have vertical rate");
+        // Should return error when only velocity data is available
+        // We need valid position coordinates to create a fix
+        assert!(fix_result.is_err());
+        assert!(
+            fix_result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot create fix without valid position data"),
+            "Should error when only velocity data (no position) is available"
+        );
     }
 }

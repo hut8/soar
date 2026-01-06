@@ -408,7 +408,11 @@ impl FixProcessor {
                     if flight.callsign.is_none() {
                         if let Err(e) = self
                             .flight_detection_processor
-                            .update_flight_callsign(flight_id, Some(flight_number.clone()))
+                            .update_flight_callsign(
+                                flight_id,
+                                updated_fix.aircraft_id,
+                                Some(flight_number.clone()),
+                            )
                             .await
                         {
                             debug!("Failed to update callsign for flight {}: {}", flight_id, e);
@@ -416,7 +420,7 @@ impl FixProcessor {
                     } else if flight.callsign.as_deref() != Some(flight_number) {
                         // Callsign changed from one value to another - this should not happen
                         // because flight tracker should have created a new flight
-                        warn!(
+                        error!(
                             "Flight {} callsign mismatch: has '{}' but fix has '{}' - this indicates a bug in flight coalescing",
                             flight_id,
                             flight.callsign.as_ref().unwrap(),

@@ -703,48 +703,58 @@ pub async fn handle_run(
         info!("Spawned intake queue processor");
     }
 
-    // Spawn Beast intake queue processor (only if ADS-B is enabled)
-    // This task reads raw Beast messages from the intake queue and processes them
+    // Spawn Beast intake queue workers (only if ADS-B is enabled)
+    // Multiple workers for parallel processing of Beast and SBS messages
+    // Both Beast and SBS formats are routed to this same intake queue (see envelope router)
+    // Beast message processing involves database operations (aircraft lookup, raw message storage)
+    // and CPR decoding, so we need multiple workers to handle high traffic volumes.
+    // Using 200 workers: ADS-B traffic is ~30,000 msg/sec vs OGN's ~300 msg/sec (100x more)
+    // With 200 workers at ~150 msg/sec per worker, we can handle up to 30k msg/sec
     if let (
         Some((beast_aircraft_repo, beast_repo_clone, beast_cpr_decoder, beast_receiver_id)),
         Some((_, beast_intake_rx)),
     ) = (beast_infrastructure.as_ref(), beast_intake_opt.as_ref())
     {
-        let beast_aircraft_repo = beast_aircraft_repo.clone();
-        let beast_repo_clone = beast_repo_clone.clone();
-        let beast_fix_processor = fix_processor.clone();
-        let beast_cpr_decoder = beast_cpr_decoder.clone();
-        let beast_receiver_id = *beast_receiver_id;
-        let beast_intake_rx = beast_intake_rx.clone();
-        tokio::spawn(
-            async move {
-                info!("Beast intake queue processor started");
-                let mut messages_processed = 0u64;
-                while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
-                    process_beast_message(
-                        &message_bytes,
-                        &beast_aircraft_repo,
-                        &beast_repo_clone,
-                        &beast_fix_processor,
-                        &beast_cpr_decoder,
-                        beast_receiver_id,
-                    )
-                    .await;
-                    messages_processed += 1;
-                    metrics::counter!("beast.run.intake.processed_total").increment(1);
+        let num_beast_workers = 200;
+        info!("Spawning {} Beast intake queue workers", num_beast_workers);
 
-                    // Update Beast intake queue depth metric
-                    metrics::gauge!("beast.run.nats.intake_queue_depth")
-                        .set(beast_intake_rx.len() as f64);
+        for worker_id in 0..num_beast_workers {
+            let beast_aircraft_repo = beast_aircraft_repo.clone();
+            let beast_repo_clone = beast_repo_clone.clone();
+            let beast_fix_processor = fix_processor.clone();
+            let beast_cpr_decoder = beast_cpr_decoder.clone();
+            let beast_receiver_id = *beast_receiver_id;
+            let beast_intake_rx = beast_intake_rx.clone();
+
+            tokio::spawn(
+                async move {
+                    while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
+                        let start_time = std::time::Instant::now();
+                        process_beast_message(
+                            &message_bytes,
+                            &beast_aircraft_repo,
+                            &beast_repo_clone,
+                            &beast_fix_processor,
+                            &beast_cpr_decoder,
+                            beast_receiver_id,
+                        )
+                        .await;
+
+                        let duration = start_time.elapsed();
+                        metrics::histogram!("beast.run.process_message_duration_ms")
+                            .record(duration.as_millis() as f64);
+                        metrics::counter!("beast.run.intake.processed_total").increment(1);
+
+                        // Update Beast intake queue depth metric (sample from each worker)
+                        metrics::gauge!("beast.run.nats.intake_queue_depth")
+                            .set(beast_intake_rx.len() as f64);
+                    }
+                    info!("Beast intake queue worker {} stopped", worker_id);
                 }
-                info!(
-                    "Beast intake queue processor stopped after processing {} messages",
-                    messages_processed
-                );
-            }
-            .instrument(tracing::info_span!("beast_intake_processor")),
-        );
-        info!("Spawned Beast intake queue processor");
+                .instrument(tracing::info_span!("beast_intake_worker", worker_id)),
+            );
+        }
+        info!("Spawned {} Beast intake queue workers", num_beast_workers);
     }
 
     // Spawn dedicated worker pools for each processor type

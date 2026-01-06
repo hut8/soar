@@ -158,6 +158,28 @@ pub(crate) async fn create_start_end_location(
         return None;
     }
 
+    // Validate coordinates - skip if (0, 0) which indicates missing/incomplete position data
+    // NOTE: This should not happen in normal operation (as of fix in src/beast/adsb_to_fix.rs),
+    // but kept as a defensive check to prevent wasted geocoding attempts if bad data gets through
+    if latitude.abs() < 0.001 && longitude.abs() < 0.001 {
+        warn!(
+            "DEFENSIVE CHECK: Skipping geocoding for {} location: invalid coordinates ({}, {}) - this should not happen!",
+            context, latitude, longitude
+        );
+        metrics::counter!("flight_tracker.location.invalid_coordinates_skipped_total").increment(1);
+        return None;
+    }
+
+    // Validate that coordinates are within valid ranges
+    if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+        warn!(
+            "Skipping geocoding for {} location: coordinates ({}, {}) out of valid range",
+            context, latitude, longitude
+        );
+        metrics::counter!("flight_tracker.location.out_of_range_coordinates_total").increment(1);
+        return None;
+    }
+
     use std::time::Instant;
 
     debug!(
