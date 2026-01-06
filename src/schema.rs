@@ -560,7 +560,7 @@ diesel::table! {
         resolution -> Int2,
         receiver_id -> Uuid,
         date -> Date,
-        fix_count -> Int4,
+        fix_count -> Int8,
         first_seen_at -> Timestamptz,
         last_seen_at -> Timestamptz,
         min_altitude_msl_feet -> Nullable<Int4>,

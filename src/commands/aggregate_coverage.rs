@@ -133,8 +133,8 @@ async fn fetch_and_aggregate_fixes(
             receiver_id: Uuid,
             #[diesel(sql_type = diesel::sql_types::Date)]
             date: NaiveDate,
-            #[diesel(sql_type = diesel::sql_types::Integer)]
-            fix_count: i32,
+            #[diesel(sql_type = diesel::sql_types::BigInt)]
+            fix_count: i64,
             #[diesel(sql_type = diesel::sql_types::Timestamptz)]
             first_seen_at: DateTime<Utc>,
             #[diesel(sql_type = diesel::sql_types::Timestamptz)]
@@ -162,7 +162,7 @@ async fn fetch_and_aggregate_fixes(
                 h3_lat_lng_to_cell(ST_MakePoint(longitude, latitude)::geography, $3)::bigint AS h3_index,
                 receiver_id,
                 DATE(received_at) AS date,
-                COUNT(*)::integer AS fix_count,
+                COUNT(*)::bigint AS fix_count,
                 MIN(timestamp) AS first_seen_at,
                 MAX(timestamp) AS last_seen_at,
                 MIN(altitude_msl_feet) AS min_altitude_msl_feet,
