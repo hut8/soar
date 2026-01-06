@@ -105,7 +105,6 @@ impl SocketClient {
         metrics::histogram!("socket.client.send_duration_ms").record(duration_ms);
 
         if duration_ms > 100.0 {
-            warn!("Slow socket send: {:.1}ms", duration_ms);
             metrics::counter!("socket.client.slow_sends_total").increment(1);
         }
 
