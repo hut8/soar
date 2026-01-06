@@ -337,12 +337,13 @@ impl BeastClient {
     /// Start the Beast client with persistent queue
     /// This connects to the Beast server and sends all messages to the queue
     /// The queue handles persistence and delivery to soar-run
-    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state))]
+    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state, stats_counter))]
     pub async fn start_with_queue(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     ) -> Result<()> {
         let (_internal_shutdown_tx, _internal_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
@@ -357,6 +358,7 @@ impl BeastClient {
 
         // Spawn queue feeding task - reads from channel, sends to persistent queue
         let queue_clone = queue.clone();
+        let stats_counter_clone = stats_counter.clone();
         let queue_handle = tokio::spawn(async move {
             loop {
                 match raw_message_rx.recv_async().await {
@@ -364,6 +366,8 @@ impl BeastClient {
                         if let Err(e) = queue_clone.send(message).await {
                             error!("Failed to send to persistent queue: {}", e);
                             metrics::counter!("beast.queue.send_error_total").increment(1);
+                        } else if let Some(ref counter) = stats_counter_clone {
+                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
                     }
                     Err(_) => {

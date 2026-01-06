@@ -13,7 +13,7 @@ User=soar
 Group=soar
 WorkingDirectory=/var/soar
 SyslogIdentifier=soar-run-staging
-ExecStart=/usr/local/bin/soar-staging run --archive
+ExecStart=/usr/local/bin/soar-staging run --archive --enable-tokio-console
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables (staging environment)

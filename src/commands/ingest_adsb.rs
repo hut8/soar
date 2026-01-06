@@ -235,9 +235,18 @@ pub async fn handle_ingest_adsb(
         .await
         .expect("Failed to connect SBS consumer to queue");
 
+    // Create shared counters for stats tracking
+    let stats_frames_received = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stats_messages_sent = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stats_send_time_total_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stats_slow_sends = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+
     // Spawn Beast publisher task: reads from queue → sends to socket
     let beast_queue_for_publisher = beast_queue.clone();
     let mut beast_publisher_shutdown_rx_inner = beast_publisher_shutdown_rx;
+    let stats_sent_clone = stats_messages_sent.clone();
+    let stats_time_clone = stats_send_time_total_ms.clone();
+    let stats_slow_clone = stats_slow_sends.clone();
     let beast_publisher_handle = tokio::spawn(async move {
         info!("Beast publisher task started");
         loop {
@@ -251,9 +260,20 @@ pub async fn handle_ingest_adsb(
                 recv_result = beast_queue_for_publisher.recv() => {
                     match recv_result {
                         Ok(message) => {
+                            // Track send timing
+                            let send_start = std::time::Instant::now();
+
                             // Send to socket
                             match beast_socket_client.send(message).await {
                                 Ok(_) => {
+                                    // Track stats
+                                    let send_duration_ms = send_start.elapsed().as_millis() as u64;
+                                    stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    stats_time_clone.fetch_add(send_duration_ms, std::sync::atomic::Ordering::Relaxed);
+                                    if send_duration_ms > 100 {
+                                        stats_slow_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+
                                     // Successfully delivered - commit the message so it won't be replayed
                                     if let Err(e) = beast_queue_for_publisher.commit().await {
                                         error!("Failed to commit Beast message offset: {}", e);
@@ -285,6 +305,9 @@ pub async fn handle_ingest_adsb(
     // Spawn SBS publisher task: reads from queue → sends to socket
     let sbs_queue_for_publisher = sbs_queue.clone();
     let mut sbs_publisher_shutdown_rx_inner = sbs_publisher_shutdown_rx;
+    let stats_sent_clone_sbs = stats_messages_sent.clone();
+    let stats_time_clone_sbs = stats_send_time_total_ms.clone();
+    let stats_slow_clone_sbs = stats_slow_sends.clone();
     let sbs_publisher_handle = tokio::spawn(async move {
         info!("SBS publisher task started");
         loop {
@@ -298,9 +321,20 @@ pub async fn handle_ingest_adsb(
                 recv_result = sbs_queue_for_publisher.recv() => {
                     match recv_result {
                         Ok(message) => {
+                            // Track send timing
+                            let send_start = std::time::Instant::now();
+
                             // Send to socket
                             match sbs_socket_client.send(message).await {
                                 Ok(_) => {
+                                    // Track stats
+                                    let send_duration_ms = send_start.elapsed().as_millis() as u64;
+                                    stats_sent_clone_sbs.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    stats_time_clone_sbs.fetch_add(send_duration_ms, std::sync::atomic::Ordering::Relaxed);
+                                    if send_duration_ms > 100 {
+                                        stats_slow_clone_sbs.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+
                                     // Successfully delivered - commit the message so it won't be replayed
                                     if let Err(e) = sbs_queue_for_publisher.commit().await {
                                         error!("Failed to commit SBS message offset: {}", e);
@@ -340,6 +374,69 @@ pub async fn handle_ingest_adsb(
         let _ = shutdown_tx_clone.send(());
     });
 
+    // Spawn periodic stats reporting task
+    let beast_queue_for_stats = beast_queue.clone();
+    let sbs_queue_for_stats = sbs_queue.clone();
+    let shutdown_rx_for_stats = shutdown_broadcast_tx.subscribe();
+    let stats_frames_rx = stats_frames_received.clone();
+    let stats_msgs_sent = stats_messages_sent.clone();
+    let stats_send_time = stats_send_time_total_ms.clone();
+    let stats_slow = stats_slow_sends.clone();
+
+    tokio::spawn(async move {
+        let mut shutdown_rx = shutdown_rx_for_stats;
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    info!("Stats reporting task shutting down");
+                    break;
+                }
+                _ = interval.tick() => {
+                    // Get and reset counters atomically
+                    let frames_count = stats_frames_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
+                    let sent_count = stats_msgs_sent.swap(0, std::sync::atomic::Ordering::Relaxed);
+                    let total_send_time = stats_send_time.swap(0, std::sync::atomic::Ordering::Relaxed);
+                    let slow_count = stats_slow.swap(0, std::sync::atomic::Ordering::Relaxed);
+
+                    // Calculate rates (per second)
+                    let frames_per_sec = frames_count as f64 / 30.0;
+                    let sent_per_sec = sent_count as f64 / 30.0;
+
+                    // Calculate average socket send time
+                    let avg_send_time_ms = if sent_count > 0 {
+                        let avg = total_send_time as f64 / sent_count as f64;
+                        if slow_count > 0 {
+                            format!("{:.1}ms ({} >100ms)", avg, slow_count)
+                        } else {
+                            format!("{:.1}ms", avg)
+                        }
+                    } else {
+                        "N/A".to_string()
+                    };
+
+                    // Get queue depths
+                    let beast_depth = beast_queue_for_stats.depth().await;
+                    let sbs_depth = sbs_queue_for_stats.depth().await;
+
+                    // Log comprehensive stats
+                    info!(
+                        "ADS-B Stats (30s): recv={:.1}/s sent={:.1}/s | socket_send={} | queues: beast={{mem:{} disk:{}B}} sbs={{mem:{} disk:{}B}}",
+                        frames_per_sec,
+                        sent_per_sec,
+                        avg_send_time_ms,
+                        beast_depth.memory,
+                        beast_depth.disk,
+                        sbs_depth.memory,
+                        sbs_depth.disk
+                    );
+                }
+            }
+        }
+    });
+
     // Spawn tasks for each Beast server
     let mut client_handles = vec![];
 
@@ -357,6 +454,7 @@ pub async fn handle_ingest_adsb(
         let health = health_state.clone();
         let shutdown_rx = shutdown_broadcast_tx.subscribe();
         let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let stats_rx = stats_frames_received.clone();
 
         // Bridge broadcast to oneshot
         tokio::spawn(async move {
@@ -372,7 +470,7 @@ pub async fn handle_ingest_adsb(
             async move {
                 let mut client = BeastClient::new(config);
                 match client
-                    .start_with_queue(queue, client_shutdown_rx, health)
+                    .start_with_queue(queue, client_shutdown_rx, health, Some(stats_rx))
                     .await
                 {
                     Ok(_) => info!("Beast client {}:{} stopped normally", server, port),
@@ -399,6 +497,7 @@ pub async fn handle_ingest_adsb(
         let health = health_state.clone();
         let shutdown_rx = shutdown_broadcast_tx.subscribe();
         let (client_shutdown_tx, client_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let stats_rx = stats_frames_received.clone();
 
         // Bridge broadcast to oneshot
         tokio::spawn(async move {
@@ -414,7 +513,7 @@ pub async fn handle_ingest_adsb(
             async move {
                 let mut client = SbsClient::new(config);
                 match client
-                    .start_with_queue(queue, client_shutdown_rx, health)
+                    .start_with_queue(queue, client_shutdown_rx, health, Some(stats_rx))
                     .await
                 {
                     Ok(_) => info!("SBS client {}:{} stopped normally", server, port),

@@ -186,12 +186,13 @@ impl SbsClient {
     /// Start the SBS client with a persistent queue (NEW: NATS replacement)
     /// This connects to the SBS server and feeds all messages to a persistent queue
     /// The queue handles buffering when soar-run is disconnected
-    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state))]
+    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state, stats_counter))]
     pub async fn start_with_queue(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     ) -> Result<()> {
         let (internal_shutdown_tx, mut internal_shutdown_rx) =
             tokio::sync::oneshot::channel::<()>();
@@ -208,12 +209,15 @@ impl SbsClient {
 
         // Spawn queue feeding task that consumes from the raw_message_rx channel and sends to persistent queue
         let queue_clone = queue.clone();
+        let stats_counter_clone = stats_counter.clone();
         let queue_feeder_handle = tokio::spawn(async move {
             info!("Starting SBS queue feeding task");
             while let Ok(message) = raw_message_rx.recv_async().await {
                 if let Err(e) = queue_clone.send(message).await {
                     error!("Failed to send SBS message to persistent queue: {}", e);
                     metrics::counter!("sbs.queue.send_error_total").increment(1);
+                } else if let Some(ref counter) = stats_counter_clone {
+                    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
             info!("SBS queue feeding task ended");
