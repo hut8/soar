@@ -1,6 +1,13 @@
 pub mod client;
+pub mod decoder;
+pub mod sbs_to_fix;
 
 pub use client::{SbsClient, SbsClientConfig};
+pub use decoder::{DecodedSbsMessage, SbsMessageType, decode_sbs_message, message_to_json};
+pub use sbs_to_fix::{
+    extract_altitude, extract_flight_number, extract_icao_address, extract_position,
+    extract_velocity, message_can_produce_fix, sbs_message_to_fix,
+};
 
 use anyhow::Result;
 
