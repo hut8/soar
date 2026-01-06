@@ -158,6 +158,27 @@ pub(crate) async fn create_start_end_location(
         return None;
     }
 
+    // Validate coordinates - skip if (0, 0) which indicates missing/incomplete ADS-B position data
+    // ADS-B messages without CPR-decoded position default to (0, 0) and should not be geocoded
+    if latitude.abs() < 0.001 && longitude.abs() < 0.001 {
+        debug!(
+            "Skipping geocoding for {} location: invalid coordinates ({}, {}) likely from incomplete ADS-B CPR decoding",
+            context, latitude, longitude
+        );
+        metrics::counter!("flight_tracker.location.invalid_coordinates_skipped_total").increment(1);
+        return None;
+    }
+
+    // Validate that coordinates are within valid ranges
+    if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+        warn!(
+            "Skipping geocoding for {} location: coordinates ({}, {}) out of valid range",
+            context, latitude, longitude
+        );
+        metrics::counter!("flight_tracker.location.out_of_range_coordinates_total").increment(1);
+        return None;
+    }
+
     use std::time::Instant;
 
     debug!(
