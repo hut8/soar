@@ -83,50 +83,6 @@ pub async fn handle_ingest_ogn(
         .context("Failed to acquire instance lock - is another ogn-ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
-    // Set up signal handling for immediate shutdown
-    info!("Setting up shutdown handlers...");
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let (publisher_shutdown_tx, publisher_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-
-    // Spawn signal handler task for both SIGINT and SIGTERM
-    tokio::spawn(async move {
-        #[cfg(unix)]
-        {
-            use tokio::signal::unix::{SignalKind, signal};
-
-            let mut sigterm =
-                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
-            let mut sigint =
-                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
-
-            tokio::select! {
-                _ = sigterm.recv() => {
-                    info!("Received SIGTERM, exiting immediately...");
-                }
-                _ = sigint.recv() => {
-                    info!("Received SIGINT (Ctrl+C), exiting immediately...");
-                }
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => {
-                    info!("Received SIGINT (Ctrl+C), exiting immediately...");
-                }
-                Err(err) => {
-                    error!("Failed to listen for SIGINT signal: {}", err);
-                    return;
-                }
-            }
-        }
-
-        // Signal shutdown to both client and publisher
-        let _ = shutdown_tx.send(());
-        let _ = publisher_shutdown_tx.send(());
-    });
-
     // Create OGN (APRS) client config
     let config = AprsClientConfigBuilder::new()
         .server(server)
@@ -187,45 +143,34 @@ pub async fn handle_ingest_ogn(
 
     // Spawn publisher task: reads from queue → sends to socket
     let queue_for_publisher = queue.clone();
-    let mut publisher_shutdown_rx_inner = publisher_shutdown_rx;
-    let publisher_handle = tokio::spawn(async move {
+    let _publisher_handle = tokio::spawn(async move {
         info!("Publisher task started");
         loop {
-            tokio::select! {
-                // Check for shutdown signal first (biased)
-                _ = &mut publisher_shutdown_rx_inner => {
-                    info!("Publisher task received shutdown signal, exiting...");
-                    break;
-                }
-                // Process queue messages
-                recv_result = queue_for_publisher.recv() => {
-                    match recv_result {
-                        Ok(message) => {
-                            // Send to socket
-                            match socket_client.send(message.into_bytes()).await {
-                                Ok(_) => {
-                                    // Successfully delivered - commit the message so it won't be replayed
-                                    if let Err(e) = queue_for_publisher.commit().await {
-                                        error!("Failed to commit message offset: {}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to send to socket: {}", e);
-                                    metrics::counter!("aprs.socket.send_error_total").increment(1);
-
-                                    // DON'T commit - message will be replayed on next recv()
-                                    // Reconnect and retry
-                                    if let Err(e) = socket_client.reconnect().await {
-                                        error!("Failed to reconnect to socket: {}", e);
-                                    }
-                                }
+            match queue_for_publisher.recv().await {
+                Ok(message) => {
+                    // Send to socket
+                    match socket_client.send(message.into_bytes()).await {
+                        Ok(_) => {
+                            // Successfully delivered - commit the message so it won't be replayed
+                            if let Err(e) = queue_for_publisher.commit().await {
+                                error!("Failed to commit message offset: {}", e);
                             }
                         }
                         Err(e) => {
-                            error!("Failed to receive from queue: {}", e);
-                            break;
+                            error!("Failed to send to socket: {}", e);
+                            metrics::counter!("aprs.socket.send_error_total").increment(1);
+
+                            // DON'T commit - message will be replayed on next recv()
+                            // Reconnect and retry
+                            if let Err(e) = socket_client.reconnect().await {
+                                error!("Failed to reconnect to socket: {}", e);
+                            }
                         }
                     }
+                }
+                Err(e) => {
+                    error!("Failed to receive from queue: {}", e);
+                    break;
                 }
             }
         }
@@ -236,23 +181,8 @@ pub async fn handle_ingest_ogn(
 
     info!("Starting OGN (APRS) client for ingestion...");
 
-    // Run OGN (APRS) client with shutdown signal
-    let client_result = client
-        .start_with_queue(queue.clone(), shutdown_rx, health_state.clone())
-        .await;
-
-    // Wait for publisher to finish
-    let _ = publisher_handle.await;
-
-    match client_result {
-        Ok(_) => {
-            info!("OGN ingestion stopped normally");
-        }
-        Err(e) => {
-            error!("OGN ingestion failed: {}", e);
-            metrics::counter!("aprs.ingest_failed_total").increment(1);
-        }
-    }
-
-    Ok(())
+    // Run OGN (APRS) client - will run until process is terminated
+    client
+        .start_with_queue(queue.clone(), health_state.clone())
+        .await
 }

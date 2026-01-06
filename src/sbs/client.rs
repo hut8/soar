@@ -114,9 +114,6 @@ impl SbsClient {
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
-            // Create a new subscription for this iteration
-            let shutdown_rx_for_connection = shutdown_rx_for_loop.resubscribe();
-
             tokio::select! {
                 _ = &mut internal_shutdown_rx => {
                     info!("Shutdown signal received, stopping SBS client");
@@ -129,7 +126,6 @@ impl SbsClient {
                 result = Self::connect_and_process(
                     &config,
                     &raw_message_tx,
-                    shutdown_rx_for_connection,
                     health_state.clone(),
                 ) => {
                     match result {
@@ -186,23 +182,14 @@ impl SbsClient {
     /// Start the SBS client with a persistent queue (NEW: NATS replacement)
     /// This connects to the SBS server and feeds all messages to a persistent queue
     /// The queue handles buffering when soar-run is disconnected
-    #[tracing::instrument(skip(self, queue, shutdown_rx, health_state, stats_counter))]
+    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
     pub async fn start_with_queue(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
-        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     ) -> Result<()> {
-        let (internal_shutdown_tx, mut internal_shutdown_rx) =
-            tokio::sync::oneshot::channel::<()>();
-        self.shutdown_tx = Some(internal_shutdown_tx);
-
         let config = self.config.clone();
-
-        // Use a broadcast channel to share shutdown signal with both feeder and connection loop
-        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
 
         // Create bounded channel for raw SBS messages from TCP socket
         let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
@@ -223,76 +210,57 @@ impl SbsClient {
             info!("SBS queue feeding task ended");
         });
 
-        // Monitor shutdown signal
-        tokio::spawn(async move {
-            if shutdown_rx.await.is_ok() {
-                info!("Received shutdown signal, broadcasting to tasks...");
-                let _ = shutdown_broadcast_tx.send(());
-            }
-        });
-
         // Connection loop with exponential backoff
         let mut retry_count = 0;
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
-            // Create a new subscription for this iteration
-            let shutdown_rx_for_connection = shutdown_rx_for_loop.resubscribe();
+            let result =
+                Self::connect_and_process(&config, &raw_message_tx, health_state.clone()).await;
 
-            tokio::select! {
-                _ = &mut internal_shutdown_rx => {
-                    info!("Shutdown signal received, stopping SBS client");
+            match result {
+                ConnectionResult::Success => {
+                    info!("SBS connection completed successfully");
                     break;
                 }
-                _ = shutdown_rx_for_loop.recv() => {
-                    info!("Shutdown broadcast received, stopping SBS client");
-                    break;
-                }
-                result = Self::connect_and_process(
-                    &config,
-                    &raw_message_tx,
-                    shutdown_rx_for_connection,
-                    health_state.clone(),
-                ) => {
-                    match result {
-                        ConnectionResult::Success => {
-                            info!("SBS connection completed successfully");
-                            break;
-                        }
-                        ConnectionResult::ConnectionFailed(e) => {
-                            retry_count += 1;
-                            if retry_count > config.max_retries {
-                                error!(
-                                    "Max retries ({}) exceeded for SBS connection to {}:{}, giving up: {}",
-                                    config.max_retries, config.server, config.port, e
-                                );
-                                break;
-                            }
-
-                            metrics::counter!("sbs.connection.failed_total").increment(1);
-                            warn!(
-                                "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
-                                config.server, config.port, retry_count, config.max_retries, e, current_delay
-                            );
-
-                            sleep(Duration::from_secs(current_delay)).await;
-
-                            // Exponential backoff with cap
-                            current_delay = std::cmp::min(
-                                current_delay * 2,
-                                config.max_retry_delay_seconds,
-                            );
-                        }
-                        ConnectionResult::OperationFailed(e) => {
-                            metrics::counter!("sbs.connection.operation_failed_total").increment(1);
-                            warn!("SBS connection to {}:{} failed during operation: {} - reconnecting in 1s", config.server, config.port, e);
-                            sleep(Duration::from_secs(1)).await;
-
-                            // Reset retry count on operation failures (connection was successful)
-                            retry_count = 0;
-                            current_delay = config.retry_delay_seconds;
-                        }
+                ConnectionResult::ConnectionFailed(e) => {
+                    retry_count += 1;
+                    if retry_count > config.max_retries {
+                        error!(
+                            "Max retries ({}) exceeded for SBS connection to {}:{}, giving up: {}",
+                            config.max_retries, config.server, config.port, e
+                        );
+                        break;
                     }
+
+                    metrics::counter!("sbs.connection.failed_total").increment(1);
+                    warn!(
+                        "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
+                        config.server,
+                        config.port,
+                        retry_count,
+                        config.max_retries,
+                        e,
+                        current_delay
+                    );
+
+                    sleep(Duration::from_secs(current_delay)).await;
+
+                    // Exponential backoff with cap
+                    current_delay =
+                        std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                }
+                ConnectionResult::OperationFailed(e) => {
+                    metrics::counter!("sbs.connection.operation_failed_total").increment(1);
+                    warn!(
+                        "SBS connection to {}:{} failed during operation: {} - reconnecting in 1s",
+                        config.server, config.port, e
+                    );
+                    sleep(Duration::from_secs(1)).await;
+
+                    // Reset retry count on operation failures (connection was successful)
+                    retry_count = 0;
+                    current_delay = config.retry_delay_seconds;
                 }
             }
         }
@@ -309,7 +277,6 @@ impl SbsClient {
     async fn connect_and_process(
         config: &SbsClientConfig,
         raw_message_tx: &flume::Sender<Vec<u8>>,
-        shutdown_rx: tokio::sync::broadcast::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
     ) -> ConnectionResult {
         let address = format!("{}:{}", config.server, config.port);
@@ -344,14 +311,7 @@ impl SbsClient {
             .map(|a| a.to_string())
             .unwrap_or_else(|_| "unknown".to_string());
 
-        Self::process_connection(
-            stream,
-            peer_addr_str,
-            raw_message_tx,
-            shutdown_rx,
-            health_state,
-        )
-        .await
+        Self::process_connection(stream, peer_addr_str, raw_message_tx, health_state).await
     }
 
     /// Process an active SBS connection
@@ -359,7 +319,6 @@ impl SbsClient {
         stream: TcpStream,
         peer_addr_str: String,
         raw_message_tx: &flume::Sender<Vec<u8>>,
-        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
     ) -> ConnectionResult {
         info!("Processing connection to SBS server at {}", peer_addr_str);
@@ -372,11 +331,28 @@ impl SbsClient {
         let connection_start = std::time::Instant::now();
 
         loop {
-            tokio::select! {
-                _ = shutdown_rx.recv() => {
+            let result = tokio::time::timeout(message_timeout, lines.next_line()).await;
+            match result {
+                Err(_) => {
+                    // Timeout
+                    let duration = connection_start.elapsed();
+                    warn!(
+                        "SBS connection to {} timed out after {:.1}s (no data for {}s)",
+                        peer_addr_str,
+                        duration.as_secs_f64(),
+                        message_timeout.as_secs()
+                    );
+                    metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Connection timed out"
+                    ));
+                }
+                Ok(Ok(None)) => {
+                    // Connection closed
                     let duration = connection_start.elapsed();
                     info!(
-                        "Shutdown signal received, closing SBS connection (IP: {}) after {:.1}s, received {} messages",
+                        "SBS connection closed by server (IP: {}) after {:.1}s, received {} messages",
                         peer_addr_str,
                         duration.as_secs_f64(),
                         message_count
@@ -391,86 +367,48 @@ impl SbsClient {
 
                     return ConnectionResult::Success;
                 }
-                result = tokio::time::timeout(message_timeout, lines.next_line()) => {
-                    match result {
-                        Err(_) => {
-                            // Timeout
-                            let duration = connection_start.elapsed();
-                            warn!(
-                                "SBS connection to {} timed out after {:.1}s (no data for {}s)",
-                                peer_addr_str,
-                                duration.as_secs_f64(),
-                                message_timeout.as_secs()
-                            );
-                            metrics::gauge!("sbs.connection.connected").set(0.0);
+                Ok(Ok(Some(line))) => {
+                    // Data received
+                    trace!("Received SBS line: {}", line);
+                    metrics::counter!("sbs.bytes.received_total").increment(line.len() as u64);
 
-                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                                "Connection timed out"
-                            ));
-                        }
-                        Ok(Ok(None)) => {
-                            // Connection closed
-                            let duration = connection_start.elapsed();
-                            info!(
-                                "SBS connection closed by server (IP: {}) after {:.1}s, received {} messages",
-                                peer_addr_str,
-                                duration.as_secs_f64(),
-                                message_count
-                            );
-                            metrics::gauge!("sbs.connection.connected").set(0.0);
-
-                            // Mark as disconnected in health state
-                            {
-                                let mut health = health_state.write().await;
-                                health.beast_connected = false;
-                            }
-
-                            return ConnectionResult::Success;
-                        }
-                        Ok(Ok(Some(line))) => {
-                            // Data received
-                            trace!("Received SBS line: {}", line);
-                            metrics::counter!("sbs.bytes.received_total").increment(line.len() as u64);
-
-                            // Skip empty lines
-                            if line.trim().is_empty() {
-                                continue;
-                            }
-
-                            // Publish line with timestamp
-                            Self::publish_line(raw_message_tx, line).await;
-                            message_count += 1;
-
-                            // Log stats every 10 seconds
-                            if last_stats_log.elapsed().as_secs() >= 10 {
-                                let elapsed = last_stats_log.elapsed().as_secs_f64();
-                                let rate = message_count as f64 / elapsed;
-                                info!(
-                                    "SBS stats: {:.1} msg/s, {} total messages",
-                                    rate, message_count
-                                );
-                                metrics::gauge!("sbs.message_rate").set(rate);
-                                message_count = 0;
-                                last_stats_log = std::time::Instant::now();
-                            }
-                        }
-                        Ok(Err(e)) => {
-                            // Read error
-                            let duration = connection_start.elapsed();
-                            error!(
-                                "SBS read error from {} after {:.1}s: {}",
-                                peer_addr_str,
-                                duration.as_secs_f64(),
-                                e
-                            );
-                            metrics::gauge!("sbs.connection.connected").set(0.0);
-
-                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                                "SBS read error: {}",
-                                e
-                            ));
-                        }
+                    // Skip empty lines
+                    if line.trim().is_empty() {
+                        continue;
                     }
+
+                    // Publish line with timestamp
+                    Self::publish_line(raw_message_tx, line).await;
+                    message_count += 1;
+
+                    // Log stats every 10 seconds
+                    if last_stats_log.elapsed().as_secs() >= 10 {
+                        let elapsed = last_stats_log.elapsed().as_secs_f64();
+                        let rate = message_count as f64 / elapsed;
+                        info!(
+                            "SBS stats: {:.1} msg/s, {} total messages",
+                            rate, message_count
+                        );
+                        metrics::gauge!("sbs.message_rate").set(rate);
+                        message_count = 0;
+                        last_stats_log = std::time::Instant::now();
+                    }
+                }
+                Ok(Err(e)) => {
+                    // Read error
+                    let duration = connection_start.elapsed();
+                    error!(
+                        "SBS read error from {} after {:.1}s: {}",
+                        peer_addr_str,
+                        duration.as_secs_f64(),
+                        e
+                    );
+                    metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "SBS read error: {}",
+                        e
+                    ));
                 }
             }
         }
