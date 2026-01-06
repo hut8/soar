@@ -19,8 +19,8 @@ struct CoverageQueryResult {
     receiver_id: Uuid,
     #[diesel(sql_type = sql_types::Date)]
     date: NaiveDate,
-    #[diesel(sql_type = sql_types::Integer)]
-    fix_count: i32,
+    #[diesel(sql_type = sql_types::BigInt)]
+    fix_count: i64,
     #[diesel(sql_type = sql_types::Timestamptz)]
     first_seen_at: DateTime<Utc>,
     #[diesel(sql_type = sql_types::Timestamptz)]
@@ -248,7 +248,7 @@ impl CoverageRepository {
                 let resolutions: Vec<i16> = chunk.iter().map(|c| c.resolution).collect();
                 let receiver_ids: Vec<Uuid> = chunk.iter().map(|c| c.receiver_id).collect();
                 let dates: Vec<NaiveDate> = chunk.iter().map(|c| c.date).collect();
-                let fix_counts: Vec<i32> = chunk.iter().map(|c| c.fix_count).collect();
+                let fix_counts: Vec<i64> = chunk.iter().map(|c| c.fix_count).collect();
                 let first_seen_ats: Vec<_> = chunk.iter().map(|c| c.first_seen_at).collect();
                 let last_seen_ats: Vec<_> = chunk.iter().map(|c| c.last_seen_at).collect();
                 let min_altitudes: Vec<Option<i32>> =
@@ -268,7 +268,7 @@ impl CoverageRepository {
                     )
                     SELECT * FROM UNNEST(
                         $1::bigint[], $2::smallint[], $3::uuid[], $4::date[],
-                        $5::integer[], $6::timestamptz[], $7::timestamptz[],
+                        $5::bigint[], $6::timestamptz[], $7::timestamptz[],
                         $8::integer[], $9::integer[], $10::integer[]
                     )
                     ON CONFLICT (h3_index, resolution, receiver_id, date) DO UPDATE SET
@@ -289,7 +289,7 @@ impl CoverageRepository {
                 .bind::<sql_types::Array<sql_types::SmallInt>, _>(resolutions)
                 .bind::<sql_types::Array<sql_types::Uuid>, _>(receiver_ids)
                 .bind::<sql_types::Array<sql_types::Date>, _>(dates)
-                .bind::<sql_types::Array<sql_types::Integer>, _>(fix_counts)
+                .bind::<sql_types::Array<sql_types::BigInt>, _>(fix_counts)
                 .bind::<sql_types::Array<sql_types::Timestamptz>, _>(first_seen_ats)
                 .bind::<sql_types::Array<sql_types::Timestamptz>, _>(last_seen_ats)
                 .bind::<sql_types::Array<sql_types::Nullable<sql_types::Integer>>, _>(
