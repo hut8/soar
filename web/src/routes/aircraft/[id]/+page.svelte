@@ -172,7 +172,7 @@
 			const response = await serverCall<FixesResponse>(`/aircraft/${aircraftId}/fixes`, {
 				params: {
 					page,
-					perPage: 10,
+					perPage: 5,
 					after,
 					...(hideInactiveFixes && { active: true })
 				}

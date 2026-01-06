@@ -380,10 +380,10 @@
 								href={`/flights/${flight.id}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+								class="btn flex items-center gap-2 preset-filled-primary-500"
 							>
-								<ExternalLink class="h-3 w-3" />
-								Open
+								<ExternalLink class="h-4 w-4" />
+								<span class="font-semibold">View Flight</span>
 							</a>
 						</td>
 					</tr>
@@ -398,7 +398,9 @@
 	{#each flightDetails as { flight, aircraft } (flight.id)}
 		<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
 			<!-- Aircraft info -->
-			<div class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3">
+			<div
+				class="border-surface-200-700-token mb-3 flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-start sm:justify-between"
+			>
 				<div class="flex flex-wrap items-center gap-2">
 					{#if showAircraft}
 						{#if aircraft}
@@ -427,10 +429,10 @@
 				</div>
 				<a
 					href={`/flights/${flight.id}`}
-					class="relative z-10 flex-shrink-0"
-					title="View flight details"
+					class="btn flex flex-shrink-0 items-center gap-2 preset-filled-primary-500"
 				>
-					<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+					<ExternalLink class="h-4 w-4" />
+					<span class="font-semibold">View Flight</span>
 				</a>
 			</div>
 

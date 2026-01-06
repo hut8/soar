@@ -39,15 +39,15 @@ flowchart TB
     subgraph Ingest ["APRS Ingestion (soar ingest-ogn)"]
         AprsClient[APRS Client]
         RawQueue["Raw Message Queue<br/>(1,000 messages)"]
-        AprsNatsPublisher[NATS Publisher]
+        AprsNatsPublisher[JetStream Publisher]
     end
 
-    %% NATS Pub/Sub (Lightweight Message Bus)
-    NatsPubSub["NATS Pub/Sub<br/>Subject: ogn.raw<br/>(Fire-and-forget)"]
+    %% NATS JetStream (Persistent Message Stream)
+    NatsJetStream["NATS JetStream<br/>Stream: ogn_raw<br/>(Persistent, Guaranteed Delivery)"]
 
     %% Processing Process (soar run)
     subgraph Processing ["Message Processing (soar run)"]
-        NatsSubscriber[NATS Subscriber]
+        NatsConsumer[JetStream Consumer]
 
         subgraph RouterBox ["Packet Router"]
             Router[Router Logic]
@@ -78,7 +78,7 @@ flowchart TB
     %% Real-time Broadcasting (within Fix Processor)
     subgraph Broadcast ["Real-time Broadcasting to Web Clients"]
         LiveFixQueue["Live Fix Queue<br/>(1,000 messages)"]
-        LiveFixPublisher[NATS Fix Publisher<br/>(in FixProcessor)]
+        LiveFixPublisher[NATS Pub/Sub Publisher<br/>(in FixProcessor)]
         LiveNats["NATS Pub/Sub<br/>Subjects: aircraft.fix.*<br/>aircraft.area.*"]
     end
 
@@ -95,11 +95,11 @@ flowchart TB
     APRS --> AprsClient
     AprsClient --> RawQueue
     RawQueue --> AprsNatsPublisher
-    AprsNatsPublisher --> NatsPubSub
+    AprsNatsPublisher --> NatsJetStream
 
     %% Data Flow - Processing Entry
-    NatsPubSub --> NatsSubscriber
-    NatsSubscriber --> Router
+    NatsJetStream --> NatsConsumer
+    NatsConsumer --> Router
 
     %% Data Flow - Router & Generic Processing
     Router --> GenericProc
@@ -145,8 +145,8 @@ flowchart TB
     classDef externalStyle fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
 
     class RawQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,LiveFixQueue queueStyle
-    class AprsClient,AprsNatsPublisher,NatsSubscriber,Router,GenericProc,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,LiveFixPublisher,Sitemap procStyle
-    class Database,NatsPubSub,LiveNats,ArchiveFiles,SitemapFiles storageStyle
+    class AprsClient,AprsNatsPublisher,NatsConsumer,Router,GenericProc,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,LiveFixPublisher,Sitemap procStyle
+    class Database,NatsJetStream,LiveNats,ArchiveFiles,SitemapFiles storageStyle
     class APRS,WebClients externalStyle
 ```
 
@@ -155,14 +155,15 @@ flowchart TB
 **Ingestion (`soar ingest-ogn`)**
 - Connects to OGN APRS-IS network (~500 messages/sec)
 - Buffers messages in 1,000-message queue
-- Publishes to NATS pub/sub (subject: `ogn.raw`) using fire-and-forget for maximum throughput
+- Publishes to NATS JetStream (stream: `ogn_raw`) with guaranteed delivery
+- Messages are persisted and can be replayed after crashes
 
 **Processing (`soar run`)**
-- **NATS Subscriber**: Consumes messages from NATS pub/sub with automatic reconnection
+- **JetStream Consumer**: Consumes messages from NATS JetStream with automatic reconnection and acknowledgment
 - **Packet Router**: Routes messages based on type
 - **Generic Processor**: Runs inline for every message
   - Archives all raw messages to compressed daily log files (.log.zst)
-  - Inserts message records into `aprs_messages` table
+  - Inserts message records into `aprs_messages` table (with deduplication for crash recovery)
   - Identifies and caches receiver information
 - **Type-specific Queues**: Buffers for specialized processing (aircraft: 1,000 messages; receiver/server: 50 messages each)
 - **Worker Processors**: Process aircraft positions, receiver status/position, and server messages
@@ -170,13 +171,14 @@ flowchart TB
 
 **Storage**
 - **PostgreSQL + PostGIS**: All processed data (devices, fixes, flights, receivers, airports)
-- **NATS Pub/Sub**: Lightweight message bus for decoupling ingestion from processing (subjects: `ogn.raw`, `beast.raw`)
+- **NATS JetStream**: Persistent message streams for reliable ingestion (streams: `ogn_raw`, `beast_raw`)
+- **NATS Pub/Sub**: Used for real-time broadcasting to web clients (subjects: `aircraft.fix.*`, `aircraft.area.*`)
 - **Daily Archive Files**: Compressed raw APRS messages (.log.zst) with UTC-based rotation
 
 **Real-time Broadcasting**
-- Fix Processor contains embedded NATS Fix Publisher with 1,000-message buffer
-- Publishes aircraft positions to NATS (subjects: `aircraft.fix.{device_id}`, `aircraft.area.{lat}.{lon}`)
-- Web server's LiveFixService bridges NATS messages to WebSocket clients
+- Fix Processor contains embedded NATS Pub/Sub Publisher with 1,000-message buffer
+- Publishes aircraft positions to NATS Pub/Sub (subjects: `aircraft.fix.{device_id}`, `aircraft.area.{lat}.{lon}`)
+- Web server's LiveFixService bridges NATS Pub/Sub messages to WebSocket clients
 
 **Batch Processes**
 - **Sitemap Generator**: Runs via `soar sitemap` command
@@ -189,9 +191,9 @@ flowchart TB
 
 Needs PostgreSQL with PostGIS and pg_trgm. Tested on PostgreSQL 17 but should work on any modern version as long as those extensions are available. Use the environment variable `DATABASE_URL` in the form `postgres://user:password@server/database` as a connection string.
 
-### NATS
+### NATS JetStream
 
-NATS provides a lightweight message bus that decouples data ingestion from processing. The OGN and ADS-B ingesters publish messages to NATS pub/sub, which the processing service (`soar run`) subscribes to. This architecture uses fire-and-forget semantics for maximum throughput.
+NATS JetStream provides a persistent message streaming system that decouples data ingestion from processing. The OGN and ADS-B ingesters publish messages to JetStream streams (`ogn_raw`, `beast_raw`), which the processing service (`soar run`) consumes reliably. JetStream provides guaranteed delivery, message persistence, and crash recovery - messages are stored and can be replayed if the processor crashes or restarts.
 
 To install, head over to [the NATS releases on GitHub](https://github.com/nats-io/nats-server/releases/) and download the latest AMD64 .deb package and install it via `dpkg -i`. For example:
 

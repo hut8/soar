@@ -17,6 +17,8 @@
 		ChevronLeft,
 		ChevronRight,
 		ChevronsRight,
+		ChevronDown,
+		ChevronUp,
 		Info,
 		ExternalLink,
 		MountainSnow,
@@ -59,12 +61,31 @@
 	let isLoadingAircraft = $state(true);
 	let isLoadingFixes = $state(true);
 
+	// Aircraft images state
+	interface AircraftImage {
+		source: 'airport_data' | 'planespotters';
+		pageUrl: string;
+		thumbnailUrl: string;
+		imageUrl?: string;
+		photographer?: string;
+	}
+	interface AircraftImageCollection {
+		images: AircraftImage[];
+		lastFetched: Record<string, string>;
+	}
+	let aircraftImages = $state<AircraftImage[]>([]);
+	let isLoadingImages = $state(false);
+
 	// Load aircraft and fixes progressively
 	$effect(() => {
 		isLoadingAircraft = true;
 		data.aircraftPromise.then((result) => {
 			aircraft = result;
 			isLoadingAircraft = false;
+			// Load images after aircraft is loaded
+			if (result?.id) {
+				loadAircraftImages(result.id);
+			}
 		});
 
 		isLoadingFixes = true;
@@ -103,7 +124,7 @@
 
 	// Pagination state
 	let currentPage = $state(1);
-	let pageSize = 50;
+	let pageSize = 25;
 
 	// Display options
 	let includeNearbyFlights = $state(false);
@@ -129,6 +150,9 @@
 	let flightGaps = $state<FlightGap[]>([]);
 	let isLoadingGaps = $state(false);
 	let showGaps = $state(false);
+
+	// Fixes list collapse state (mobile only)
+	let isFixesCollapsed = $state(true);
 
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived(fixes.length > 0 ? [...fixes].reverse() : []);
@@ -755,6 +779,22 @@
 			console.error('Failed to fetch receivers:', err);
 		} finally {
 			isLoadingReceivers = false;
+		}
+	}
+
+	// Load aircraft images
+	async function loadAircraftImages(aircraftId: string) {
+		isLoadingImages = true;
+		try {
+			const response = await serverCall<DataResponse<AircraftImageCollection>>(
+				`/aircraft/${aircraftId}/images`
+			);
+			aircraftImages = response.data.images || [];
+		} catch (err) {
+			console.error('Failed to load aircraft images:', err);
+			aircraftImages = [];
+		} finally {
+			isLoadingImages = false;
 		}
 	}
 
@@ -1758,6 +1798,117 @@
 		</div>
 	</div>
 
+	<!-- Aircraft Information -->
+	{#if !isLoadingAircraft && aircraft && data.flight.aircraftId}
+		<div class="card p-6">
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="flex items-center gap-2 h2">
+					<Plane class="h-6 w-6" />
+					Aircraft Information
+				</h2>
+				<a
+					href="/aircraft/{data.flight.aircraftId}"
+					class="btn flex items-center gap-2 preset-filled-primary-500"
+				>
+					<span>View Full Aircraft Details</span>
+					<ExternalLink class="h-4 w-4" />
+				</a>
+			</div>
+
+			<!-- Aircraft Photos -->
+			{#if !isLoadingImages && aircraftImages.length > 0}
+				<div class="mb-4 flex gap-4 overflow-x-auto pb-2">
+					{#each aircraftImages as image (image.thumbnailUrl)}
+						<a
+							href={image.pageUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="group relative flex-shrink-0"
+						>
+							<img
+								src={image.thumbnailUrl}
+								alt="Aircraft photo{image.photographer ? ` by ${image.photographer}` : ''}"
+								class="border-surface-300-600-token h-48 rounded-lg border object-cover transition-all group-hover:border-primary-500 group-hover:shadow-lg"
+								loading="lazy"
+							/>
+							{#if image.photographer}
+								<p class="text-surface-600-300-token mt-1 text-center text-xs">
+									© {image.photographer}
+								</p>
+							{/if}
+							<p class="text-surface-600-300-token mt-0.5 text-center text-xs capitalize">
+								{image.source === 'airport_data' ? 'Airport Data' : 'Planespotters'}
+							</p>
+						</a>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Aircraft Details -->
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#if aircraft.registration}
+					<div>
+						<div class="text-surface-600-300-token text-sm">Registration</div>
+						<div class="font-mono font-semibold">
+							{aircraft.registration}
+							{#if aircraft.competitionNumber}
+								<span class="text-surface-500-400-token ml-1">({aircraft.competitionNumber})</span>
+							{/if}
+						</div>
+					</div>
+				{/if}
+				{#if aircraft.aircraftModel}
+					<div>
+						<div class="text-surface-600-300-token text-sm">Model</div>
+						<div class="font-semibold">{aircraft.aircraftModel}</div>
+					</div>
+				{/if}
+				{#if aircraft.aircraftTypeOgn}
+					<div>
+						<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
+						<span
+							class="chip {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-sm font-semibold"
+						>
+							{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
+						</span>
+					</div>
+				{/if}
+				{#if aircraft.countryCode}
+					{@const countryName = getCountryName(aircraft.countryCode)}
+					<div>
+						<div class="text-surface-600-300-token text-sm">Country</div>
+						<div class="flex items-center gap-2">
+							{#if getFlagPath(aircraft.countryCode)}
+								<img
+									src={getFlagPath(aircraft.countryCode)}
+									alt="{aircraft.countryCode} flag"
+									class="h-4 w-6 rounded-sm object-cover"
+								/>
+							{/if}
+							<span class="font-semibold"
+								>{countryName
+									? `${countryName} (${aircraft.countryCode})`
+									: aircraft.countryCode}</span
+							>
+						</div>
+					</div>
+				{/if}
+				{#if aircraft.homeBaseAirportIdent}
+					<div>
+						<div class="text-surface-600-300-token text-sm">Home Base Airport</div>
+						<div class="font-semibold">{aircraft.homeBaseAirportIdent}</div>
+					</div>
+				{/if}
+				{#if aircraft.icaoModelCode}
+					<div>
+						<div class="text-surface-600-300-token text-sm">ICAO Model Code</div>
+						<div class="font-mono font-semibold">{aircraft.icaoModelCode}</div>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
 	<!-- Map -->
 	{#if isLoadingFixes}
 		<!-- Map loading skeleton -->
@@ -1920,82 +2071,99 @@
 					</span>
 				{/if}
 			</h2>
+			<!-- Mobile collapse button -->
+			<button
+				class="btn preset-tonal btn-sm md:hidden"
+				onclick={() => (isFixesCollapsed = !isFixesCollapsed)}
+				type="button"
+			>
+				{#if isFixesCollapsed}
+					<ChevronDown class="h-4 w-4" />
+					<span>Show</span>
+				{:else}
+					<ChevronUp class="h-4 w-4" />
+					<span>Hide</span>
+				{/if}
+			</button>
 		</div>
 
-		{#if isLoadingFixes}
-			<!-- Fixes loading skeleton -->
-			<div class="space-y-2">
-				<div class="h-12 placeholder w-full animate-pulse"></div>
-				<div class="h-12 placeholder w-full animate-pulse"></div>
-				<div class="h-12 placeholder w-full animate-pulse"></div>
-				<div class="h-12 placeholder w-full animate-pulse"></div>
-				<div class="h-12 placeholder w-full animate-pulse"></div>
-			</div>
-		{:else if fixes.length === 0}
-			<div class="text-surface-600-300-token py-8 text-center">
-				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-				<p>No position data available for this flight.</p>
-			</div>
-		{:else}
-			<FixesList
-				fixes={paginatedFixes}
-				showHideInactive={false}
-				showRaw={true}
-				useRelativeTimes={true}
-				showIntervals={true}
-				showClimb={true}
-				emptyMessage="No position data available for this flight."
-			/>
-
-			<!-- Pagination -->
-			{#if totalPages > 1}
-				<div class="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
-					<div class="text-surface-600-300-token text-sm">
-						Page {currentPage} of {totalPages}
-					</div>
-					<div class="flex flex-wrap justify-center gap-2">
-						<button
-							onclick={() => goToPage(1)}
-							disabled={currentPage === 1}
-							class="btn preset-tonal btn-sm"
-							type="button"
-							title="First page (Takeoff)"
-						>
-							<ChevronsLeft class="h-4 w-4" />
-							Takeoff
-						</button>
-						<button
-							onclick={() => goToPage(currentPage - 1)}
-							disabled={currentPage === 1}
-							class="btn preset-tonal btn-sm"
-							type="button"
-							title="Previous page"
-						>
-							<ChevronLeft class="h-4 w-4" />
-						</button>
-						<button
-							onclick={() => goToPage(currentPage + 1)}
-							disabled={currentPage === totalPages}
-							class="btn preset-tonal btn-sm"
-							type="button"
-							title="Next page"
-						>
-							<ChevronRight class="h-4 w-4" />
-						</button>
-						<button
-							onclick={() => goToPage(totalPages)}
-							disabled={currentPage === totalPages}
-							class="btn preset-tonal btn-sm"
-							type="button"
-							title="Last page (Landing)"
-						>
-							Landing
-							<ChevronsRight class="h-4 w-4" />
-						</button>
-					</div>
+		<!-- Desktop: always show; Mobile: only show when not collapsed -->
+		<div class="md:block" class:hidden={isFixesCollapsed}>
+			{#if isLoadingFixes}
+				<!-- Fixes loading skeleton -->
+				<div class="space-y-2">
+					<div class="h-12 placeholder w-full animate-pulse"></div>
+					<div class="h-12 placeholder w-full animate-pulse"></div>
+					<div class="h-12 placeholder w-full animate-pulse"></div>
+					<div class="h-12 placeholder w-full animate-pulse"></div>
+					<div class="h-12 placeholder w-full animate-pulse"></div>
 				</div>
+			{:else if fixes.length === 0}
+				<div class="text-surface-600-300-token py-8 text-center">
+					<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+					<p>No position data available for this flight.</p>
+				</div>
+			{:else}
+				<FixesList
+					fixes={paginatedFixes}
+					showHideInactive={false}
+					showRaw={true}
+					useRelativeTimes={true}
+					showIntervals={true}
+					showClimb={true}
+					emptyMessage="No position data available for this flight."
+				/>
+
+				<!-- Pagination -->
+				{#if totalPages > 1}
+					<div class="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+						<div class="text-surface-600-300-token text-sm">
+							Page {currentPage} of {totalPages}
+						</div>
+						<div class="flex flex-wrap justify-center gap-2">
+							<button
+								onclick={() => goToPage(1)}
+								disabled={currentPage === 1}
+								class="btn preset-tonal btn-sm"
+								type="button"
+								title="First page (Takeoff)"
+							>
+								<ChevronsLeft class="h-4 w-4" />
+								Takeoff
+							</button>
+							<button
+								onclick={() => goToPage(currentPage - 1)}
+								disabled={currentPage === 1}
+								class="btn preset-tonal btn-sm"
+								type="button"
+								title="Previous page"
+							>
+								<ChevronLeft class="h-4 w-4" />
+							</button>
+							<button
+								onclick={() => goToPage(currentPage + 1)}
+								disabled={currentPage === totalPages}
+								class="btn preset-tonal btn-sm"
+								type="button"
+								title="Next page"
+							>
+								<ChevronRight class="h-4 w-4" />
+							</button>
+							<button
+								onclick={() => goToPage(totalPages)}
+								disabled={currentPage === totalPages}
+								class="btn preset-tonal btn-sm"
+								type="button"
+								title="Last page (Landing)"
+							>
+								Landing
+								<ChevronsRight class="h-4 w-4" />
+							</button>
+						</div>
+					</div>
+				{/if}
 			{/if}
-		{/if}
+		</div>
 	</div>
 
 	<!-- Fix Gaps Section -->
