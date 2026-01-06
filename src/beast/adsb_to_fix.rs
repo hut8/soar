@@ -257,12 +257,15 @@ mod tests {
             None, // No CPR decoder for this basic test
         );
 
-        // For now, this will return None since we haven't implemented
-        // position/velocity extraction yet
-        assert!(fix_result.is_ok());
+        // Should return error when no valid position data (CPR decoding required)
+        // A "fix" is a position fix - we cannot create one without coordinates
+        assert!(fix_result.is_err());
         assert!(
-            fix_result.unwrap().is_none(),
-            "Should return None when no position/velocity data"
+            fix_result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot create fix without valid position data"),
+            "Should error when no position data available"
         );
     }
 
@@ -357,7 +360,8 @@ mod tests {
 
     #[test]
     fn test_adsb_to_fix_with_velocity() {
-        // Velocity message should create a Fix
+        // Velocity-only message without position data should NOT create a Fix
+        // A "fix" is a position fix - velocity alone is not sufficient
         let mode_s_payload = hex!("8D485020994409940838175B284F");
         let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
@@ -376,14 +380,15 @@ mod tests {
             None, // No CPR decoder for this test
         );
 
-        assert!(fix_result.is_ok());
-        let fix_opt = fix_result.unwrap();
-        assert!(fix_opt.is_some(), "Should create Fix for velocity message");
-
-        let fix = fix_opt.unwrap();
-        assert_eq!(fix.source, "485020", "ICAO should be 485020");
-        assert!(fix.ground_speed_knots.is_some(), "Should have ground speed");
-        assert!(fix.track_degrees.is_some(), "Should have track");
-        assert!(fix.climb_fpm.is_some(), "Should have vertical rate");
+        // Should return error when only velocity data is available
+        // We need valid position coordinates to create a fix
+        assert!(fix_result.is_err());
+        assert!(
+            fix_result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot create fix without valid position data"),
+            "Should error when only velocity data (no position) is available"
+        );
     }
 }
