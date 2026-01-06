@@ -1,33 +1,65 @@
-use anyhow::Result;
-use opentelemetry_sdk::trace::Sampler;
+use anyhow::{Context, Result};
+use opentelemetry::{KeyValue, global, trace::TracerProvider};
+use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::{
+    Resource,
+    trace::{Sampler, SdkTracerProvider},
+};
 use tracing::info;
 
 /// Initialize the OpenTelemetry tracer with environment-aware sampling
 /// Exports traces to an OTLP collector (Grafana Tempo) via gRPC
-///
-/// NOTE: Currently disabled due to OpenTelemetry SDK v0.27 API compatibility issues
-/// The infrastructure is ready, but the Rust API for v0.27 needs to be updated
-/// TODO: Re-implement using correct v0.27 opentelemetry-otlp API
 pub fn init_tracer(
     env: &str,
     component: &str,
     version: &str,
 ) -> Result<opentelemetry_sdk::trace::Tracer> {
     info!(
-        "OpenTelemetry tracer initialization skipped (v0.27 API pending) for component={}, env={}, version={}",
+        "Initializing OpenTelemetry tracer for component={}, env={}, version={}",
         component, env, version
     );
 
-    // API patterns changed significantly in v0.27 and documentation is sparse
-    // The v0.27 release removed new_pipeline() and new_exporter() functions
-    // Need to find correct builder patterns for v0.27 before enabling
+    // Build the Resource with service information
+    // Note: with_service_name requires a static string, so we convert to String
+    let resource = Resource::builder()
+        .with_service_name(component.to_string())
+        .with_attributes([
+            KeyValue::new("deployment.environment", env.to_string()),
+            KeyValue::new("service.version", version.to_string()),
+        ])
+        .build();
 
-    anyhow::bail!("OpenTelemetry tracer disabled - infrastructure ready, API integration pending")
+    // Create the OTLP span exporter with gRPC
+    // Endpoint configured via OTEL_EXPORTER_OTLP_ENDPOINT environment variable
+    // Default: http://localhost:4317
+    let exporter = SpanExporter::builder()
+        .with_tonic()
+        .build()
+        .context("Failed to create OTLP span exporter")?;
+
+    // Get environment-aware sampler
+    let sampler = get_trace_sampler(env);
+
+    // Build the tracer provider
+    let tracer_provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_sampler(sampler)
+        .with_resource(resource)
+        .build();
+
+    // Set as global provider
+    global::set_tracer_provider(tracer_provider.clone());
+
+    // Get the tracer directly from the provider (not from global to get concrete type)
+    // Note: tracer() requires a static string, so we convert to String
+    let tracer = tracer_provider.tracer(component.to_string());
+
+    info!("OpenTelemetry tracer initialized successfully - exporting to OTLP collector");
+
+    Ok(tracer)
 }
 
 /// Get environment-aware trace sampler
-/// This will be used once the tracer initialization is working
-#[allow(dead_code)]
 fn get_trace_sampler(env: &str) -> Sampler {
     // Check for explicit sampler configuration from environment
     if let Ok(sampler_arg) = std::env::var("OTEL_TRACES_SAMPLER_ARG")
@@ -81,11 +113,13 @@ pub fn init_logger_provider(_env: &str, _component: &str, _version: &str) -> Res
 }
 
 /// Gracefully shutdown OpenTelemetry providers with timeout
+/// Note: In v0.31, shutdown is handled automatically via Drop trait
+/// If explicit shutdown is needed, store the TracerProvider handle and call shutdown() on it
 #[allow(dead_code)]
 pub fn shutdown_telemetry() {
-    info!("Shutting down OpenTelemetry providers");
-    // Will be implemented once tracer initialization is working
-    info!("OpenTelemetry shutdown complete");
+    info!("OpenTelemetry shutdown requested - cleanup happens automatically via Drop");
+    // In v0.31, there's no global::shutdown_tracer_provider()
+    // The TracerProvider implements Drop and will cleanup automatically
 }
 
 #[cfg(test)]
