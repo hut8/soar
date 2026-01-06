@@ -19,10 +19,45 @@ pub struct NewBeastMessage {
     pub raw_message_hash: Vec<u8>,
 }
 
+// Diesel model for inserting new SBS messages (using raw SQL for enum)
+#[derive(Clone)]
+pub struct NewSbsMessage {
+    pub id: Uuid,
+    pub raw_message: Vec<u8>, // SBS CSV bytes
+    pub received_at: DateTime<Utc>,
+    pub receiver_id: Uuid,
+    pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
+}
+
 impl NewBeastMessage {
     /// Create a new Beast message with computed hash
     pub fn new(
         raw_message: Vec<u8>, // Binary Beast frame
+        received_at: DateTime<Utc>,
+        receiver_id: Uuid,
+        unparsed: Option<String>,
+    ) -> Self {
+        // Compute SHA-256 hash of raw message for deduplication
+        let mut hasher = Sha256::new();
+        hasher.update(&raw_message);
+        let hash = hasher.finalize().to_vec();
+
+        Self {
+            id: Uuid::now_v7(),
+            raw_message,
+            received_at,
+            receiver_id,
+            unparsed,
+            raw_message_hash: hash,
+        }
+    }
+}
+
+impl NewSbsMessage {
+    /// Create a new SBS message with computed hash
+    pub fn new(
+        raw_message: Vec<u8>, // SBS CSV bytes
         received_at: DateTime<Utc>,
         receiver_id: Uuid,
         unparsed: Option<String>,
@@ -256,6 +291,66 @@ impl RawMessagesRepository {
                     // Duplicate message on redelivery - this is expected after crashes
                     debug!("Duplicate beast message detected on redelivery");
                     metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
+
+                    // Find existing message ID by natural key
+                    use crate::schema::raw_messages::dsl::*;
+                    let existing = raw_messages
+                        .filter(receiver_id.eq(receiver))
+                        .filter(received_at.eq(timestamp))
+                        .filter(raw_message_hash.eq(&hash))
+                        .select(id)
+                        .first::<Uuid>(&mut conn)?;
+
+                    Ok(existing)
+                }
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Insert a new SBS (ADS-B) message into the database
+    /// Returns the ID of the inserted message
+    /// On duplicate (redelivery after crash), returns the existing message ID
+    pub async fn insert_sbs(&self, new_message: NewSbsMessage) -> Result<Uuid> {
+        let message_id = new_message.id;
+        let pool = self.pool.clone();
+        let receiver = new_message.receiver_id;
+        let timestamp = new_message.received_at;
+        let hash = new_message.raw_message_hash.clone();
+        let raw_msg = new_message.raw_message;
+        let unparsed_val = new_message.unparsed;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use raw SQL to insert with enum value 'sbs'
+            let insert_result = diesel::sql_query(
+                "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'sbs'::message_source)"
+            )
+            .bind::<diesel::sql_types::Uuid, _>(message_id)
+            .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // SBS CSV bytes
+            .bind::<diesel::sql_types::Timestamptz, _>(timestamp)
+            .bind::<diesel::sql_types::Uuid, _>(receiver)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&unparsed_val)
+            .bind::<diesel::sql_types::Bytea, _>(&hash)
+            .execute(&mut conn);
+
+            match insert_result {
+                Ok(_) => {
+                    metrics::counter!("sbs.messages.inserted_total").increment(1);
+                    Ok::<Uuid, anyhow::Error>(message_id)
+                }
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    // Duplicate message on redelivery - this is expected after crashes
+                    debug!("Duplicate sbs message detected on redelivery");
+                    metrics::counter!("sbs.messages.duplicate_on_redelivery_total").increment(1);
 
                     // Find existing message ID by natural key
                     use crate::schema::raw_messages::dsl::*;
