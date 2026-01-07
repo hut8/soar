@@ -682,12 +682,18 @@ async fn main() -> Result<()> {
     // Initialize OpenTelemetry tracer with component name
     // This enables distributed tracing across SOAR services via OTLP export to Tempo
     let version = env!("VERGEN_GIT_DESCRIBE");
-    if let Ok(_tracer) = telemetry::init_tracer(&soar_env, component_name, version) {
-        info!("OpenTelemetry tracer initialized successfully - exporting traces to OTLP collector");
-        // Note: Tracing-subscriber integration pending due to type system complexities
-        // Traces are being exported to Tempo, but not yet integrated with tracing spans
-        // TODO: Integrate tracing-opentelemetry layer once type issues are resolved
-    }
+    let otel_enabled = match telemetry::init_tracer(&soar_env, component_name, version) {
+        Ok(_) => {
+            info!(
+                "OpenTelemetry tracer initialized successfully - exporting traces to OTLP collector"
+            );
+            true
+        }
+        Err(e) => {
+            warn!("Failed to initialize OpenTelemetry tracer: {}", e);
+            false
+        }
+    };
 
     // Optionally initialize OpenTelemetry meter provider for OTLP metrics export
     // This runs alongside Prometheus metrics export
@@ -747,14 +753,32 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                registry.with(fmt_layer).with(console_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(otel_layer)
+                        .init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
 
                 info!(
                     "tokio-console subscriber initialized on port 6669 - connect with `tokio-console http://localhost:6669`"
                 );
             } else {
                 // No tokio-console overhead
-                registry.with(fmt_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry.with(fmt_layer).with(otel_layer).init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
         }
         Commands::VerifyRuntime {
@@ -769,14 +793,32 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                registry.with(fmt_layer).with(console_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(otel_layer)
+                        .init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
 
                 info!(
                     "tokio-console subscriber initialized on port 7779 - connect with `tokio-console http://localhost:7779`"
                 );
             } else {
                 // No tokio-console overhead
-                registry.with(fmt_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry.with(fmt_layer).with(otel_layer).init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
         }
         Commands::Web {
@@ -788,7 +830,14 @@ async fn main() -> Result<()> {
 
             if is_test_mode {
                 // Test mode: skip console subscriber
-                registry.with(fmt_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry.with(fmt_layer).with(otel_layer).init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).init();
+                }
                 info!("Running in test mode - console subscriber disabled");
             } else if *enable_tokio_console {
                 // Production/development mode with tokio-console enabled
@@ -799,19 +848,44 @@ async fn main() -> Result<()> {
                     console_filter.clone(),
                 );
 
-                registry.with(fmt_layer).with(console_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(otel_layer)
+                        .init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
 
                 info!(
                     "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
                 );
             } else {
                 // No tokio-console overhead
-                registry.with(fmt_layer).init();
+                if otel_enabled {
+                    let otel_layer = tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    registry.with(fmt_layer).with(otel_layer).init();
+                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
-            registry.with(fmt_layer).init();
+            if otel_enabled {
+                let otel_layer = tracing_opentelemetry::layer()
+                    .with_tracer(opentelemetry::global::tracer(component_name));
+                registry.with(fmt_layer).with(otel_layer).init();
+                info!("OpenTelemetry layer integrated with tracing subscriber");
+            } else {
+                registry.with(fmt_layer).init();
+            }
         }
     }
 
