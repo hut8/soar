@@ -127,6 +127,8 @@ ACTIVE_SERVICES=(
 # Manually-deployed services (installed but not automatically started)
 # These services change infrequently and are deployed via manual GitHub Actions workflows
 MANUAL_SERVICES=(
+    "soar-ingest${SERVICE_SUFFIX}.service"
+    # Deprecated - replaced by unified soar-ingest service
     "soar-ingest-ogn${SERVICE_SUFFIX}.service"
     "soar-ingest-adsb${SERVICE_SUFFIX}.service"
 )

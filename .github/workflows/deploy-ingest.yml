@@ -17,7 +17,7 @@ on:
           - staging
           - production
       services:
-        description: 'Services to deploy (comma-separated: ingest-ogn, ingest-adsb, or "all")'
+        description: 'Services to deploy (comma-separated: ingest, ingest-ogn, ingest-adsb, or "all")'
         required: true
         default: 'all'
 
@@ -38,21 +38,29 @@ jobs:
           SERVICES="${{ inputs.services }}"
 
           if [ "$SERVICES" = "all" ]; then
-            echo "deploy_ogn=true" >> $GITHUB_OUTPUT
-            echo "deploy_adsb=true" >> $GITHUB_OUTPUT
-            echo "Deploying all ingest services"
+            echo "deploy_ingest=true" >> $GITHUB_OUTPUT
+            echo "deploy_ogn=false" >> $GITHUB_OUTPUT
+            echo "deploy_adsb=false" >> $GITHUB_OUTPUT
+            echo "Deploying unified ingest service"
           else
             # Parse comma-separated list
+            if echo "$SERVICES" | grep -q "^ingest$\|,ingest,\|^ingest,\|,ingest$"; then
+              echo "deploy_ingest=true" >> $GITHUB_OUTPUT
+              echo "Will deploy unified ingest"
+            else
+              echo "deploy_ingest=false" >> $GITHUB_OUTPUT
+            fi
+
             if echo "$SERVICES" | grep -q "ingest-ogn"; then
               echo "deploy_ogn=true" >> $GITHUB_OUTPUT
-              echo "Will deploy ingest-ogn"
+              echo "Will deploy ingest-ogn (deprecated)"
             else
               echo "deploy_ogn=false" >> $GITHUB_OUTPUT
             fi
 
             if echo "$SERVICES" | grep -q "ingest-adsb"; then
               echo "deploy_adsb=true" >> $GITHUB_OUTPUT
-              echo "Will deploy ingest-adsb"
+              echo "Will deploy ingest-adsb (deprecated)"
             else
               echo "deploy_adsb=false" >> $GITHUB_OUTPUT
             fi
@@ -81,6 +89,15 @@ jobs:
             echo "suffix=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Stop unified ingest service
+        if: steps.parse-services.outputs.deploy_ingest == 'true'
+        run: |
+          SERVER="${{ steps.target.outputs.server }}"
+          SUFFIX="${{ steps.target.outputs.suffix }}"
+
+          echo "Stopping soar-ingest${SUFFIX}.service on $SERVER..."
+          ssh soar@$SERVER "sudo systemctl stop soar-ingest${SUFFIX}.service" || true
+
       - name: Stop ingest-ogn service
         if: steps.parse-services.outputs.deploy_ogn == 'true'
         run: |
@@ -103,12 +120,18 @@ jobs:
         run: |
           SERVER="${{ steps.target.outputs.server }}"
           SUFFIX="${{ steps.target.outputs.suffix }}"
+          DEPLOY_INGEST="${{ steps.parse-services.outputs.deploy_ingest }}"
           DEPLOY_OGN="${{ steps.parse-services.outputs.deploy_ogn }}"
           DEPLOY_ADSB="${{ steps.parse-services.outputs.deploy_adsb }}"
 
           # Copy service files to server's temp directory
           TEMP_DIR="/tmp/soar-ingest-deploy-$(date +%s)"
           ssh soar@$SERVER "mkdir -p $TEMP_DIR"
+
+          if [ "$DEPLOY_INGEST" = "true" ]; then
+            echo "Uploading soar-ingest${SUFFIX}.service..."
+            scp infrastructure/systemd/soar-ingest${SUFFIX}.service soar@$SERVER:$TEMP_DIR/
+          fi
 
           if [ "$DEPLOY_OGN" = "true" ]; then
             echo "Uploading soar-ingest-ogn${SUFFIX}.service..."
@@ -129,6 +152,25 @@ jobs:
 
           # Cleanup
           ssh soar@$SERVER "rm -rf $TEMP_DIR"
+
+      - name: Enable and start unified ingest service
+        if: steps.parse-services.outputs.deploy_ingest == 'true'
+        run: |
+          SERVER="${{ steps.target.outputs.server }}"
+          SUFFIX="${{ steps.target.outputs.suffix }}"
+
+          echo "Enabling soar-ingest${SUFFIX}.service..."
+          ssh soar@$SERVER "sudo systemctl enable soar-ingest${SUFFIX}.service"
+
+          echo "Starting soar-ingest${SUFFIX}.service..."
+          ssh soar@$SERVER "sudo systemctl start soar-ingest${SUFFIX}.service"
+
+          # Wait for service to start
+          sleep 3
+
+          # Check status
+          echo "Service status:"
+          ssh soar@$SERVER "sudo systemctl status soar-ingest${SUFFIX}.service --no-pager" || true
 
       - name: Enable and start ingest-ogn service
         if: steps.parse-services.outputs.deploy_ogn == 'true'
@@ -172,10 +214,20 @@ jobs:
         run: |
           SERVER="${{ steps.target.outputs.server }}"
           SUFFIX="${{ steps.target.outputs.suffix }}"
+          DEPLOY_INGEST="${{ steps.parse-services.outputs.deploy_ingest }}"
           DEPLOY_OGN="${{ steps.parse-services.outputs.deploy_ogn }}"
           DEPLOY_ADSB="${{ steps.parse-services.outputs.deploy_adsb }}"
 
           ALL_HEALTHY=true
+
+          if [ "$DEPLOY_INGEST" = "true" ]; then
+            if ssh soar@$SERVER "systemctl is-active --quiet soar-ingest${SUFFIX}.service"; then
+              echo "✓ soar-ingest${SUFFIX}.service is active"
+            else
+              echo "✗ soar-ingest${SUFFIX}.service failed to start"
+              ALL_HEALTHY=false
+            fi
+          fi
 
           if [ "$DEPLOY_OGN" = "true" ]; then
             if ssh soar@$SERVER "systemctl is-active --quiet soar-ingest-ogn${SUFFIX}.service"; then

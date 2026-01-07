@@ -1,0 +1,21 @@
+---
+# Prometheus scrape configuration for SOAR unified ingest service (staging)
+# This service combines OGN (APRS) and ADS-B (Beast/SBS) ingestion
+#
+# Metrics include:
+# - Aggregate metrics (all sources combined)
+# - Per-source metrics (OGN, Beast, SBS)
+# - Socket send duration tracking
+# - Queue depth monitoring
+
+scrape_configs:
+  - job_name: 'soar-ingest-staging'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['localhost:9197']
+        labels:
+          environment: 'staging'
+          service: 'soar-ingest-staging'
+          component: 'ingest'

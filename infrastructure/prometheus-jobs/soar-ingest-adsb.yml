@@ -1,3 +1,6 @@
+# DEPRECATED: This configuration is for the legacy soar-ingest-adsb service
+# Use soar-ingest.yml for the unified ingest service instead
+#
 # SOAR ADS-B Ingest Metrics (ingest-adsb subcommand)
 # This file defines a complete scrape job configuration for the SOAR ADS-B ingest service.
 # Prometheus will automatically load this file when using scrape_config_files.

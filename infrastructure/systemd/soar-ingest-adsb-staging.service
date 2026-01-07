@@ -1,3 +1,6 @@
+# DEPRECATED: This service has been replaced by soar-ingest-staging.service
+# The unified soar-ingest service consolidates both OGN and ADS-B ingestion
+# This file is kept for backward compatibility during transition
 [Unit]
 Description=SOAR ADS-B Ingest (Staging) - Durable ADS-B Message Queue Service
 Documentation=https://github.com/hut8/soar
