@@ -357,28 +357,25 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
     response
 }
 
-// Middleware to capture HTTP errors to Sentry
-async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response {
+// Middleware to record HTTP errors on OpenTelemetry spans
+async fn error_recording_middleware(request: Request<Body>, next: Next) -> Response {
+    use tracing::Span;
+
     let method = request.method().clone();
     let uri = request.uri().clone();
 
     let response = next.run(request).await;
 
-    // Capture HTTP 5xx errors to Sentry
+    // Record HTTP 5xx errors on the current span
     if response.status().is_server_error() {
         let status = response.status();
         error!("HTTP {} error on {} {}", status.as_u16(), method, uri);
 
-        sentry::configure_scope(|scope| {
-            scope.set_tag("http.method", method.as_str());
-            scope.set_tag("http.url", uri.to_string());
-            scope.set_tag("http.status_code", status.as_u16().to_string());
-        });
-
-        sentry::capture_message(
-            &format!("HTTP {} error on {} {}", status.as_u16(), method, uri),
-            sentry::Level::Error,
-        );
+        // Get the current OpenTelemetry span and record the error
+        let span = Span::current();
+        span.record("error", true);
+        span.record("http.status_code", status.as_u16());
+        span.record("error.message", format!("HTTP {} error", status.as_u16()));
     }
 
     response
@@ -543,10 +540,6 @@ async fn sitemap_file(Path(filename): Path<String>) -> impl IntoResponse {
 }
 
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "web-server");
-    });
-
     // Initialize Prometheus metrics exporter with "web" component label
     let metrics_handle = crate::metrics::init_metrics(Some("web"));
     METRICS_HANDLE
@@ -807,7 +800,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .with_state(app_state.clone())
         .layer(middleware::from_fn(metrics_middleware))
         .layer(middleware::from_fn(request_logging_middleware))
-        .layer(middleware::from_fn(sentry_error_middleware))
+        .layer(middleware::from_fn(error_recording_middleware))
         .layer(cors_layer);
 
     // Create the listener

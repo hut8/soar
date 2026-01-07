@@ -140,7 +140,6 @@ impl NominatimClient {
             error!("{}", error_msg);
 
             // Report to Sentry
-            sentry::capture_message(&error_msg, sentry::Level::Error);
 
             return Err(anyhow!(error_msg));
         }
@@ -234,7 +233,6 @@ impl NominatimClient {
             error!("{}", error_msg);
 
             // Report to Sentry
-            sentry::capture_message(&error_msg, sentry::Level::Error);
 
             return Err(anyhow!(error_msg));
         }

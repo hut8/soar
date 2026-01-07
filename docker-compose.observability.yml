@@ -1,0 +1,58 @@
+# Docker Compose for local OpenTelemetry observability stack
+# Usage: docker-compose -f docker-compose.observability.yml up
+
+services:
+  # Grafana Tempo - Distributed tracing backend
+  tempo:
+    image: grafana/tempo:latest
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./infrastructure/tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "9411:9411"   # Zipkin receiver (optional)
+    networks:
+      - soar-observability
+
+  # Grafana Loki - Log aggregation backend
+  loki:
+    image: grafana/loki:latest
+    command: [ "-config.file=/etc/loki/local-config.yaml" ]
+    volumes:
+      - loki-data:/loki
+    ports:
+      - "3100:3100"   # Loki HTTP API
+    networks:
+      - soar-observability
+
+  # Grafana - Visualization and dashboards
+  # Note: If you already have Grafana running, you can skip this service
+  # and just add Tempo/Loki datasources to your existing instance
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"   # Grafana web UI
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/grafana-provisioning:/etc/grafana/provisioning
+    networks:
+      - soar-observability
+    depends_on:
+      - tempo
+      - loki
+
+volumes:
+  tempo-data:
+  loki-data:
+  grafana-data:
+
+networks:
+  soar-observability:
+    driver: bridge

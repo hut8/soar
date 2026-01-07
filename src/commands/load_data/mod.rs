@@ -54,10 +54,6 @@ pub async fn handle_load_data(
     geocode: bool,
     link_home_bases: bool,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "load-data");
-    });
-
     let overall_start = Instant::now();
     let mut report = DataLoadReport::new();
 

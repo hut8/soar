@@ -31,5 +31,15 @@ PHOTON_BASE_URL=https://photon.glider.flights
 #SMTP_USERNAME=your_email@gmail.com
 #SMTP_PASSWORD=your_app_password
 
-# Sentry DSN for error reporting and deployment tracking
-#SENTRY_DSN=https://your_sentry_dsn_here
+# OpenTelemetry Configuration
+# OTLP endpoint for traces, metrics, and logs (gRPC)
+# Production: http://localhost:4317 (Grafana Tempo)
+# Development: http://localhost:4317
+#OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+# Optional: Override default trace sampling
+# Production: 0.01 (1%), Staging: 0.10 (10%), Development: 1.0 (100%)
+#OTEL_TRACES_SAMPLER_ARG=0.01
+
+# Optional: Enable OTLP log export (disabled by default)
+#OTEL_LOGS_EXPORT_ENABLED=false

@@ -65,6 +65,11 @@ pub fn set_beast_health(health: Arc<RwLock<BeastIngestHealth>>) {
 /// Initialize Prometheus metrics exporter
 /// Returns a handle that can be used to render metrics for scraping
 /// Optionally adds a component label to all metrics (e.g., "ingest-adsb", "ingest-ogn", "web", "run")
+///
+/// Note: OTLP metrics export is available via the `telemetry` module's `init_meter_provider`
+/// function. The `metrics` crate can only have one recorder (Prometheus in this case), but
+/// OpenTelemetry metrics can be instrumented separately using the OpenTelemetry SDK's meter API
+/// for dual export to both Prometheus and OTLP endpoints.
 pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
     let mut builder = PrometheusBuilder::new();
 

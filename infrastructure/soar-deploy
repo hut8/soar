@@ -690,7 +690,7 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
             if [ -f "$datasource_file" ]; then
                 filename=$(basename "$datasource_file")
                 cp "$datasource_file" /etc/grafana/provisioning/datasources/
-                chmod 640 "/etc/grafana/provisioning/datasources/$filename"
+                chmod 644 "/etc/grafana/provisioning/datasources/$filename"
                 log_info "Installed datasource config: $filename"
             fi
         done

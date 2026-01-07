@@ -1,0 +1,34 @@
+services:
+  tempo:
+    image: grafana/tempo:latest
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    user: "10000:10000"  # Run as non-root user
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - ./tempo-data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "14317:4317"  # OTLP gRPC receiver (mapped to avoid conflict with netdata on 4317)
+      - "14318:4318"  # OTLP HTTP receiver
+    networks:
+      - observability
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    command: [ "-config.file=/etc/loki/local-config.yaml" ]
+    volumes:
+      - loki-data:/loki
+    ports:
+      - "3100:3100"   # Loki HTTP API
+    networks:
+      - observability
+    restart: unless-stopped
+
+volumes:
+  tempo-data:
+  loki-data:
+
+networks:
+  observability:
+    driver: bridge

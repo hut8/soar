@@ -54,8 +54,8 @@ repos:
   - repo: local
     hooks:
       - id: rust-fmt
-        name: Auto-fix Rust formatting
-        entry: cargo fmt
+        name: Check Rust formatting
+        entry: cargo fmt --check
         language: system
         files: \.rs$
         pass_filenames: false

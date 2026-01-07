@@ -15,3 +15,7 @@ test-results
 # Grafana alerting configuration (processed from templates, contains credentials)
 infrastructure/grafana-provisioning/alerting/contact-points.yml
 infrastructure/systemd/grafana-server.service.d-smtp.conf
+
+# OpenTelemetry data directories
+infrastructure/tempo-data/
+infrastructure/loki-data/
