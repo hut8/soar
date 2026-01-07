@@ -1,6 +1,5 @@
 ---
 applyTo: "web/src/**/*.{ts,svelte}"
-excludeAgent: "code-review"
 ---
 
 # Frontend (SvelteKit 5 + TypeScript) Standards
