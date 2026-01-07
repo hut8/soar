@@ -91,7 +91,6 @@ mod tests {
             id: uuid::Uuid::now_v7(),
             source: "TEST".to_string(),
             aprs_type: "APRS".to_string(),
-            via: vec![],
             timestamp: Utc::now(),
             received_at: Utc::now(),
             latitude: 40.0,

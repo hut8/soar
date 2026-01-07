@@ -3,39 +3,9 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
-
-/// Custom serializer for via field to convert Vec to comma-separated string
-fn serialize_via<S>(via: &[Option<String>], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let via_string = via
-        .iter()
-        .map(|opt| opt.as_deref().unwrap_or(""))
-        .collect::<Vec<&str>>()
-        .join(",");
-    serializer.serialize_str(&via_string)
-}
-
-/// Custom deserializer for via field to convert comma-separated string to Vec
-fn deserialize_via<'de, D>(deserializer: D) -> Result<Vec<Option<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    Ok(s.split(',')
-        .map(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        })
-        .collect())
-}
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
@@ -53,8 +23,6 @@ pub struct Fix {
     /// APRS packet header information
     pub source: String,
     pub aprs_type: String,
-    #[serde(serialize_with = "serialize_via", deserialize_with = "deserialize_via")]
-    pub via: Vec<Option<String>>, // NOT NULL in DB but contains nullable strings
 
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
@@ -234,10 +202,12 @@ impl Fix {
         // For now, use received_at as the packet timestamp
         let timestamp = received_at;
 
-        // Extract source, aprs_type, and via from packet header
+        // Extract source and aprs_type from packet header
         let source = packet.from.to_string();
         let aprs_type = packet.to.to_string();
-        let via = packet.via.iter().map(|v| Some(v.to_string())).collect();
+
+        // Convert via array to store in source_metadata
+        let via: Vec<String> = packet.via.iter().map(|v| v.to_string()).collect();
 
         // Only process position packets
         match packet.data {
@@ -302,6 +272,9 @@ impl Fix {
                     let mut metadata = serde_json::Map::new();
                     metadata.insert("protocol".to_string(), serde_json::json!("aprs"));
 
+                    // Store via path in metadata (OGN/APRS-specific)
+                    metadata.insert("via".to_string(), serde_json::json!(via));
+
                     if let Some(snr) = snr_db {
                         metadata.insert("snr_db".to_string(), serde_json::json!(snr));
                     }
@@ -334,7 +307,6 @@ impl Fix {
                     id: Uuid::now_v7(),
                     source,
                     aprs_type,
-                    via,
                     timestamp,
                     latitude,
                     longitude,

@@ -552,7 +552,6 @@ mod tests {
             id: Uuid::new_v4(),
             source: "TEST".to_string(),
             aprs_type: "position".to_string(),
-            via: vec![],
             timestamp,
             latitude: 42.0,
             longitude: -122.0,

@@ -107,7 +107,6 @@ struct FixDslRow {
     id: Uuid,
     source: String,
     aprs_type: String,
-    via: Vec<Option<String>>, // NOT NULL array that can contain NULL elements
     timestamp: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
@@ -136,7 +135,6 @@ impl From<FixDslRow> for Fix {
             id: row.id,
             source: row.source,
             aprs_type: row.aprs_type,
-            via: row.via, // Now directly a Vec<Option<String>>
             timestamp: row.timestamp,
             received_at: row.received_at,
             latitude: row.latitude,

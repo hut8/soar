@@ -83,7 +83,6 @@ pub fn adsb_message_to_fix(
         id: Uuid::now_v7(),
         source: format!("{:06X}", icao_address),
         aprs_type: "ADSB".to_string(), // ADS-B messages don't have APRS-style "to" field
-        via: vec![],                   // ADS-B is direct from aircraft
         timestamp,
         latitude: position.latitude,
         longitude: position.longitude,
