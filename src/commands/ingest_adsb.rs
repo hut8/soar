@@ -40,9 +40,10 @@ pub async fn handle_ingest_adsb(
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
+    let socket_path = soar::socket_path();
     info!(
-        "Starting ADS-B ingestion service - Beast servers: {:?}, SBS servers: {:?}",
-        beast_servers, sbs_servers
+        "Starting ADS-B ingestion service - Beast servers: {:?}, SBS servers: {:?}, socket: {:?}",
+        beast_servers, sbs_servers, socket_path
     );
 
     info!(
@@ -121,8 +122,7 @@ pub async fn handle_ingest_adsb(
 
     info!("Created persistent queues at /var/lib/soar/queues/adsb-*.queue");
 
-    // Create socket clients for sending to soar-run
-    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
+    // Create socket clients for sending to soar-run (socket_path already defined earlier)
     let mut beast_socket_client = match soar::socket_client::SocketClient::connect(
         &socket_path,
         soar::protocol::IngestSource::Beast,
