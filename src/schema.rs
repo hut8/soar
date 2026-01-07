@@ -398,9 +398,6 @@ diesel::table! {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
-        #[max_length = 9]
-        aprs_type -> Varchar,
-        via -> Array<Nullable<Text>>,
         timestamp -> Timestamptz,
         latitude -> Float8,
         longitude -> Float8,
@@ -546,7 +543,7 @@ diesel::table! {
     raw_messages (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
-        receiver_id -> Uuid,
+        receiver_id -> Nullable<Uuid>,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         raw_message -> Bytea,

@@ -20,7 +20,7 @@ pub struct RawMessageCsv {
     id: Uuid,
     raw_message: String,
     received_at: DateTime<Utc>,
-    receiver_id: Uuid,
+    receiver_id: Option<Uuid>, // NULL for ADS-B messages
     unparsed: Option<String>,
     raw_message_hash: String, // Hex-encoded instead of Vec<u8>
 }

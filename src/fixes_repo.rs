@@ -106,8 +106,6 @@ impl From<AircraftTypeOgn> for ForeignAircraftType {
 struct FixDslRow {
     id: Uuid,
     source: String,
-    aprs_type: String,
-    via: Vec<Option<String>>, // NOT NULL array that can contain NULL elements
     timestamp: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
@@ -135,8 +133,6 @@ impl From<FixDslRow> for Fix {
         Self {
             id: row.id,
             source: row.source,
-            aprs_type: row.aprs_type,
-            via: row.via, // Now directly a Vec<Option<String>>
             timestamp: row.timestamp,
             received_at: row.received_at,
             latitude: row.latitude,
@@ -1126,6 +1122,7 @@ impl FixesRepository {
     }
 
     /// Get fix counts grouped by APRS type for a specific receiver ID (last 24 hours only)
+    /// Note: aprs_type is now stored in source_metadata->>'aprs_type'
     pub async fn get_fix_counts_by_aprs_type_for_receiver(
         &self,
         receiver_uuid: Uuid,
@@ -1133,34 +1130,25 @@ impl FixesRepository {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
-            use diesel::dsl::count_star;
             let mut conn = pool.get()?;
 
             // Only get fixes from the last 24 hours
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
-            // Group by aprs_type and count
-            let counts = fixes
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.gt(cutoff_time))
-                .group_by(aprs_type)
-                .select((aprs_type, count_star()))
-                .order_by(count_star().desc())
-                .load::<(String, i64)>(&mut conn)?;
+            // Group by aprs_type (extracted from source_metadata) and count
+            // Use raw SQL to extract aprs_type from JSONB
+            let counts = diesel::sql_query(
+                "SELECT source_metadata->>'aprs_type' as aprs_type, COUNT(*) as count
+                 FROM fixes
+                 WHERE receiver_id = $1 AND received_at > $2
+                 GROUP BY source_metadata->>'aprs_type'
+                 ORDER BY count DESC",
+            )
+            .bind::<diesel::sql_types::Uuid, _>(receiver_uuid)
+            .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+            .load::<crate::actions::receivers::AprsTypeCount>(&mut conn)?;
 
-            // Convert to AprsTypeCount structs
-            let result: Vec<crate::actions::receivers::AprsTypeCount> = counts
-                .into_iter()
-                .map(
-                    |(type_name, count)| crate::actions::receivers::AprsTypeCount {
-                        aprs_type: type_name,
-                        count,
-                    },
-                )
-                .collect();
-
-            Ok::<Vec<crate::actions::receivers::AprsTypeCount>, anyhow::Error>(result)
+            Ok::<Vec<crate::actions::receivers::AprsTypeCount>, anyhow::Error>(counts)
         })
         .await??;
 

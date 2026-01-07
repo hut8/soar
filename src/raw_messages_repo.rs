@@ -14,17 +14,18 @@ pub struct NewBeastMessage {
     pub id: Uuid,
     pub raw_message: Vec<u8>, // Binary Beast frame
     pub received_at: DateTime<Utc>,
-    pub receiver_id: Uuid,
+    pub receiver_id: Option<Uuid>, // NULL for ADS-B/Beast - no receiver concept
     pub unparsed: Option<String>,
     pub raw_message_hash: Vec<u8>,
 }
 
 impl NewBeastMessage {
     /// Create a new Beast message with computed hash
+    /// receiver_id should be None for ADS-B messages (no receiver concept)
     pub fn new(
         raw_message: Vec<u8>, // Binary Beast frame
         received_at: DateTime<Utc>,
-        receiver_id: Uuid,
+        receiver_id: Option<Uuid>,
         unparsed: Option<String>,
     ) -> Self {
         // Compute SHA-256 hash of raw message for deduplication
@@ -95,7 +96,7 @@ pub struct AprsMessage {
     #[diesel(deserialize_as = Vec<u8>)]
     pub raw_message: Vec<u8>, // UTF-8 encoded APRS text (stored as BYTEA)
     pub received_at: DateTime<Utc>,
-    pub receiver_id: Uuid,
+    pub receiver_id: Option<Uuid>, // NULL for ADS-B/Beast messages
     pub unparsed: Option<String>,
     pub raw_message_hash: Vec<u8>,
 }
@@ -137,7 +138,7 @@ impl<'de> Deserialize<'de> for AprsMessage {
             id: Uuid,
             raw_message: String, // Expect string in JSON
             received_at: DateTime<Utc>,
-            receiver_id: Uuid,
+            receiver_id: Option<Uuid>, // Nullable for ADS-B messages
             unparsed: Option<String>,
             raw_message_hash: String, // Hex-encoded in JSON
         }
@@ -239,7 +240,7 @@ impl RawMessagesRepository {
             .bind::<diesel::sql_types::Uuid, _>(message_id)
             .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // Binary Beast frame
             .bind::<diesel::sql_types::Timestamptz, _>(timestamp)
-            .bind::<diesel::sql_types::Uuid, _>(receiver)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(receiver)
             .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&unparsed_val)
             .bind::<diesel::sql_types::Bytea, _>(&hash)
             .execute(&mut conn);
@@ -259,13 +260,23 @@ impl RawMessagesRepository {
 
                     // Find existing message ID by natural key
                     use crate::schema::raw_messages::dsl::*;
-                    let existing = raw_messages
-                        .filter(receiver_id.eq(receiver))
-                        .filter(received_at.eq(timestamp))
-                        .filter(raw_message_hash.eq(&hash))
-                        .select(id)
-                        .first::<Uuid>(&mut conn)?;
+                    let query = if let Some(recv_id) = receiver {
+                        raw_messages
+                            .filter(receiver_id.eq(recv_id))
+                            .filter(received_at.eq(timestamp))
+                            .filter(raw_message_hash.eq(&hash))
+                            .select(id)
+                            .into_boxed()
+                    } else {
+                        raw_messages
+                            .filter(receiver_id.is_null())
+                            .filter(received_at.eq(timestamp))
+                            .filter(raw_message_hash.eq(&hash))
+                            .select(id)
+                            .into_boxed()
+                    };
 
+                    let existing = query.first::<Uuid>(&mut conn)?;
                     Ok(existing)
                 }
                 Err(e) => Err(e.into()),
@@ -277,7 +288,8 @@ impl RawMessagesRepository {
     }
 
     /// Insert a batch of Beast messages into the database
-    /// Uses a transaction for atomicity and ignores duplicates
+    /// Uses a transaction for atomicity
+    /// Note: Duplicates are not handled in batch mode - each insert will fail on primary key violation
     pub async fn insert_beast_batch(&self, messages: &[NewBeastMessage]) -> Result<()> {
         if messages.is_empty() {
             return Ok(());
@@ -292,23 +304,21 @@ impl RawMessagesRepository {
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 for message in &messages_vec {
                     // Use raw SQL to insert with enum value 'adsb'
+                    // No ON CONFLICT clause - let duplicates fail naturally on primary key
                     let insert_result = diesel::sql_query(
                         "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                         VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)
-                         ON CONFLICT (receiver_id, received_at, raw_message_hash) DO NOTHING"
+                         VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)"
                     )
                     .bind::<diesel::sql_types::Uuid, _>(message.id)
                     .bind::<diesel::sql_types::Bytea, _>(&message.raw_message)
                     .bind::<diesel::sql_types::Timestamptz, _>(message.received_at)
-                    .bind::<diesel::sql_types::Uuid, _>(message.receiver_id)
+                    .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(message.receiver_id)
                     .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&message.unparsed)
                     .bind::<diesel::sql_types::Bytea, _>(&message.raw_message_hash)
                     .execute(conn)?;
 
                     if insert_result > 0 {
                         metrics::counter!("beast.messages.inserted_total").increment(1);
-                    } else {
-                        metrics::counter!("beast.messages.duplicate_on_redelivery_total").increment(1);
                     }
                 }
                 Ok(())
@@ -502,7 +512,7 @@ mod tests {
         let message = retrieved.unwrap();
         assert_eq!(message.id, message_id);
         assert_eq!(message.raw_message_text(), "TEST>APRS:>Test message");
-        assert_eq!(message.receiver_id, receiver_id);
+        assert_eq!(message.receiver_id, Some(receiver_id));
     }
 
     #[tokio::test]

@@ -196,11 +196,12 @@ async fn process_beast_message(
     };
 
     // Store raw Beast message in database
+    // ADS-B/Beast messages don't have a receiver concept, so receiver_id is None
     let raw_message_id = match beast_repo
         .insert_beast(NewBeastMessage::new(
             raw_frame.to_vec(),
             received_at,
-            receiver_id,
+            None, // receiver_id - ADS-B has no receiver concept
             None, // unparsed field (could add decoded JSON if needed)
         ))
         .await
