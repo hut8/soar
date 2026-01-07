@@ -27,14 +27,19 @@ fn parse_server_address(addr: &str) -> Result<(String, u16)> {
 /// Unified health state for the consolidated ingest service
 /// Tracks health of OGN (APRS), Beast, and SBS connections
 #[derive(Clone, Debug, Default)]
-#[allow(dead_code)] // Health tracking will be implemented in future iterations
 pub struct IngestHealth {
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub ogn_connected: bool,
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub beast_connected: bool,
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub sbs_connected: bool,
     pub socket_connected: bool,
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub last_ogn_message_time: Option<std::time::Instant>,
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub last_beast_message_time: Option<std::time::Instant>,
+    #[allow(dead_code)] // Will be used for health endpoint in future
     pub last_sbs_message_time: Option<std::time::Instant>,
 }
 
