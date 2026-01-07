@@ -32,19 +32,20 @@ SOAR uses OpenTelemetry for distributed tracing and observability, with traces e
 
 ## Current Status
 
-**⚠️ OpenTelemetry tracer is currently DISABLED** due to API compatibility issues with OpenTelemetry Rust SDK v0.28. The infrastructure is in place and ready to be enabled once the API is stabilized.
+**✅ OpenTelemetry tracer initialization working** with OpenTelemetry Rust SDK v0.31. The infrastructure is deployed and the tracer successfully initializes.
 
 **What's working:**
-- ✅ Infrastructure configuration (Tempo, Loki, Grafana datasources)
-- ✅ Environment-aware sampling configuration
-- ✅ Tracing subscriber integration (code ready, commented out)
+- ✅ Infrastructure deployed (Tempo on port 3200, Loki on port 3100)
+- ✅ OpenTelemetry v0.31 tracer initialization with environment-aware sampling
+- ✅ OTLP gRPC exporter configured (endpoint: localhost:14317)
+- ✅ Grafana datasources configured (Tempo, Loki)
 - ✅ HTTP middleware for span recording
 - ✅ Metrics dual export capability (Prometheus + OTLP)
 
 **What's pending:**
-- ⏳ OpenTelemetry SDK v0.28 API compatibility fixes
-- ⏳ Active trace export to Tempo
-- ⏳ NATS message trace context propagation
+- ⏳ Tracing-subscriber layer integration (connect tracer to tracing spans)
+- ⏳ NATS message trace context propagation (W3C TraceContext headers)
+- ⏳ End-to-end testing of trace export to Tempo
 
 ## Configuration
 

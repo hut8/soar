@@ -4,7 +4,7 @@ datasources:
   - name: Loki
     type: loki
     access: proxy
-    url: http://loki:3100
+    url: http://localhost:3100
     uid: loki
     editable: true
     jsonData:
