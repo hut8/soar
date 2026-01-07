@@ -538,8 +538,6 @@ impl AprsClient {
                                         metrics::counter!("aprs.queue_send_timeout_total")
                                             .increment(1);
 
-
-
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Queue send timeout after {:.1}s - publisher stuck",
                                             duration.as_secs_f64()
