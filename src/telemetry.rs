@@ -8,7 +8,8 @@ use opentelemetry_sdk::{
 use tracing::info;
 
 /// Initialize the OpenTelemetry tracer with environment-aware sampling
-/// Exports traces to an OTLP collector (Grafana Tempo) via gRPC
+/// Exports traces to an OTLP collector (Grafana Tempo) via HTTP/protobuf
+/// Note: OpenTelemetry Rust SDK 0.31 only supports HTTP transport, not gRPC
 pub fn init_tracer(
     env: &str,
     component: &str,
