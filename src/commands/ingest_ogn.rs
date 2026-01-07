@@ -29,9 +29,10 @@ pub async fn handle_ingest_ogn(
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
+    let socket_path = soar::socket_path();
     info!(
-        "Starting OGN ingestion service - server: {}:{}, socket: /var/run/soar/run.sock",
-        server, port
+        "Starting OGN ingestion service - server: {}:{}, socket: {:?}",
+        server, port, socket_path
     );
 
     info!(
@@ -107,8 +108,7 @@ pub async fn handle_ingest_ogn(
 
     info!("Created persistent queue at /var/lib/soar/queues/ogn.queue");
 
-    // Create socket client for sending to soar-run
-    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
+    // Create socket client for sending to soar-run (socket_path already defined earlier)
     let mut socket_client = match soar::socket_client::SocketClient::connect(
         &socket_path,
         soar::protocol::IngestSource::Ogn,

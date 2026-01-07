@@ -579,8 +579,8 @@ pub async fn handle_run(
     };
 
     // Create Unix socket server for receiving messages from ingesters
-    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
-    let socket_server = soar::socket_server::SocketServer::start(socket_path.clone())
+    let socket_path = soar::socket_path();
+    let socket_server = soar::socket_server::SocketServer::start(&socket_path)
         .await
         .context("Failed to start socket server")?;
     info!("Socket server listening on {:?}", socket_path);
