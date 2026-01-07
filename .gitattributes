@@ -1,0 +1,61 @@
+# Ensure consistent line endings across all platforms
+* text=auto
+
+# Explicitly declare text files
+*.rs text
+*.toml text
+*.ts text
+*.js text
+*.svelte text
+*.md text
+*.yml text
+*.yaml text
+*.json text
+*.sql text
+*.sh text eol=lf
+*.py text
+
+# Mark generated files and build artifacts
+target/ linguist-generated=true
+web/build/ linguist-generated=true
+web/.svelte-kit/ linguist-generated=true
+web/node_modules/ linguist-generated=true
+Cargo.lock linguist-generated=true
+package-lock.json linguist-generated=true
+
+# Language hints for GitHub
+*.rs linguist-language=Rust
+*.svelte linguist-language=Svelte
+*.ts linguist-language=TypeScript
+*.proto linguist-language=Protocol-Buffer
+
+# Diff settings for specific file types
+*.rs diff=rust
+*.ts diff=typescript
+*.md diff=markdown
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.db binary
+*.sqlite binary
+
+# Documentation
+*.md linguist-documentation
+docs/** linguist-documentation
+
+# Exclude from export archives
+.github/ export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+.pre-commit-config.yaml export-ignore
