@@ -756,7 +756,7 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
         .route("/debug/pprof/profile", get(profile_handler))
         .route("/debug/pprof/heap", get(heap_profile_handler));
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("Starting metrics server on http://{}/metrics", addr);
     if let Some(comp) = component {
         info!("Metrics will be labeled with component={}", comp);

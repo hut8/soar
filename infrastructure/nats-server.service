@@ -8,7 +8,7 @@ Type=simple
 # Enable JetStream with file-based storage for durable message queues
 # Note: Create /var/lib/nats/jetstream directory and set ownership to daemon:daemon
 # mkdir -p /var/lib/nats/jetstream && chown daemon:daemon /var/lib/nats/jetstream
-ExecStart=/usr/local/bin/nats-server --jetstream --store_dir=/var/lib/nats/jetstream --http_port 8222
+ExecStart=/usr/local/bin/nats-server --jetstream --store_dir=/var/lib/nats/jetstream --addr 127.0.0.1 --http_port 8222
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # The nats-server uses SIGUSR2 to trigger Lame Duck Mode (LDM) shutdown

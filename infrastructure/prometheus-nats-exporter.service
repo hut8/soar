@@ -11,7 +11,7 @@ Type=simple
 # Scrapes NATS HTTP monitoring endpoint at localhost:8222
 # Exposes Prometheus metrics on port 7777
 ExecStart=/usr/local/bin/prometheus-nats-exporter \
-  -port 7777 \
+  -addr 127.0.0.1:7777 \
   -jsz all \
   -varz \
   -connz \
