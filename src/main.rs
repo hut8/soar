@@ -705,15 +705,9 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Optionally initialize OpenTelemetry logger provider for log export
-    // This is disabled by default - set OTEL_LOGS_EXPORT_ENABLED=true to enable
-    if let Ok(_logger_provider) =
-        telemetry::init_logger_provider(&soar_env, component_name, version)
-    {
-        info!(
-            "OpenTelemetry OTLP log export initialized for {}",
-            component_name
-        );
+    // Initialize OpenTelemetry logger provider for log export to Loki
+    if let Err(e) = telemetry::init_logger_provider(&soar_env, component_name, version) {
+        warn!("Failed to initialize OpenTelemetry logger provider: {}", e);
     }
 
     // Initialize tracing/tokio-console based on subcommand

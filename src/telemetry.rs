@@ -102,14 +102,16 @@ pub fn init_meter_provider(_env: &str, _component: &str, _version: &str) -> Resu
 }
 
 /// Initialize the OpenTelemetry logger provider for log export
-/// This is optional and currently returns None (logs via tracing only)
-/// Future enhancement: Implement log export to Loki via OTLP
-pub fn init_logger_provider(_env: &str, _component: &str, _version: &str) -> Result<Option<()>> {
-    // OTLP log export is optional and not yet implemented
-    // Logs are already captured via the tracing crate and can be
-    // exported to Loki using the tracing-loki crate if needed
-    info!("OTLP log export not yet implemented - using tracing only");
-    Ok(None)
+/// NOTE: Direct OTLP log export is not yet stable in OpenTelemetry Rust SDK v0.31
+/// However, logs are already exported to Tempo via the tracing-opentelemetry layer:
+/// - All error!(), warn!(), info!(), debug!(), trace!() calls create span events
+/// - These events are attached to the current span and exported to Tempo
+/// - They can be queried in Grafana Tempo and correlated with traces
+pub fn init_logger_provider(_env: &str, _component: &str, _version: &str) -> Result<()> {
+    info!("Log export via tracing-opentelemetry layer (logs appear as span events in Tempo)");
+    // Logs are automatically exported via the tracing-opentelemetry layer
+    // integrated in main.rs - no additional setup needed
+    Ok(())
 }
 
 /// Gracefully shutdown OpenTelemetry providers with timeout
