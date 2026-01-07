@@ -95,7 +95,7 @@ applyTo: "docs/api/**/*.md"
 
 ## Related Files
 
-- `../ copilot-instructions.md` - Repository-wide instructions (applies everywhere)
+- `../copilot-instructions.md` - Repository-wide instructions (applies everywhere)
 - `../../CLAUDE.md` - Comprehensive AI assistant guide
 - `../copilot-setup-steps.yml` - Development environment setup
 
