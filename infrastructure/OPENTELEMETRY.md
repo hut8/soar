@@ -4,15 +4,17 @@ This document describes the OpenTelemetry (OTEL) observability integration for t
 
 ## Overview
 
-SOAR uses OpenTelemetry for distributed tracing and observability, with traces exported to a self-hosted Grafana Tempo instance. This provides comprehensive visibility into request flows, service interactions, and performance bottlenecks.
+SOAR uses OpenTelemetry for distributed tracing and observability, with traces exported to a self-hosted Grafana Tempo instance via OTLP HTTP/protobuf. This provides comprehensive visibility into request flows, service interactions, and performance bottlenecks.
+
+**Note**: The OpenTelemetry Rust SDK 0.31 only supports OTLP over HTTP/protobuf transport, not gRPC. All configuration uses HTTP endpoint (port 4318) instead of gRPC (port 4317).
 
 ## Architecture
 
 ```
-┌─────────────┐     OTLP/gRPC      ┌─────────────┐
+┌─────────────┐   OTLP/HTTP        ┌─────────────┐
 │ SOAR        │────────────────────>│ Tempo       │
-│ (Rust app)  │     port 4317      │ (Traces)    │
-└─────────────┘                     └─────────────┘
+│ (Rust app)  │   port 4318        │ (Traces)    │
+└─────────────┘   HTTP/protobuf    └─────────────┘
        │                                   │
        │                                   │
        │         Prometheus                │
@@ -25,7 +27,7 @@ SOAR uses OpenTelemetry for distributed tracing and observability, with traces e
 ### Components
 
 - **SOAR Application**: Rust backend with OpenTelemetry instrumentation via `tracing-opentelemetry`
-- **Grafana Tempo**: Trace storage and query backend (OTLP receiver on port 4317)
+- **Grafana Tempo**: Trace storage and query backend (OTLP HTTP receiver on port 4318)
 - **Grafana Loki**: Log aggregation (optional, configured for future use)
 - **Grafana**: Visualization and dashboards with Tempo datasource integration
 - **Prometheus**: Metrics collection (existing, unchanged)
@@ -37,7 +39,7 @@ SOAR uses OpenTelemetry for distributed tracing and observability, with traces e
 **What's working:**
 - ✅ Infrastructure deployed (Tempo on port 3200, Loki on port 3100)
 - ✅ OpenTelemetry v0.31 tracer initialization with environment-aware sampling
-- ✅ OTLP gRPC exporter configured (endpoint: localhost:14317)
+- ✅ OTLP HTTP exporter configured (endpoint: localhost:4318)
 - ✅ Grafana datasources configured (Tempo, Loki)
 - ✅ HTTP middleware for span recording
 - ✅ Metrics dual export capability (Prometheus + OTLP)
@@ -53,7 +55,9 @@ SOAR uses OpenTelemetry for distributed tracing and observability, with traces e
 
 ```bash
 # OpenTelemetry OTLP Exporter Endpoint
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# Note: Use port 4318 for HTTP (not 4317 which is gRPC)
+# The Rust SDK 0.31 only supports HTTP/protobuf transport
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 # Trace Sampling Configuration
 # Options: always_on, always_off, traceidratio, parentbased_always_on,
@@ -114,7 +118,8 @@ curl http://localhost:3000/api/health  # Grafana
 Create or update `/etc/soar/env`:
 ```bash
 # OpenTelemetry Configuration
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# Note: Use HTTP endpoint (port 4318), not gRPC (port 4317)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_TRACES_SAMPLER_ARG=1.0  # 100% sampling for development
 ```
 
@@ -175,14 +180,16 @@ sudo systemctl restart grafana-server
 Update `/etc/soar/env` (production):
 ```bash
 SOAR_ENV=production
-OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-host:4317
+# Note: Use HTTP endpoint (port 4318), not gRPC (port 4317)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-host:4318
 OTEL_TRACES_SAMPLER_ARG=0.01  # 1% sampling
 ```
 
 Update `/etc/soar/env-staging` (staging):
 ```bash
 SOAR_ENV=staging
-OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-host:4317
+# Note: Use HTTP endpoint (port 4318), not gRPC (port 4317)
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-host:4318
 OTEL_TRACES_SAMPLER_ARG=0.10  # 10% sampling
 ```
 
@@ -271,8 +278,8 @@ All existing Prometheus metrics continue to work unchanged:
 
 **Ports:**
 - `3200`: HTTP API (query, status)
-- `4317`: OTLP gRPC receiver
-- `4318`: OTLP HTTP receiver
+- `4317`: OTLP gRPC receiver (not used by Rust SDK)
+- `4318`: OTLP HTTP receiver (used by Rust SDK)
 
 ### Grafana Loki (Optional)
 
@@ -328,9 +335,12 @@ echo $OTEL_TRACES_SAMPLER_ARG
 
 **Check 4: OTLP endpoint is reachable**
 ```bash
-# Test gRPC endpoint connectivity
-grpcurl -plaintext localhost:4317 list
+# Test HTTP endpoint connectivity (Rust SDK uses HTTP, not gRPC)
+curl -v http://localhost:4318/v1/traces
+# Expected: HTTP 405 Method Not Allowed (POST is required)
 
+# For gRPC testing (not used by Rust SDK):
+grpcurl -plaintext localhost:4317 list
 # Expected: Service list or connection success
 ```
 
