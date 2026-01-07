@@ -1,6 +1,8 @@
 /target
 .env
-.vscode/settings.json
+# Allow team-shared VS Code settings, but ignore local overrides
+# Use .vscode/settings.local.json for personal settings
+.vscode/settings.local.json
 .logs
 .mcp.json
 
