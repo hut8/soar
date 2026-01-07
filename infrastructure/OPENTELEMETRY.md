@@ -278,7 +278,6 @@ All existing Prometheus metrics continue to work unchanged:
 
 **Ports:**
 - `3200`: HTTP API (query, status)
-- `4317`: OTLP gRPC receiver (not used by Rust SDK)
 - `4318`: OTLP HTTP receiver (used by Rust SDK)
 
 ### Grafana Loki (Optional)
