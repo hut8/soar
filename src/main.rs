@@ -14,7 +14,7 @@ mod migration_email_reporter;
 mod telemetry;
 
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest_adsb, handle_ingest_ogn,
+    handle_archive, handle_dump_unified_ddb, handle_ingest, handle_ingest_adsb, handle_ingest_ogn,
     handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
     handle_seed_test_data, handle_sitemap_generation,
 };
@@ -110,8 +110,54 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         countries: Option<Vec<String>>,
     },
+    /// Unified ingestion service for OGN (APRS) and ADS-B messages (uses persistent queues + Unix socket)
+    ///
+    /// This service can ingest from multiple sources simultaneously:
+    /// - OGN/APRS for glider tracking
+    /// - Beast format ADS-B for powered aircraft
+    /// - SBS (BaseStation/port 30003) format for additional ADS-B coverage
+    ///
+    /// All messages are buffered to persistent queues and sent to soar-run via Unix socket.
+    /// Metrics are exported both in aggregate (all sources) and individually per source.
+    /// Socket write times are tracked to monitor performance.
+    Ingest {
+        /// OGN APRS server hostname (optional, omit to disable OGN)
+        #[arg(long)]
+        ogn_server: Option<String>,
+
+        /// OGN APRS server port (automatically switches to 10152 for full feed if no filter specified)
+        #[arg(long, default_value = "14580")]
+        ogn_port: Option<u16>,
+
+        /// OGN callsign for APRS authentication
+        #[arg(long, default_value = "N0CALL")]
+        ogn_callsign: Option<String>,
+
+        /// OGN APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
+        #[arg(long)]
+        ogn_filter: Option<String>,
+
+        /// Beast server(s) in format "ip:port" (can specify multiple times, optional)
+        /// Example: --beast 1.2.3.4:30005 --beast 5.6.7.8:30005
+        #[arg(long)]
+        beast: Vec<String>,
+
+        /// SBS (BaseStation/port 30003) server(s) in format "ip:port" (can specify multiple times, optional)
+        /// Example: --sbs data.adsbhub.org:5002
+        #[arg(long)]
+        sbs: Vec<String>,
+
+        /// Maximum number of connection retry attempts
+        #[arg(long, default_value = "5")]
+        max_retries: u32,
+
+        /// Delay between reconnection attempts in seconds
+        #[arg(long, default_value = "5")]
+        retry_delay: u64,
+    },
     /// Ingest OGN (APRS) messages (uses persistent queue + Unix socket)
     ///
+    /// DEPRECATED: Use the unified `ingest` command instead.
     /// This service connects to OGN APRS-IS and buffers messages to a persistent queue.
     /// Messages are sent to soar-run via Unix socket when available.
     IngestOgn {
@@ -141,6 +187,7 @@ enum Commands {
     },
     /// Ingest ADS-B (Beast) messages (uses persistent queue + Unix socket)
     ///
+    /// DEPRECATED: Use the unified `ingest` command instead.
     /// This service connects to a Beast-format ADS-B server and buffers messages to a persistent queue.
     /// Messages are sent to soar-run via Unix socket when available.
     IngestAdsb {
@@ -664,6 +711,7 @@ async fn main() -> Result<()> {
     let component_name = match &cli.command {
         Commands::Run { .. } => "run",
         Commands::Web { .. } => "web",
+        Commands::Ingest { .. } => "ingest",
         Commands::IngestOgn { .. } => "ingest-ogn",
         Commands::IngestAdsb { .. } => "ingest-adsb",
         Commands::Migrate { .. } => "migrate",
@@ -897,6 +945,29 @@ async fn main() -> Result<()> {
             info!("Runtime verification PASSED");
             return Ok(());
         }
+        Commands::Ingest {
+            ogn_server,
+            ogn_port,
+            ogn_callsign,
+            ogn_filter,
+            beast,
+            sbs,
+            max_retries,
+            retry_delay,
+        } => {
+            // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
+            return handle_ingest(
+                ogn_server.clone(),
+                *ogn_port,
+                ogn_callsign.clone(),
+                ogn_filter.clone(),
+                beast.clone(),
+                sbs.clone(),
+                *max_retries,
+                *retry_delay,
+            )
+            .await;
+        }
         Commands::IngestOgn {
             server,
             port,
@@ -1004,6 +1075,7 @@ async fn main() -> Result<()> {
         Commands::SeedTestData {} => "soar-seed-test-data",
         Commands::AggregateCoverage { .. } => "soar-aggregate-coverage",
         // These should not reach here due to early returns
+        Commands::Ingest { .. } => unreachable!(),
         Commands::IngestOgn { .. } => unreachable!(),
         Commands::IngestAdsb { .. } => unreachable!(),
         Commands::VerifyRuntime { .. } => unreachable!(),
@@ -1079,6 +1151,10 @@ async fn main() -> Result<()> {
             incremental,
             countries,
         } => handle_pull_airspaces(diesel_pool, incremental, countries).await,
+        Commands::Ingest { .. } => {
+            // This should never be reached due to early return above
+            unreachable!("Ingest should be handled before database setup")
+        }
         Commands::IngestOgn { .. } => {
             // This should never be reached due to early return above
             unreachable!("IngestOgn should be handled before database setup")

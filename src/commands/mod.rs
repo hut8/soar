@@ -1,6 +1,7 @@
 pub mod aggregate_coverage;
 pub mod archive;
 pub mod dump_unified_ddb;
+pub mod ingest;
 pub mod ingest_adsb;
 pub mod ingest_ogn;
 pub mod load_data;
@@ -13,6 +14,7 @@ pub mod sitemap;
 pub use aggregate_coverage::aggregate_coverage;
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_unified_ddb::handle_dump_unified_ddb;
+pub use ingest::handle_ingest;
 pub use ingest_adsb::handle_ingest_adsb;
 pub use ingest_ogn::handle_ingest_ogn;
 pub use load_data::handle_load_data;
