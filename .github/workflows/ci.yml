@@ -462,6 +462,9 @@ jobs:
       - name: Build static release binary
         env:
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
+          # CRITICAL: tokio_unstable is required for tokio-console support
+          # Without this flag, --enable-tokio-console will cause exit code 101 with no output
+          RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static"
         run: cross build --release --target x86_64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
@@ -553,6 +556,9 @@ jobs:
         env:
           CROSS_CONTAINER_ENGINE: docker
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
+          # CRITICAL: tokio_unstable is required for tokio-console support
+          # Without this flag, --enable-tokio-console will cause exit code 101 with no output
+          RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static"
         run: cross build --release --target aarch64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
