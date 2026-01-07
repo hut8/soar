@@ -22,7 +22,6 @@ pub struct Fix {
 
     /// APRS packet header information
     pub source: String,
-    pub aprs_type: String,
 
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
@@ -45,7 +44,7 @@ pub struct Fix {
     pub turn_rate_rot: Option<f32>,
 
     /// Protocol-specific metadata stored as JSONB
-    /// For APRS: snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
+    /// For APRS: via, aprs_type, snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
     /// For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
     pub source_metadata: Option<serde_json::Value>,
 
@@ -272,8 +271,9 @@ impl Fix {
                     let mut metadata = serde_json::Map::new();
                     metadata.insert("protocol".to_string(), serde_json::json!("aprs"));
 
-                    // Store via path in metadata (OGN/APRS-specific)
+                    // Store APRS-specific fields in metadata
                     metadata.insert("via".to_string(), serde_json::json!(via));
+                    metadata.insert("aprs_type".to_string(), serde_json::json!(aprs_type));
 
                     if let Some(snr) = snr_db {
                         metadata.insert("snr_db".to_string(), serde_json::json!(snr));
@@ -306,7 +306,6 @@ impl Fix {
                 Ok(Some(Fix {
                     id: Uuid::now_v7(),
                     source,
-                    aprs_type,
                     timestamp,
                     latitude,
                     longitude,

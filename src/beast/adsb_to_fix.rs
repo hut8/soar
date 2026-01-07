@@ -82,7 +82,6 @@ pub fn adsb_message_to_fix(
     let fix = Fix {
         id: Uuid::now_v7(),
         source: format!("{:06X}", icao_address),
-        aprs_type: "ADSB".to_string(), // ADS-B messages don't have APRS-style "to" field
         timestamp,
         latitude: position.latitude,
         longitude: position.longitude,
@@ -211,6 +210,9 @@ fn extract_squawk(_message: &Message) -> Option<String> {
 /// Note: Protocol is determined from raw_messages.source enum, not stored in metadata
 fn build_adsb_metadata(message: &Message) -> serde_json::Value {
     let mut metadata = serde_json::Map::new();
+
+    // Add protocol identifier
+    metadata.insert("protocol".to_string(), serde_json::json!("adsb"));
 
     // Add CRC and other ADS-B-specific fields
     // This will be expanded as we extract more information (NIC, NAC, SIL, etc.)

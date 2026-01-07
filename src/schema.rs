@@ -398,8 +398,6 @@ diesel::table! {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
-        #[max_length = 9]
-        aprs_type -> Varchar,
         timestamp -> Timestamptz,
         latitude -> Float8,
         longitude -> Float8,
