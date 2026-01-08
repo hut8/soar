@@ -3,4 +3,12 @@
 /**
  * Response model for tow fees
  */
-export type TowFeeView = { id: string, clubId: string, maxAltitude: number | null, cost: string, modifiedBy: string, createdAt: string, updatedAt: string, };
+export type TowFeeView = {
+	id: string;
+	clubId: string;
+	maxAltitude: number | null;
+	cost: string;
+	modifiedBy: string;
+	createdAt: string;
+	updatedAt: string;
+};
