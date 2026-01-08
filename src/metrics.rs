@@ -612,8 +612,13 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.aircraft.stage_total", "stage" => "completed").absolute(0);
 
     // Queue send blocked counters (tracks when send_async has to wait for space)
+    metrics::counter!("queue.send_blocked_total", "queue" => "aprs_intake").absolute(0);
+    metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").absolute(0);
     metrics::counter!("queue.send_blocked_total", "queue" => "router").absolute(0);
     metrics::counter!("queue.send_blocked_total", "queue" => "aircraft").absolute(0);
+    metrics::counter!("queue.send_blocked_total", "queue" => "receiver_status").absolute(0);
+    metrics::counter!("queue.send_blocked_total", "queue" => "receiver_position").absolute(0);
+    metrics::counter!("queue.send_blocked_total", "queue" => "server_status").absolute(0);
     metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").absolute(0);
 }
 

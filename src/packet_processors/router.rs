@@ -200,6 +200,10 @@ impl PacketRouter {
 
         // Step 2: Route to server status queue if configured
         if let Some(tx) = &self.server_status_tx {
+            if tx.is_full() {
+                metrics::counter!("queue.send_blocked_total", "queue" => "server_status")
+                    .increment(1);
+            }
             let message_with_timestamp = (raw_message.to_string(), received_at);
             if let Err(e) = tx.send_async(message_with_timestamp).await {
                 warn!(
@@ -315,6 +319,9 @@ impl PacketRouter {
                     PositionSourceType::Receiver => {
                         // Route to receiver position queue
                         if let Some(tx) = &self.receiver_position_tx {
+                            if tx.is_full() {
+                                metrics::counter!("queue.send_blocked_total", "queue" => "receiver_position").increment(1);
+                            }
                             if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
                                     "Receiver position queue CLOSED - cannot route packet from {}: {}",
@@ -351,6 +358,10 @@ impl PacketRouter {
                     packet_from, position_source
                 );
                 if let Some(tx) = &self.receiver_status_tx {
+                    if tx.is_full() {
+                        metrics::counter!("queue.send_blocked_total", "queue" => "receiver_status")
+                            .increment(1);
+                    }
                     if let Err(e) = tx.send_async((packet, context)).await {
                         warn!(
                             "Receiver status queue CLOSED - cannot route packet from {}: {}",

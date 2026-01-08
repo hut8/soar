@@ -611,6 +611,9 @@ pub async fn handle_run(
                                 // OGN messages already have timestamp prepended by aprs_client
                                 // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <packet>"
                                 // Just pass through without adding another timestamp
+                                if aprs_tx.is_full() {
+                                    metrics::counter!("queue.send_blocked_total", "queue" => "aprs_intake").increment(1);
+                                }
                                 if let Err(e) = aprs_tx.send_async(message).await {
                                     error!(
                                         "Failed to send OGN message to APRS intake queue: {}",
@@ -633,6 +636,9 @@ pub async fn handle_run(
                 soar::protocol::IngestSource::Beast | soar::protocol::IngestSource::Sbs => {
                     if let Some(beast_tx) = &beast_intake_tx_for_router {
                         // Beast/SBS messages are already binary (timestamp + data)
+                        if beast_tx.is_full() {
+                            metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").increment(1);
+                        }
                         if let Err(e) = beast_tx.send_async(envelope.data).await {
                             error!("Failed to send Beast/SBS message to intake queue: {}", e);
                             metrics::counter!("socket.router.beast_send_error_total").increment(1);
