@@ -152,6 +152,7 @@ impl AircraftRepository {
     /// Get or insert an aircraft by address
     /// If the aircraft doesn't exist, it will be created with from_ogn_ddb=false, tracked=true, identified=true
     /// Uses INSERT ... ON CONFLICT to handle race conditions atomically
+    #[tracing::instrument(skip(self), fields(%address, ?address_type))]
     pub async fn get_or_insert_aircraft_by_address(
         &self,
         address: i32,
