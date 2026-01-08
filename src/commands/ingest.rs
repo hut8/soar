@@ -633,7 +633,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         let _stats_total = stats_frames_received.clone();
 
         info!("Spawning Beast client for {}:{}", server, port);
-        let server_clone = server.clone();
 
         // Create wrapper health state for Beast client compatibility
         let beast_health = Arc::new(tokio::sync::RwLock::new(
@@ -673,7 +672,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         let _stats_total = stats_frames_received.clone();
 
         info!("Spawning SBS client for {}:{}", server, port);
-        let server_clone = server.clone();
 
         // Create wrapper health state for SBS client compatibility
         let beast_health = Arc::new(tokio::sync::RwLock::new(
