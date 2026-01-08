@@ -11,12 +11,10 @@ This consolidation simplifies deployment and provides better monitoring with agg
 
 ## Migration Path
 
-### Current State (Deprecated)
-- `soar ingest-ogn` - Separate OGN ingestion service (port 9093 production, 9194 staging)
-- `soar ingest-adsb` - Separate ADS-B ingestion service (port 9094 production, 9196 staging)
+The separate `soar ingest-ogn` and `soar ingest-adsb` services have been replaced with a unified `soar ingest` service:
 
-### New State (Recommended)
-- `soar ingest` - Unified ingestion service (port 9095 production, 9197 staging)
+- **Old**: `soar ingest-ogn` (port 9093 production, 9194 staging) and `soar ingest-adsb` (port 9094 production, 9196 staging)
+- **New**: `soar ingest` - Unified ingestion service (port 9095 production, 9197 staging)
 
 ## Command Examples
 
@@ -55,16 +53,12 @@ soar ingest \
 ## Systemd Service Files
 
 ### Production
-- **New**: `/etc/systemd/system/soar-ingest.service`
-- **Old** (deprecated): 
-  - `/etc/systemd/system/soar-ingest-ogn.service`
-  - `/etc/systemd/system/soar-ingest-adsb.service`
+- `/etc/systemd/system/soar-ingest.service`
 
 ### Staging
-- **New**: `/etc/systemd/system/soar-ingest-staging.service`
-- **Old** (deprecated):
-  - `/etc/systemd/system/soar-ingest-ogn-staging.service`
-  - `/etc/systemd/system/soar-ingest-adsb-staging.service`
+- `/etc/systemd/system/soar-ingest-staging.service`
+
+Note: The old separate service files (`soar-ingest-ogn` and `soar-ingest-adsb`) have been removed.
 
 ## Deployment
 
