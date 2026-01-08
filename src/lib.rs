@@ -93,6 +93,40 @@ pub use packet_processors::{
 #[cfg(test)]
 mod ts_export;
 
+/// Get the Unix socket path for inter-process communication based on the environment.
+///
+/// Environment detection:
+/// - SOAR_ENV=production -> "/var/run/soar/run.sock"
+/// - SOAR_ENV=staging -> "/var/run/soar/run.sock"
+/// - SOAR_ENV unset or other -> "/tmp/soar-{user}/run.sock" (user-specific for development)
+///
+/// In development mode, uses the USER environment variable to create a user-specific
+/// directory to avoid permission conflicts when multiple users run the service.
+///
+/// # Examples
+///
+/// ```
+/// unsafe {
+///     std::env::set_var("SOAR_ENV", "production");
+/// }
+/// assert_eq!(soar::socket_path(), std::path::PathBuf::from("/var/run/soar/run.sock"));
+///
+/// unsafe {
+///     std::env::set_var("SOAR_ENV", "staging");
+/// }
+/// assert_eq!(soar::socket_path(), std::path::PathBuf::from("/var/run/soar/run.sock"));
+/// ```
+pub fn socket_path() -> std::path::PathBuf {
+    match std::env::var("SOAR_ENV").as_deref() {
+        Ok("production") | Ok("staging") => std::path::PathBuf::from("/var/run/soar/run.sock"),
+        _ => {
+            // Development mode: use user-specific directory to avoid permission conflicts
+            let user = std::env::var("USER").unwrap_or_else(|_| "default".to_string());
+            std::path::PathBuf::from(format!("/tmp/soar-{}/run.sock", user))
+        }
+    }
+}
+
 /// Get the NATS client name for a given process based on the environment.
 ///
 /// Environment detection:
@@ -130,6 +164,61 @@ pub fn nats_client_name(process_name: &str) -> String {
 mod tests {
     use super::*;
     use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_socket_path_production() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "production");
+        }
+        assert_eq!(
+            socket_path(),
+            std::path::PathBuf::from("/var/run/soar/run.sock")
+        );
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_socket_path_staging() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "staging");
+        }
+        assert_eq!(
+            socket_path(),
+            std::path::PathBuf::from("/var/run/soar/run.sock")
+        );
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_socket_path_dev() {
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+        let user = std::env::var("USER").unwrap_or_else(|_| "default".to_string());
+        let expected = std::path::PathBuf::from(format!("/tmp/soar-{}/run.sock", user));
+        assert_eq!(socket_path(), expected);
+    }
+
+    #[test]
+    #[serial]
+    fn test_socket_path_dev_other() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "development");
+        }
+        let user = std::env::var("USER").unwrap_or_else(|_| "default".to_string());
+        let expected = std::path::PathBuf::from(format!("/tmp/soar-{}/run.sock", user));
+        assert_eq!(socket_path(), expected);
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
 
     #[test]
     #[serial]

@@ -417,8 +417,11 @@ fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) 
                 fixes::track_degrees.eq(Some(90.0 + (i as f32 * 5.0))),
                 // Use realistic values based on production data
                 fixes::source.eq("ICAABC123"), // Source is the device address with ICAO prefix
-                fixes::aprs_type.eq("OGADSB"), // OGN ADS-B type
-                fixes::via.eq(vec!["qAS".to_string(), "TestStation".to_string()]), // Via path like production
+                fixes::source_metadata.eq(serde_json::json!({
+                    "protocol": "aprs",
+                    "aprs_type": "OGADSB",
+                    "via": ["qAS", "TestStation"]
+                })),
                 fixes::received_at.eq(fix_time),
                 fixes::is_active.eq(true),
             ))

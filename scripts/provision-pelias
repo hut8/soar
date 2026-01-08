@@ -286,7 +286,7 @@ cat > /opt/pelias/docker/pelias.json <<EOF
   "api": {
     "version": "1.0",
     "indexName": "pelias",
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 4000,
     "services": {
       "pip": {
@@ -421,6 +421,7 @@ User=pelias
 Group=pelias
 WorkingDirectory=/opt/pelias/pip
 Environment="NODE_ENV=production"
+Environment="HOST=127.0.0.1"
 Environment="PORT=4200"
 Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
 ExecStart=/usr/bin/node --max-old-space-size=28672 /opt/pelias/pip/index.js
@@ -453,6 +454,7 @@ User=pelias
 Group=pelias
 WorkingDirectory=/opt/pelias/api
 Environment="NODE_ENV=production"
+Environment="HOST=127.0.0.1"
 Environment="PORT=4000"
 Environment="PELIAS_CONFIG=/opt/pelias/api/pelias.json"
 ExecStart=/usr/bin/node /opt/pelias/api/index.js

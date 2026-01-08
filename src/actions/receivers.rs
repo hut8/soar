@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use diesel::QueryableByName;
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
@@ -504,10 +505,12 @@ pub struct ReceiverRawMessagesQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, QueryableByName)]
 #[serde(rename_all = "camelCase")]
 pub struct AprsTypeCount {
-    pub aprs_type: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub aprs_type: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
     pub count: i64,
 }
 

@@ -196,11 +196,12 @@ async fn process_beast_message(
     };
 
     // Store raw Beast message in database
+    // ADS-B/Beast messages don't have a receiver concept, so receiver_id is None
     let raw_message_id = match beast_repo
         .insert_beast(NewBeastMessage::new(
             raw_frame.to_vec(),
             received_at,
-            receiver_id,
+            None, // receiver_id - ADS-B has no receiver concept
             None, // unparsed field (could add decoded JSON if needed)
         ))
         .await
@@ -575,8 +576,8 @@ pub async fn handle_run(
     };
 
     // Create Unix socket server for receiving messages from ingesters
-    let socket_path = std::path::PathBuf::from("/var/run/soar/run.sock");
-    let socket_server = soar::socket_server::SocketServer::start(socket_path.clone())
+    let socket_path = soar::socket_path();
+    let socket_server = soar::socket_server::SocketServer::start(&socket_path)
         .await
         .context("Failed to start socket server")?;
     info!("Socket server listening on {:?}", socket_path);

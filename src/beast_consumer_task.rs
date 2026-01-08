@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 use crate::beast::decoder::{decode_beast_frame, message_to_json};
 use crate::raw_messages_repo::{NewBeastMessage, RawMessagesRepository};
@@ -20,22 +19,15 @@ pub struct BeastConsumerTask {
     nats_client: Client,
     subject: String,
     repository: RawMessagesRepository,
-    receiver_id: Uuid,
     batch_size: usize,
 }
 
 impl BeastConsumerTask {
-    pub fn new(
-        nats_client: Client,
-        subject: String,
-        repository: RawMessagesRepository,
-        receiver_id: Uuid,
-    ) -> Self {
+    pub fn new(nats_client: Client, subject: String, repository: RawMessagesRepository) -> Self {
         Self {
             nats_client,
             subject,
             repository,
-            receiver_id,
             batch_size: 100, // Process messages in batches
         }
     }
@@ -45,10 +37,7 @@ impl BeastConsumerTask {
     /// This will run indefinitely, consuming messages from NATS and storing them
     /// in the database. Messages are processed in batches for efficiency.
     pub async fn run(&self) -> Result<()> {
-        info!(
-            "Starting Beast consumer task for receiver {}",
-            self.receiver_id
-        );
+        info!("Starting Beast consumer task");
 
         // Subscribe to NATS subject
         let mut subscriber = self
@@ -69,7 +58,6 @@ impl BeastConsumerTask {
         });
 
         // Start consuming messages from NATS
-        let receiver_id = self.receiver_id;
         while let Some(msg) = subscriber.next().await {
             let payload = msg.payload.to_vec();
 
@@ -119,8 +107,8 @@ impl BeastConsumerTask {
             };
 
             // Create new Beast message with decoded JSON in unparsed field
-            let message =
-                NewBeastMessage::new(raw_frame.to_vec(), received_at, receiver_id, decoded_json);
+            // ADS-B/Beast messages don't have a receiver concept, so receiver_id is None
+            let message = NewBeastMessage::new(raw_frame.to_vec(), received_at, None, decoded_json);
 
             // Send to batch writer (blocking send for backpressure)
             match batch_tx.send_async(message).await {

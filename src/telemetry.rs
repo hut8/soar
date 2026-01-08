@@ -8,7 +8,8 @@ use opentelemetry_sdk::{
 use tracing::info;
 
 /// Initialize the OpenTelemetry tracer with environment-aware sampling
-/// Exports traces to an OTLP collector (Grafana Tempo) via gRPC
+/// Exports traces to an OTLP collector (Grafana Tempo) via HTTP/protobuf
+/// Note: OpenTelemetry Rust SDK 0.31 only supports HTTP transport, not gRPC
 pub fn init_tracer(
     env: &str,
     component: &str,
@@ -29,11 +30,13 @@ pub fn init_tracer(
         ])
         .build();
 
-    // Create the OTLP span exporter with gRPC
+    // Create the OTLP span exporter with HTTP
+    // Note: OpenTelemetry Rust SDK 0.31 does not support gRPC transport properly.
+    // We use HTTP/protobuf which is fully supported and works with Grafana Tempo.
     // Endpoint configured via OTEL_EXPORTER_OTLP_ENDPOINT environment variable
-    // Default: http://localhost:4317
+    // Default: http://localhost:4318 (HTTP endpoint, not gRPC port 4317)
     let exporter = SpanExporter::builder()
-        .with_tonic()
+        .with_http()
         .build()
         .context("Failed to create OTLP span exporter")?;
 
