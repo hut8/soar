@@ -43,19 +43,32 @@ pub struct IngestHealth {
     pub last_sbs_message_time: Option<std::time::Instant>,
 }
 
-pub async fn handle_ingest(
+/// Configuration for the unified ingest service
+pub struct IngestConfig {
     // OGN parameters
-    ogn_server: Option<String>,
-    ogn_port: Option<u16>,
-    ogn_callsign: Option<String>,
-    ogn_filter: Option<String>,
+    pub ogn_server: Option<String>,
+    pub ogn_port: Option<u16>,
+    pub ogn_callsign: Option<String>,
+    pub ogn_filter: Option<String>,
     // ADS-B parameters
-    beast_servers: Vec<String>,
-    sbs_servers: Vec<String>,
+    pub beast_servers: Vec<String>,
+    pub sbs_servers: Vec<String>,
     // Common parameters
-    max_retries: u32,
-    retry_delay: u64,
-) -> Result<()> {
+    pub max_retries: u32,
+    pub retry_delay: u64,
+}
+
+pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
+    let IngestConfig {
+        ogn_server,
+        ogn_port,
+        ogn_callsign,
+        ogn_filter,
+        beast_servers,
+        sbs_servers,
+        max_retries,
+        retry_delay,
+    } = config;
     // Validate that at least one source is specified
     let ogn_enabled = ogn_server.is_some();
     let beast_enabled = !beast_servers.is_empty();

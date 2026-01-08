@@ -3,4 +3,4 @@
 /**
  * Bounds of a cluster of aircraft
  */
-export type ClusterBounds = { north: number; south: number; east: number; west: number };
+export type ClusterBounds = { north: number, south: number, east: number, west: number, };

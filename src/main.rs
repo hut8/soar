@@ -901,16 +901,16 @@ async fn main() -> Result<()> {
             retry_delay,
         } => {
             // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
-            return handle_ingest(
-                ogn_server.clone(),
-                *ogn_port,
-                ogn_callsign.clone(),
-                ogn_filter.clone(),
-                beast.clone(),
-                sbs.clone(),
-                *max_retries,
-                *retry_delay,
-            )
+            return handle_ingest(commands::ingest::IngestConfig {
+                ogn_server: ogn_server.clone(),
+                ogn_port: *ogn_port,
+                ogn_callsign: ogn_callsign.clone(),
+                ogn_filter: ogn_filter.clone(),
+                beast_servers: beast.clone(),
+                sbs_servers: sbs.clone(),
+                max_retries: *max_retries,
+                retry_delay: *retry_delay,
+            })
             .await;
         }
         Commands::DumpUnifiedDdb { output, source } => {
