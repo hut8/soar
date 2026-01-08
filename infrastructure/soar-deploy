@@ -984,6 +984,43 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
     fi
 fi
 
+# Install Pyroscope and Alloy configuration files
+log_info "Installing Pyroscope and Alloy configuration..."
+
+# Install Pyroscope configuration
+if [ -f "$DEPLOY_DIR/pyroscope-config.yml" ]; then
+    log_info "Installing Pyroscope configuration..."
+    sudo cp "$DEPLOY_DIR/pyroscope-config.yml" /etc/pyroscope/config.yml
+    sudo chown pyroscope:pyroscope /etc/pyroscope/config.yml
+    sudo chmod 644 /etc/pyroscope/config.yml
+    log_info "Pyroscope configuration installed"
+    
+    # Restart Pyroscope if running to pick up new config
+    if systemctl is-active --quiet pyroscope; then
+        log_info "Restarting Pyroscope to apply new configuration..."
+        systemctl restart pyroscope || log_warn "Failed to restart Pyroscope"
+    fi
+else
+    log_warn "Pyroscope configuration file not found in deployment directory"
+fi
+
+# Install Alloy configuration
+if [ -f "$DEPLOY_DIR/alloy-config.alloy" ]; then
+    log_info "Installing Alloy configuration..."
+    sudo cp "$DEPLOY_DIR/alloy-config.alloy" /etc/alloy/config.alloy
+    sudo chown alloy:alloy /etc/alloy/config.alloy
+    sudo chmod 644 /etc/alloy/config.alloy
+    log_info "Alloy configuration installed"
+    
+    # Restart Alloy if running to pick up new config
+    if systemctl is-active --quiet alloy; then
+        log_info "Restarting Alloy to apply new configuration..."
+        systemctl restart alloy || log_warn "Failed to restart Alloy"
+    fi
+else
+    log_warn "Alloy configuration file not found in deployment directory"
+fi
+
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload

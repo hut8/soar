@@ -1,0 +1,16 @@
+# Pyroscope Metrics
+# This file defines a scrape job configuration for Pyroscope profiling server.
+# Pyroscope exposes Prometheus metrics for monitoring ingestion and storage.
+
+scrape_configs:
+  - job_name: 'pyroscope'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets:
+          - 'localhost:4040'
+        labels:
+          instance: 'pyroscope'
+          component: 'profiling'
+          environment: 'production'

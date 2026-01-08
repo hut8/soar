@@ -1,0 +1,126 @@
+// Grafana Alloy Configuration for Continuous Profiling
+// Documentation: https://grafana.com/docs/alloy/latest/
+
+// Logging configuration
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Discover SOAR processes and scrape pprof endpoints
+// The SOAR Rust application exposes pprof endpoints at:
+// - /debug/pprof/profile (CPU profiling - 30 seconds)
+// - /debug/pprof/heap (Heap profiling)
+
+// Scrape production soar-run service
+discovery.relabel "soar_run" {
+  targets = [{
+    __address__ = "localhost:9090",
+    service     = "soar-run",
+    environment = "production",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-run"
+  }
+}
+
+// Scrape production soar-web service
+discovery.relabel "soar_web" {
+  targets = [{
+    __address__ = "localhost:9091",
+    service     = "soar-web",
+    environment = "production",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-web"
+  }
+}
+
+// Scrape production soar-ingest-ogn service
+discovery.relabel "soar_ingest_ogn" {
+  targets = [{
+    __address__ = "localhost:9092",
+    service     = "soar-ingest-ogn",
+    environment = "production",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-ingest-ogn"
+  }
+}
+
+// Scrape production soar-ingest-adsb service
+discovery.relabel "soar_ingest_adsb" {
+  targets = [{
+    __address__ = "localhost:9093",
+    service     = "soar-ingest-adsb",
+    environment = "production",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-ingest-adsb"
+  }
+}
+
+// Scrape staging soar-run service (if running)
+discovery.relabel "soar_run_staging" {
+  targets = [{
+    __address__ = "localhost:9094",
+    service     = "soar-run-staging",
+    environment = "staging",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-run-staging"
+  }
+}
+
+// Scrape staging soar-web service (if running)
+discovery.relabel "soar_web_staging" {
+  targets = [{
+    __address__ = "localhost:9095",
+    service     = "soar-web-staging",
+    environment = "staging",
+  }]
+
+  rule {
+    target_label = "job"
+    replacement  = "soar-web-staging"
+  }
+}
+
+// CPU profiling scraper - scrapes /debug/pprof/profile
+pyroscope.scrape "soar_cpu" {
+  targets = concat(
+    discovery.relabel.soar_run.output,
+    discovery.relabel.soar_web.output,
+    discovery.relabel.soar_ingest_ogn.output,
+    discovery.relabel.soar_ingest_adsb.output,
+    discovery.relabel.soar_run_staging.output,
+    discovery.relabel.soar_web_staging.output,
+  )
+
+  forward_to = [pyroscope.write.endpoint.receiver]
+
+  profiling_config {
+    profile.process_cpu {
+      enabled = true
+      path    = "/debug/pprof/profile"
+      delta   = false
+    }
+  }
+}
+
+// Write profiles to Pyroscope
+pyroscope.write "endpoint" {
+  endpoint {
+    url = "http://localhost:4040"
+  }
+}
