@@ -14,7 +14,7 @@ mod migration_email_reporter;
 mod telemetry;
 
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest, handle_ingest_adsb, handle_ingest_ogn,
+    handle_archive, handle_dump_unified_ddb, handle_ingest,
     handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
     handle_seed_test_data, handle_sitemap_generation,
 };
@@ -143,60 +143,6 @@ enum Commands {
         beast: Vec<String>,
 
         /// SBS (BaseStation/port 30003) server(s) in format "ip:port" (can specify multiple times, optional)
-        /// Example: --sbs data.adsbhub.org:5002
-        #[arg(long)]
-        sbs: Vec<String>,
-
-        /// Maximum number of connection retry attempts
-        #[arg(long, default_value = "5")]
-        max_retries: u32,
-
-        /// Delay between reconnection attempts in seconds
-        #[arg(long, default_value = "5")]
-        retry_delay: u64,
-    },
-    /// Ingest OGN (APRS) messages (uses persistent queue + Unix socket)
-    ///
-    /// DEPRECATED: Use the unified `ingest` command instead.
-    /// This service connects to OGN APRS-IS and buffers messages to a persistent queue.
-    /// Messages are sent to soar-run via Unix socket when available.
-    IngestOgn {
-        /// APRS server hostname
-        #[arg(long, default_value = "aprs.glidernet.org")]
-        server: String,
-
-        /// APRS server port (automatically switches to 10152 for full feed if no filter specified)
-        #[arg(long, default_value = "14580")]
-        port: u16,
-
-        /// Callsign for APRS authentication
-        #[arg(long, default_value = "N0CALL")]
-        callsign: String,
-
-        /// APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
-        #[arg(long)]
-        filter: Option<String>,
-
-        /// Maximum number of connection retry attempts
-        #[arg(long, default_value = "5")]
-        max_retries: u32,
-
-        /// Delay between reconnection attempts in seconds
-        #[arg(long, default_value = "5")]
-        retry_delay: u64,
-    },
-    /// Ingest ADS-B (Beast) messages (uses persistent queue + Unix socket)
-    ///
-    /// DEPRECATED: Use the unified `ingest` command instead.
-    /// This service connects to a Beast-format ADS-B server and buffers messages to a persistent queue.
-    /// Messages are sent to soar-run via Unix socket when available.
-    IngestAdsb {
-        /// Beast server(s) in format "ip:port" (can specify multiple times)
-        /// Example: --beast 1.2.3.4:30005 --beast 5.6.7.8:30005
-        #[arg(long)]
-        beast: Vec<String>,
-
-        /// SBS (BaseStation/port 30003) server(s) in format "ip:port" (can specify multiple times)
         /// Example: --sbs data.adsbhub.org:5002
         #[arg(long)]
         sbs: Vec<String>,
@@ -712,8 +658,6 @@ async fn main() -> Result<()> {
         Commands::Run { .. } => "run",
         Commands::Web { .. } => "web",
         Commands::Ingest { .. } => "ingest",
-        Commands::IngestOgn { .. } => "ingest-ogn",
-        Commands::IngestAdsb { .. } => "ingest-adsb",
         Commands::Migrate { .. } => "migrate",
         Commands::LoadData { .. } => "load-data",
         Commands::PullData { .. } => "pull-data",
@@ -968,35 +912,6 @@ async fn main() -> Result<()> {
             )
             .await;
         }
-        Commands::IngestOgn {
-            server,
-            port,
-            callsign,
-            filter,
-            max_retries,
-            retry_delay,
-        } => {
-            // IngestOgn uses persistent queue + Unix socket, doesn't need database
-            return handle_ingest_ogn(
-                server.clone(),
-                *port,
-                callsign.clone(),
-                filter.clone(),
-                *max_retries,
-                *retry_delay,
-            )
-            .await;
-        }
-        Commands::IngestAdsb {
-            beast,
-            sbs,
-            max_retries,
-            retry_delay,
-        } => {
-            // IngestAdsb uses persistent queue + socket, doesn't need database
-            return handle_ingest_adsb(beast.clone(), sbs.clone(), *max_retries, *retry_delay)
-                .await;
-        }
         Commands::DumpUnifiedDdb { output, source } => {
             // DumpUnifiedDdb only downloads and exports data, doesn't need database
             return handle_dump_unified_ddb(output.clone(), source.clone()).await;
@@ -1076,8 +991,6 @@ async fn main() -> Result<()> {
         Commands::AggregateCoverage { .. } => "soar-aggregate-coverage",
         // These should not reach here due to early returns
         Commands::Ingest { .. } => unreachable!(),
-        Commands::IngestOgn { .. } => unreachable!(),
-        Commands::IngestAdsb { .. } => unreachable!(),
         Commands::VerifyRuntime { .. } => unreachable!(),
         Commands::DumpUnifiedDdb { .. } => unreachable!(),
     };
@@ -1154,14 +1067,6 @@ async fn main() -> Result<()> {
         Commands::Ingest { .. } => {
             // This should never be reached due to early return above
             unreachable!("Ingest should be handled before database setup")
-        }
-        Commands::IngestOgn { .. } => {
-            // This should never be reached due to early return above
-            unreachable!("IngestOgn should be handled before database setup")
-        }
-        Commands::IngestAdsb { .. } => {
-            // This should never be reached due to early return above
-            unreachable!("IngestAdsb should be handled before database setup")
         }
         Commands::Run {
             archive_dir,

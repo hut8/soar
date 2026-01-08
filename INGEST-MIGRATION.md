@@ -113,10 +113,6 @@ Note: The old Prometheus configuration files for the separate OGN and ADS-B serv
 4. **Resource Efficiency**: Shared metrics server and health monitoring
 5. **Flexible Source Selection**: Enable/disable sources as needed
 
-## Backward Compatibility
-
-The old `ingest-ogn` and `ingest-adsb` commands are still available for backward compatibility during the transition period. They will be removed in a future release once all deployments have migrated to the unified service.
-
 ## Troubleshooting
 
 ### Check Service Status
@@ -148,13 +144,6 @@ sudo journalctl -u soar-ingest-staging.service -f
 # Test with both
 ./soar ingest --ogn-server aprs.glidernet.org --beast localhost:30005
 ```
-
-## Migration Timeline
-
-1. **Phase 1** (Current): New unified service deployed alongside old services
-2. **Phase 2**: Production deployments switch to unified service
-3. **Phase 3**: Old services disabled but kept for rollback capability
-4. **Phase 4**: Old services removed from repository
 
 ## Questions?
 
