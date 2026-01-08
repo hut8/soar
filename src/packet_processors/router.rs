@@ -1,6 +1,6 @@
 use super::generic::{GenericProcessor, PacketContext};
 use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
-use tracing::{Instrument, debug, trace, warn};
+use tracing::{debug, trace, warn};
 
 /// Task representing a message to be processed by PacketRouter workers
 enum MessageTask {
@@ -83,37 +83,34 @@ impl PacketRouter {
             let rx = internal_queue_rx.clone();
             let router = self.clone();
 
-            tokio::spawn(
-                async move {
-                    tracing::info!("PacketRouter worker {} started", worker_id);
-                    while let Ok(task) = rx.recv_async().await {
-                        match task {
-                            MessageTask::Packet {
-                                packet,
-                                raw_message,
-                                received_at,
-                            } => {
-                                router
-                                    .process_packet_internal(*packet, &raw_message, received_at)
-                                    .await;
-                            }
-                            MessageTask::ServerMessage {
-                                raw_message,
-                                received_at,
-                            } => {
-                                router
-                                    .process_server_message_internal(&raw_message, received_at)
-                                    .await;
-                            }
+            tokio::spawn(async move {
+                tracing::info!("PacketRouter worker {} started", worker_id);
+                while let Ok(task) = rx.recv_async().await {
+                    match task {
+                        MessageTask::Packet {
+                            packet,
+                            raw_message,
+                            received_at,
+                        } => {
+                            router
+                                .process_packet_internal(*packet, &raw_message, received_at)
+                                .await;
                         }
-
-                        // Update internal queue depth metric
-                        metrics::gauge!("aprs.router.internal_queue_depth").set(rx.len() as f64);
+                        MessageTask::ServerMessage {
+                            raw_message,
+                            received_at,
+                        } => {
+                            router
+                                .process_server_message_internal(&raw_message, received_at)
+                                .await;
+                        }
                     }
-                    tracing::info!("PacketRouter worker {} stopped", worker_id);
+
+                    // Update internal queue depth metric
+                    metrics::gauge!("aprs.router.internal_queue_depth").set(rx.len() as f64);
                 }
-                .instrument(tracing::info_span!("router_worker", worker_id)),
-            );
+                tracing::info!("PacketRouter worker {} stopped", worker_id);
+            });
         }
 
         tracing::info!("Spawned {} PacketRouter workers", num_workers);

@@ -604,57 +604,52 @@ pub async fn handle_run(
     let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
-    tokio::spawn(
-        async move {
-            info!("Envelope router task started");
-            while let Ok(envelope) = envelope_rx.recv_async().await {
-                match envelope.source() {
-                    soar::protocol::IngestSource::Ogn => {
-                        if let Some(aprs_tx) = &aprs_intake_tx_for_router {
-                            // Decode bytes to String (OGN messages are UTF-8)
-                            match String::from_utf8(envelope.data) {
-                                Ok(message) => {
-                                    // OGN messages already have timestamp prepended by aprs_client
-                                    // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <packet>"
-                                    // Just pass through without adding another timestamp
-                                    if let Err(e) = aprs_tx.send_async(message).await {
-                                        error!(
-                                            "Failed to send OGN message to APRS intake queue: {}",
-                                            e
-                                        );
-                                        metrics::counter!("socket.router.aprs_send_error_total")
-                                            .increment(1);
-                                    } else {
-                                        metrics::counter!("socket.router.aprs_routed_total")
-                                            .increment(1);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to decode OGN message as UTF-8: {}", e);
-                                    metrics::counter!("socket.router.decode_error_total")
+    tokio::spawn(async move {
+        info!("Envelope router task started");
+        while let Ok(envelope) = envelope_rx.recv_async().await {
+            match envelope.source() {
+                soar::protocol::IngestSource::Ogn => {
+                    if let Some(aprs_tx) = &aprs_intake_tx_for_router {
+                        // Decode bytes to String (OGN messages are UTF-8)
+                        match String::from_utf8(envelope.data) {
+                            Ok(message) => {
+                                // OGN messages already have timestamp prepended by aprs_client
+                                // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <packet>"
+                                // Just pass through without adding another timestamp
+                                if let Err(e) = aprs_tx.send_async(message).await {
+                                    error!(
+                                        "Failed to send OGN message to APRS intake queue: {}",
+                                        e
+                                    );
+                                    metrics::counter!("socket.router.aprs_send_error_total")
+                                        .increment(1);
+                                } else {
+                                    metrics::counter!("socket.router.aprs_routed_total")
                                         .increment(1);
                                 }
                             }
-                        }
-                    }
-                    soar::protocol::IngestSource::Beast | soar::protocol::IngestSource::Sbs => {
-                        if let Some(beast_tx) = &beast_intake_tx_for_router {
-                            // Beast/SBS messages are already binary (timestamp + data)
-                            if let Err(e) = beast_tx.send_async(envelope.data).await {
-                                error!("Failed to send Beast/SBS message to intake queue: {}", e);
-                                metrics::counter!("socket.router.beast_send_error_total")
-                                    .increment(1);
-                            } else {
-                                metrics::counter!("socket.router.beast_routed_total").increment(1);
+                            Err(e) => {
+                                error!("Failed to decode OGN message as UTF-8: {}", e);
+                                metrics::counter!("socket.router.decode_error_total").increment(1);
                             }
                         }
                     }
                 }
+                soar::protocol::IngestSource::Beast | soar::protocol::IngestSource::Sbs => {
+                    if let Some(beast_tx) = &beast_intake_tx_for_router {
+                        // Beast/SBS messages are already binary (timestamp + data)
+                        if let Err(e) = beast_tx.send_async(envelope.data).await {
+                            error!("Failed to send Beast/SBS message to intake queue: {}", e);
+                            metrics::counter!("socket.router.beast_send_error_total").increment(1);
+                        } else {
+                            metrics::counter!("socket.router.beast_routed_total").increment(1);
+                        }
+                    }
+                }
             }
-            info!("Envelope router task stopped");
         }
-        .instrument(tracing::info_span!("envelope_router")),
-    );
+        info!("Envelope router task stopped");
+    });
     info!("Spawned envelope router task");
 
     // Create PacketRouter with per-processor queues and internal worker pool
@@ -677,26 +672,22 @@ pub async fn handle_run(
     if let Some((_, nats_intake_rx)) = aprs_intake_opt.as_ref() {
         let intake_router = packet_router.clone();
         let nats_intake_rx = nats_intake_rx.clone();
-        tokio::spawn(
-            async move {
-                info!("Intake queue processor started");
-                let mut messages_processed = 0u64;
-                while let Ok(message) = nats_intake_rx.recv_async().await {
-                    process_aprs_message(&message, &intake_router).await;
-                    messages_processed += 1;
-                    metrics::counter!("aprs.intake.processed_total").increment(1);
+        tokio::spawn(async move {
+            info!("Intake queue processor started");
+            let mut messages_processed = 0u64;
+            while let Ok(message) = nats_intake_rx.recv_async().await {
+                process_aprs_message(&message, &intake_router).await;
+                messages_processed += 1;
+                metrics::counter!("aprs.intake.processed_total").increment(1);
 
-                    // Update intake queue depth metric
-                    metrics::gauge!("aprs.nats.intake_queue_depth")
-                        .set(nats_intake_rx.len() as f64);
-                }
-                info!(
-                    "Intake queue processor stopped after processing {} messages",
-                    messages_processed
-                );
+                // Update intake queue depth metric
+                metrics::gauge!("aprs.nats.intake_queue_depth").set(nats_intake_rx.len() as f64);
             }
-            .instrument(tracing::info_span!("intake_processor")),
-        );
+            info!(
+                "Intake queue processor stopped after processing {} messages",
+                messages_processed
+            );
+        });
         info!("Spawned intake queue processor");
     }
 
@@ -723,33 +714,30 @@ pub async fn handle_run(
             let beast_receiver_id = *beast_receiver_id;
             let beast_intake_rx = beast_intake_rx.clone();
 
-            tokio::spawn(
-                async move {
-                    while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
-                        let start_time = std::time::Instant::now();
-                        process_beast_message(
-                            &message_bytes,
-                            &beast_aircraft_repo,
-                            &beast_repo_clone,
-                            &beast_fix_processor,
-                            &beast_cpr_decoder,
-                            beast_receiver_id,
-                        )
-                        .await;
+            tokio::spawn(async move {
+                while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
+                    let start_time = std::time::Instant::now();
+                    process_beast_message(
+                        &message_bytes,
+                        &beast_aircraft_repo,
+                        &beast_repo_clone,
+                        &beast_fix_processor,
+                        &beast_cpr_decoder,
+                        beast_receiver_id,
+                    )
+                    .await;
 
-                        let duration = start_time.elapsed();
-                        metrics::histogram!("beast.run.process_message_duration_ms")
-                            .record(duration.as_millis() as f64);
-                        metrics::counter!("beast.run.intake.processed_total").increment(1);
+                    let duration = start_time.elapsed();
+                    metrics::histogram!("beast.run.process_message_duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("beast.run.intake.processed_total").increment(1);
 
-                        // Update Beast intake queue depth metric (sample from each worker)
-                        metrics::gauge!("beast.run.nats.intake_queue_depth")
-                            .set(beast_intake_rx.len() as f64);
-                    }
-                    info!("Beast intake queue worker {} stopped", worker_id);
+                    // Update Beast intake queue depth metric (sample from each worker)
+                    metrics::gauge!("beast.run.nats.intake_queue_depth")
+                        .set(beast_intake_rx.len() as f64);
                 }
-                .instrument(tracing::info_span!("beast_intake_worker", worker_id)),
-            );
+                info!("Beast intake queue worker {} stopped", worker_id);
+            });
         }
         info!("Spawned {} Beast intake queue workers", num_beast_workers);
     }
@@ -763,24 +751,21 @@ pub async fn handle_run(
         "Spawning {} aircraft position workers",
         num_aircraft_workers
     );
-    for worker_id in 0..num_aircraft_workers {
+    for _worker_id in 0..num_aircraft_workers {
         let worker_rx = aircraft_rx.clone();
         let processor = aircraft_position_processor.clone();
-        tokio::spawn(
-            async move {
-                while let Ok((packet, context)) = worker_rx.recv_async().await {
-                    let start = std::time::Instant::now();
-                    processor.process_aircraft_position(&packet, context).await;
-                    let duration = start.elapsed();
-                    metrics::histogram!("aprs.aircraft.duration_ms")
-                        .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.aircraft.processed_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                }
+        tokio::spawn(async move {
+            while let Ok((packet, context)) = worker_rx.recv_async().await {
+                let start = std::time::Instant::now();
+                processor.process_aircraft_position(&packet, context).await;
+                let duration = start.elapsed();
+                metrics::histogram!("aprs.aircraft.duration_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aprs.aircraft.processed_total").increment(1);
+                metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
+                metrics::counter!("aprs.messages.processed.total_total").increment(1);
             }
-            .instrument(tracing::info_span!("aircraft_worker", worker_id)),
-        );
+        });
     }
 
     // Receiver status workers (6 workers - medium processing)
@@ -789,24 +774,21 @@ pub async fn handle_run(
         "Spawning {} receiver status workers",
         num_receiver_status_workers
     );
-    for worker_id in 0..num_receiver_status_workers {
+    for _worker_id in 0..num_receiver_status_workers {
         let worker_rx = receiver_status_rx.clone();
         let processor = receiver_status_processor.clone();
-        tokio::spawn(
-            async move {
-                while let Ok((packet, context)) = worker_rx.recv_async().await {
-                    let start = std::time::Instant::now();
-                    processor.process_status_packet(&packet, context).await;
-                    let duration = start.elapsed();
-                    metrics::histogram!("aprs.receiver_status.duration_ms")
-                        .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.receiver_status.processed_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                }
+        tokio::spawn(async move {
+            while let Ok((packet, context)) = worker_rx.recv_async().await {
+                let start = std::time::Instant::now();
+                processor.process_status_packet(&packet, context).await;
+                let duration = start.elapsed();
+                metrics::histogram!("aprs.receiver_status.duration_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aprs.receiver_status.processed_total").increment(1);
+                metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
+                metrics::counter!("aprs.messages.processed.total_total").increment(1);
             }
-            .instrument(tracing::info_span!("receiver_status_worker", worker_id)),
-        );
+        });
     }
 
     // Receiver position workers (4 workers - light processing)
@@ -815,49 +797,42 @@ pub async fn handle_run(
         "Spawning {} receiver position workers",
         num_receiver_position_workers
     );
-    for worker_id in 0..num_receiver_position_workers {
+    for _worker_id in 0..num_receiver_position_workers {
         let worker_rx = receiver_position_rx.clone();
         let processor = receiver_position_processor.clone();
-        tokio::spawn(
-            async move {
-                while let Ok((packet, context)) = worker_rx.recv_async().await {
-                    let start = std::time::Instant::now();
-                    processor.process_receiver_position(&packet, context).await;
-                    let duration = start.elapsed();
-                    metrics::histogram!("aprs.receiver_position.duration_ms")
-                        .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.receiver_position.processed_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.receiver_position_total")
-                        .increment(1);
-                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                }
+        tokio::spawn(async move {
+            while let Ok((packet, context)) = worker_rx.recv_async().await {
+                let start = std::time::Instant::now();
+                processor.process_receiver_position(&packet, context).await;
+                let duration = start.elapsed();
+                metrics::histogram!("aprs.receiver_position.duration_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aprs.receiver_position.processed_total").increment(1);
+                metrics::counter!("aprs.messages.processed.receiver_position_total").increment(1);
+                metrics::counter!("aprs.messages.processed.total_total").increment(1);
             }
-            .instrument(tracing::info_span!("receiver_position_worker", worker_id)),
-        );
+        });
     }
 
     // Server status workers (2 workers - very light processing)
     info!("Spawning 2 server status workers");
-    for worker_id in 0..2 {
+    for _worker_id in 0..2 {
         let worker_rx = server_status_rx.clone();
         let processor = server_status_processor.clone();
-        tokio::spawn(
-            async move {
-                while let Ok((message, received_at)) = worker_rx.recv_async().await {
-                    let start = std::time::Instant::now();
-                    processor
-                        .process_server_message(&message, received_at)
-                        .await;
-                    let duration = start.elapsed();
-                    metrics::histogram!("aprs.server_status.duration_ms")
-                        .record(duration.as_millis() as f64);
-                    metrics::counter!("aprs.server_status.processed_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.server_total").increment(1);
-                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                }
+        tokio::spawn(async move {
+            while let Ok((message, received_at)) = worker_rx.recv_async().await {
+                let start = std::time::Instant::now();
+                processor
+                    .process_server_message(&message, received_at)
+                    .await;
+                let duration = start.elapsed();
+                metrics::histogram!("aprs.server_status.duration_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aprs.server_status.processed_total").increment(1);
+                metrics::counter!("aprs.messages.processed.server_total").increment(1);
+                metrics::counter!("aprs.messages.processed.total_total").increment(1);
             }
-            .instrument(tracing::info_span!("server_status_worker", worker_id)),
-        );
+        });
     }
 
     // Spawn queue depth and system metrics reporter
