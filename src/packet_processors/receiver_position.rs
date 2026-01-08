@@ -19,6 +19,7 @@ impl ReceiverPositionProcessor {
 
     /// Process a receiver position packet and update its location
     /// Note: Receiver is guaranteed to exist in database (created by GenericProcessor)
+    #[tracing::instrument(skip(self, packet, _context), fields(callsign = %packet.from))]
     pub async fn process_receiver_position(&self, packet: &AprsPacket, _context: PacketContext) {
         // Extract position data from packet
         if let AprsData::Position(position) = &packet.data {

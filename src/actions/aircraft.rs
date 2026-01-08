@@ -36,6 +36,7 @@ fn default_per_page() -> i64 {
     50
 }
 
+#[tracing::instrument(skip(state), fields(%club_id))]
 pub async fn get_aircraft_registrations_by_club(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
