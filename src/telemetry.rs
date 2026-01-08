@@ -3,7 +3,7 @@ use opentelemetry::{KeyValue, global, trace::TracerProvider};
 use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::{
     Resource,
-    trace::{Sampler, SdkTracerProvider},
+    trace::{Sampler, SdkTracerProvider, SpanLimits},
 };
 use tracing::info;
 
@@ -43,11 +43,22 @@ pub fn init_tracer(
     // Get environment-aware sampler
     let sampler = get_trace_sampler(env);
 
+    // Configure span limits to prevent traces from growing too large
+    // Tempo has a 5MB default limit per trace
+    let span_limits = SpanLimits {
+        max_events_per_span: 50, // Limit log events attached to spans (default 128)
+        max_attributes_per_span: 32, // Limit attributes per span (default 128)
+        max_links_per_span: 16,  // Limit span links (default 128)
+        max_attributes_per_event: 16, // Limit attributes per event (default 128)
+        max_attributes_per_link: 16, // Limit attributes per link (default 128)
+    };
+
     // Build the tracer provider
     let tracer_provider = SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
         .with_sampler(sampler)
         .with_resource(resource)
+        .with_span_limits(span_limits)
         .build();
 
     // Set as global provider

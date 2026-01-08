@@ -10,7 +10,7 @@ use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use tracing::{debug, error, warn};
+use tracing::{Instrument, debug, error, info_span, warn};
 use uuid::Uuid;
 
 use super::FlightProcessorContext;
@@ -118,98 +118,101 @@ fn spawn_flight_enrichment_on_creation(
     let airports_repo = ctx.airports_repo.clone();
     let locations_repo = ctx.locations_repo.clone();
 
-    tokio::spawn(async move {
-        let start = std::time::Instant::now();
+    tokio::spawn(
+        async move {
+            let start = std::time::Instant::now();
 
-        // Fetch flight to get departure_airport_id (we set this in fast path)
-        let flight = match flights_repo.get_flight_by_id(flight_id).await {
-            Ok(Some(f)) => f,
-            Ok(None) => {
-                warn!(
-                    "Flight {} not found during background enrichment",
-                    flight_id
-                );
-                return;
-            }
-            Err(e) => {
-                error!("Failed to fetch flight {} for enrichment: {}", flight_id, e);
-                return;
-            }
-        };
-
-        let departure_airport_id = flight.departure_airport_id;
-
-        // SLOW: Determine runway (queries fixes table for 40-second window)
-        let takeoff_runway_info = determine_runway_identifier(
-            &fixes_repo,
-            &runways_repo,
-            &aircraft,
-            fix.timestamp,
-            fix.latitude,
-            fix.longitude,
-            departure_airport_id,
-        )
-        .await;
-
-        let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
-
-        // SLOW: Create location via geocoding (HTTP API call to Pelias)
-        let start_location_id = if let Some(airport_id) = departure_airport_id {
-            match get_airport_location_id(&airports_repo, airport_id).await {
-                Some(location_id) => Some(location_id),
-                None => {
-                    create_start_end_location(
-                        &locations_repo,
-                        fix.latitude,
-                        fix.longitude,
-                        "start (takeoff)",
-                    )
-                    .await
+            // Fetch flight to get departure_airport_id (we set this in fast path)
+            let flight = match flights_repo.get_flight_by_id(flight_id).await {
+                Ok(Some(f)) => f,
+                Ok(None) => {
+                    warn!(
+                        "Flight {} not found during background enrichment",
+                        flight_id
+                    );
+                    return;
                 }
-            }
-        } else {
-            create_start_end_location(
+                Err(e) => {
+                    error!("Failed to fetch flight {} for enrichment: {}", flight_id, e);
+                    return;
+                }
+            };
+
+            let departure_airport_id = flight.departure_airport_id;
+
+            // SLOW: Determine runway (queries fixes table for 40-second window)
+            let takeoff_runway_info = determine_runway_identifier(
+                &fixes_repo,
+                &runways_repo,
+                &aircraft,
+                fix.timestamp,
+                fix.latitude,
+                fix.longitude,
+                departure_airport_id,
+            )
+            .await;
+
+            let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
+
+            // SLOW: Create location via geocoding (HTTP API call to Pelias)
+            let start_location_id = if let Some(airport_id) = departure_airport_id {
+                match get_airport_location_id(&airports_repo, airport_id).await {
+                    Some(location_id) => Some(location_id),
+                    None => {
+                        create_start_end_location(
+                            &locations_repo,
+                            fix.latitude,
+                            fix.longitude,
+                            "start (takeoff)",
+                        )
+                        .await
+                    }
+                }
+            } else {
+                create_start_end_location(
+                    &locations_repo,
+                    fix.latitude,
+                    fix.longitude,
+                    "start (takeoff)",
+                )
+                .await
+            };
+
+            let takeoff_location_id = create_or_find_location(
+                &airports_repo,
                 &locations_repo,
                 fix.latitude,
                 fix.longitude,
-                "start (takeoff)",
+                departure_airport_id,
             )
-            .await
-        };
+            .await;
 
-        let takeoff_location_id = create_or_find_location(
-            &airports_repo,
-            &locations_repo,
-            fix.latitude,
-            fix.longitude,
-            departure_airport_id,
-        )
-        .await;
+            // Update flight with enriched data
+            if let Err(e) = flights_repo
+                .update_flight_takeoff_enrichment(
+                    flight_id,
+                    takeoff_runway,
+                    start_location_id,
+                    takeoff_location_id,
+                )
+                .await
+            {
+                error!(
+                    "Failed to update flight {} with enrichment data: {}",
+                    flight_id, e
+                );
+            }
 
-        // Update flight with enriched data
-        if let Err(e) = flights_repo
-            .update_flight_takeoff_enrichment(
-                flight_id,
-                takeoff_runway,
-                start_location_id,
-                takeoff_location_id,
-            )
-            .await
-        {
-            error!(
-                "Failed to update flight {} with enrichment data: {}",
-                flight_id, e
+            metrics::histogram!("flight_tracker.enrich_flight_on_creation.latency_ms")
+                .record(start.elapsed().as_micros() as f64 / 1000.0);
+
+            debug!(
+                "Enriched flight {} with runway/location data in background",
+                flight_id
             );
         }
-
-        metrics::histogram!("flight_tracker.enrich_flight_on_creation.latency_ms")
-            .record(start.elapsed().as_micros() as f64 / 1000.0);
-
-        debug!(
-            "Enriched flight {} with runway/location data in background",
-            flight_id
-        );
-    });
+        .instrument(info_span!("flight_enrichment_creation", %flight_id)),
+    );
 }
 
 /// Timeout a flight that has not received beacons for 1+ hour
@@ -730,95 +733,98 @@ fn spawn_flight_enrichment_on_completion_direct(
     let airports_repo = airports_repo.clone();
     let locations_repo = locations_repo.clone();
 
-    tokio::spawn(async move {
-        let start = std::time::Instant::now();
+    tokio::spawn(
+        async move {
+            let start = std::time::Instant::now();
 
-        // Fetch flight to get arrival_airport_id (we set this in fast path)
-        let flight = match flights_repo.get_flight_by_id(flight_id).await {
-            Ok(Some(f)) => f,
-            Ok(None) => {
-                warn!(
-                    "Flight {} not found during background enrichment on completion",
-                    flight_id
-                );
-                return;
-            }
-            Err(e) => {
-                error!(
-                    "Failed to fetch flight {} for enrichment on completion: {}",
-                    flight_id, e
-                );
-                return;
-            }
-        };
-
-        let arrival_airport_id = flight.arrival_airport_id;
-
-        // SLOW: Determine runway (queries fixes table for 40-second window)
-        let landing_runway_info = determine_runway_identifier(
-            &fixes_repo,
-            &runways_repo,
-            &aircraft,
-            fix.timestamp,
-            fix.latitude,
-            fix.longitude,
-            arrival_airport_id,
-        )
-        .await;
-
-        let (landing_runway, landing_runway_inferred) = match landing_runway_info {
-            Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
-            None => (None, None),
-        };
-
-        // SLOW: Create location via geocoding (HTTP API call to Pelias)
-        let end_location_id = if let Some(airport_id) = arrival_airport_id {
-            match get_airport_location_id(&airports_repo, airport_id).await {
-                Some(location_id) => Some(location_id),
-                None => {
-                    create_start_end_location(
-                        &locations_repo,
-                        fix.latitude,
-                        fix.longitude,
-                        "end (no airport location)",
-                    )
-                    .await
+            // Fetch flight to get arrival_airport_id (we set this in fast path)
+            let flight = match flights_repo.get_flight_by_id(flight_id).await {
+                Ok(Some(f)) => f,
+                Ok(None) => {
+                    warn!(
+                        "Flight {} not found during background enrichment on completion",
+                        flight_id
+                    );
+                    return;
                 }
-            }
-        } else {
-            create_start_end_location(
-                &locations_repo,
+                Err(e) => {
+                    error!(
+                        "Failed to fetch flight {} for enrichment on completion: {}",
+                        flight_id, e
+                    );
+                    return;
+                }
+            };
+
+            let arrival_airport_id = flight.arrival_airport_id;
+
+            // SLOW: Determine runway (queries fixes table for 40-second window)
+            let landing_runway_info = determine_runway_identifier(
+                &fixes_repo,
+                &runways_repo,
+                &aircraft,
+                fix.timestamp,
                 fix.latitude,
                 fix.longitude,
-                "end (no airport)",
+                arrival_airport_id,
             )
-            .await
-        };
+            .await;
 
-        // Update flight with enriched landing data
-        if let Err(e) = flights_repo
-            .update_flight_landing_enrichment(
+            let (landing_runway, landing_runway_inferred) = match landing_runway_info {
+                Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
+                None => (None, None),
+            };
+
+            // SLOW: Create location via geocoding (HTTP API call to Pelias)
+            let end_location_id = if let Some(airport_id) = arrival_airport_id {
+                match get_airport_location_id(&airports_repo, airport_id).await {
+                    Some(location_id) => Some(location_id),
+                    None => {
+                        create_start_end_location(
+                            &locations_repo,
+                            fix.latitude,
+                            fix.longitude,
+                            "end (no airport location)",
+                        )
+                        .await
+                    }
+                }
+            } else {
+                create_start_end_location(
+                    &locations_repo,
+                    fix.latitude,
+                    fix.longitude,
+                    "end (no airport)",
+                )
+                .await
+            };
+
+            // Update flight with enriched landing data
+            if let Err(e) = flights_repo
+                .update_flight_landing_enrichment(
+                    flight_id,
+                    landing_runway,
+                    landing_runway_inferred,
+                    end_location_id,
+                    None, // landing_location_id - not set during enrichment
+                )
+                .await
+            {
+                error!(
+                    "Failed to update flight {} with enriched landing data: {}",
+                    flight_id, e
+                );
+            }
+
+            metrics::histogram!("flight_tracker.enrichment.landing.latency_ms")
+                .record(start.elapsed().as_micros() as f64 / 1000.0);
+
+            debug!(
+                "Flight {} landing enrichment completed in {:.2}s",
                 flight_id,
-                landing_runway,
-                landing_runway_inferred,
-                end_location_id,
-                None, // landing_location_id - not set during enrichment
-            )
-            .await
-        {
-            error!(
-                "Failed to update flight {} with enriched landing data: {}",
-                flight_id, e
+                start.elapsed().as_secs_f64()
             );
         }
-
-        metrics::histogram!("flight_tracker.enrichment.landing.latency_ms")
-            .record(start.elapsed().as_micros() as f64 / 1000.0);
-
-        debug!(
-            "Flight {} landing enrichment completed in {:.2}s",
-            flight_id,
-            start.elapsed().as_secs_f64()
-        );
-    });
+        .instrument(info_span!("flight_enrichment_completion", %flight_id)),
+    );
 }
