@@ -96,21 +96,23 @@ impl NatsFixPublisher {
                 let mut last_stats_log = std::time::Instant::now();
 
             while let Ok(fix_with_flight) = fix_receiver.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
                 let aircraft_id = fix_with_flight.aircraft_id.to_string();
 
                 match publish_to_nats(&client_clone, &aircraft_id, &fix_with_flight).await {
                     Ok(()) => {
                         fixes_published += 1;
-                        metrics::counter!("nats_publisher_fixes_published_total").increment(1);
+                        metrics::counter!("nats.fix_publisher.published_total").increment(1);
                     }
                     Err(e) => {
                         error!("Failed to publish fix for device {}: {}", aircraft_id, e);
-                        metrics::counter!("nats_publisher_errors_total").increment(1);
+                        metrics::counter!("nats.fix_publisher.errors_total").increment(1);
                     }
                 }
+                metrics::gauge!("worker.active", "type" => "nats_publisher").decrement(1.0);
 
                 // Update queue depth metric
-                metrics::gauge!("nats_publisher_queue_depth").set(fix_receiver.len() as f64);
+                metrics::gauge!("nats.fix_publisher.queue_depth").set(fix_receiver.len() as f64);
 
                 // Log statistics every 5 minutes
                 if last_stats_log.elapsed().as_secs() >= 300 {
@@ -146,6 +148,11 @@ impl NatsFixPublisher {
     /// Process a fix and publish it to NATS (blocking)
     /// This will block if the queue is full, applying backpressure to the caller
     pub async fn process_fix(&self, fix_with_flight: FixWithFlightInfo, _raw_message: &str) {
+        // Track if send will block (queue is full)
+        if self.fix_sender.is_full() {
+            metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").increment(1);
+        }
+
         // Use send_async to block until space is available - never drop fixes
         match self.fix_sender.send_async(fix_with_flight).await {
             Ok(_) => {
@@ -154,7 +161,7 @@ impl NatsFixPublisher {
             Err(flume::SendError(_)) => {
                 // NATS publisher task has shut down
                 error!("NATS publisher channel is closed - cannot publish fix");
-                metrics::counter!("nats_publisher_errors_total").increment(1);
+                metrics::counter!("nats.fix_publisher.errors_total").increment(1);
             }
         }
     }

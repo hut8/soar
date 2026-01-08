@@ -1,6 +1,6 @@
 use super::generic::{GenericProcessor, PacketContext};
 use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
-use tracing::{Instrument, debug, trace, warn};
+use tracing::{debug, trace, warn};
 
 /// Task representing a message to be processed by PacketRouter workers
 enum MessageTask {
@@ -83,37 +83,37 @@ impl PacketRouter {
             let rx = internal_queue_rx.clone();
             let router = self.clone();
 
-            tokio::spawn(
-                async move {
-                    tracing::info!("PacketRouter worker {} started", worker_id);
-                    while let Ok(task) = rx.recv_async().await {
-                        match task {
-                            MessageTask::Packet {
-                                packet,
-                                raw_message,
-                                received_at,
-                            } => {
-                                router
-                                    .process_packet_internal(*packet, &raw_message, received_at)
-                                    .await;
-                            }
-                            MessageTask::ServerMessage {
-                                raw_message,
-                                received_at,
-                            } => {
-                                router
-                                    .process_server_message_internal(&raw_message, received_at)
-                                    .await;
-                            }
+            tokio::spawn(async move {
+                tracing::info!("PacketRouter worker {} started", worker_id);
+                while let Ok(task) = rx.recv_async().await {
+                    metrics::gauge!("worker.active", "type" => "router").increment(1.0);
+                    match task {
+                        MessageTask::Packet {
+                            packet,
+                            raw_message,
+                            received_at,
+                        } => {
+                            router
+                                .process_packet_internal(*packet, &raw_message, received_at)
+                                .await;
                         }
-
-                        // Update internal queue depth metric
-                        metrics::gauge!("aprs.router.internal_queue_depth").set(rx.len() as f64);
+                        MessageTask::ServerMessage {
+                            raw_message,
+                            received_at,
+                        } => {
+                            router
+                                .process_server_message_internal(&raw_message, received_at)
+                                .await;
+                        }
                     }
-                    tracing::info!("PacketRouter worker {} stopped", worker_id);
+                    metrics::counter!("aprs.router.processed_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "router").decrement(1.0);
+
+                    // Update internal queue depth metric
+                    metrics::gauge!("aprs.router_queue.depth").set(rx.len() as f64);
                 }
-                .instrument(tracing::info_span!("router_worker", worker_id)),
-            );
+                tracing::info!("PacketRouter worker {} stopped", worker_id);
+            });
         }
 
         tracing::info!("Spawned {} PacketRouter workers", num_workers);
@@ -171,13 +171,18 @@ impl PacketRouter {
             received_at,
         };
 
+        // Track if send will block (queue is full)
+        if self.internal_queue_tx.is_full() {
+            metrics::counter!("queue.send_blocked_total", "queue" => "router").increment(1);
+        }
+
         // Block until space is available - never drop messages
         if let Err(e) = self.internal_queue_tx.send_async(task).await {
             warn!(
                 "PacketRouter internal queue disconnected, cannot send server message: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
+            metrics::counter!("aprs.router_queue.disconnected_total").increment(1);
         }
     }
 
@@ -225,13 +230,18 @@ impl PacketRouter {
             received_at,
         };
 
+        // Track if send will block (queue is full)
+        if self.internal_queue_tx.is_full() {
+            metrics::counter!("queue.send_blocked_total", "queue" => "router").increment(1);
+        }
+
         // Block until space is available - never drop packets
         if let Err(e) = self.internal_queue_tx.send_async(task).await {
             warn!(
                 "PacketRouter internal queue disconnected, cannot send packet: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
+            metrics::counter!("aprs.router_queue.disconnected_total").increment(1);
         }
     }
 
@@ -281,6 +291,10 @@ impl PacketRouter {
                             .increment(1);
                         // Route to aircraft position queue
                         if let Some(tx) = &self.aircraft_position_tx {
+                            // Track if send will block (queue is full)
+                            if tx.is_full() {
+                                metrics::counter!("queue.send_blocked_total", "queue" => "aircraft").increment(1);
+                            }
                             if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
                                     "Aircraft position queue CLOSED - cannot route packet from {}: {}",

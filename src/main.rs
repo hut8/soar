@@ -723,7 +723,8 @@ async fn main() -> Result<()> {
 
     let registry = tracing_subscriber::registry();
 
-    let fmt_layer = filter::Filtered::new(tracing_subscriber::fmt::layer(), fmt_filter);
+    let fmt_layer =
+        filter::Filtered::new(tracing_subscriber::fmt::layer().without_time(), fmt_filter);
 
     match &cli.command {
         Commands::Run {
