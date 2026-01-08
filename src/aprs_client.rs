@@ -3,7 +3,6 @@ use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tracing::Instrument;
 use tracing::{error, info, trace, warn};
 
 // Queue size for raw APRS messages
@@ -96,86 +95,80 @@ impl AprsClient {
 
         // Spawn queue feeding task - reads from channel, sends to persistent queue
         let queue_clone = queue.clone();
-        let queue_handle = tokio::spawn(
-            async move {
-                loop {
-                    match raw_message_rx.recv_async().await {
-                        Ok(message) => {
-                            if let Err(e) = queue_clone.send(message).await {
-                                error!("Failed to send to persistent queue: {}", e);
-                                // Queue overflow or other error - this is critical
-                                metrics::counter!("aprs.queue.send_error_total").increment(1);
-                            }
+        let queue_handle = tokio::spawn(async move {
+            loop {
+                match raw_message_rx.recv_async().await {
+                    Ok(message) => {
+                        if let Err(e) = queue_clone.send(message).await {
+                            error!("Failed to send to persistent queue: {}", e);
+                            // Queue overflow or other error - this is critical
+                            metrics::counter!("aprs.queue.send_error_total").increment(1);
                         }
-                        Err(_) => {
-                            // Channel closed, exit
-                            info!("Raw message channel closed, queue feeder exiting");
-                            break;
-                        }
+                    }
+                    Err(_) => {
+                        // Channel closed, exit
+                        info!("Raw message channel closed, queue feeder exiting");
+                        break;
                     }
                 }
             }
-            .instrument(tracing::info_span!("aprs_queue_feeder")),
-        );
+        });
 
         // Spawn connection management task
         let health_for_connection = health_state.clone();
-        let connection_handle = tokio::spawn(
-            async move {
-                let mut retry_count = 0;
-                let mut current_delay = config.retry_delay_seconds;
+        let connection_handle = tokio::spawn(async move {
+            let mut retry_count = 0;
+            let mut current_delay = config.retry_delay_seconds;
 
-                loop {
-                    if retry_count == 0 {
-                        info!(
-                            "Connecting to APRS server at {}:{}",
-                            config.server, config.port
-                        );
-                    } else {
-                        info!(
-                            "Reconnecting to APRS server at {}:{} (retry attempt {})",
-                            config.server, config.port, retry_count
-                        );
+            loop {
+                if retry_count == 0 {
+                    info!(
+                        "Connecting to APRS server at {}:{}",
+                        config.server, config.port
+                    );
+                } else {
+                    info!(
+                        "Reconnecting to APRS server at {}:{} (retry attempt {})",
+                        config.server, config.port, retry_count
+                    );
+                }
+
+                let connect_result = Self::connect_and_run(
+                    &config,
+                    raw_message_tx.clone(),
+                    health_for_connection.clone(),
+                )
+                .await;
+
+                match connect_result {
+                    ConnectionResult::Success => {
+                        info!("APRS connection completed normally");
+                        retry_count = 0;
+                        current_delay = config.retry_delay_seconds;
                     }
-
-                    let connect_result = Self::connect_and_run(
-                        &config,
-                        raw_message_tx.clone(),
-                        health_for_connection.clone(),
-                    )
-                    .await;
-
-                    match connect_result {
-                        ConnectionResult::Success => {
-                            info!("APRS connection completed normally");
-                            retry_count = 0;
-                            current_delay = config.retry_delay_seconds;
-                        }
-                        ConnectionResult::ConnectionFailed(e) => {
-                            error!("APRS connection failed: {}", e);
-                            retry_count += 1;
-                            metrics::counter!("aprs.connection_failed_total").increment(1);
-                        }
-                        ConnectionResult::OperationFailed(e) => {
-                            error!("APRS operation failed: {}", e);
-                            retry_count = 0;
-                            metrics::counter!("aprs.operation_failed_total").increment(1);
-                        }
+                    ConnectionResult::ConnectionFailed(e) => {
+                        error!("APRS connection failed: {}", e);
+                        retry_count += 1;
+                        metrics::counter!("aprs.connection_failed_total").increment(1);
                     }
-
-                    // Sleep before retrying
-                    if current_delay > 0 {
-                        info!("Waiting {} seconds before retry", current_delay);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(current_delay)).await;
-
-                        // Exponential backoff
-                        current_delay =
-                            std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                    ConnectionResult::OperationFailed(e) => {
+                        error!("APRS operation failed: {}", e);
+                        retry_count = 0;
+                        metrics::counter!("aprs.operation_failed_total").increment(1);
                     }
                 }
+
+                // Sleep before retrying
+                if current_delay > 0 {
+                    info!("Waiting {} seconds before retry", current_delay);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(current_delay)).await;
+
+                    // Exponential backoff
+                    current_delay =
+                        std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                }
             }
-            .instrument(tracing::info_span!("aprs_connection")),
-        );
+        });
 
         let (queue_result, connection_result) = tokio::join!(queue_handle, connection_handle);
 

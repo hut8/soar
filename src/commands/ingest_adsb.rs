@@ -3,7 +3,6 @@ use soar::beast::{BeastClient, BeastClientConfig};
 use soar::instance_lock::InstanceLock;
 use soar::sbs::{SbsClient, SbsClientConfig};
 use std::env;
-use tracing::Instrument;
 use tracing::{error, info, warn};
 
 /// Parse a "host:port" string into (hostname, port)
@@ -79,12 +78,9 @@ pub async fn handle_ingest_adsb(
             .unwrap_or(default_port);
 
         info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(
-            async move {
-                soar::metrics::start_metrics_server(metrics_port, Some("ingest-adsb")).await;
-            }
-            .instrument(tracing::info_span!("metrics_server")),
-        );
+        tokio::spawn(async move {
+            soar::metrics::start_metrics_server(metrics_port, Some("ingest-adsb")).await;
+        });
     }
 
     // Acquire instance lock to prevent multiple ingest instances from running
@@ -363,17 +359,13 @@ pub async fn handle_ingest_adsb(
         let stats_rx = stats_frames_received.clone();
 
         info!("Spawning Beast client for {}:{}", server, port);
-        let server_clone = server.clone();
-        let _handle = tokio::spawn(
-            async move {
-                let mut client = BeastClient::new(config);
-                match client.start_with_queue(queue, health, Some(stats_rx)).await {
-                    Ok(_) => info!("Beast client {}:{} stopped normally", server, port),
-                    Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
-                }
+        let _handle = tokio::spawn(async move {
+            let mut client = BeastClient::new(config);
+            match client.start_with_queue(queue, health, Some(stats_rx)).await {
+                Ok(_) => info!("Beast client {}:{} stopped normally", server, port),
+                Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
             }
-            .instrument(tracing::info_span!("beast_client", server = %server_clone, port = %port)),
-        );
+        });
     }
 
     // Spawn tasks for each SBS server
@@ -392,17 +384,13 @@ pub async fn handle_ingest_adsb(
         let stats_rx = stats_frames_received.clone();
 
         info!("Spawning SBS client for {}:{}", server, port);
-        let server_clone = server.clone();
-        let _handle = tokio::spawn(
-            async move {
-                let mut client = SbsClient::new(config);
-                match client.start_with_queue(queue, health, Some(stats_rx)).await {
-                    Ok(_) => info!("SBS client {}:{} stopped normally", server, port),
-                    Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
-                }
+        let _handle = tokio::spawn(async move {
+            let mut client = SbsClient::new(config);
+            match client.start_with_queue(queue, health, Some(stats_rx)).await {
+                Ok(_) => info!("SBS client {}:{} stopped normally", server, port),
+                Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
             }
-            .instrument(tracing::info_span!("sbs_client", server = %server_clone, port = %port)),
-        );
+        });
     }
 
     info!(

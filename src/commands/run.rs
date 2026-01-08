@@ -20,7 +20,6 @@ use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 use std::env;
 use std::sync::Arc;
-use tracing::Instrument;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -319,12 +318,9 @@ pub async fn handle_run(
         // Auto-assign port based on environment: production=9091, staging=9192
         let metrics_port = if is_staging { 9192 } else { 9091 };
         info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(
-            async move {
-                soar::metrics::start_metrics_server(metrics_port, Some("run")).await;
-            }
-            .instrument(tracing::info_span!("metrics_server")),
-        );
+        tokio::spawn(async move {
+            soar::metrics::start_metrics_server(metrics_port, Some("run")).await;
+        });
     }
 
     let lock_name = if is_production {
@@ -592,12 +588,9 @@ pub async fn handle_run(
     );
 
     // Spawn socket accept loop task
-    tokio::spawn(
-        async move {
-            socket_server.accept_loop(envelope_tx).await;
-        }
-        .instrument(tracing::info_span!("socket_server")),
-    );
+    tokio::spawn(async move {
+        socket_server.accept_loop(envelope_tx).await;
+    });
     info!("Spawned socket server accept loop");
 
     // Spawn envelope router task
@@ -853,96 +846,88 @@ pub async fn handle_run(
     let metrics_receiver_position_rx = receiver_position_rx.clone();
     let metrics_server_status_rx = server_status_rx.clone();
     let metrics_db_pool = diesel_pool.clone();
-    tokio::spawn(
-        async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
-            interval.tick().await; // First tick completes immediately
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        interval.tick().await; // First tick completes immediately
 
-            loop {
-                interval.tick().await;
+        loop {
+            interval.tick().await;
 
-                // Sample queue depths (lock-free with flume!)
-                let envelope_intake_depth = metrics_envelope_rx.len();
-                let internal_queue_depth = metrics_packet_router.internal_queue_depth();
-                let aircraft_depth = metrics_aircraft_rx.len();
-                let receiver_status_depth = metrics_receiver_status_rx.len();
-                let receiver_position_depth = metrics_receiver_position_rx.len();
-                let server_status_depth = metrics_server_status_rx.len();
+            // Sample queue depths (lock-free with flume!)
+            let envelope_intake_depth = metrics_envelope_rx.len();
+            let internal_queue_depth = metrics_packet_router.internal_queue_depth();
+            let aircraft_depth = metrics_aircraft_rx.len();
+            let receiver_status_depth = metrics_receiver_status_rx.len();
+            let receiver_position_depth = metrics_receiver_position_rx.len();
+            let server_status_depth = metrics_server_status_rx.len();
 
-                // Get database pool state
-                let pool_state = metrics_db_pool.state();
-                let active_connections = pool_state.connections - pool_state.idle_connections;
+            // Get database pool state
+            let pool_state = metrics_db_pool.state();
+            let active_connections = pool_state.connections - pool_state.idle_connections;
 
-                // Report queue depths to Prometheus
-                metrics::gauge!("socket.envelope_intake_queue.depth")
-                    .set(envelope_intake_depth as f64);
-                metrics::gauge!("aprs.router_queue.depth").set(internal_queue_depth as f64);
-                metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
-                metrics::gauge!("aprs.receiver_status_queue.depth")
-                    .set(receiver_status_depth as f64);
-                metrics::gauge!("aprs.receiver_position_queue.depth")
-                    .set(receiver_position_depth as f64);
-                metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
+            // Report queue depths to Prometheus
+            metrics::gauge!("socket.envelope_intake_queue.depth").set(envelope_intake_depth as f64);
+            metrics::gauge!("aprs.router_queue.depth").set(internal_queue_depth as f64);
+            metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
+            metrics::gauge!("aprs.receiver_status_queue.depth").set(receiver_status_depth as f64);
+            metrics::gauge!("aprs.receiver_position_queue.depth")
+                .set(receiver_position_depth as f64);
+            metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
 
-                // Report database pool state to Prometheus
-                metrics::gauge!("aprs.db_pool.total_connections")
-                    .set(pool_state.connections as f64);
-                metrics::gauge!("aprs.db_pool.active_connections").set(active_connections as f64);
-                metrics::gauge!("aprs.db_pool.idle_connections")
-                    .set(pool_state.idle_connections as f64);
+            // Report database pool state to Prometheus
+            metrics::gauge!("aprs.db_pool.total_connections").set(pool_state.connections as f64);
+            metrics::gauge!("aprs.db_pool.active_connections").set(active_connections as f64);
+            metrics::gauge!("aprs.db_pool.idle_connections")
+                .set(pool_state.idle_connections as f64);
 
-                // Warn if queues are building up
-                // Envelope intake queue: 80% threshold (critical - first point of backpressure)
-                if envelope_intake_depth > (ENVELOPE_INTAKE_QUEUE_SIZE * 80 / 100) {
-                    let percent = (envelope_intake_depth as f64 / ENVELOPE_INTAKE_QUEUE_SIZE as f64
-                        * 100.0) as usize;
-                    warn!(
-                        "Envelope intake queue building up: {}/{} messages ({}% full) - socket reads may slow down",
-                        envelope_intake_depth, ENVELOPE_INTAKE_QUEUE_SIZE, percent
-                    );
-                }
+            // Warn if queues are building up
+            // Envelope intake queue: 80% threshold (critical - first point of backpressure)
+            if envelope_intake_depth > (ENVELOPE_INTAKE_QUEUE_SIZE * 80 / 100) {
+                let percent = (envelope_intake_depth as f64 / ENVELOPE_INTAKE_QUEUE_SIZE as f64
+                    * 100.0) as usize;
+                warn!(
+                    "Envelope intake queue building up: {}/{} messages ({}% full) - socket reads may slow down",
+                    envelope_intake_depth, ENVELOPE_INTAKE_QUEUE_SIZE, percent
+                );
+            }
 
-                // Internal router queue: 50% threshold
-                const INTERNAL_QUEUE_SIZE: usize = 1_000;
-                if internal_queue_depth > queue_warning_threshold(INTERNAL_QUEUE_SIZE) {
-                    let percent =
-                        (internal_queue_depth as f64 / INTERNAL_QUEUE_SIZE as f64 * 100.0) as usize;
-                    warn!(
-                        "PacketRouter internal queue building up: {}/{} messages ({}% full)",
-                        internal_queue_depth, INTERNAL_QUEUE_SIZE, percent
-                    );
-                }
+            // Internal router queue: 50% threshold
+            const INTERNAL_QUEUE_SIZE: usize = 1_000;
+            if internal_queue_depth > queue_warning_threshold(INTERNAL_QUEUE_SIZE) {
+                let percent =
+                    (internal_queue_depth as f64 / INTERNAL_QUEUE_SIZE as f64 * 100.0) as usize;
+                warn!(
+                    "PacketRouter internal queue building up: {}/{} messages ({}% full)",
+                    internal_queue_depth, INTERNAL_QUEUE_SIZE, percent
+                );
+            }
 
-                // Aircraft position queue: 50% threshold
-                if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {
-                    let percent =
-                        (aircraft_depth as f64 / AIRCRAFT_QUEUE_SIZE as f64 * 100.0) as usize;
-                    warn!(
-                        "Aircraft position queue building up: {}/{} messages ({}% full)",
-                        aircraft_depth, AIRCRAFT_QUEUE_SIZE, percent
-                    );
-                }
-                if receiver_status_depth > queue_warning_threshold(RECEIVER_STATUS_QUEUE_SIZE) {
-                    let percent = (receiver_status_depth as f64 / RECEIVER_STATUS_QUEUE_SIZE as f64
-                        * 100.0) as usize;
-                    warn!(
-                        "Receiver status queue building up: {}/{} messages ({}% full)",
-                        receiver_status_depth, RECEIVER_STATUS_QUEUE_SIZE, percent
-                    );
-                }
-                if receiver_position_depth > queue_warning_threshold(RECEIVER_POSITION_QUEUE_SIZE) {
-                    let percent = (receiver_position_depth as f64
-                        / RECEIVER_POSITION_QUEUE_SIZE as f64
-                        * 100.0) as usize;
-                    warn!(
-                        "Receiver position queue building up: {}/{} messages ({}% full)",
-                        receiver_position_depth, RECEIVER_POSITION_QUEUE_SIZE, percent
-                    );
-                }
+            // Aircraft position queue: 50% threshold
+            if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {
+                let percent = (aircraft_depth as f64 / AIRCRAFT_QUEUE_SIZE as f64 * 100.0) as usize;
+                warn!(
+                    "Aircraft position queue building up: {}/{} messages ({}% full)",
+                    aircraft_depth, AIRCRAFT_QUEUE_SIZE, percent
+                );
+            }
+            if receiver_status_depth > queue_warning_threshold(RECEIVER_STATUS_QUEUE_SIZE) {
+                let percent = (receiver_status_depth as f64 / RECEIVER_STATUS_QUEUE_SIZE as f64
+                    * 100.0) as usize;
+                warn!(
+                    "Receiver status queue building up: {}/{} messages ({}% full)",
+                    receiver_status_depth, RECEIVER_STATUS_QUEUE_SIZE, percent
+                );
+            }
+            if receiver_position_depth > queue_warning_threshold(RECEIVER_POSITION_QUEUE_SIZE) {
+                let percent = (receiver_position_depth as f64 / RECEIVER_POSITION_QUEUE_SIZE as f64
+                    * 100.0) as usize;
+                warn!(
+                    "Receiver position queue building up: {}/{} messages ({}% full)",
+                    receiver_position_depth, RECEIVER_POSITION_QUEUE_SIZE, percent
+                );
             }
         }
-        .instrument(tracing::info_span!("queue_metrics_reporter")),
-    );
+    });
     info!("Spawned queue depth metrics reporter (reports every 10 seconds to Prometheus)");
 
     // Set up graceful shutdown handler
@@ -953,47 +938,56 @@ pub async fn handle_run(
     let shutdown_aprs_intake_opt = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let shutdown_beast_intake_opt = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
 
-    tokio::spawn(
-        async move {
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => {
-                    info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
-                    info!("Socket server will stop accepting connections, allowing queues to drain...");
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
+                info!("Socket server will stop accepting connections, allowing queues to drain...");
 
-                    // Wait for queues to drain (check every second, max 10 minutes)
-                    for i in 1..=600 {
-                        let intake_depth = shutdown_aprs_intake_opt.as_ref().map_or(0, |tx| tx.len());
-                        let beast_intake_depth = shutdown_beast_intake_opt.as_ref().map_or(0, |tx| tx.len());
-                        let aircraft_depth = shutdown_aircraft_rx.len();
-                        let receiver_status_depth = shutdown_receiver_status_rx.len();
-                        let receiver_position_depth = shutdown_receiver_position_rx.len();
-                        let server_status_depth = shutdown_server_status_rx.len();
+                // Wait for queues to drain (check every second, max 10 minutes)
+                for i in 1..=600 {
+                    let intake_depth = shutdown_aprs_intake_opt.as_ref().map_or(0, |tx| tx.len());
+                    let beast_intake_depth =
+                        shutdown_beast_intake_opt.as_ref().map_or(0, |tx| tx.len());
+                    let aircraft_depth = shutdown_aircraft_rx.len();
+                    let receiver_status_depth = shutdown_receiver_status_rx.len();
+                    let receiver_position_depth = shutdown_receiver_position_rx.len();
+                    let server_status_depth = shutdown_server_status_rx.len();
 
-                        let total_queued = intake_depth + beast_intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth;
+                    let total_queued = intake_depth
+                        + beast_intake_depth
+                        + aircraft_depth
+                        + receiver_status_depth
+                        + receiver_position_depth
+                        + server_status_depth;
 
-                        if total_queued == 0 {
-                            info!("All queues drained, shutting down now");
-                            break;
-                        }
-
-                        info!(
-                            "Waiting for queues to drain ({}/600s): {} intake, {} beast_intake, {} aircraft, {} rx_status, {} rx_pos, {} server",
-                            i, intake_depth, beast_intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth
-                        );
-
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    if total_queued == 0 {
+                        info!("All queues drained, shutting down now");
+                        break;
                     }
 
-                    info!("Graceful shutdown complete");
-                    std::process::exit(0);
+                    info!(
+                        "Waiting for queues to drain ({}/600s): {} intake, {} beast_intake, {} aircraft, {} rx_status, {} rx_pos, {} server",
+                        i,
+                        intake_depth,
+                        beast_intake_depth,
+                        aircraft_depth,
+                        receiver_status_depth,
+                        receiver_position_depth,
+                        server_status_depth
+                    );
+
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
-                Err(err) => {
-                    eprintln!("Unable to listen for shutdown signal: {}", err);
-                }
+
+                info!("Graceful shutdown complete");
+                std::process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("Unable to listen for shutdown signal: {}", err);
             }
         }
-        .instrument(tracing::info_span!("shutdown_handler")),
-    );
+    });
     info!("Graceful shutdown handler configured");
 
     // All processing tasks are now running via socket server and envelope router
