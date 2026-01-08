@@ -70,7 +70,7 @@ async fn process_aprs_message(
     // Calculate and record lag (difference between now and packet timestamp)
     let now = chrono::Utc::now();
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
-    metrics::gauge!("aprs.nats.lag_seconds").set(lag_seconds);
+    metrics::gauge!("aprs.intake.lag_seconds").set(lag_seconds);
 
     // Route server messages (starting with #) differently
     // Server messages don't create PacketContext
@@ -676,12 +676,14 @@ pub async fn handle_run(
             info!("Intake queue processor started");
             let mut messages_processed = 0u64;
             while let Ok(message) = nats_intake_rx.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
                 process_aprs_message(&message, &intake_router).await;
                 messages_processed += 1;
                 metrics::counter!("aprs.intake.processed_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
 
                 // Update intake queue depth metric
-                metrics::gauge!("aprs.nats.intake_queue_depth").set(nats_intake_rx.len() as f64);
+                metrics::gauge!("aprs.intake_queue.depth").set(nats_intake_rx.len() as f64);
             }
             info!(
                 "Intake queue processor stopped after processing {} messages",
@@ -756,6 +758,7 @@ pub async fn handle_run(
         let processor = aircraft_position_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "aircraft").increment(1.0);
                 let start = std::time::Instant::now();
                 processor.process_aircraft_position(&packet, context).await;
                 let duration = start.elapsed();
@@ -764,6 +767,7 @@ pub async fn handle_run(
                 metrics::counter!("aprs.aircraft.processed_total").increment(1);
                 metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
                 metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "aircraft").decrement(1.0);
             }
         });
     }
@@ -779,6 +783,7 @@ pub async fn handle_run(
         let processor = receiver_status_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "receiver_status").increment(1.0);
                 let start = std::time::Instant::now();
                 processor.process_status_packet(&packet, context).await;
                 let duration = start.elapsed();
@@ -787,6 +792,7 @@ pub async fn handle_run(
                 metrics::counter!("aprs.receiver_status.processed_total").increment(1);
                 metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
                 metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "receiver_status").decrement(1.0);
             }
         });
     }
@@ -802,6 +808,7 @@ pub async fn handle_run(
         let processor = receiver_position_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "receiver_position").increment(1.0);
                 let start = std::time::Instant::now();
                 processor.process_receiver_position(&packet, context).await;
                 let duration = start.elapsed();
@@ -810,6 +817,7 @@ pub async fn handle_run(
                 metrics::counter!("aprs.receiver_position.processed_total").increment(1);
                 metrics::counter!("aprs.messages.processed.receiver_position_total").increment(1);
                 metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "receiver_position").decrement(1.0);
             }
         });
     }
@@ -821,6 +829,7 @@ pub async fn handle_run(
         let processor = server_status_processor.clone();
         tokio::spawn(async move {
             while let Ok((message, received_at)) = worker_rx.recv_async().await {
+                metrics::gauge!("worker.active", "type" => "server_status").increment(1.0);
                 let start = std::time::Instant::now();
                 processor
                     .process_server_message(&message, received_at)
@@ -831,6 +840,7 @@ pub async fn handle_run(
                 metrics::counter!("aprs.server_status.processed_total").increment(1);
                 metrics::counter!("aprs.messages.processed.server_total").increment(1);
                 metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "server_status").decrement(1.0);
             }
         });
     }
@@ -866,7 +876,7 @@ pub async fn handle_run(
                 // Report queue depths to Prometheus
                 metrics::gauge!("socket.envelope_intake_queue.depth")
                     .set(envelope_intake_depth as f64);
-                metrics::gauge!("aprs.router.internal_queue.depth").set(internal_queue_depth as f64);
+                metrics::gauge!("aprs.router_queue.depth").set(internal_queue_depth as f64);
                 metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
                 metrics::gauge!("aprs.receiver_status_queue.depth")
                     .set(receiver_status_depth as f64);
