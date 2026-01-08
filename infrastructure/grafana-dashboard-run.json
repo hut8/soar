@@ -2320,17 +2320,6 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "JetStream Intake Queue",
-          "range": true,
-          "refId": "Z"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
           "expr": "aprs_aircraft_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Aircraft Queue",
           "range": true,
@@ -2375,17 +2364,6 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Elevation Queue (async mode)",
-          "range": true,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
           "expr": "aprs_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "APRS Intake Queue",
           "range": true,
@@ -2412,6 +2390,17 @@
           "legendFormat": "NATS Fix Publisher Queue",
           "range": true,
           "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "beast_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
+          "legendFormat": "Beast Intake Queue",
+          "range": true,
+          "refId": "K"
         }
       ],
       "title": "Queue Depths",

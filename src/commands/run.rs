@@ -730,8 +730,7 @@ pub async fn handle_run(
                     metrics::counter!("beast.run.intake.processed_total").increment(1);
 
                     // Update Beast intake queue depth metric (sample from each worker)
-                    metrics::gauge!("beast.run.nats.intake_queue_depth")
-                        .set(beast_intake_rx.len() as f64);
+                    metrics::gauge!("beast.intake_queue.depth").set(beast_intake_rx.len() as f64);
                 }
                 info!("Beast intake queue worker {} stopped", worker_id);
             });

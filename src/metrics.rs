@@ -574,7 +574,7 @@ pub fn initialize_run_metrics() {
     metrics::counter!("beast.run.nats.subscription_failed_total").absolute(0);
     metrics::counter!("beast.run.nats.subscription_ended_total").absolute(0);
     metrics::gauge!("beast.run.nats.lag_seconds").set(0.0);
-    metrics::gauge!("beast.run.nats.intake_queue_depth").set(0.0);
+    metrics::gauge!("beast.intake_queue.depth").set(0.0);
     metrics::histogram!("beast.run.message_processing_latency_ms").record(0.0);
 
     // Queue depth metrics (pipeline order)
