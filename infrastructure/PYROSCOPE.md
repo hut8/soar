@@ -4,7 +4,7 @@ This document describes the Pyroscope continuous profiling integration for the S
 
 ## Overview
 
-SOAR uses Grafana Pyroscope for continuous profiling of Rust applications, with Grafana Alloy collecting profiles from pprof endpoints. This provides visibility into CPU usage patterns, performance bottlenecks, and resource consumption over time.
+SOAR uses Grafana Pyroscope for continuous profiling of Rust applications, with Grafana Alloy collecting profiles from pprof endpoints. Alloy also integrates with Loki (logs) and Tempo (traces) for comprehensive observability.
 
 ## Architecture
 
@@ -12,28 +12,38 @@ SOAR uses Grafana Pyroscope for continuous profiling of Rust applications, with 
 ┌─────────────┐   /debug/pprof/profile    ┌─────────────┐   HTTP Push      ┌─────────────┐
 │ SOAR        │────────────────────────────>│ Alloy       │─────────────────>│ Pyroscope   │
 │ Services    │   (HTTP scrape)            │ (Collector) │   (profiles)     │ (Storage)   │
+│             │                            │             │                  └─────────────┘
+│             │   Logs (journald)          │             │   Logs           ┌─────────────┐
+│             │───────────────────────────>│             │─────────────────>│ Loki        │
+│             │                            │             │                  │ (Logs)      │
+│             │                            │             │                  └─────────────┘
+│             │   OTLP Traces              │             │   Traces         ┌─────────────┐
+│             │───────────────────────────>│             │─────────────────>│ Tempo       │
+│             │   (port 4317/4318)         │             │   (OTLP)         │ (Traces)    │
 └─────────────┘                            └─────────────┘                  └─────────────┘
      │                                             │                                │
      │         Prometheus metrics                  │                                │
      └──────────────────────>┌─────────────────────▼────────────────────────────────▼─────┐
-                   port 9090 │ Prometheus → Grafana (Visualization)                       │
+                   port 9090 │ Prometheus → Grafana (Unified Visualization)               │
                              └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Components
 
 - **SOAR Services**: Rust applications exposing pprof endpoints at `/debug/pprof/profile` (CPU) and `/debug/pprof/heap` (memory)
-- **Grafana Alloy**: Profiling collector that scrapes pprof endpoints and forwards profiles to Pyroscope
+- **Grafana Alloy**: Unified collector for logs (Loki), traces (Tempo), and profiles (Pyroscope)
 - **Pyroscope**: Profile storage backend with filesystem storage
-- **Grafana**: Visualization with Pyroscope datasource for flamegraph exploration
+- **Loki**: Log aggregation (via Alloy journald collection)
+- **Tempo**: Distributed tracing backend (via OTLP)
+- **Grafana**: Unified visualization with datasources for all three pillars
 
 ## Current Status
 
 **✅ Infrastructure deployed and configured**
 
-- ✅ Pyroscope installed via Grafana APT repository
-- ✅ Alloy installed and configured to scrape SOAR services
-- ✅ Systemd services for Pyroscope and Alloy
+- ✅ Pyroscope installed via Grafana APT repository (systemd service provided by package)
+- ✅ Alloy installed and configured (systemd service provided by package)
+- ✅ Alloy integrates with Loki, Tempo, and Pyroscope
 - ✅ Prometheus scrape configs for monitoring Pyroscope/Alloy
 - ✅ Grafana datasource auto-provisioning
 - ✅ 30-day profile retention configured
@@ -42,6 +52,8 @@ SOAR uses Grafana Pyroscope for continuous profiling of Rust applications, with 
 - Existing pprof endpoints in SOAR (`/debug/pprof/profile`, `/debug/pprof/heap`)
 - Pyroscope server with filesystem storage
 - Alloy configuration to scrape production and staging services
+- Alloy log collection from systemd journal
+- Alloy OTLP trace receiver for Tempo integration
 - Grafana datasource for profile visualization
 
 ## Configuration
@@ -68,19 +80,34 @@ retention:
 
 Location: `/etc/alloy/config.alloy`
 
-Alloy is configured to scrape the following SOAR services:
+Alloy provides unified observability collection for:
 
-**Production Services:**
+**1. Profiling (Pyroscope)**
+- Scrapes pprof endpoints from SOAR services
+- CPU profiling via `/debug/pprof/profile` (30-second samples)
+- Forwards to Pyroscope at `http://localhost:4040`
+
+**2. Logs (Loki)**
+- Collects logs from systemd journal for SOAR services
+- Processes and labels log entries
+- Forwards to Loki at `http://localhost:3100/loki/api/v1/push`
+
+**3. Traces (Tempo)**
+- Receives OTLP traces on ports 4317 (gRPC) and 4318 (HTTP)
+- Batches and processes traces
+- Forwards to Tempo at `localhost:4317`
+
+**Monitored Services:**
+
+**Production:**
 - `soar-run` (localhost:9090)
 - `soar-web` (localhost:9091)
 - `soar-ingest-ogn` (localhost:9092)
 - `soar-ingest-adsb` (localhost:9093)
 
-**Staging Services:**
+**Staging:**
 - `soar-run-staging` (localhost:9094)
 - `soar-web-staging` (localhost:9095)
-
-The CPU profiling endpoint `/debug/pprof/profile` is scraped for 30-second samples.
 
 ### Service Ports
 
@@ -97,11 +124,12 @@ The CPU profiling endpoint `/debug/pprof/profile` is scraped for 30-second sampl
 
 The `scripts/provision` script automatically:
 1. Adds Grafana APT repository (if not already added)
-2. Installs `pyroscope` and `alloy` packages
-3. Creates system users (`pyroscope`, `alloy`)
+2. Installs `pyroscope` and `alloy` packages (includes systemd services)
+3. Creates system users (`pyroscope`, `alloy`) if not created by packages
 4. Creates directories (`/var/lib/pyroscope`, `/var/lib/alloy`, `/etc/pyroscope`, `/etc/alloy`)
-5. Installs systemd service files
-6. Enables and starts services
+5. Enables and starts services
+
+**Note:** Systemd service files are provided by the Debian packages. Custom service files are NOT needed.
 
 ### Manual Installation (if needed)
 
@@ -111,21 +139,21 @@ sudo apt-get install -y gnupg
 wget -q -O - https://apt.grafana.com/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
 echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
 
-# Install Pyroscope and Alloy
+# Install Pyroscope and Alloy (includes systemd services)
 sudo apt-get update
 sudo apt-get install -y pyroscope alloy
 
-# Create users (if not already created by package)
-sudo useradd --system --home-dir /var/lib/pyroscope --shell /bin/false pyroscope
-sudo useradd --system --home-dir /var/lib/alloy --shell /bin/false alloy
+# The packages install:
+# - Systemd service files (/lib/systemd/system/{pyroscope,alloy}.service)
+# - System users (pyroscope, alloy)
+# - Default directories
 
-# Create directories
-sudo mkdir -p /var/lib/pyroscope /etc/pyroscope
-sudo mkdir -p /var/lib/alloy /etc/alloy
-sudo chown -R pyroscope:pyroscope /var/lib/pyroscope /etc/pyroscope
-sudo chown -R alloy:alloy /var/lib/alloy /etc/alloy
+# Create custom configuration directories if needed
+sudo mkdir -p /etc/pyroscope /etc/alloy
+sudo chown -R pyroscope:pyroscope /etc/pyroscope
+sudo chown -R alloy:alloy /etc/alloy
 
-# Copy configuration files (deployed via soar-deploy)
+# Configuration files are deployed via soar-deploy
 # These are automatically managed by deployment
 ```
 

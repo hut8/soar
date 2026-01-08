@@ -417,12 +417,11 @@ echo -e "${GREEN}Photon installation complete${NC}"
 
 # Copy infrastructure service files
 # Note: SOAR application service files (soar-run, soar-web, etc.) are installed by soar-deploy
+# Note: Pyroscope and Alloy service files are provided by their packages, not installed here
 echo -e "${BLUE}Installing infrastructure systemd service files...${NC}"
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
 sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
 sudo cp infrastructure/photon.service /etc/systemd/system/
-sudo cp infrastructure/pyroscope.service /etc/systemd/system/
-sudo cp infrastructure/alloy.service /etc/systemd/system/
 
 # Install migration service (templated for staging/production)
 echo -e "${BLUE}Installing migration service...${NC}"
