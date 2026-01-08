@@ -42,7 +42,12 @@ async fn publish_to_nats(
         fix_with_flight.latitude,
         fix_with_flight.longitude,
     );
+
+    let publish_start = std::time::Instant::now();
     nats_client.publish(area_subject, payload.into()).await?;
+    let publish_duration = publish_start.elapsed();
+    metrics::histogram!("nats.fix_publisher.publish_latency_us")
+        .record(publish_duration.as_micros() as f64);
 
     Ok(())
 }
