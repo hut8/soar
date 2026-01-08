@@ -1,0 +1,51 @@
+[Unit]
+Description=SOAR Unified Ingest (Staging) - Combined OGN and ADS-B Message Queue Service
+Documentation=https://github.com/hut8/soar
+After=network-online.target
+Wants=network-online.target
+# This unified service ingests from multiple sources: OGN (APRS), Beast (ADS-B), and SBS (BaseStation)
+# It is designed to run independently from the main processing service
+# Uses persistent queues to buffer messages when soar-run is unavailable
+# Metrics are exported in aggregate (all sources combined) and individually per source
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+SyslogIdentifier=soar-ingest-staging
+# Example: ExecStart=/usr/local/bin/soar-staging ingest --ogn-server aprs.glidernet.org --beast radar:41365
+# Customize parameters based on deployment needs:
+# - Add --ogn-server, --ogn-port, --ogn-callsign, --ogn-filter for OGN/APRS ingestion
+# - Add --beast <server:port> for Beast format ADS-B (can specify multiple times)
+# - Add --sbs <server:port> for SBS (BaseStation) format (can specify multiple times)
+ExecStart=/usr/local/bin/soar-staging ingest --ogn-server aprs.glidernet.org --beast radar:41365
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+
+# Graceful shutdown configuration
+# Allow 30 seconds for graceful shutdown (queue flush + connection cleanup)
+TimeoutStopSec=30
+# Send SIGTERM first, then SIGKILL after timeout
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart configuration
+# Restart aggressively to minimize message loss during failures
+Restart=on-failure
+RestartSec=2
+StartLimitInterval=60s
+StartLimitBurst=5
+
+# Process limits
+LimitNOFILE=65536
+# Memory limit for combined OGN + ADS-B ingestion
+MemoryMax=4G
+
+[Install]
+WantedBy=multi-user.target soar.target

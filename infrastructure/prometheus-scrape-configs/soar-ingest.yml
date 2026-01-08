@@ -1,0 +1,8 @@
+- job_name: 'soar-ingest'
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['localhost:9095']
+      labels:
+        environment: 'production'
+        service: 'soar-ingest'
+        component: 'ingest'
