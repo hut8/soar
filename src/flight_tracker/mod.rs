@@ -415,6 +415,7 @@ impl FlightTracker {
 
     /// Process a fix, insert it into the database, and return it with updated flight_id
     /// This method holds the per-device lock through the entire process including DB insertion
+    #[tracing::instrument(skip(self, fix, fixes_repo), fields(aircraft_id = %fix.aircraft_id, flight_id = ?fix.flight_id))]
     pub async fn process_and_insert_fix(
         &self,
         fix: Fix,
