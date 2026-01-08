@@ -29,11 +29,12 @@ async fn publish_to_nats(
     // Serialize the FixWithFlightInfo to JSON once
     let payload = serde_json::to_vec(fix_with_flight)?;
 
+    // TODO: Temporarily disabled to reduce NATS publish load
     // Publish by device
-    let device_subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
-    nats_client
-        .publish(device_subject.clone(), payload.clone().into())
-        .await?;
+    // let device_subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
+    // nats_client
+    //     .publish(device_subject.clone(), payload.clone().into())
+    //     .await?;
 
     // Publish by area
     let area_subject = get_area_subject(
@@ -41,9 +42,7 @@ async fn publish_to_nats(
         fix_with_flight.latitude,
         fix_with_flight.longitude,
     );
-    nats_client
-        .publish(area_subject.clone(), payload.into())
-        .await?;
+    nats_client.publish(area_subject, payload.into()).await?;
 
     Ok(())
 }
