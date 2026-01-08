@@ -68,26 +68,9 @@ soar ingest \
 
 ## Deployment
 
-The unified ingest service is deployed via the manual GitHub Actions workflow:
+The unified ingest service must be deployed manually using the regular deployment process. The service is not automatically restarted during regular deploys, but deploys will ensure it is running.
 
-```bash
-# Deploy to production
-gh workflow run deploy-ingest.yml \
-  -f environment=production \
-  -f services=ingest
-
-# Deploy to staging
-gh workflow run deploy-ingest.yml \
-  -f environment=staging \
-  -f services=ingest
-```
-
-The old services can still be deployed for backward compatibility:
-```bash
-gh workflow run deploy-ingest.yml \
-  -f environment=production \
-  -f services=ingest-ogn,ingest-adsb
-```
+Refer to the main deployment documentation for details on deploying services.
 
 ## Metrics
 
@@ -120,16 +103,13 @@ These metrics are labeled with `source="ogn"`, `source="beast"`, or `source="sbs
 
 ## Prometheus Configuration
 
-### New Configuration Files
+### Configuration Files
 - `infrastructure/prometheus-jobs/soar-ingest.yml` - Production
 - `infrastructure/prometheus-jobs/soar-ingest-staging.yml` - Staging
 - `infrastructure/prometheus-scrape-configs/soar-ingest.yml` - Production scrape config
 - `infrastructure/prometheus-scrape-configs/soar-ingest-staging.yml` - Staging scrape config
 
-### Old Configuration Files (Deprecated)
-- `infrastructure/prometheus-jobs/soar-ingest-ogn.yml` 
-- `infrastructure/prometheus-jobs/soar-ingest-adsb.yml`
-- And corresponding staging files
+Note: The old Prometheus configuration files for the separate OGN and ADS-B services have been removed as part of this consolidation.
 
 ## Benefits
 
