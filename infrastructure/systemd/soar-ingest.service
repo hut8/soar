@@ -25,10 +25,6 @@ ExecReload=/bin/kill -s HUP $MAINPID
 # Environment variables
 EnvironmentFile=/etc/soar/env-production
 
-# Runtime directory for Unix sockets
-RuntimeDirectory=soar
-RuntimeDirectoryMode=0755
-
 # Security settings
 NoNewPrivileges=yes
 
