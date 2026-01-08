@@ -2,7 +2,6 @@ use anyhow::Result;
 use async_nats::Client;
 use serde_json;
 use std::sync::Arc;
-use tracing::Instrument;
 use tracing::{error, info, warn};
 
 use crate::fixes::FixWithFlightInfo;
@@ -89,11 +88,10 @@ impl NatsFixPublisher {
 
         // Spawn SINGLE background task to publish all fixes
         let client_clone = Arc::clone(&nats_client);
-        tokio::spawn(
-            async move {
-                info!("NATS publisher background task started");
-                let mut fixes_published = 0u64;
-                let mut last_stats_log = std::time::Instant::now();
+        tokio::spawn(async move {
+            info!("NATS publisher background task started");
+            let mut fixes_published = 0u64;
+            let mut last_stats_log = std::time::Instant::now();
 
             while let Ok(fix_with_flight) = fix_receiver.recv_async().await {
                 metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
@@ -133,9 +131,7 @@ impl NatsFixPublisher {
             }
 
             warn!("NATS publisher background task stopped");
-        }
-        .instrument(tracing::info_span!("nats_publisher_background_task"))
-        );
+        });
 
         Ok(Self {
             _nats_client: nats_client,

@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::instance_lock::InstanceLock;
 use std::env;
-use tracing::Instrument;
 use tracing::{error, info, warn};
 
 pub async fn handle_ingest_ogn(
@@ -62,12 +61,9 @@ pub async fn handle_ingest_ogn(
             .unwrap_or(default_port);
 
         info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(
-            async move {
-                soar::metrics::start_metrics_server(metrics_port, Some("ingest-ogn")).await;
-            }
-            .instrument(tracing::info_span!("metrics_server")),
-        );
+        tokio::spawn(async move {
+            soar::metrics::start_metrics_server(metrics_port, Some("ingest-ogn")).await;
+        });
     }
 
     // Acquire instance lock to prevent multiple ingest instances from running
