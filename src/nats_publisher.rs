@@ -1,5 +1,5 @@
 use anyhow::Result;
-use async_nats::Client;
+use async_nats::{Client, Event};
 use serde_json;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -71,6 +71,34 @@ impl NatsFixPublisher {
         let nats_client_name = crate::nats_client_name("nats-publisher");
         let nats_client = async_nats::ConnectOptions::new()
             .name(&nats_client_name)
+            .event_callback(|event| async move {
+                match event {
+                    Event::Connected => {
+                        info!("NATS publisher connected");
+                        metrics::counter!("nats.fix_publisher.connected_total").increment(1);
+                    }
+                    Event::Disconnected => {
+                        warn!("NATS publisher disconnected");
+                        metrics::counter!("nats.fix_publisher.disconnected_total").increment(1);
+                    }
+                    Event::SlowConsumer(sid) => {
+                        warn!("NATS slow consumer detected for subscription {}", sid);
+                        metrics::counter!("nats.fix_publisher.slow_consumer_total").increment(1);
+                    }
+                    Event::ServerError(err) => {
+                        error!("NATS server error: {}", err);
+                        metrics::counter!("nats.fix_publisher.server_error_total").increment(1);
+                    }
+                    Event::ClientError(err) => {
+                        error!("NATS client error: {}", err);
+                        metrics::counter!("nats.fix_publisher.client_error_total").increment(1);
+                    }
+                    Event::LameDuckMode => {
+                        warn!("NATS server entering lame duck mode (preparing to shutdown)");
+                    }
+                    _ => {}
+                }
+            })
             .connect(nats_url)
             .await?;
 
