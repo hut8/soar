@@ -306,6 +306,25 @@ where
         }
     }
 
+    /// Check if the disk queue is at or near capacity
+    /// Returns true if sending would likely fail due to size limit
+    /// Uses 95% threshold to allow some buffer before hard limit
+    pub fn is_at_capacity(&self) -> bool {
+        if let Some(max_size) = self.max_size_bytes
+            && self.file_path.exists()
+            && let Ok(metadata) = std::fs::metadata(&self.file_path)
+        {
+            // Use 95% threshold to trigger backpressure before we hit the hard limit
+            return metadata.len() >= (max_size * 95 / 100);
+        }
+        false
+    }
+
+    /// Get the queue name (for logging)
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Append a message to the disk file
     async fn append_to_disk(&self, message: T) -> Result<()> {
         use std::io::{Seek, Write};

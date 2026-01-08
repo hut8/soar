@@ -199,15 +199,49 @@ impl SbsClient {
         let stats_counter_clone = stats_counter.clone();
         let queue_feeder_handle = tokio::spawn(async move {
             info!("Starting SBS queue feeding task");
-            while let Ok(message) = raw_message_rx.recv_async().await {
-                if let Err(e) = queue_clone.send(message).await {
-                    error!("Failed to send SBS message to persistent queue: {}", e);
-                    metrics::counter!("sbs.queue.send_error_total").increment(1);
-                } else if let Some(ref counter) = stats_counter_clone {
-                    counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let mut at_capacity_logged = false;
+            loop {
+                // Check if disk queue is at capacity before consuming from channel
+                // This provides backpressure - channel will fill up, causing TCP reader to block
+                while queue_clone.is_at_capacity() {
+                    if !at_capacity_logged {
+                        warn!(
+                            "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
+                            queue_clone.name()
+                        );
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "sbs")
+                            .increment(1);
+                        at_capacity_logged = true;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+                if at_capacity_logged {
+                    info!(
+                        "Queue '{}' has space, resuming consumption",
+                        queue_clone.name()
+                    );
+                    at_capacity_logged = false;
+                }
+
+                match raw_message_rx.recv_async().await {
+                    Ok(message) => {
+                        if let Err(e) = queue_clone.send(message).await {
+                            // This can still happen in a race condition, but should be rare
+                            warn!(
+                                "Failed to send SBS message to persistent queue (will retry): {}",
+                                e
+                            );
+                            metrics::counter!("sbs.queue.send_error_total").increment(1);
+                        } else if let Some(ref counter) = stats_counter_clone {
+                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                    Err(_) => {
+                        info!("SBS queue feeding task ended");
+                        break;
+                    }
                 }
             }
-            info!("SBS queue feeding task ended");
         });
 
         // Connection loop with exponential backoff
