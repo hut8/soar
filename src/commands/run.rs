@@ -581,7 +581,7 @@ pub async fn handle_run(
     info!("Socket server listening on {:?}", socket_path);
 
     // Envelope intake queue: buffers messages from socket server before routing
-    const ENVELOPE_INTAKE_QUEUE_SIZE: usize = 10_000;
+    const ENVELOPE_INTAKE_QUEUE_SIZE: usize = 1_000;
     let (envelope_tx, envelope_rx) =
         flume::bounded::<soar::protocol::Envelope>(ENVELOPE_INTAKE_QUEUE_SIZE);
     info!(
