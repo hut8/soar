@@ -14,9 +14,9 @@ mod migration_email_reporter;
 mod telemetry;
 
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest,
-    handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
-    handle_seed_test_data, handle_sitemap_generation,
+    handle_archive, handle_dump_unified_ddb, handle_ingest, handle_load_data,
+    handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
+    handle_sitemap_generation,
 };
 use migration_email_reporter::{
     MigrationEmailConfig, MigrationReport, send_migration_email_report,

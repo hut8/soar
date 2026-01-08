@@ -291,10 +291,13 @@ pub async fn handle_ingest(
                                 // Track stats
                                 let send_duration_ms = send_start.elapsed().as_millis() as u64;
                                 stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                stats_time_clone
-                                    .fetch_add(send_duration_ms, std::sync::atomic::Ordering::Relaxed);
+                                stats_time_clone.fetch_add(
+                                    send_duration_ms,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
                                 if send_duration_ms > 100 {
-                                    stats_slow_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    stats_slow_clone
+                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 }
 
                                 // Update per-source metric
@@ -348,10 +351,13 @@ pub async fn handle_ingest(
                                 // Track stats
                                 let send_duration_ms = send_start.elapsed().as_millis() as u64;
                                 stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                stats_time_clone
-                                    .fetch_add(send_duration_ms, std::sync::atomic::Ordering::Relaxed);
+                                stats_time_clone.fetch_add(
+                                    send_duration_ms,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
                                 if send_duration_ms > 100 {
-                                    stats_slow_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    stats_slow_clone
+                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 }
 
                                 // Update per-source metric
@@ -405,10 +411,13 @@ pub async fn handle_ingest(
                                 // Track stats
                                 let send_duration_ms = send_start.elapsed().as_millis() as u64;
                                 stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                stats_time_clone
-                                    .fetch_add(send_duration_ms, std::sync::atomic::Ordering::Relaxed);
+                                stats_time_clone.fetch_add(
+                                    send_duration_ms,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
                                 if send_duration_ms > 100 {
-                                    stats_slow_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    stats_slow_clone
+                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 }
 
                                 // Update per-source metric
@@ -572,15 +581,20 @@ pub async fn handle_ingest(
         let _stats_total = stats_frames_received.clone();
 
         // Create wrapper health state for APRS client compatibility
-        let aprs_health = Arc::new(tokio::sync::RwLock::new(soar::metrics::AprsIngestHealth::default()));
+        let aprs_health = Arc::new(tokio::sync::RwLock::new(
+            soar::metrics::AprsIngestHealth::default(),
+        ));
 
         tokio::spawn(async move {
             let mut client = AprsClient::new(config);
-            
+
             // The AprsClient's start_with_queue method will handle stats internally
             // We wrap the queue to track our own stats as well
             loop {
-                match client.start_with_queue(queue.clone(), aprs_health.clone()).await {
+                match client
+                    .start_with_queue(queue.clone(), aprs_health.clone())
+                    .await
+                {
                     Ok(_) => {
                         info!("OGN client stopped normally");
                         break;
@@ -613,15 +627,20 @@ pub async fn handle_ingest(
         let server_clone = server.clone();
 
         // Create wrapper health state for Beast client compatibility
-        let beast_health = Arc::new(tokio::sync::RwLock::new(soar::metrics::BeastIngestHealth::default()));
+        let beast_health = Arc::new(tokio::sync::RwLock::new(
+            soar::metrics::BeastIngestHealth::default(),
+        ));
 
         tokio::spawn(
             async move {
                 let mut client = BeastClient::new(config);
-                
+
                 // The Beast client's start_with_queue tracks stats - pass our counters
                 // The stats counter updates both per-source and total
-                match client.start_with_queue(queue, beast_health, Some(stats_rx)).await {
+                match client
+                    .start_with_queue(queue, beast_health, Some(stats_rx))
+                    .await
+                {
                     Ok(_) => {
                         info!("Beast client {}:{} stopped normally", server, port);
                     }
@@ -651,14 +670,19 @@ pub async fn handle_ingest(
         let server_clone = server.clone();
 
         // Create wrapper health state for SBS client compatibility
-        let beast_health = Arc::new(tokio::sync::RwLock::new(soar::metrics::BeastIngestHealth::default()));
+        let beast_health = Arc::new(tokio::sync::RwLock::new(
+            soar::metrics::BeastIngestHealth::default(),
+        ));
 
         tokio::spawn(
             async move {
                 let mut client = SbsClient::new(config);
-                
+
                 // The SBS client's start_with_queue tracks stats - pass our counters
-                match client.start_with_queue(queue, beast_health, Some(stats_rx)).await {
+                match client
+                    .start_with_queue(queue, beast_health, Some(stats_rx))
+                    .await
+                {
                     Ok(_) => {
                         info!("SBS client {}:{} stopped normally", server, port);
                     }
@@ -696,13 +720,14 @@ fn initialize_ingest_metrics() {
         metrics::counter!("ingest.messages_received_total", "source" => *source).absolute(0);
         metrics::counter!("ingest.messages_sent_total", "source" => *source).absolute(0);
         metrics::counter!("ingest.socket_send_error_total", "source" => *source).absolute(0);
-        
+
         // Socket send duration histogram
         metrics::histogram!("ingest.socket_send_duration_ms", "source" => *source).record(0.0);
-        
+
         // Queue depth metrics
         for queue_type in &["memory", "disk"] {
-            metrics::gauge!("ingest.queue_depth", "source" => *source, "type" => *queue_type).set(0.0);
+            metrics::gauge!("ingest.queue_depth", "source" => *source, "type" => *queue_type)
+                .set(0.0);
         }
     }
 
