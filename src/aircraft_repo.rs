@@ -222,6 +222,7 @@ impl AircraftRepository {
     /// - Always returns the aircraft in one atomic operation
     ///
     /// This avoids both no-op updates and separate update tasks for modified fields
+    #[tracing::instrument(skip(self, packet_fields), fields(%address, ?address_type))]
     pub async fn aircraft_for_fix(
         &self,
         address: i32,

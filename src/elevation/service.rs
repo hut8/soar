@@ -197,6 +197,7 @@ impl ElevationService {
     ///
     /// Note: This returns i16 (matching HGT format) while the old implementation returned f64.
     /// For most use cases, converting i16 to f64 is sufficient.
+    #[tracing::instrument(skip(self), fields(lat = %lat, lon = %lon))]
     pub async fn elevation(&self, lat: f64, lon: f64) -> Result<Option<i16>> {
         let start = Instant::now();
 

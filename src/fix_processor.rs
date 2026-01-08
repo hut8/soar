@@ -137,6 +137,7 @@ impl FixProcessor {
 
     /// Process a pre-created Fix (e.g., from ADS-B)
     /// This is used when the fix has already been created from a non-APRS source
+    #[tracing::instrument(skip(self, fix), fields(aircraft_id = %fix.aircraft_id))]
     pub async fn process_fix(&self, fix: Fix) -> anyhow::Result<()> {
         // Use an empty raw message for non-APRS fixes
         self.process_fix_internal(fix, "").await;

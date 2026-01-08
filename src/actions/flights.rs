@@ -66,6 +66,7 @@ pub struct FlightGap {
 }
 
 /// Get a flight by its UUID
+#[tracing::instrument(skip(state), fields(%id))]
 pub async fn get_flight_by_id(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,

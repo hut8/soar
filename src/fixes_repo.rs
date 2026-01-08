@@ -182,6 +182,7 @@ impl FixesRepository {
     }
 
     /// Insert a new fix into the database
+    #[instrument(skip(self, fix), fields(aircraft_id = %fix.aircraft_id, flight_id = ?fix.flight_id))]
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
 
