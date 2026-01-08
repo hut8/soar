@@ -463,23 +463,21 @@ async fn setup_diesel_database(app_name_prefix: &str) -> Result<MigrationResult>
     // Clone for schema dump later (database_url will be moved into ConnectionManager)
     let database_url_for_dump = database_url.clone();
 
-    // Create a Diesel connection pool with conservative sizing to prevent "too many clients" errors
-    // PostgreSQL max_connections: 200
-    // Pool size: 20 per instance (allows up to 10 concurrent service instances safely)
-    // Handles:
-    // - 5 APRS workers
-    // - 8 elevation workers
-    // - 1 batch writer
-    // - Various background tasks and web requests
-    // Increased to 30 (with pgbouncer in front for connection pooling)
-    // Previous: 50 (connection exhaustion) → 20 (too conservative) → 30 (balanced with pgbouncer)
+    // Create a Diesel connection pool - sized for pgbouncer in front
+    // pgbouncer handles actual PostgreSQL connection pooling:
+    // - pgbouncer max_client_conn: 500
+    // - pgbouncer default_pool_size: 30 (actual PG connections)
+    // - pgbouncer max_db_connections: 40
+    // Application pool can be larger since pgbouncer multiplexes connections
+    // Workers: 80 aircraft + 10 router + 6 receiver_status + 4 receiver_position + 2 server_status + misc
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
-        .max_size(30)
+        .max_size(150)
+        .min_idle(Some(10))
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 30)");
+    info!("Successfully created Diesel connection pool (max connections: 150, via pgbouncer)");
 
     // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");

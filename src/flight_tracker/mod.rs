@@ -27,7 +27,6 @@ use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::Instrument;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -255,20 +254,17 @@ impl FlightTracker {
     /// Start a background task to periodically check for timed-out flights
     pub fn start_timeout_checker(&self, check_interval_secs: u64) {
         let tracker = self.clone();
-        tokio::spawn(
-            async move {
-                let mut interval =
-                    tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
-                // Skip the first tick (immediate execution)
-                interval.tick().await;
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
+            // Skip the first tick (immediate execution)
+            interval.tick().await;
 
-                loop {
-                    interval.tick().await;
-                    tracker.check_and_timeout_stale_flights().await;
-                }
+            loop {
+                interval.tick().await;
+                tracker.check_and_timeout_stale_flights().await;
             }
-            .instrument(tracing::info_span!("flight_timeout_checker")),
-        );
+        });
         info!(
             "Started flight timeout checker (every {} seconds)",
             check_interval_secs
@@ -278,20 +274,17 @@ impl FlightTracker {
     /// Start a background task to periodically clean up stale aircraft states (older than 18 hours)
     pub fn start_state_cleanup(&self, check_interval_secs: u64) {
         let tracker = self.clone();
-        tokio::spawn(
-            async move {
-                let mut interval =
-                    tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
-                // Skip the first tick (immediate execution)
-                interval.tick().await;
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
+            // Skip the first tick (immediate execution)
+            interval.tick().await;
 
-                loop {
-                    interval.tick().await;
-                    tracker.cleanup_stale_aircraft_states().await;
-                }
+            loop {
+                interval.tick().await;
+                tracker.cleanup_stale_aircraft_states().await;
             }
-            .instrument(tracing::info_span!("aircraft_state_cleanup")),
-        );
+        });
         info!(
             "Started aircraft state cleanup (every {} seconds)",
             check_interval_secs
