@@ -573,6 +573,17 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
+          "expr": "rate(aprs_router_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+          "legendFormat": "Router Processed",
+          "range": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
           "expr": "rate(aprs_raw_message_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_aircraft_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_position_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_server_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Total Dropped",
           "range": true,
