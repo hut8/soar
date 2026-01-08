@@ -576,7 +576,7 @@
           "expr": "rate(aprs_router_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Router Processed",
           "range": true,
-          "refId": "H"
+          "refId": "K"
         },
         {
           "datasource": {
