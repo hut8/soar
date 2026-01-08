@@ -155,6 +155,7 @@ impl FixProcessor {
         raw_message: &str,
         context: PacketContext,
     ) {
+        metrics::counter!("aprs.aircraft.stage_total", "stage" => "entered").increment(1);
         let total_start = std::time::Instant::now();
 
         // Use the received_at timestamp from context (captured at ingestion time)
@@ -261,6 +262,7 @@ impl FixProcessor {
                 let longitude = pos_packet.longitude.as_();
 
                 let aircraft_lookup_start = std::time::Instant::now();
+                metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_db").increment(1);
                 match self
                     .aircraft_repo
                     .aircraft_for_fix(
@@ -274,6 +276,8 @@ impl FixProcessor {
                     .await
                 {
                     Ok(aircraft_model) => {
+                        metrics::counter!("aprs.aircraft.stage_total", "stage" => "after_db")
+                            .increment(1);
                         metrics::histogram!("aprs.aircraft.upsert_ms")
                             .record(aircraft_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
@@ -290,6 +294,7 @@ impl FixProcessor {
                             context.raw_message_id,
                         ) {
                             Ok(Some(fix)) => {
+                                metrics::counter!("aprs.aircraft.stage_total", "stage" => "fix_created").increment(1);
                                 metrics::histogram!("aprs.aircraft.fix_creation_ms").record(
                                     fix_creation_start.elapsed().as_micros() as f64 / 1000.0,
                                 );
@@ -359,6 +364,7 @@ impl FixProcessor {
 
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
+        metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_flight").increment(1);
         let flight_insert_start = std::time::Instant::now();
         let updated_fix = match self
             .flight_detection_processor
@@ -368,6 +374,7 @@ impl FixProcessor {
             Some(fix) => fix,
             None => return, // Fix was discarded (duplicate, error, etc.)
         };
+        metrics::counter!("aprs.aircraft.stage_total", "stage" => "after_flight").increment(1);
         metrics::histogram!("aprs.aircraft.flight_insert_ms")
             .record(flight_insert_start.elapsed().as_micros() as f64 / 1000.0);
 
@@ -476,11 +483,14 @@ impl FixProcessor {
             };
 
             let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
+            metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_nats").increment(1);
             nats_publisher
                 .process_fix(fix_with_flight, raw_message)
                 .await;
             metrics::histogram!("aprs.aircraft.nats_publish_ms")
                 .record(nats_publish_start.elapsed().as_micros() as f64 / 1000.0);
         }
+
+        metrics::counter!("aprs.aircraft.stage_total", "stage" => "completed").increment(1);
     }
 }

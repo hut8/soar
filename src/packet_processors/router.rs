@@ -86,6 +86,7 @@ impl PacketRouter {
             tokio::spawn(async move {
                 tracing::info!("PacketRouter worker {} started", worker_id);
                 while let Ok(task) = rx.recv_async().await {
+                    metrics::gauge!("worker.active", "type" => "router").increment(1.0);
                     match task {
                         MessageTask::Packet {
                             packet,
@@ -105,9 +106,11 @@ impl PacketRouter {
                                 .await;
                         }
                     }
+                    metrics::counter!("aprs.router.processed_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "router").decrement(1.0);
 
                     // Update internal queue depth metric
-                    metrics::gauge!("aprs.router.internal_queue_depth").set(rx.len() as f64);
+                    metrics::gauge!("aprs.router_queue.depth").set(rx.len() as f64);
                 }
                 tracing::info!("PacketRouter worker {} stopped", worker_id);
             });
@@ -168,13 +171,18 @@ impl PacketRouter {
             received_at,
         };
 
+        // Track if send will block (queue is full)
+        if self.internal_queue_tx.is_full() {
+            metrics::counter!("queue.send_blocked_total", "queue" => "router").increment(1);
+        }
+
         // Block until space is available - never drop messages
         if let Err(e) = self.internal_queue_tx.send_async(task).await {
             warn!(
                 "PacketRouter internal queue disconnected, cannot send server message: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
+            metrics::counter!("aprs.router_queue.disconnected_total").increment(1);
         }
     }
 
@@ -222,13 +230,18 @@ impl PacketRouter {
             received_at,
         };
 
+        // Track if send will block (queue is full)
+        if self.internal_queue_tx.is_full() {
+            metrics::counter!("queue.send_blocked_total", "queue" => "router").increment(1);
+        }
+
         // Block until space is available - never drop packets
         if let Err(e) = self.internal_queue_tx.send_async(task).await {
             warn!(
                 "PacketRouter internal queue disconnected, cannot send packet: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_disconnected_total").increment(1);
+            metrics::counter!("aprs.router_queue.disconnected_total").increment(1);
         }
     }
 
@@ -278,6 +291,10 @@ impl PacketRouter {
                             .increment(1);
                         // Route to aircraft position queue
                         if let Some(tx) = &self.aircraft_position_tx {
+                            // Track if send will block (queue is full)
+                            if tx.is_full() {
+                                metrics::counter!("queue.send_blocked_total", "queue" => "aircraft").increment(1);
+                            }
                             if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
                                     "Aircraft position queue CLOSED - cannot route packet from {}: {}",
