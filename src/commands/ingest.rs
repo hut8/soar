@@ -5,7 +5,6 @@ use soar::instance_lock::InstanceLock;
 use soar::sbs::{SbsClient, SbsClientConfig};
 use std::env;
 use std::sync::Arc;
-use tracing::Instrument;
 use tracing::{error, info, warn};
 
 /// Parse a "host:port" string into (hostname, port)
@@ -136,12 +135,9 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             .unwrap_or(default_port);
 
         info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(
-            async move {
-                soar::metrics::start_metrics_server(metrics_port, Some("ingest")).await;
-            }
-            .instrument(tracing::info_span!("metrics_server")),
-        );
+        tokio::spawn(async move {
+            soar::metrics::start_metrics_server(metrics_port, Some("ingest")).await;
+        });
     }
 
     // Acquire instance lock to prevent multiple ingest instances from running
@@ -644,24 +640,21 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             soar::metrics::BeastIngestHealth::default(),
         ));
 
-        tokio::spawn(
-            async move {
-                let mut client = BeastClient::new(config);
+        tokio::spawn(async move {
+            let mut client = BeastClient::new(config);
 
-                // The Beast client's start_with_queue tracks stats - pass our counters
-                // The stats counter updates both per-source and total
-                match client
-                    .start_with_queue(queue, beast_health, Some(stats_rx))
-                    .await
-                {
-                    Ok(_) => {
-                        info!("Beast client {}:{} stopped normally", server, port);
-                    }
-                    Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
+            // The Beast client's start_with_queue tracks stats - pass our counters
+            // The stats counter updates both per-source and total
+            match client
+                .start_with_queue(queue, beast_health, Some(stats_rx))
+                .await
+            {
+                Ok(_) => {
+                    info!("Beast client {}:{} stopped normally", server, port);
                 }
+                Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
             }
-            .instrument(tracing::info_span!("beast_client", server = %server_clone, port = %port)),
-        );
+        });
     }
 
     // Spawn SBS clients if enabled
@@ -687,23 +680,20 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             soar::metrics::BeastIngestHealth::default(),
         ));
 
-        tokio::spawn(
-            async move {
-                let mut client = SbsClient::new(config);
+        tokio::spawn(async move {
+            let mut client = SbsClient::new(config);
 
-                // The SBS client's start_with_queue tracks stats - pass our counters
-                match client
-                    .start_with_queue(queue, beast_health, Some(stats_rx))
-                    .await
-                {
-                    Ok(_) => {
-                        info!("SBS client {}:{} stopped normally", server, port);
-                    }
-                    Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
+            // The SBS client's start_with_queue tracks stats - pass our counters
+            match client
+                .start_with_queue(queue, beast_health, Some(stats_rx))
+                .await
+            {
+                Ok(_) => {
+                    info!("SBS client {}:{} stopped normally", server, port);
                 }
+                Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
             }
-            .instrument(tracing::info_span!("sbs_client", server = %server_clone, port = %port)),
-        );
+        });
     }
 
     info!(
