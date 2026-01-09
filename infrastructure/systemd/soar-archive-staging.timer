@@ -41,4 +41,4 @@ RandomizedDelaySec=300
 AccuracySec=30min
 
 [Install]
-WantedBy=timers.target soar.target
+WantedBy=timers.target soar@staging.target

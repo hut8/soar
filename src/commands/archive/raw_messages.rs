@@ -12,8 +12,8 @@ use soar::schema::raw_messages;
 
 use super::archiver::{Archivable, PgPool, finalize_pending_detachment, write_records_to_file};
 
-/// CSV-serializable version of RawMessage (AprsMessage) with hex-encoded hash
-/// This is used for archival to avoid CSV serialization issues with Vec<u8>
+/// Serializable version of RawMessage (AprsMessage) with hex-encoded hash
+/// This is used for archival with text-friendly encoding for binary fields
 /// Handles both APRS and ADS-B messages from the raw_messages table
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RawMessageCsv {
@@ -147,7 +147,7 @@ impl Archivable for RawMessageCsv {
                 .select(AprsMessage::as_select())
                 .load_iter::<AprsMessage, diesel::pg::PgRowByRowLoadingMode>(&mut conn)?;
 
-            // Convert AprsMessage to RawMessageCsv for CSV serialization
+            // Convert AprsMessage to RawMessageCsv for JSON serialization
             let csv_messages_iter = messages_iter.map(|result| result.map(RawMessageCsv::from));
 
             write_records_to_file(csv_messages_iter, &file_path, Self::table_name())
@@ -216,7 +216,7 @@ impl Archivable for RawMessageCsv {
     fn insert_batch(conn: &mut PgConnection, batch: &[Self]) -> Result<()> {
         conn.transaction::<_, anyhow::Error, _>(|conn| {
             for csv_message in batch {
-                // Convert CSV format back to database format
+                // Convert archive format back to database format
                 let db_message: AprsMessage = csv_message.clone().into();
                 diesel::insert_into(raw_messages::table)
                     .values(&db_message)

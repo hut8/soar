@@ -30,4 +30,4 @@ LimitNOFILE=65536
 TimeoutStartSec=14400
 
 [Install]
-WantedBy=multi-user.target soar.target
+WantedBy=multi-user.target soar@production.target
