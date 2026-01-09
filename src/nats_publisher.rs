@@ -1,5 +1,5 @@
 use anyhow::Result;
-use async_nats::Client;
+use async_nats::{Client, Event};
 use serde_json;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -29,11 +29,12 @@ async fn publish_to_nats(
     // Serialize the FixWithFlightInfo to JSON once
     let payload = serde_json::to_vec(fix_with_flight)?;
 
+    // TODO: Temporarily disabled to reduce NATS publish load
     // Publish by device
-    let device_subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
-    nats_client
-        .publish(device_subject.clone(), payload.clone().into())
-        .await?;
+    // let device_subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
+    // nats_client
+    //     .publish(device_subject.clone(), payload.clone().into())
+    //     .await?;
 
     // Publish by area
     let area_subject = get_area_subject(
@@ -41,9 +42,12 @@ async fn publish_to_nats(
         fix_with_flight.latitude,
         fix_with_flight.longitude,
     );
-    nats_client
-        .publish(area_subject.clone(), payload.into())
-        .await?;
+
+    let publish_start = std::time::Instant::now();
+    nats_client.publish(area_subject, payload.into()).await?;
+    let publish_duration = publish_start.elapsed();
+    metrics::histogram!("nats.fix_publisher.publish_latency_us")
+        .record(publish_duration.as_micros() as f64);
 
     Ok(())
 }
@@ -72,6 +76,34 @@ impl NatsFixPublisher {
         let nats_client_name = crate::nats_client_name("nats-publisher");
         let nats_client = async_nats::ConnectOptions::new()
             .name(&nats_client_name)
+            .event_callback(|event| async move {
+                match event {
+                    Event::Connected => {
+                        info!("NATS publisher connected");
+                        metrics::counter!("nats.fix_publisher.connected_total").increment(1);
+                    }
+                    Event::Disconnected => {
+                        warn!("NATS publisher disconnected");
+                        metrics::counter!("nats.fix_publisher.disconnected_total").increment(1);
+                    }
+                    Event::SlowConsumer(sid) => {
+                        warn!("NATS slow consumer detected for subscription {}", sid);
+                        metrics::counter!("nats.fix_publisher.slow_consumer_total").increment(1);
+                    }
+                    Event::ServerError(err) => {
+                        error!("NATS server error: {}", err);
+                        metrics::counter!("nats.fix_publisher.server_error_total").increment(1);
+                    }
+                    Event::ClientError(err) => {
+                        error!("NATS client error: {}", err);
+                        metrics::counter!("nats.fix_publisher.client_error_total").increment(1);
+                    }
+                    Event::LameDuckMode => {
+                        warn!("NATS server entering lame duck mode (preparing to shutdown)");
+                    }
+                    _ => {}
+                }
+            })
             .connect(nats_url)
             .await?;
 
