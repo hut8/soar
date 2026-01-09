@@ -187,7 +187,8 @@ impl PacketRouter {
     }
 
     /// Internal worker method to process a server message
-    #[tracing::instrument(skip(self, raw_message), fields(message_len = raw_message.len()))]
+    /// Note: No #[instrument] here - this is called for every server message
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     async fn process_server_message_internal(
         &self,
         raw_message: &str,
@@ -254,7 +255,9 @@ impl PacketRouter {
     ///
     /// 1. GenericProcessor archives and inserts to database
     /// 2. Route to appropriate queue based on packet type
-    #[tracing::instrument(skip(self, packet, raw_message), fields(packet_from = %packet.from, packet_type = ?packet.data))]
+    ///
+    /// Note: No #[instrument] here - this is called for every APRS packet
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     async fn process_packet_internal(
         &self,
         packet: AprsPacket,

@@ -43,7 +43,8 @@ impl AircraftPositionProcessor {
 
     /// Process an aircraft position packet
     /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
-    #[tracing::instrument(skip(self, packet, context), fields(packet_from = %packet.from))]
+    /// Note: No #[instrument] here - this is called for every aircraft position packet
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn process_aircraft_position(&self, packet: &AprsPacket, context: PacketContext) {
         let raw_message = packet.raw.clone().unwrap_or_default();
 

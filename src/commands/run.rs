@@ -39,7 +39,8 @@ fn queue_warning_threshold(queue_size: usize) -> usize {
 /// Process a received APRS message by parsing and routing through PacketRouter
 /// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
 /// We extract the timestamp and pass it through the processing pipeline
-#[tracing::instrument(skip(packet_router), fields(message_len = message.len()))]
+/// Note: No #[instrument] here - this is called thousands of times per second
+/// and would cause trace accumulation beyond Tempo's 5MB limit
 async fn process_aprs_message(
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
@@ -119,7 +120,8 @@ async fn process_aprs_message(
 
 /// Process a received Beast (ADS-B) message from NATS
 /// The message format is binary: 8-byte timestamp (big-endian i64 microseconds) + Beast frame
-#[tracing::instrument(skip(aircraft_repo, beast_repo, fix_processor, cpr_decoder), fields(message_len = message_bytes.len(), %receiver_id))]
+/// Note: No #[instrument] here - this is called thousands of times per second
+/// and would cause trace accumulation beyond Tempo's 5MB limit
 async fn process_beast_message(
     message_bytes: &[u8],
     aircraft_repo: &AircraftRepository,

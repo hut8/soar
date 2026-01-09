@@ -26,7 +26,8 @@ impl ReceiverStatusProcessor {
 
     /// Process a status packet from a receiver
     /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
-    #[tracing::instrument(skip(self, packet, context), fields(callsign = %packet.from))]
+    /// Note: No #[instrument] here - this is called for every receiver status packet
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn process_status_packet(&self, packet: &AprsPacket, context: PacketContext) {
         let source_type = packet.position_source_type();
         let callsign = packet.from.to_string();

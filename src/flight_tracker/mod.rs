@@ -323,7 +323,8 @@ impl FlightTracker {
     }
 
     /// Calculate altitude AGL and update the fix in the database asynchronously
-    #[tracing::instrument(skip(self, fix, fixes_repo), fields(fix_id = %fix_id))]
+    /// Note: No #[instrument] here - this is called for every fix (thousands per second)
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn calculate_and_update_agl_async(
         &self,
         fix_id: uuid::Uuid,
@@ -342,7 +343,7 @@ impl FlightTracker {
     }
 
     /// Check all aircraft with active flights and timeout any that haven't received fixes for 1+ hours
-    #[tracing::instrument(skip(self))]
+    /// Note: This runs periodically (not per-fix) so instrumentation is OK, but removing for consistency
     pub async fn check_and_timeout_stale_flights(&self) {
         let timeout_threshold = chrono::Duration::hours(1);
         let now = chrono::Utc::now();
@@ -415,7 +416,8 @@ impl FlightTracker {
 
     /// Process a fix, insert it into the database, and return it with updated flight_id
     /// This method holds the per-device lock through the entire process including DB insertion
-    #[tracing::instrument(skip(self, fix, fixes_repo), fields(aircraft_id = %fix.aircraft_id, flight_id = ?fix.flight_id))]
+    /// Note: No #[instrument] here - this is called for every fix (thousands per second)
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn process_and_insert_fix(
         &self,
         fix: Fix,

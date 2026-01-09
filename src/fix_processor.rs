@@ -138,7 +138,8 @@ impl FixProcessor {
 
     /// Process a pre-created Fix (e.g., from ADS-B)
     /// This is used when the fix has already been created from a non-APRS source
-    #[tracing::instrument(skip(self, fix), fields(aircraft_id = %fix.aircraft_id))]
+    /// Note: No #[instrument] here - this is called for every fix (thousands per second)
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn process_fix(&self, fix: Fix) -> anyhow::Result<()> {
         // Use an empty raw message for non-APRS fixes
         self.process_fix_internal(fix, "").await;
@@ -150,7 +151,8 @@ impl FixProcessor {
     /// Process an APRS packet by looking up device and creating a Fix
     /// This is the main entry point that orchestrates the entire pipeline
     /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
-    #[tracing::instrument(skip(self, packet, raw_message, context))]
+    /// Note: No #[instrument] here - this is called for every APRS packet (thousands per second)
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     pub async fn process_aprs_packet(
         &self,
         packet: AprsPacket,
@@ -337,7 +339,8 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.aircraft_id))]
+    /// Note: No #[instrument] here - this is called for every fix (thousands per second)
+    /// and would cause trace accumulation beyond Tempo's 5MB limit
     async fn process_fix_internal(&self, mut fix: Fix, raw_message: &str) {
         // Step 0: Calculate elevation synchronously if in sync mode (before database insert)
         // This ensures the fix is inserted with complete data including AGL altitude
