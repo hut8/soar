@@ -540,12 +540,18 @@ async fn sitemap_file(Path(filename): Path<String>) -> impl IntoResponse {
 }
 
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
+    // Initialize server start time for uptime tracking
+    actions::init_server_start_time();
+
     // Initialize Prometheus metrics exporter with "web" component label
     let metrics_handle = crate::metrics::init_metrics(Some("web"));
     METRICS_HANDLE
         .set(metrics_handle)
         .expect("Metrics handle already initialized");
     info!("Prometheus metrics exporter initialized (component=web)");
+
+    // Initialize build info metric with version labels
+    crate::metrics::initialize_build_info();
 
     // Initialize WebSocket metrics to zero so they're always exported to Prometheus
     // even when there are no active connections
@@ -785,6 +791,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             get(actions::get_airport_activity),
         )
         .route("/analytics/summary", get(actions::get_summary))
+        // Status endpoint
+        .route("/status", get(actions::get_status))
         .with_state(app_state.clone());
 
     // Build the main Axum application
