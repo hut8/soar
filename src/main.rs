@@ -733,6 +733,10 @@ async fn main() -> Result<()> {
     // Create filter for tokio-console layer (needs tokio=trace,runtime=trace for task visibility)
     let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace");
 
+    // Create filter for OpenTelemetry layer - exclude tokio runtime internals to prevent
+    // trace bloat from waker.clone/waker.drop events being attached to every span
+    let otel_filter = EnvFilter::new("info,tokio=off,runtime=off");
+
     let registry = tracing_subscriber::registry();
 
     let fmt_layer =
@@ -753,8 +757,11 @@ async fn main() -> Result<()> {
                 );
 
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry
                         .with(fmt_layer)
                         .with(console_layer)
@@ -771,8 +778,11 @@ async fn main() -> Result<()> {
             } else {
                 // No tokio-console overhead
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry.with(fmt_layer).with(otel_layer).init();
                     info!("OpenTelemetry layer integrated with tracing subscriber");
                 } else {
@@ -793,8 +803,11 @@ async fn main() -> Result<()> {
                 );
 
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry
                         .with(fmt_layer)
                         .with(console_layer)
@@ -811,8 +824,11 @@ async fn main() -> Result<()> {
             } else {
                 // No tokio-console overhead
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry.with(fmt_layer).with(otel_layer).init();
                     info!("OpenTelemetry layer integrated with tracing subscriber");
                 } else {
@@ -830,8 +846,11 @@ async fn main() -> Result<()> {
             if is_test_mode {
                 // Test mode: skip console subscriber
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry.with(fmt_layer).with(otel_layer).init();
                     info!("OpenTelemetry layer integrated with tracing subscriber");
                 } else {
@@ -848,8 +867,11 @@ async fn main() -> Result<()> {
                 );
 
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry
                         .with(fmt_layer)
                         .with(console_layer)
@@ -866,8 +888,11 @@ async fn main() -> Result<()> {
             } else {
                 // No tokio-console overhead
                 if otel_enabled {
-                    let otel_layer = tracing_opentelemetry::layer()
-                        .with_tracer(opentelemetry::global::tracer(component_name));
+                    let otel_layer = filter::Filtered::new(
+                        tracing_opentelemetry::layer()
+                            .with_tracer(opentelemetry::global::tracer(component_name)),
+                        otel_filter.clone(),
+                    );
                     registry.with(fmt_layer).with(otel_layer).init();
                     info!("OpenTelemetry layer integrated with tracing subscriber");
                 } else {
@@ -878,8 +903,11 @@ async fn main() -> Result<()> {
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
             if otel_enabled {
-                let otel_layer = tracing_opentelemetry::layer()
-                    .with_tracer(opentelemetry::global::tracer(component_name));
+                let otel_layer = filter::Filtered::new(
+                    tracing_opentelemetry::layer()
+                        .with_tracer(opentelemetry::global::tracer(component_name)),
+                    otel_filter.clone(),
+                );
                 registry.with(fmt_layer).with(otel_layer).init();
                 info!("OpenTelemetry layer integrated with tracing subscriber");
             } else {
