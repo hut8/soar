@@ -82,8 +82,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
     - `infrastructure/grafana-dashboard-run-flights.json` - Aircraft and flight tracking
     - `infrastructure/grafana-dashboard-run-geocoding.json` - Pelias geocoding service
     - `infrastructure/grafana-dashboard-run-elevation.json` - Elevation processing and AGL
-  - `infrastructure/grafana-dashboard-ingest-ogn.json` - OGN/APRS ingestion (`ingest-ogn` command)
-  - `infrastructure/grafana-dashboard-ingest-adsb.json` - ADS-B Beast ingestion (`ingest-adsb` command)
+  - `infrastructure/grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
   - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
   - `infrastructure/grafana-dashboard-nats.json` - NATS/JetStream metrics
   - `infrastructure/grafana-dashboard-analytics.json` - Analytics API and cache performance

@@ -64,7 +64,7 @@ pub fn set_beast_health(health: Arc<RwLock<BeastIngestHealth>>) {
 
 /// Initialize Prometheus metrics exporter
 /// Returns a handle that can be used to render metrics for scraping
-/// Optionally adds a component label to all metrics (e.g., "ingest-adsb", "ingest-ogn", "web", "run")
+/// Optionally adds a component label to all metrics (e.g., "ingest", "web", "run")
 ///
 /// Note: OTLP metrics export is available via the `telemetry` module's `init_meter_provider`
 /// function. The `metrics` crate can only have one recorder (Prometheus in this case), but
@@ -687,6 +687,44 @@ pub fn initialize_coverage_metrics() {
     metrics::counter!("coverage.cache.miss_total").absolute(0);
 }
 
+/// Initialize build info metric with version details as labels
+/// This exports a gauge with value 1 and labels containing version, commit, target, etc.
+/// Follows the standard "info" metric pattern used by Prometheus exporters.
+pub fn initialize_build_info() {
+    // Get binary modification time if available
+    let binary_modified = get_binary_modified_time().unwrap_or_else(|| "unknown".to_string());
+
+    metrics::gauge!(
+        "build_info",
+        "version" => env!("VERGEN_GIT_DESCRIBE"),
+        "commit" => env!("VERGEN_GIT_SHA"),
+        "build_timestamp" => env!("VERGEN_BUILD_TIMESTAMP"),
+        "target" => env!("VERGEN_CARGO_TARGET_TRIPLE"),
+        "binary_modified" => leak_string(binary_modified),
+    )
+    .set(1.0);
+}
+
+/// Get binary modification time as ISO 8601 string
+fn get_binary_modified_time() -> Option<String> {
+    let exe_path = std::env::current_exe().ok()?;
+    let metadata = std::fs::metadata(&exe_path).ok()?;
+    let modified = metadata.modified().ok()?;
+
+    let duration = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
+    let datetime =
+        chrono::DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
+            .map(|dt| dt.to_rfc3339())?;
+
+    Some(datetime)
+}
+
+/// Leak a string to get a &'static str (needed for metric labels)
+/// This is safe for build info since it's only called once at startup
+fn leak_string(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
 /// Health check handler for APRS ingestion service
 /// Returns 200 OK if service is healthy and ready to receive traffic
 /// Returns 503 Service Unavailable if not ready
@@ -767,12 +805,15 @@ async fn readiness_check_handler() -> impl IntoResponse {
 
 /// Start a standalone metrics server on the specified port
 /// This is used by the "run" subcommand to expose metrics independently
-/// The component parameter is used to add a global label to all metrics (e.g., "ingest-adsb", "ingest-ogn", "web", "run")
+/// The component parameter is used to add a global label to all metrics (e.g., "ingest", "web", "run")
 pub async fn start_metrics_server(port: u16, component: Option<&str>) {
     let handle = init_metrics(component);
     METRICS_HANDLE
         .set(handle)
         .expect("Metrics handle already initialized");
+
+    // Initialize build info metric with version labels
+    initialize_build_info();
 
     // Start process metrics background task
     tokio::spawn(process_metrics_task());
