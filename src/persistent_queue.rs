@@ -4,10 +4,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 const MAGIC_BYTES: &[u8; 8] = b"SOARQUE1";
 const HEADER_SIZE: usize = 32;
+const DEFAULT_MAX_SEGMENT_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
 
 /// State of the persistent queue
 #[derive(Debug, Clone)]
@@ -33,9 +34,9 @@ pub enum QueueState {
 #[derive(Debug, Clone)]
 pub struct QueueDepth {
     pub memory: usize,
-    /// Actual data bytes remaining (write_offset - read_offset)
+    /// Actual data bytes remaining across all segments
     pub disk_data_bytes: u64,
-    /// Total file size on disk (may be larger than data_bytes due to consumed messages)
+    /// Total file size on disk across all segments
     pub disk_file_bytes: u64,
 }
 
@@ -46,6 +47,13 @@ pub struct QueueDepth {
 /// - Disconnected: Messages buffer to disk file (slow path)
 /// - Draining: Replay disk backlog while buffering new messages
 ///
+/// Storage:
+/// - Uses a directory containing segment files
+/// - Each segment file is named with a 16-digit zero-padded unix timestamp (milliseconds)
+/// - Segment files are rotated when they exceed max_segment_size_bytes
+/// - Segments are deleted after being fully drained
+/// - This limits deadspace to at most one segment's worth
+///
 /// Delivery Semantics:
 /// - At-most-once: Messages are marked as consumed only after successful delivery
 /// - If crash occurs after recv() but before commit(), message will be replayed
@@ -54,14 +62,16 @@ where
     T: Serialize + for<'de> Deserialize<'de> + Send + Sync + 'static,
 {
     name: String,
-    file_path: PathBuf,
-    max_size_bytes: Option<u64>,
+    dir_path: PathBuf,
+    max_total_size_bytes: Option<u64>,
+    max_segment_size_bytes: u64,
     state: Arc<RwLock<QueueState>>,
     memory_tx: flume::Sender<T>,
     memory_rx: flume::Receiver<T>,
     /// Pending read offset - set when message is read, committed when delivery succeeds
     /// This ensures at-most-once delivery: offset only advances after successful send
-    pending_commit_offset: Arc<RwLock<Option<u64>>>,
+    /// Format: (segment_name, new_read_offset)
+    pending_commit: Arc<RwLock<Option<(String, u64)>>>,
 }
 
 impl<T> PersistentQueue<T>
@@ -72,26 +82,49 @@ where
     ///
     /// # Arguments
     /// * `name` - Queue name (for metrics)
-    /// * `file_path` - Path to persistent file
-    /// * `max_size_bytes` - Optional maximum file size (disconnect on overflow)
+    /// * `dir_path` - Path to persistent queue directory
+    /// * `max_total_size_bytes` - Optional maximum total size across all segments (disconnect on overflow)
     /// * `memory_capacity` - Bounded channel capacity for fast path
     pub fn new(
         name: String,
-        file_path: PathBuf,
-        max_size_bytes: Option<u64>,
+        dir_path: PathBuf,
+        max_total_size_bytes: Option<u64>,
         memory_capacity: usize,
     ) -> Result<Self> {
-        // Create parent directory if needed
-        if let Some(parent) = file_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        Self::with_segment_size(
+            name,
+            dir_path,
+            max_total_size_bytes,
+            memory_capacity,
+            DEFAULT_MAX_SEGMENT_SIZE,
+        )
+    }
+
+    /// Create a new persistent queue with custom segment size
+    ///
+    /// # Arguments
+    /// * `name` - Queue name (for metrics)
+    /// * `dir_path` - Path to persistent queue directory
+    /// * `max_total_size_bytes` - Optional maximum total size across all segments
+    /// * `memory_capacity` - Bounded channel capacity for fast path
+    /// * `max_segment_size_bytes` - Maximum size of each segment file before rotation
+    pub fn with_segment_size(
+        name: String,
+        dir_path: PathBuf,
+        max_total_size_bytes: Option<u64>,
+        memory_capacity: usize,
+        max_segment_size_bytes: u64,
+    ) -> Result<Self> {
+        // Create directory if needed
+        std::fs::create_dir_all(&dir_path)?;
 
         let (memory_tx, memory_rx) = flume::bounded(memory_capacity);
 
         let queue = Self {
             name: name.clone(),
-            file_path,
-            max_size_bytes,
+            dir_path,
+            max_total_size_bytes,
+            max_segment_size_bytes,
             state: Arc::new(RwLock::new(QueueState::Disconnected {
                 disconnected_at: Instant::now(),
                 messages_buffered: 0,
@@ -99,13 +132,119 @@ where
             })),
             memory_tx,
             memory_rx,
-            pending_commit_offset: Arc::new(RwLock::new(None)),
+            pending_commit: Arc::new(RwLock::new(None)),
         };
 
         // Initialize metrics
         metrics::gauge!(format!("queue.{}.state", name)).set(0.0); // 0=disconnected, 1=connected, 2=draining
 
         Ok(queue)
+    }
+
+    /// List segment files sorted by name (oldest first)
+    fn list_segments(&self) -> Vec<String> {
+        let mut segments = Vec::new();
+
+        if let Ok(entries) = std::fs::read_dir(&self.dir_path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                // Segment files are 16-digit numbers
+                if name.len() == 16 && name.chars().all(|c| c.is_ascii_digit()) {
+                    segments.push(name);
+                }
+            }
+        }
+
+        // Sort asciibetically (works because we use zero-padded numbers)
+        segments.sort();
+        segments
+    }
+
+    /// Get path to a segment file
+    fn segment_path(&self, segment_name: &str) -> PathBuf {
+        self.dir_path.join(segment_name)
+    }
+
+    /// Generate a new segment name based on current timestamp
+    fn new_segment_name(&self) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        // 16-digit zero-padded timestamp
+        format!("{:016}", timestamp)
+    }
+
+    /// Get the current write segment (create if needed)
+    fn get_or_create_write_segment(&self) -> Result<String> {
+        let segments = self.list_segments();
+
+        if let Some(latest) = segments.last() {
+            // Check if current segment is under size limit
+            let path = self.segment_path(latest);
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+            if size < self.max_segment_size_bytes {
+                return Ok(latest.clone());
+            }
+            // Current segment is full, create new one
+        }
+
+        // Create new segment
+        let name = self.new_segment_name();
+        Ok(name)
+    }
+
+    /// Get the oldest segment for reading (returns None if no segments)
+    fn get_read_segment(&self) -> Option<String> {
+        self.list_segments().first().cloned()
+    }
+
+    /// Read the offsets from a segment file header
+    fn read_segment_offsets(&self, segment_name: &str) -> Option<(u64, u64)> {
+        use std::io::Read;
+
+        let path = self.segment_path(segment_name);
+        if !path.exists() {
+            return None;
+        }
+
+        let mut file = std::fs::File::open(&path).ok()?;
+        let mut header = [0u8; HEADER_SIZE];
+        file.read_exact(&mut header).ok()?;
+
+        // Verify magic bytes
+        if &header[0..8] != MAGIC_BYTES {
+            return None;
+        }
+
+        let write_offset = u64::from_le_bytes(header[8..16].try_into().ok()?);
+        let read_offset = u64::from_le_bytes(header[16..24].try_into().ok()?);
+
+        Some((write_offset, read_offset))
+    }
+
+    /// Check if a segment is fully drained
+    fn is_segment_drained(&self, segment_name: &str) -> bool {
+        if let Some((write_offset, read_offset)) = self.read_segment_offsets(segment_name) {
+            read_offset >= write_offset
+        } else {
+            true // Invalid or missing segment is considered drained
+        }
+    }
+
+    /// Delete a segment file
+    fn delete_segment(&self, segment_name: &str) -> Result<()> {
+        let path = self.segment_path(segment_name);
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+            debug!("Deleted drained segment: {}", segment_name);
+            metrics::counter!(format!("queue.{}.segments_deleted_total", self.name)).increment(1);
+        }
+        Ok(())
     }
 
     /// Send a message to the queue
@@ -165,7 +304,7 @@ where
             QueueState::Connected { .. } => {
                 // Check if there's disk overflow (memory was full and messages went to disk)
                 // This can happen when the publisher is slow/blocked
-                if self.file_path.exists() {
+                if self.has_segments() {
                     // We have disk overflow - transition to Draining mode to process it
                     info!(
                         "Queue '{}' detected disk overflow in Connected state, switching to Draining",
@@ -225,23 +364,54 @@ where
     pub async fn commit(&self) -> Result<()> {
         use std::io::{Seek, Write};
 
-        // Get pending offset
-        let offset = {
-            let mut pending = self.pending_commit_offset.write().await;
+        // Get pending commit info
+        let commit_info = {
+            let mut pending = self.pending_commit.write().await;
             pending.take()
         };
 
-        if let Some(new_read_offset) = offset {
-            // Write new read_offset to disk
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .open(&self.file_path)?;
+        if let Some((segment_name, new_read_offset)) = commit_info {
+            let path = self.segment_path(&segment_name);
 
-            file.seek(std::io::SeekFrom::Start(16))?;
-            file.write_all(&new_read_offset.to_le_bytes())?;
-            // Use sync_all() instead of flush() to force write to physical disk
-            // This ensures durability and prevents duplicate messages on SIGKILL
-            file.sync_all()?;
+            // Check if segment still exists (might have been deleted in a race)
+            if !path.exists() {
+                return Ok(());
+            }
+
+            // Get write_offset to check if segment is fully drained
+            let (write_offset, _) = self
+                .read_segment_offsets(&segment_name)
+                .ok_or_else(|| anyhow::anyhow!("Failed to read segment offsets"))?;
+
+            // If this commit drains the segment, we may be able to delete it
+            if new_read_offset >= write_offset {
+                // Only delete if this is NOT the newest segment (the write segment).
+                // If it's the newest, concurrent appends may be writing to it, and
+                // we'd race with append_to_disk() which writes data before updating
+                // the header's write_offset. Deleting based on stale write_offset
+                // would drop those concurrent writes.
+                let segments = self.list_segments();
+                let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
+
+                if is_write_segment {
+                    // Can't delete - this is the current write segment.
+                    // Just update read_offset to mark it as empty.
+                    let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+                    file.seek(std::io::SeekFrom::Start(16))?;
+                    file.write_all(&new_read_offset.to_le_bytes())?;
+                    file.sync_all()?;
+                } else {
+                    // Safe to delete - writes are going to newer segments
+                    self.delete_segment(&segment_name)?;
+                }
+            } else {
+                // Write new read_offset to disk
+                let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+
+                file.seek(std::io::SeekFrom::Start(16))?;
+                file.write_all(&new_read_offset.to_le_bytes())?;
+                file.sync_all()?;
+            }
 
             metrics::counter!(format!("queue.{}.messages.committed_total", self.name)).increment(1);
         }
@@ -254,7 +424,7 @@ where
         let mut state = self.state.write().await;
 
         // Check if there's a disk backlog
-        let has_backlog = self.file_path.exists();
+        let has_backlog = self.has_segments();
 
         if has_backlog {
             // Transition to Draining state
@@ -300,70 +470,50 @@ where
         QueueDepth {
             memory: self.memory_tx.len(),
             disk_data_bytes: self.data_size_bytes(),
-            disk_file_bytes: self.file_size_bytes(),
+            disk_file_bytes: self.total_file_size_bytes(),
         }
     }
 
-    /// Read the current offsets from the queue file header
-    /// Returns (write_offset, read_offset) or None if file doesn't exist or is invalid
-    fn read_offsets(&self) -> Option<(u64, u64)> {
-        use std::io::Read;
-
-        if !self.file_path.exists() {
-            return None;
-        }
-
-        let mut file = std::fs::File::open(&self.file_path).ok()?;
-        let mut header = [0u8; HEADER_SIZE];
-        file.read_exact(&mut header).ok()?;
-
-        // Verify magic bytes
-        if &header[0..8] != MAGIC_BYTES {
-            return None;
-        }
-
-        let write_offset = u64::from_le_bytes(header[8..16].try_into().ok()?);
-        let read_offset = u64::from_le_bytes(header[16..24].try_into().ok()?);
-
-        Some((write_offset, read_offset))
+    /// Check if there are any segment files
+    fn has_segments(&self) -> bool {
+        !self.list_segments().is_empty()
     }
 
-    /// Get the actual data size in the queue (bytes not yet consumed)
-    /// This is write_offset - read_offset, NOT the file size
+    /// Get the actual data size in the queue (bytes not yet consumed) across all segments
     pub fn data_size_bytes(&self) -> u64 {
-        if let Some((write_offset, read_offset)) = self.read_offsets() {
-            write_offset.saturating_sub(read_offset)
-        } else {
-            0
+        let mut total = 0u64;
+
+        for segment in self.list_segments() {
+            if let Some((write_offset, read_offset)) = self.read_segment_offsets(&segment) {
+                total += write_offset.saturating_sub(read_offset);
+            }
         }
+
+        total
     }
 
-    /// Get the file size (total bytes on disk, including already-consumed data)
-    pub fn file_size_bytes(&self) -> u64 {
-        if self.file_path.exists() {
-            std::fs::metadata(&self.file_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
-        } else {
-            0
+    /// Get the total file size across all segments
+    pub fn total_file_size_bytes(&self) -> u64 {
+        let mut total = 0u64;
+
+        for segment in self.list_segments() {
+            let path = self.segment_path(&segment);
+            if let Ok(meta) = std::fs::metadata(&path) {
+                total += meta.len();
+            }
         }
+
+        total
     }
 
     /// Check if the disk queue is at or near capacity
     /// Returns true if sending would likely fail due to size limit
     /// Uses 95% threshold on actual data size to trigger backpressure
     pub fn is_at_capacity(&self) -> bool {
-        if let Some(max_size) = self.max_size_bytes {
+        if let Some(max_size) = self.max_total_size_bytes {
             let data_size = self.data_size_bytes();
             // Backpressure when actual data is >= 95% of max
             if data_size >= (max_size * 95 / 100) {
-                return true;
-            }
-            // Also check if file is physically full (can't append even if data is drained)
-            let file_size = self.file_size_bytes();
-            if file_size >= max_size && data_size > 0 {
-                // File is full but has unconsumed data - needs compaction
-                // Trigger compaction by returning at_capacity until file is compacted
                 return true;
             }
         }
@@ -373,106 +523,37 @@ where
     /// Check if the queue is ready to accept new connections
     /// Returns true if below 75% capacity (allows reconnection after backpressure)
     pub fn is_ready_for_connection(&self) -> bool {
-        if let Some(max_size) = self.max_size_bytes {
+        if let Some(max_size) = self.max_total_size_bytes {
             let data_size = self.data_size_bytes();
-            let file_size = self.file_size_bytes();
 
             // Allow reconnection when actual data is below 75% of max
             if data_size < (max_size * 75 / 100) {
-                // But if file is physically full, we need compaction first
-                if file_size >= (max_size * 95 / 100) && data_size > 0 {
-                    // Trigger compaction
-                    if let Err(e) = self.compact_if_needed() {
-                        warn!("Failed to compact queue '{}': {}", self.name, e);
-                        return false;
-                    }
-                }
                 return true;
             }
             return false;
         }
-        // If no max size or file doesn't exist, always ready
+        // If no max size or no segments, always ready
         true
     }
 
     /// Get current capacity usage as a percentage (0-100)
     /// Based on actual data size, not file size
     pub fn capacity_percent(&self) -> u8 {
-        if let Some(max_size) = self.max_size_bytes {
+        if let Some(max_size) = self.max_total_size_bytes {
             let data_size = self.data_size_bytes();
             return ((data_size * 100) / max_size) as u8;
         }
         0
     }
 
-    /// Compact the queue file by rewriting only unconsumed messages
-    /// This is needed when the file is full but most data has been consumed
-    fn compact_if_needed(&self) -> Result<()> {
-        use std::io::{Read, Seek, Write};
-
-        let Some((write_offset, read_offset)) = self.read_offsets() else {
-            return Ok(()); // No file or invalid
-        };
-
-        let file_size = self.file_size_bytes();
-        let data_size = write_offset.saturating_sub(read_offset);
-
-        // Only compact if file is mostly consumed (> 50% of file is dead space)
-        if read_offset <= HEADER_SIZE as u64 || data_size > file_size / 2 {
-            return Ok(()); // No need to compact
-        }
-
-        info!(
-            "Compacting queue '{}': file_size={}B, data_size={}B, dead_space={}B",
-            self.name,
-            file_size,
-            data_size,
-            read_offset - HEADER_SIZE as u64
-        );
-
-        // Read all remaining messages
-        let mut file = std::fs::File::open(&self.file_path)?;
-        file.seek(std::io::SeekFrom::Start(read_offset))?;
-        let mut remaining_data = vec![0u8; data_size as usize];
-        file.read_exact(&mut remaining_data)?;
-        drop(file);
-
-        // Rewrite the file with just the remaining data
-        let temp_path = self.file_path.with_extension("compact");
-        {
-            let mut temp_file = std::fs::File::create(&temp_path)?;
-
-            // Write new header
-            let new_write_offset = HEADER_SIZE as u64 + data_size;
-            let header = [
-                MAGIC_BYTES.as_slice(),
-                &new_write_offset.to_le_bytes(),
-                &(HEADER_SIZE as u64).to_le_bytes(), // read_offset back to start
-                &0u64.to_le_bytes(),                 // reserved
-            ]
-            .concat();
-            temp_file.write_all(&header)?;
-            temp_file.write_all(&remaining_data)?;
-            temp_file.sync_all()?;
-        }
-
-        // Atomically replace the old file
-        std::fs::rename(&temp_path, &self.file_path)?;
-
-        metrics::counter!(format!("queue.{}.compactions_total", self.name)).increment(1);
-        info!(
-            "Queue '{}' compacted: {}B -> {}B",
-            self.name,
-            file_size,
-            HEADER_SIZE as u64 + data_size
-        );
-
-        Ok(())
-    }
-
     /// Get the queue name (for logging)
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Get the number of segment files
+    pub fn segment_count(&self) -> usize {
+        self.list_segments().len()
     }
 
     /// Append a message to the disk file
@@ -486,13 +567,31 @@ where
         // Calculate CRC32
         let checksum = crc32fast::hash(&data);
 
+        // Message size on disk: 4 bytes length + data + 4 bytes checksum
+        let message_disk_size = 4 + data.len() as u64 + 4;
+
+        // Get or create write segment
+        let segment_name = self.get_or_create_write_segment()?;
+        let path = self.segment_path(&segment_name);
+
+        // Check total size limit
+        if let Some(max_size) = self.max_total_size_bytes {
+            let current_size = self.total_file_size_bytes();
+            if current_size >= max_size {
+                anyhow::bail!(
+                    "Queue total size limit exceeded: {}",
+                    self.dir_path.display()
+                );
+            }
+        }
+
         // Open file in append mode
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(false) // Don't truncate - we're appending
             .read(true)
             .write(true)
-            .open(&self.file_path)?;
+            .open(&path)?;
 
         // If file is empty, write header
         let file_size = file.metadata()?.len();
@@ -506,16 +605,42 @@ where
             ]
             .concat();
             file.write_all(&header)?;
+            metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
         }
 
-        // Check size limit
-        if let Some(max_size) = self.max_size_bytes
-            && file_size >= max_size
+        // Check if this message would exceed segment size
+        let current_file_size = file.metadata()?.len();
+        if current_file_size > 0
+            && current_file_size + message_disk_size > self.max_segment_size_bytes
         {
-            anyhow::bail!(
-                "Queue file size limit exceeded: {}",
-                self.file_path.display()
-            );
+            // Need to rotate to a new segment
+            drop(file);
+
+            // Wait a moment to ensure unique timestamp
+            std::thread::sleep(std::time::Duration::from_millis(1));
+
+            let new_segment = self.new_segment_name();
+            let new_path = self.segment_path(&new_segment);
+
+            let mut new_file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(&new_path)?;
+
+            // Write header
+            let header = [
+                MAGIC_BYTES.as_slice(),
+                &(HEADER_SIZE as u64).to_le_bytes(),
+                &(HEADER_SIZE as u64).to_le_bytes(),
+                &0u64.to_le_bytes(),
+            ]
+            .concat();
+            new_file.write_all(&header)?;
+            metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
+
+            file = new_file;
         }
 
         // Seek to end
@@ -536,18 +661,25 @@ where
         Ok(())
     }
 
-    /// Read a message from the disk file
+    /// Read a message from the disk file (from oldest segment)
     async fn read_from_disk(&self) -> Result<Option<T>> {
         use std::io::{Read, Seek, Write};
 
-        if !self.file_path.exists() {
+        // Get the oldest segment
+        let segment_name = match self.get_read_segment() {
+            Some(name) => name,
+            None => return Ok(None),
+        };
+
+        let path = self.segment_path(&segment_name);
+        if !path.exists() {
             return Ok(None);
         }
 
         let mut file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(&self.file_path)?;
+            .open(&path)?;
 
         // Read header
         let mut header = [0u8; HEADER_SIZE];
@@ -555,16 +687,31 @@ where
 
         // Verify magic bytes
         if &header[0..8] != MAGIC_BYTES {
-            anyhow::bail!("Invalid queue file magic bytes");
+            anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
         }
 
         // Read offsets
         let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
         let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
 
-        // Check if we've read everything
+        // Check if we've read everything in this segment
         if read_offset >= write_offset {
-            return Ok(None);
+            // Segment is drained - only delete if it's NOT the write segment
+            // to avoid race with concurrent appends (same fix as in commit())
+            drop(file);
+            let segments = self.list_segments();
+            let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
+
+            if !is_write_segment {
+                // Safe to delete - not the write segment
+                self.delete_segment(&segment_name)?;
+                // Try to read from the next segment
+                return Box::pin(self.read_from_disk()).await;
+            } else {
+                // This is the write segment - don't delete, just return None
+                // to indicate no messages available from disk
+                return Ok(None);
+            }
         }
 
         // Seek to read position
@@ -587,14 +734,17 @@ where
         // Verify checksum
         let actual_checksum = crc32fast::hash(&data);
         if actual_checksum != expected_checksum {
-            warn!("Checksum mismatch, skipping corrupted message");
+            warn!(
+                "Checksum mismatch in segment {}, skipping corrupted message",
+                segment_name
+            );
             metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
             // Skip to next message
             let new_read_offset = read_offset + 4 + data_len as u64 + 4;
             file.seek(std::io::SeekFrom::Start(16))?;
             file.write_all(&new_read_offset.to_le_bytes())?;
             file.flush()?;
-            drop(file); // Drop file handle before recursive call
+            drop(file);
             return Box::pin(self.read_from_disk()).await;
         }
 
@@ -606,10 +756,10 @@ where
         // after successful delivery (when commit() is called)
         let new_read_offset = read_offset + 4 + data_len as u64 + 4;
 
-        // Store pending offset - will be committed after successful delivery
+        // Store pending commit info - will be committed after successful delivery
         {
-            let mut pending = self.pending_commit_offset.write().await;
-            *pending = Some(new_read_offset);
+            let mut pending = self.pending_commit.write().await;
+            *pending = Some((segment_name, new_read_offset));
         }
 
         Ok(Some(message))
@@ -619,9 +769,12 @@ where
     async fn finish_drain(&self) -> Result<()> {
         let name = self.name.clone();
 
-        // Delete the drained file
-        if self.file_path.exists() {
-            std::fs::remove_file(&self.file_path)?;
+        // All segments should already be deleted during commit()
+        // But clean up any remaining empty segments just in case
+        for segment in self.list_segments() {
+            if self.is_segment_drained(&segment) {
+                self.delete_segment(&segment)?;
+            }
         }
 
         // Transition to Connected
@@ -662,7 +815,7 @@ mod tests {
     #[tokio::test]
     async fn test_basic_send_recv() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
             PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
@@ -688,7 +841,7 @@ mod tests {
     #[tokio::test]
     async fn test_persistence() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         // Create queue, send messages while disconnected
         {
@@ -729,7 +882,7 @@ mod tests {
     #[tokio::test]
     async fn test_drain_mode() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
             PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 100)
@@ -776,7 +929,7 @@ mod tests {
     #[tokio::test]
     async fn test_overflow_protection() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue = PersistentQueue::<String>::new(
             "test".to_string(),
@@ -805,7 +958,7 @@ mod tests {
     #[tokio::test]
     async fn test_binary_messages() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
             PersistentQueue::<Vec<u8>>::new("test".to_string(), queue_path, None, 10).unwrap();
@@ -831,7 +984,7 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_send_recv() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
             PersistentQueue::<usize>::new("test".to_string(), queue_path, None, 1000).unwrap(),
@@ -873,7 +1026,7 @@ mod tests {
     #[tokio::test]
     async fn test_state_transitions() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
             PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
@@ -916,7 +1069,7 @@ mod tests {
     #[tokio::test]
     async fn test_depth() {
         let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test.queue");
+        let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
             PersistentQueue::<String>::new("test".to_string(), queue_path, None, 10).unwrap();
@@ -940,5 +1093,197 @@ mod tests {
 
         let depth = queue.depth().await;
         assert_eq!(depth.memory, 2);
+    }
+
+    #[tokio::test]
+    async fn test_segment_rotation() {
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        // Use a small segment size to force rotation
+        let queue = PersistentQueue::<String>::with_segment_size(
+            "test".to_string(),
+            queue_path.clone(),
+            None,
+            10,
+            500, // 500 bytes per segment
+        )
+        .unwrap();
+
+        // Send enough messages to create multiple segments
+        for i in 0..50 {
+            queue.send(format!("message-{:04}", i)).await.unwrap();
+        }
+
+        // Should have created multiple segments
+        let segment_count = queue.segment_count();
+        assert!(
+            segment_count > 1,
+            "Expected multiple segments, got {}",
+            segment_count
+        );
+
+        // Connect and drain
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        for i in 0..50 {
+            let msg = queue.recv().await.unwrap();
+            assert_eq!(msg, format!("message-{:04}", i));
+            queue.commit().await.unwrap();
+        }
+
+        // After draining, only the write segment may remain (empty but not deleted
+        // to avoid race with concurrent appends). Non-write segments are deleted.
+        let remaining_segments = queue.segment_count();
+        assert!(
+            remaining_segments <= 1,
+            "Expected at most 1 segment (the write segment) after drain, got {}",
+            remaining_segments
+        );
+    }
+
+    #[tokio::test]
+    async fn test_segment_cleanup_on_drain() {
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        // Small segments for testing
+        let queue = PersistentQueue::<String>::with_segment_size(
+            "test".to_string(),
+            queue_path.clone(),
+            None,
+            10,
+            200, // Very small segments
+        )
+        .unwrap();
+
+        // Write messages to create multiple segments
+        for i in 0..20 {
+            queue.send(format!("msg-{:02}", i)).await.unwrap();
+        }
+
+        let initial_segments = queue.segment_count();
+        assert!(initial_segments > 1, "Should have multiple segments");
+
+        // Connect and drain half the messages
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        for _ in 0..10 {
+            queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+        }
+
+        // Some segments should have been deleted (all except the write segment)
+        let mid_segments = queue.segment_count();
+        assert!(
+            mid_segments < initial_segments,
+            "Segments should decrease during drain"
+        );
+
+        // Drain remaining messages
+        for _ in 0..10 {
+            queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+        }
+
+        // After draining, only the write segment may remain (empty but not deleted
+        // to avoid race with concurrent appends). Non-write segments are deleted.
+        assert!(
+            queue.segment_count() <= 1,
+            "At most 1 segment (the write segment) should remain"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_drain_and_append_single_segment() {
+        // This test verifies that concurrent appends to the write segment
+        // are not lost when commit() drains that same segment.
+        // Regression test for: commit() deleting segment based on stale write_offset
+        // while append_to_disk() is concurrently writing to it.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue = Arc::new(
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap(),
+        );
+
+        // Buffer a single message to disk (creates one segment)
+        queue.send("initial".to_string()).await.unwrap();
+        assert_eq!(queue.segment_count(), 1);
+
+        // Connect consumer (enters drain mode since there's a backlog)
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        // Drain the initial message
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "initial");
+
+        // Before commit, append a new message to the same segment
+        // This simulates concurrent append during drain
+        queue.send("concurrent".to_string()).await.unwrap();
+
+        // Now commit - this should NOT delete the segment because:
+        // 1. It's the only/newest segment (the write segment)
+        // 2. The concurrent append just added data to it
+        queue.commit().await.unwrap();
+
+        // The concurrent message should NOT be lost
+        let msg2 = queue.recv().await.unwrap();
+        assert_eq!(msg2, "concurrent");
+        queue.commit().await.unwrap();
+
+        // Segment should still exist (it's the write segment) but be empty
+        // It will be cleaned up when finish_drain() runs after memory channel recv
+    }
+
+    #[tokio::test]
+    async fn test_write_segment_not_deleted_prematurely() {
+        // Verify that the current write segment is never deleted by commit(),
+        // even if it appears fully drained.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue =
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap();
+
+        // Send and drain a single message
+        queue.send("message1".to_string()).await.unwrap();
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "message1");
+        queue.commit().await.unwrap();
+
+        // The segment should NOT be deleted because it's the write segment
+        // (even though it's fully drained)
+        assert_eq!(
+            queue.segment_count(),
+            1,
+            "Write segment should not be deleted"
+        );
+
+        // Verify we can still write to it
+        queue.send("message2".to_string()).await.unwrap();
+
+        // And read the new message
+        let msg2 = queue.recv().await.unwrap();
+        assert_eq!(msg2, "message2");
+        queue.commit().await.unwrap();
     }
 }
