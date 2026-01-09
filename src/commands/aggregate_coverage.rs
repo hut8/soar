@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use diesel::sql_types;
+use std::collections::HashSet;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -16,6 +17,7 @@ use soar::web::PgPool;
 /// - start_date defaults to 30 days ago (from end_date)
 ///
 /// This ensures all resolutions have coverage for the last 30 days by default.
+/// Skips date/resolution combinations that already have coverage data.
 pub async fn aggregate_coverage(
     pool: PgPool,
     start_date: Option<NaiveDate>,
@@ -51,29 +53,70 @@ pub async fn aggregate_coverage(
         return Ok(());
     }
 
-    info!(
-        "Aggregating coverage from {} to {} for resolutions {:?}",
-        start_date, end_date, resolutions
-    );
-
     let repo = CoverageRepository::new(pool.clone());
 
-    // Iterate over each day in the range
+    // Find needed coverage dimensions (skip already-computed ones)
+    info!("finding needed coverage dimensions");
+
+    let existing_dimensions = repo
+        .get_existing_coverage_dimensions(start_date, end_date, &resolutions)
+        .await?;
+
+    // Build list of needed dimensions
+    let mut needed_dimensions: Vec<(NaiveDate, i16)> = Vec::new();
     let mut current_date = start_date;
     while current_date <= end_date {
-        info!("Processing date: {}", current_date);
+        for &resolution in &resolutions {
+            if !existing_dimensions.contains(&(current_date, resolution)) {
+                needed_dimensions.push((current_date, resolution));
+            }
+        }
+        current_date += chrono::Duration::days(1);
+    }
+
+    // Log each needed dimension
+    for (date, resolution) in &needed_dimensions {
+        info!("found dimension: date={} resolution={}", date, resolution);
+    }
+
+    // Calculate summary statistics
+    let unique_dates: HashSet<NaiveDate> = needed_dimensions.iter().map(|(d, _)| *d).collect();
+    let unique_resolutions: HashSet<i16> = needed_dimensions.iter().map(|(_, r)| *r).collect();
+
+    info!(
+        "found total dimensions: {} resolutions across {} dates",
+        unique_resolutions.len(),
+        unique_dates.len()
+    );
+
+    if needed_dimensions.is_empty() {
+        info!("all coverage dimensions already computed, nothing to do");
+        return Ok(());
+    }
+
+    // Group dimensions by date for parallel processing
+    let mut dates_to_process: Vec<NaiveDate> = unique_dates.into_iter().collect();
+    dates_to_process.sort();
+
+    for date in dates_to_process {
+        info!("Processing date: {}", date);
+
+        // Get resolutions needed for this date
+        let resolutions_for_date: Vec<i16> = needed_dimensions
+            .iter()
+            .filter(|(d, _)| *d == date)
+            .map(|(_, r)| *r)
+            .collect();
 
         // Process all resolutions for this day in parallel
         let mut tasks = Vec::new();
-        for resolution in &resolutions {
+        for resolution in resolutions_for_date {
             let pool_clone = pool.clone();
-            let date = current_date;
-            let res = *resolution;
 
             let task = tokio::spawn(async move {
-                fetch_and_aggregate_fixes(pool_clone, date, date, res).await
+                fetch_and_aggregate_fixes(pool_clone, date, date, resolution).await
             });
-            tasks.push((res, task));
+            tasks.push((resolution, task));
         }
 
         // Wait for all resolutions to complete and upsert results
@@ -84,19 +127,14 @@ pub async fn aggregate_coverage(
                 info!(
                     "Upserting {} coverage records for date {} resolution {}",
                     coverage_data.len(),
-                    current_date,
+                    date,
                     resolution
                 );
                 repo.upsert_coverage_batch(coverage_data).await?;
             } else {
-                info!(
-                    "No fixes found for date {} resolution {}",
-                    current_date, resolution
-                );
+                info!("No fixes found for date {} resolution {}", date, resolution);
             }
         }
-
-        current_date += chrono::Duration::days(1);
     }
 
     info!("Coverage aggregation complete");
@@ -148,7 +186,7 @@ async fn fetch_and_aggregate_fixes(
         }
 
         info!(
-            "Aggregating fixes from {} to {} using PostgreSQL h3 extension",
+            "Aggregating fixes from {} to {}",
             start_datetime, end_datetime
         );
         let start = std::time::Instant::now();
@@ -184,7 +222,7 @@ async fn fetch_and_aggregate_fixes(
 
         let duration = start.elapsed();
         info!(
-            "Aggregated {} coverage hexes in {:.2}s using PostgreSQL h3 extension",
+            "Aggregated {} coverage hexes in {:.2}s",
             coverage_data.len(),
             duration.as_secs_f64()
         );
