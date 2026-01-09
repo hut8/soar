@@ -7,6 +7,8 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 mod commands;
@@ -426,6 +428,24 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     Ok(())
 }
 
+/// Read system load average from /proc/loadavg (Linux only)
+/// Returns a formatted string like "load=1.23,2.34,3.45" or "load=unavailable" on error
+fn get_system_load() -> String {
+    match fs::read_to_string("/proc/loadavg") {
+        Ok(contents) => {
+            // Format: "1.23 2.34 3.45 1/234 12345"
+            // We want the first three numbers (1min, 5min, 15min load averages)
+            let parts: Vec<&str> = contents.split_whitespace().collect();
+            if parts.len() >= 3 {
+                format!("load={},{},{}", parts[0], parts[1], parts[2])
+            } else {
+                "load=unavailable".to_string()
+            }
+        }
+        Err(_) => "load=unavailable".to_string(),
+    }
+}
+
 /// Migration result containing the pool and migration information
 pub struct MigrationResult {
     pub pool: Pool<ConnectionManager<PgConnection>>,
@@ -550,54 +570,102 @@ async fn setup_diesel_database(
         Err(e) => {
             warn!("Could not list pending migrations: {}", e);
         }
-    }
+    };
 
-    // Run migrations while holding the lock and handle result immediately
-    let applied_migration_names = match connection.run_pending_migrations(MIGRATIONS) {
-        Ok(applied_migrations) => {
-            let migration_names: Vec<String> =
-                applied_migrations.iter().map(|m| m.to_string()).collect();
+    // Run migrations in a background thread while printing progress to keep SSH alive
+    // This prevents GitHub Actions from timing out during long migrations
+    let migration_start_time = Instant::now();
+    info!("running migration: elapsed=0s {}", get_system_load());
 
-            if applied_migrations.is_empty() {
+    // Use a channel to receive the migration result from the background thread
+    // The thread handles both migration execution and lock release
+    let (tx, rx) = mpsc::channel::<Result<Vec<String>, String>>();
+
+    // Clone database URL for schema dump (done in main thread after migration completes)
+    let database_url_for_dump_clone = database_url_for_dump.clone();
+
+    // Spawn the migration in a separate thread
+    // The thread runs migrations and releases the lock before returning
+    std::thread::spawn(move || {
+        let result = match connection.run_pending_migrations(MIGRATIONS) {
+            Ok(applied_migrations) => {
+                let migration_names: Vec<String> =
+                    applied_migrations.iter().map(|m| m.to_string()).collect();
+
+                // Release the advisory lock after successful migrations
+                if let Err(e) =
+                    diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
+                        .execute(&mut connection)
+                {
+                    // Log but don't fail - lock will be released when connection closes anyway
+                    eprintln!("Warning: Failed to release migration lock: {e}");
+                }
+
+                Ok(migration_names)
+            }
+            Err(migration_error) => {
+                // Release the advisory lock even if migrations failed
+                let _ =
+                    diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
+                        .execute(&mut connection);
+
+                Err(format!("{migration_error}"))
+            }
+        };
+        let _ = tx.send(result);
+    });
+
+    // Poll for completion while printing progress every 30 seconds
+    let progress_interval = Duration::from_secs(30);
+    let mut last_progress = Instant::now();
+
+    let migration_result = loop {
+        // Check if migration completed
+        match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => break result,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // Migration still running - print progress if interval elapsed
+                if last_progress.elapsed() >= progress_interval {
+                    let elapsed = migration_start_time.elapsed().as_secs();
+                    info!(
+                        "running migration: elapsed={}s {}",
+                        elapsed,
+                        get_system_load()
+                    );
+                    last_progress = Instant::now();
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                // Thread panicked or was otherwise lost
+                return Err(anyhow::anyhow!("Migration thread terminated unexpectedly"));
+            }
+        }
+    };
+
+    // Handle migration result
+    let applied_migration_names = match migration_result {
+        Ok(migration_names) => {
+            if migration_names.is_empty() {
                 info!("No pending migrations to apply");
             } else {
                 info!(
                     "Successfully applied {} migration(s):",
-                    applied_migrations.len()
+                    migration_names.len()
                 );
-                for migration in &applied_migrations {
+                for migration in &migration_names {
                     info!("  - Applied migration: {}", migration);
                 }
             }
             info!("Database migrations completed successfully");
+            info!("Migration lock released");
 
             // Dump schema to schema.sql (non-production only)
-            dump_schema_if_non_production(&database_url_for_dump)?;
-
-            // Release the advisory lock after successful migrations
-            diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
-                .execute(&mut connection)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to release migration lock after successful migrations: {e}"
-                    )
-                })?;
-            info!("Migration lock released");
+            dump_schema_if_non_production(&database_url_for_dump_clone)?;
 
             migration_names
         }
         Err(migration_error) => {
-            // Release the advisory lock even if migrations failed
-            let unlock_result =
-                diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
-                    .execute(&mut connection);
             info!("Migration lock released after failure");
-
-            // Log unlock error but prioritize migration error
-            if let Err(unlock_error) = unlock_result {
-                warn!("Also failed to release migration lock: {}", unlock_error);
-            }
-
             return Err(anyhow::anyhow!(
                 "Failed to run migrations: {migration_error}"
             ));

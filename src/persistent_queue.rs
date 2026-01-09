@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -72,6 +73,9 @@ where
     /// This ensures at-most-once delivery: offset only advances after successful send
     /// Format: (segment_name, new_read_offset)
     pending_commit: Arc<RwLock<Option<(String, u64)>>>,
+    /// Track whether we've logged the overflow warning (to avoid spamming logs)
+    /// Set to true on first overflow, reset to false after drain completes
+    overflow_warned: Arc<AtomicBool>,
 }
 
 impl<T> PersistentQueue<T>
@@ -133,6 +137,7 @@ where
             memory_tx,
             memory_rx,
             pending_commit: Arc::new(RwLock::new(None)),
+            overflow_warned: Arc::new(AtomicBool::new(false)),
         };
 
         // Initialize metrics
@@ -268,10 +273,13 @@ where
                     Err(flume::TrySendError::Full(message)) => {
                         // Memory channel is full (publisher is slow/blocked)
                         // Overflow to disk to prevent blocking the entire pipeline
-                        warn!(
-                            "Queue {} memory channel full, overflowing to disk (publisher is slow)",
-                            self.name
-                        );
+                        // Only log warning once per overflow episode (not on every send)
+                        if !self.overflow_warned.swap(true, Ordering::Relaxed) {
+                            warn!(
+                                "Queue {} memory channel full, overflowing to disk (publisher is slow)",
+                                self.name
+                            );
+                        }
                         metrics::counter!(format!("queue.{}.overflow_to_disk_total", self.name))
                             .increment(1);
                         self.append_to_disk(message).await?;
@@ -800,7 +808,15 @@ where
         metrics::histogram!(format!("queue.{}.drain_duration_seconds", name))
             .record(drain_duration);
 
-        info!("Drained {} messages in {:.2}s", drained, drain_duration);
+        // Log recovery if we were in overflow mode, and reset the warning flag
+        if self.overflow_warned.swap(false, Ordering::Relaxed) {
+            info!(
+                "Queue {} recovered from disk overflow, back to memory channel (drained {} messages in {:.2}s)",
+                name, drained, drain_duration
+            );
+        } else {
+            info!("Drained {} messages in {:.2}s", drained, drain_duration);
+        }
 
         Ok(())
     }
