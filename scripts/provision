@@ -191,6 +191,24 @@ else
     echo -e "${BLUE}'soar' user already exists${NC}"
 fi
 
+# Create pyroscope user if it doesn't exist
+if ! id "pyroscope" &>/dev/null; then
+    echo -e "${BLUE}Creating 'pyroscope' system user...${NC}"
+    sudo useradd --system --home-dir /var/lib/pyroscope --shell /bin/false pyroscope
+    echo -e "${GREEN}'pyroscope' user created successfully${NC}"
+else
+    echo -e "${BLUE}'pyroscope' user already exists${NC}"
+fi
+
+# Create alloy user if it doesn't exist
+if ! id "alloy" &>/dev/null; then
+    echo -e "${BLUE}Creating 'alloy' system user...${NC}"
+    sudo useradd --system --home-dir /var/lib/alloy --shell /bin/false alloy
+    echo -e "${GREEN}'alloy' user created successfully${NC}"
+else
+    echo -e "${BLUE}'alloy' user already exists${NC}"
+fi
+
 # Install sudoers configuration for deployment
 echo -e "${BLUE}Installing deployment sudoers configuration...${NC}"
 sudo cp infrastructure/sudoers.d/soar /etc/sudoers.d/
@@ -249,6 +267,22 @@ sudo apt-get update
 sudo apt-get install -y grafana
 
 echo -e "${GREEN}Grafana installed successfully${NC}"
+
+# Install Pyroscope
+echo -e "${BLUE}Installing Pyroscope...${NC}"
+
+# Pyroscope is in the same Grafana repository
+sudo apt-get install -y pyroscope
+
+echo -e "${GREEN}Pyroscope installed successfully${NC}"
+
+# Install Alloy
+echo -e "${BLUE}Installing Grafana Alloy...${NC}"
+
+# Alloy is also in the Grafana repository
+sudo apt-get install -y alloy
+
+echo -e "${GREEN}Grafana Alloy installed successfully${NC}"
 
 # Install Caddy
 echo -e "${BLUE}Installing Caddy web server...${NC}"
@@ -383,6 +417,7 @@ echo -e "${GREEN}Photon installation complete${NC}"
 
 # Copy infrastructure service files
 # Note: SOAR application service files (soar-run, soar-web, etc.) are installed by soar-deploy
+# Note: Pyroscope and Alloy service files are provided by their packages, not installed here
 echo -e "${BLUE}Installing infrastructure systemd service files...${NC}"
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
 sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
@@ -546,6 +581,8 @@ sudo systemctl enable photon.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
 sudo systemctl enable caddy
+sudo systemctl enable pyroscope
+sudo systemctl enable alloy
 
 # Start Prometheus if not already running
 if ! systemctl is-active --quiet prometheus; then
@@ -600,6 +637,32 @@ else
     echo -e "${BLUE}Photon is already running${NC}"
 fi
 
+# Start Pyroscope if not already running
+if ! systemctl is-active --quiet pyroscope; then
+    echo -e "${BLUE}Starting Pyroscope...${NC}"
+    sudo systemctl start pyroscope
+    if systemctl is-active --quiet pyroscope; then
+        echo -e "${GREEN}Pyroscope started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Pyroscope. Check logs with: journalctl -u pyroscope -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Pyroscope is already running${NC}"
+fi
+
+# Start Alloy if not already running
+if ! systemctl is-active --quiet alloy; then
+    echo -e "${BLUE}Starting Alloy...${NC}"
+    sudo systemctl start alloy
+    if systemctl is-active --quiet alloy; then
+        echo -e "${GREEN}Alloy started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Alloy. Check logs with: journalctl -u alloy -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Alloy is already running${NC}"
+fi
+
 # Configure Photon OpenSearch for single-node operation
 echo -e "${BLUE}Configuring Photon OpenSearch replica settings...${NC}"
 
@@ -643,6 +706,10 @@ sudo mkdir -p /var/soar/elevation
 sudo mkdir -p /etc/soar
 sudo mkdir -p /var/lib/nats/jetstream
 sudo mkdir -p /storage/soar/backups/base
+sudo mkdir -p /var/lib/pyroscope
+sudo mkdir -p /etc/pyroscope
+sudo mkdir -p /var/lib/alloy
+sudo mkdir -p /etc/alloy
 
 # Set ownership for soar user
 echo -e "${BLUE}Setting ownership for soar user...${NC}"
@@ -655,6 +722,18 @@ sudo chmod 755 /home/soar
 echo -e "${BLUE}Setting ownership for backup temp directory...${NC}"
 sudo chown -R postgres:postgres /storage/soar/backups/base
 sudo chmod 750 /storage/soar/backups/base
+
+# Set ownership for Pyroscope
+echo -e "${BLUE}Setting ownership for Pyroscope...${NC}"
+sudo chown -R pyroscope:pyroscope /var/lib/pyroscope
+sudo chown -R pyroscope:pyroscope /etc/pyroscope
+echo -e "${GREEN}Pyroscope directories configured${NC}"
+
+# Set ownership for Alloy
+echo -e "${BLUE}Setting ownership for Alloy...${NC}"
+sudo chown -R alloy:alloy /var/lib/alloy
+sudo chown -R alloy:alloy /etc/alloy
+echo -e "${GREEN}Alloy directories configured${NC}"
 
 # Download elevation data with rclone
 echo -e "${BLUE}Setting up elevation data...${NC}"
@@ -806,6 +885,8 @@ echo "    sudo systemctl start prometheus-nats-exporter"
 echo "    sudo systemctl start grafana-server"
 echo "    sudo systemctl start photon"
 echo "    sudo systemctl start caddy"
+echo "    sudo systemctl start pyroscope"
+echo "    sudo systemctl start alloy"
 echo
 echo "  Check service status:"
 echo "    sudo systemctl status nats-server"
@@ -814,6 +895,8 @@ echo "    sudo systemctl status prometheus-nats-exporter"
 echo "    sudo systemctl status grafana-server"
 echo "    sudo systemctl status photon"
 echo "    sudo systemctl status caddy"
+echo "    sudo systemctl status pyroscope"
+echo "    sudo systemctl status alloy"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
 echo "  sudo journalctl -u nats-server -f"
@@ -822,6 +905,8 @@ echo "  sudo journalctl -u prometheus-nats-exporter -f"
 echo "  sudo journalctl -u grafana-server -f"
 echo "  sudo journalctl -u photon -f"
 echo "  sudo journalctl -u caddy -f"
+echo "  sudo journalctl -u pyroscope -f"
+echo "  sudo journalctl -u alloy -f"
 echo
 echo -e "${YELLOW}Database verification:${NC}"
 echo "  sudo -u postgres psql -l  # List all databases"
@@ -916,6 +1001,51 @@ else
     echo "  Status: Data not installed (download manually)"
     echo "  Download data: See docs/photon-deployment.md for instructions"
 fi
+echo
+echo -e "${YELLOW}Pyroscope Continuous Profiling:${NC}"
+echo "  Local Web UI: http://localhost:4040"
+echo "  Configuration: /etc/pyroscope/config.yml"
+echo "  Data directory: /var/lib/pyroscope"
+echo "  Logs: sudo journalctl -u pyroscope -f"
+echo "  Service status: sudo systemctl status pyroscope"
+echo "  Grafana datasource: Automatically provisioned as 'Pyroscope'"
+echo "  Retention: 30 days (configured in config.yml)"
+echo ""
+echo "  Features:"
+echo "    • CPU profiling via pprof endpoints"
+echo "    • Continuous profiling collection"
+echo "    • Flamegraph visualization in Grafana"
+echo "    • Profile comparison and diff"
+echo ""
+echo "  Access in Grafana:"
+echo "    1. Navigate to Explore → Select 'Pyroscope' datasource"
+echo "    2. Query profiles by service name, time range, or labels"
+echo "    3. View flamegraphs and analyze performance bottlenecks"
+echo
+echo -e "${YELLOW}Grafana Alloy (Profiling Collector):${NC}"
+echo "  Configuration: /etc/alloy/config.alloy"
+echo "  Data directory: /var/lib/alloy"
+echo "  Logs: sudo journalctl -u alloy -f"
+echo "  Service status: sudo systemctl status alloy"
+echo "  HTTP API: http://localhost:12345"
+echo "  Metrics endpoint: http://localhost:12345/metrics"
+echo ""
+echo "  Alloy automatically:"
+echo "    • Discovers SOAR services via configured targets"
+echo "    • Scrapes pprof endpoints (/debug/pprof/profile)"
+echo "    • Sends profiles to Pyroscope for storage and visualization"
+echo ""
+echo "  Profiled services:"
+echo "    • soar-run (localhost:9090)"
+echo "    • soar-web (localhost:9091)"
+echo "    • soar-ingest-ogn (localhost:9092)"
+echo "    • soar-ingest-adsb (localhost:9093)"
+if [[ "$ENVIRONMENT" == "staging" ]]; then
+    echo "    • soar-run-staging (localhost:9094)"
+    echo "    • soar-web-staging (localhost:9095)"
+fi
+echo ""
+echo "  Note: Alloy configuration is deployed via soar-deploy"
 echo
 echo -e "${BLUE}=========================================${NC}"
 echo -e "${BLUE}Database Migration System${NC}"

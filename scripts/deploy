@@ -246,6 +246,18 @@ if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
     log_info "Grafana dashboards included: $DASHBOARD_COUNT"
 fi
 
+# Copy Pyroscope configuration
+if [ -f "infrastructure/pyroscope-config.yml" ]; then
+    cp infrastructure/pyroscope-config.yml "$DEPLOY_PKG/"
+    log_info "Pyroscope configuration included"
+fi
+
+# Copy Alloy configuration
+if [ -f "infrastructure/alloy-config.alloy" ]; then
+    cp infrastructure/alloy-config.alloy "$DEPLOY_PKG/"
+    log_info "Alloy configuration included"
+fi
+
 # Copy backup scripts directory
 if [ -d "scripts/backup" ]; then
     mkdir -p "$DEPLOY_PKG/scripts"

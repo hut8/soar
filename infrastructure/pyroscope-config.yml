@@ -1,0 +1,36 @@
+# Pyroscope Server Configuration
+# Documentation: https://grafana.com/docs/pyroscope/latest/configure-server/
+
+# Server configuration
+server:
+  # HTTP server configuration
+  http_listen_address: "127.0.0.1"
+  http_listen_port: 4040
+
+# Storage configuration
+storage:
+  # Use local filesystem storage
+  backend: "filesystem"
+  filesystem:
+    path: "/var/lib/pyroscope"
+
+# Retention configuration
+retention:
+  # Keep profiles for 30 days
+  profiles: 720h  # 30 days
+
+# Targets configuration - allow push from Alloy or SDKs
+targets:
+  # Enable push ingestion (for pyroscope SDKs and Alloy)
+  push:
+    enabled: true
+
+# Metrics configuration
+metrics:
+  # Expose Prometheus metrics
+  enabled: true
+
+# Logging configuration
+log:
+  level: "info"
+  format: "logfmt"
