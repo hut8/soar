@@ -1,0 +1,46 @@
+auth_enabled: false
+
+server:
+  http_listen_address: 127.0.0.1
+  http_listen_port: 3100
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: 9097   # any free port
+
+common:
+  path_prefix: /var/lib/loki
+  storage:
+    filesystem:
+      chunks_directory: /var/lib/loki/chunks
+      rules_directory: /var/lib/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: loki_index_
+        period: 24h
+
+storage_config:
+  filesystem:
+    directory: /var/lib/loki
+
+ingester:
+  wal:
+    enabled: true
+    dir: /var/lib/loki/wal
+
+limits_config:
+  allow_structured_metadata: true
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /var/lib/loki/rules

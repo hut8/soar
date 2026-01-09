@@ -2,79 +2,77 @@
 // Integrates with Loki (logs), Tempo (traces), and Pyroscope (profiling)
 // Documentation: https://grafana.com/docs/alloy/latest/
 
-// Logging configuration
-logging {
-  level  = "info"
-  format = "logfmt"
-}
-
 // ============================================================================
-// Loki Integration - Log Collection
+// OTLP Receiver - Logs and Traces from SOAR Services
 // ============================================================================
 
-// Collect logs from systemd journal for SOAR services
-loki.source.journal "soar_services" {
-  max_age       = "12h"
-  forward_to    = [loki.process.soar_labels.receiver]
-  
-  // Filter for SOAR services
-  matches       = "_SYSTEMD_UNIT=soar-*.service"
-}
-
-// Add labels to logs
-loki.process "soar_labels" {
-  forward_to = [loki.write.default.receiver]
-
-  stage.json {
-    expressions = {
-      level = "level",
-    }
-  }
-
-  stage.labels {
-    values = {
-      level = "",
-    }
-  }
-}
-
-// Write logs to Loki
-loki.write "default" {
-  endpoint {
-    url = "http://localhost:3100/loki/api/v1/push"
-  }
-}
-
-// ============================================================================
-// Tempo Integration - Trace Collection
-// ============================================================================
-
-// Receive OTLP traces from SOAR applications
-otelcol.receiver.otlp "default" {
+// Receive OTLP from services (localhost only)
+otelcol.receiver.otlp "ingest" {
   grpc {
     endpoint = "127.0.0.1:4317"
   }
-
   http {
     endpoint = "127.0.0.1:4318"
   }
 
   output {
-    traces = [otelcol.processor.batch.default.input]
+    logs   = [otelcol.processor.batch.pipeline.input]
+    traces = [otelcol.processor.batch.pipeline.input]
   }
 }
 
-// Batch traces before export
-otelcol.processor.batch "default" {
+// Batch for efficiency
+otelcol.processor.batch "pipeline" {
   output {
-    traces = [otelcol.exporter.otlp.tempo.input]
+    logs   = [otelcol.processor.attributes.loki_labels.input]
+    traces = [otelcol.exporter.otlphttp.tempo.input]
   }
 }
 
-// Export traces to Tempo
-otelcol.exporter.otlp "tempo" {
+// ============================================================================
+// Loki Integration - Log Export with Labels
+// ============================================================================
+
+// Add Loki label "hints" so selected OTLP attrs become Loki labels
+otelcol.processor.attributes "loki_labels" {
+  // Resource attrs -> Loki labels
+  action {
+    key    = "loki.resource.labels"
+    action = "insert"
+    value  = "service.name,service.namespace,deployment.environment"
+  }
+
+  // Log record attrs -> Loki labels (be conservative to avoid high cardinality)
+  action {
+    key    = "loki.attribute.labels"
+    action = "insert"
+    value  = "log.level"
+  }
+
+  output {
+    logs = [otelcol.exporter.loki.to_loki.input]
+  }
+}
+
+// Convert OTLP logs -> Loki logproto, then forward into loki.write
+otelcol.exporter.loki "to_loki" {
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}
+
+// ============================================================================
+// Tempo Integration - Trace Export
+// ============================================================================
+
+// Export traces to Tempo via OTLP/HTTP (Tempo listens on 4320)
+otelcol.exporter.otlphttp "tempo" {
   client {
-    endpoint = "localhost:4317"
+    endpoint = "http://127.0.0.1:4320"
     tls {
       insecure = true
     }

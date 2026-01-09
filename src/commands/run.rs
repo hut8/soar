@@ -20,7 +20,8 @@ use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 use std::env;
 use std::sync::Arc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{Instrument, debug, error, info, info_span, trace, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 // Queue size constants
@@ -671,11 +672,19 @@ pub async fn handle_run(
             info!("Intake queue processor started");
             let mut messages_processed = 0u64;
             while let Ok(message) = nats_intake_rx.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
-                process_aprs_message(&message, &intake_router).await;
-                messages_processed += 1;
-                metrics::counter!("aprs.intake.processed_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
+                // Create a new root span for each message (prevents trace accumulation)
+                let span = info_span!("process_ogn_message");
+                let _ = span.set_parent(opentelemetry::Context::new());
+
+                async {
+                    metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
+                    process_aprs_message(&message, &intake_router).await;
+                    messages_processed += 1;
+                    metrics::counter!("aprs.intake.processed_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
+                }
+                .instrument(span)
+                .await;
 
                 // Update intake queue depth metric
                 metrics::gauge!("aprs.intake_queue.depth").set(nats_intake_rx.len() as f64);
@@ -713,21 +722,29 @@ pub async fn handle_run(
 
             tokio::spawn(async move {
                 while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
-                    let start_time = std::time::Instant::now();
-                    process_beast_message(
-                        &message_bytes,
-                        &beast_aircraft_repo,
-                        &beast_repo_clone,
-                        &beast_fix_processor,
-                        &beast_cpr_decoder,
-                        beast_receiver_id,
-                    )
-                    .await;
+                    // Create a new root span for each message (prevents trace accumulation)
+                    let span = info_span!("process_beast_message");
+                    let _ = span.set_parent(opentelemetry::Context::new());
 
-                    let duration = start_time.elapsed();
-                    metrics::histogram!("beast.run.process_message_duration_ms")
-                        .record(duration.as_millis() as f64);
-                    metrics::counter!("beast.run.intake.processed_total").increment(1);
+                    async {
+                        let start_time = std::time::Instant::now();
+                        process_beast_message(
+                            &message_bytes,
+                            &beast_aircraft_repo,
+                            &beast_repo_clone,
+                            &beast_fix_processor,
+                            &beast_cpr_decoder,
+                            beast_receiver_id,
+                        )
+                        .await;
+
+                        let duration = start_time.elapsed();
+                        metrics::histogram!("beast.run.process_message_duration_ms")
+                            .record(duration.as_millis() as f64);
+                        metrics::counter!("beast.run.intake.processed_total").increment(1);
+                    }
+                    .instrument(span)
+                    .await;
 
                     // Update Beast intake queue depth metric (sample from each worker)
                     metrics::gauge!("beast.run.nats.intake_queue_depth")
@@ -753,16 +770,24 @@ pub async fn handle_run(
         let processor = aircraft_position_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "aircraft").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_aircraft_position(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.aircraft.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.aircraft.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "aircraft").decrement(1.0);
+                // Create a new root span for each packet (prevents trace accumulation)
+                let span = info_span!("process_aircraft_position");
+                let _ = span.set_parent(opentelemetry::Context::new());
+
+                async {
+                    metrics::gauge!("worker.active", "type" => "aircraft").increment(1.0);
+                    let start = std::time::Instant::now();
+                    processor.process_aircraft_position(&packet, context).await;
+                    let duration = start.elapsed();
+                    metrics::histogram!("aprs.aircraft.duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("aprs.aircraft.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "aircraft").decrement(1.0);
+                }
+                .instrument(span)
+                .await;
             }
         });
     }
@@ -778,16 +803,24 @@ pub async fn handle_run(
         let processor = receiver_status_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "receiver_status").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_status_packet(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.receiver_status.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.receiver_status.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "receiver_status").decrement(1.0);
+                // Create a new root span for each packet (prevents trace accumulation)
+                let span = info_span!("process_receiver_status");
+                let _ = span.set_parent(opentelemetry::Context::new());
+
+                async {
+                    metrics::gauge!("worker.active", "type" => "receiver_status").increment(1.0);
+                    let start = std::time::Instant::now();
+                    processor.process_status_packet(&packet, context).await;
+                    let duration = start.elapsed();
+                    metrics::histogram!("aprs.receiver_status.duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("aprs.receiver_status.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "receiver_status").decrement(1.0);
+                }
+                .instrument(span)
+                .await;
             }
         });
     }
@@ -803,16 +836,25 @@ pub async fn handle_run(
         let processor = receiver_position_processor.clone();
         tokio::spawn(async move {
             while let Ok((packet, context)) = worker_rx.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "receiver_position").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_receiver_position(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.receiver_position.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.receiver_position.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.receiver_position_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "receiver_position").decrement(1.0);
+                // Create a new root span for each packet (prevents trace accumulation)
+                let span = info_span!("process_receiver_position");
+                let _ = span.set_parent(opentelemetry::Context::new());
+
+                async {
+                    metrics::gauge!("worker.active", "type" => "receiver_position").increment(1.0);
+                    let start = std::time::Instant::now();
+                    processor.process_receiver_position(&packet, context).await;
+                    let duration = start.elapsed();
+                    metrics::histogram!("aprs.receiver_position.duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("aprs.receiver_position.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.receiver_position_total")
+                        .increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "receiver_position").decrement(1.0);
+                }
+                .instrument(span)
+                .await;
             }
         });
     }
@@ -824,18 +866,26 @@ pub async fn handle_run(
         let processor = server_status_processor.clone();
         tokio::spawn(async move {
             while let Ok((message, received_at)) = worker_rx.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "server_status").increment(1.0);
-                let start = std::time::Instant::now();
-                processor
-                    .process_server_message(&message, received_at)
-                    .await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.server_status.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.server_status.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.server_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "server_status").decrement(1.0);
+                // Create a new root span for each message (prevents trace accumulation)
+                let span = info_span!("process_server_status");
+                let _ = span.set_parent(opentelemetry::Context::new());
+
+                async {
+                    metrics::gauge!("worker.active", "type" => "server_status").increment(1.0);
+                    let start = std::time::Instant::now();
+                    processor
+                        .process_server_message(&message, received_at)
+                        .await;
+                    let duration = start.elapsed();
+                    metrics::histogram!("aprs.server_status.duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("aprs.server_status.processed_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.server_total").increment(1);
+                    metrics::counter!("aprs.messages.processed.total_total").increment(1);
+                    metrics::gauge!("worker.active", "type" => "server_status").decrement(1.0);
+                }
+                .instrument(span)
+                .await;
             }
         });
     }

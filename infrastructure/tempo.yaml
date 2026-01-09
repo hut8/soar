@@ -1,30 +1,40 @@
 server:
+  http_listen_address: 127.0.0.1
   http_listen_port: 3200
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: 9096
 
 distributor:
   receivers:
     otlp:
       protocols:
-        grpc:
-          endpoint: 0.0.0.0:4317
         http:
-          endpoint: 0.0.0.0:4318
+          endpoint: 127.0.0.1:4320
 
 ingester:
-  max_block_duration: 5m               # cut the headblock when this much time passes
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  trace_idle_period: 10s
+  max_block_bytes: 104857600
+  max_block_duration: 5m
 
 compactor:
   compaction:
-    block_retention: 168h              # 7 days retention
+    block_retention: 168h  # 7 days
 
 storage:
   trace:
-    backend: local                      # use local filesystem for traces
-    wal:
-      path: /tmp/tempo/wal              # write ahead log location
+    backend: local
     local:
-      path: /tmp/tempo/blocks            # blocks storage location
+      path: /var/lib/tempo/blocks
+    wal:
+      path: /var/lib/tempo/wal
 
-query_frontend:
-  search:
-    max_duration: 0s                     # allow searching all time ranges
+overrides:
+  defaults:
+    ingestion:
+      rate_limit_bytes: 15000000
+      burst_size_bytes: 20000000
