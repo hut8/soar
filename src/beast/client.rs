@@ -556,8 +556,15 @@ impl BeastClient {
         let mut buffer = vec![0u8; 8192]; // 8KB buffer for Beast messages
         let mut frame_buffer = Vec::new();
         let mut pending_escape = false; // Track if we saw 0x1A at end of previous buffer
-        let mut message_count = 0u64;
         let mut last_stats_log = std::time::Instant::now();
+
+        // Initialize interval tracking in health state
+        {
+            let mut health = health_state.write().await;
+            if health.interval_start.is_none() {
+                health.interval_start = Some(std::time::Instant::now());
+            }
+        }
 
         loop {
             let read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)).await;
@@ -565,11 +572,15 @@ impl BeastClient {
                 Ok(Ok(0)) => {
                     // Connection closed
                     let duration = connection_start.elapsed();
+                    let total_messages = {
+                        let health = health_state.read().await;
+                        health.total_messages
+                    };
                     info!(
                         "Beast connection closed by server (IP: {}) after {:.1}s, received {} messages",
                         peer_addr_str,
                         duration.as_secs_f64(),
-                        message_count
+                        total_messages
                     );
                     metrics::gauge!("beast.connection.connected").set(0.0);
 
@@ -609,7 +620,13 @@ impl BeastClient {
                                 if !frame_buffer.is_empty() {
                                     Self::publish_frame(&raw_message_tx, frame_buffer.clone())
                                         .await;
-                                    message_count += 1;
+                                    // Update stats in health state
+                                    {
+                                        let mut health = health_state.write().await;
+                                        health.total_messages += 1;
+                                        health.interval_messages += 1;
+                                        health.last_message_time = Some(std::time::Instant::now());
+                                    }
                                 }
                             }
                             frame_buffer.clear();
@@ -634,7 +651,14 @@ impl BeastClient {
                                     if !frame_buffer.is_empty() {
                                         Self::publish_frame(&raw_message_tx, frame_buffer.clone())
                                             .await;
-                                        message_count += 1;
+                                        // Update stats in health state
+                                        {
+                                            let mut health = health_state.write().await;
+                                            health.total_messages += 1;
+                                            health.interval_messages += 1;
+                                            health.last_message_time =
+                                                Some(std::time::Instant::now());
+                                        }
                                     }
                                     frame_buffer.clear();
                                     frame_buffer.push(0x1A);
@@ -653,16 +677,24 @@ impl BeastClient {
                         }
                     }
 
-                    // Log stats every 10 seconds
+                    // Update metrics gauge periodically (every 10 seconds)
                     if last_stats_log.elapsed().as_secs() >= 10 {
-                        let elapsed = last_stats_log.elapsed().as_secs_f64();
-                        let rate = message_count as f64 / elapsed;
-                        info!(
-                            "Beast stats: {:.1} msg/s, {} total messages",
-                            rate, message_count
-                        );
-                        metrics::gauge!("beast.message_rate").set(rate);
-                        message_count = 0;
+                        let health = health_state.read().await;
+                        if let Some(interval_start) = health.interval_start {
+                            let elapsed = interval_start.elapsed().as_secs_f64();
+                            if elapsed > 0.0 {
+                                let rate = health.interval_messages as f64 / elapsed;
+                                metrics::gauge!("beast.message_rate").set(rate);
+                            }
+                        }
+                        drop(health);
+
+                        // Reset interval counters
+                        {
+                            let mut health = health_state.write().await;
+                            health.interval_messages = 0;
+                            health.interval_start = Some(std::time::Instant::now());
+                        }
                         last_stats_log = std::time::Instant::now();
                     }
                 }

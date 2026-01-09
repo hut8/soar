@@ -16,6 +16,12 @@ pub struct AprsIngestHealth {
     pub aprs_connected: bool,
     pub socket_connected: bool,
     pub last_message_time: Option<Instant>,
+    /// Total messages received since connection started
+    pub total_messages: u64,
+    /// Messages received in current stats interval
+    pub interval_messages: u64,
+    /// Start time of current stats interval
+    pub interval_start: Option<Instant>,
 }
 
 static APRS_HEALTH: OnceLock<Arc<RwLock<AprsIngestHealth>>> = OnceLock::new();
@@ -43,6 +49,12 @@ pub struct BeastIngestHealth {
     pub socket_connected: bool,
     pub last_message_time: Option<Instant>,
     pub last_error: Option<String>,
+    /// Total messages received since connection started
+    pub total_messages: u64,
+    /// Messages received in current stats interval
+    pub interval_messages: u64,
+    /// Start time of current stats interval
+    pub interval_start: Option<Instant>,
 }
 
 static BEAST_HEALTH: OnceLock<Arc<RwLock<BeastIngestHealth>>> = OnceLock::new();
