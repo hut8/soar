@@ -318,7 +318,7 @@ pub async fn handle_archive(
 }
 
 /// Handle the resurrect command
-/// Resurrects (restores) archived data from compressed CSV files back into the database
+/// Resurrects (restores) archived data from compressed JSON Lines files back into the database
 /// Restores data in the reverse order of archival to respect foreign key constraints:
 /// 1. AprsMessages (must be restored first)
 /// 2. Fixes and ReceiverStatuses (depend on raw_messages)
@@ -344,7 +344,7 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
     // Resurrect in reverse order to respect foreign key constraints
     // AprsMessages first
     info!("=== Resurrecting raw_messages ===");
-    let raw_messages_file = archive_dir.join(format!("{}-raw_messages.csv.zst", date_str));
+    let raw_messages_file = archive_dir.join(format!("{}-raw_messages.jsonl.zst", date_str));
     if raw_messages_file.exists() {
         resurrect::<RawMessageCsv>(&pool, &raw_messages_file).await?;
     } else {
@@ -357,7 +357,7 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
 
     // Fixes and ReceiverStatuses next
     info!("=== Resurrecting fixes and receiver_statuses ===");
-    let fixes_file = archive_dir.join(format!("{}-fixes.csv.zst", date_str));
+    let fixes_file = archive_dir.join(format!("{}-fixes.jsonl.zst", date_str));
     if fixes_file.exists() {
         resurrect::<Fix>(&pool, &fixes_file).await?;
     } else {
@@ -369,7 +369,7 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
     }
 
     let receiver_statuses_file =
-        archive_dir.join(format!("{}-receiver_statuses.csv.zst", date_str));
+        archive_dir.join(format!("{}-receiver_statuses.jsonl.zst", date_str));
     if receiver_statuses_file.exists() {
         resurrect::<ReceiverStatus>(&pool, &receiver_statuses_file).await?;
     } else {
@@ -382,7 +382,7 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
 
     // Flights last
     info!("=== Resurrecting flights ===");
-    let flights_file = archive_dir.join(format!("{}-flights.csv.zst", date_str));
+    let flights_file = archive_dir.join(format!("{}-flights.jsonl.zst", date_str));
     if flights_file.exists() {
         resurrect::<FlightModel>(&pool, &flights_file).await?;
     } else {

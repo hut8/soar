@@ -1,11 +1,10 @@
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, TimeZone, Utc};
-use csv::{Reader, Writer};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use tracing::info;
 use zstd::stream::read::Decoder as ZstdDecoder;
@@ -13,7 +12,7 @@ use zstd::stream::write::Encoder as ZstdEncoder;
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-/// Trait for types that can be archived to compressed CSV files
+/// Trait for types that can be archived to compressed JSON Lines files
 ///
 /// Each table that needs archiving should implement this trait to provide
 /// table-specific logic while reusing common archival infrastructure.
@@ -21,7 +20,7 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
     /// Human-readable name of the table (e.g., "flights", "fixes")
     fn table_name() -> &'static str;
 
-    /// Filename suffix for archive files (e.g., "flights" -> "20250101-flights.csv.zst")
+    /// Filename suffix for archive files (e.g., "flights" -> "20250101-flights.jsonl.zst")
     fn filename_suffix() -> &'static str {
         Self::table_name()
     }
@@ -160,7 +159,7 @@ pub async fn archive_day<T: Archivable>(
     info!("Archiving {} for {}", T::table_name(), date);
     let (day_start, day_end) = get_day_boundaries(date)?;
     let date_str = date.format("%Y%m%d").to_string();
-    let final_filename = format!("{}-{}.csv.zst", date_str, T::filename_suffix());
+    let final_filename = format!("{}-{}.jsonl.zst", date_str, T::filename_suffix());
     let temp_filename = format!(".{}.tmp", final_filename);
     let final_path = archive_dir.join(&final_filename);
     let temp_path = archive_dir.join(&temp_filename);
@@ -231,15 +230,20 @@ pub async fn resurrect<T: Archivable>(pool: &PgPool, file_path: &Path) -> Result
             .context(format!("Failed to open file: {}", file_path.display()))?;
         let buf_reader = BufReader::new(file);
         let zstd_decoder = ZstdDecoder::new(buf_reader).context("Failed to create zstd decoder")?;
-        let mut csv_reader = Reader::from_reader(zstd_decoder);
+        let json_reader = BufReader::new(zstd_decoder);
 
         let mut conn = pool.get()?;
         let mut count = 0;
         let mut batch = Vec::new();
         const BATCH_SIZE: usize = 1000;
 
-        for result in csv_reader.deserialize() {
-            let record: T = result?;
+        for line_result in json_reader.lines() {
+            let line = line_result.context("Failed to read line from archive file")?;
+            if line.is_empty() {
+                continue;
+            }
+            let record: T = serde_json::from_str(&line)
+                .context(format!("Failed to deserialize JSON line: {}", line))?;
             batch.push(record);
             count += 1;
 
@@ -403,7 +407,7 @@ pub async fn finalize_pending_detachment(
     .await?
 }
 
-/// Helper for writing records to compressed CSV file with streaming
+/// Helper for writing records to compressed JSON Lines file with streaming
 pub fn write_records_to_file<T, I>(
     records_iter: I,
     file_path: &Path,
@@ -416,23 +420,21 @@ where
     let file = File::create(file_path)
         .context(format!("Failed to create file: {}", file_path.display()))?;
     let buf_writer = BufWriter::new(file);
-    let zstd_encoder = ZstdEncoder::new(buf_writer, 3).context("Failed to create zstd encoder")?;
-    let mut csv_writer = Writer::from_writer(zstd_encoder);
+    let mut zstd_encoder =
+        ZstdEncoder::new(buf_writer, 3).context("Failed to create zstd encoder")?;
 
     let mut count = 0;
     for record_result in records_iter {
         let record = record_result?;
-        csv_writer.serialize(&record)?;
+        let json_line =
+            serde_json::to_string(&record).context("Failed to serialize record to JSON")?;
+        writeln!(zstd_encoder, "{}", json_line).context("Failed to write JSON line to file")?;
         count += 1;
         if count % 10000 == 0 {
             info!("Streamed {} {} to file...", count, table_name);
         }
     }
 
-    csv_writer.flush()?;
-    let zstd_encoder = csv_writer
-        .into_inner()
-        .context("Failed to get zstd encoder from CSV writer")?;
     let buf_writer = zstd_encoder
         .finish()
         .context("Failed to finish zstd compression")?;

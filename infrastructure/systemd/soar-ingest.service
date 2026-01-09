@@ -48,4 +48,4 @@ LimitNOFILE=65536
 MemoryMax=4G
 
 [Install]
-WantedBy=multi-user.target soar.target
+WantedBy=multi-user.target soar@production.target
