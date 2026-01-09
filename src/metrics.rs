@@ -78,6 +78,10 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
         builder = builder.add_global_label("component", comp);
     }
 
+    // Add environment label based on SOAR_ENV
+    let environment = std::env::var("SOAR_ENV").unwrap_or_else(|_| "development".to_string());
+    builder = builder.add_global_label("environment", environment);
+
     builder
         // Configure HTTP request duration as histogram with appropriate buckets
         // Buckets: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s
