@@ -102,7 +102,7 @@ pub(crate) async fn create_or_find_location(
             };
             match locations_repo.find_or_create(params).await {
                 Ok(created_location) => {
-                    info!(
+                    debug!(
                         "Created/found location {} for coordinates ({}, {}): {}",
                         created_location.id, latitude, longitude, result.display_name
                     );
@@ -118,8 +118,8 @@ pub(crate) async fn create_or_find_location(
             }
         }
         Err(e) => {
-            warn!(
-                "Reverse geocoding failed for coordinates ({}, {}): {}",
+            info!(
+                "Pelias reverse geocoding returned no result for coordinates ({}, {}): {}",
                 latitude, longitude, e
             );
             None
@@ -250,7 +250,7 @@ pub(crate) async fn create_start_end_location(
             };
             match locations_repo.find_or_create(params).await {
                 Ok(created_location) => {
-                    info!(
+                    debug!(
                         "Created/found {} location {} for coordinates ({}, {}): {}",
                         context, created_location.id, latitude, longitude, result.display_name
                     );
@@ -279,8 +279,8 @@ pub(crate) async fn create_start_end_location(
         }
         Err(e) => {
             metrics::counter!("flight_tracker.location.pelias.failure_total").increment(1);
-            warn!(
-                "Reverse geocoding failed for {} location at coordinates ({}, {}): {:?}",
+            info!(
+                "Pelias reverse geocoding returned no result for {} location at ({}, {}): {:?}",
                 context, latitude, longitude, e
             );
             None

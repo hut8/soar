@@ -265,9 +265,9 @@ enum Commands {
     },
     /// Run database migrations
     ///
-    /// Runs all pending database migrations and exits. This is useful for deployment
-    /// scripts to ensure migrations are applied before starting services.
-    /// Migrations are also run automatically by other commands that need the database.
+    /// Runs all pending database migrations and exits. This is the only command that
+    /// runs migrations - other commands (run, web, etc.) skip migrations on startup.
+    /// Run this command before starting services after deploying a new version.
     Migrate {},
     /// Seed test data for E2E testing
     ///
@@ -433,7 +433,10 @@ pub struct MigrationResult {
     pub duration_secs: f64,
 }
 
-async fn setup_diesel_database(app_name_prefix: &str) -> Result<MigrationResult> {
+async fn setup_diesel_database(
+    app_name_prefix: &str,
+    run_migrations: bool,
+) -> Result<MigrationResult> {
     let migration_start = std::time::Instant::now();
 
     // Load environment variables from .env file
@@ -478,6 +481,17 @@ async fn setup_diesel_database(app_name_prefix: &str) -> Result<MigrationResult>
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
     info!("Successfully created Diesel connection pool (max connections: 150, via pgbouncer)");
+
+    // Skip migrations if not requested (staging/production services should use `soar migrate`)
+    if !run_migrations {
+        info!("Skipping migrations (use `soar migrate` to run migrations)");
+        let duration_secs = migration_start.elapsed().as_secs_f64();
+        return Ok(MigrationResult {
+            pool,
+            applied_migrations: vec![],
+            duration_secs,
+        });
+    }
 
     // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");
@@ -974,7 +988,7 @@ async fn main() -> Result<()> {
     }
 
     // Set up database connection for commands that need it
-    // This also runs migrations automatically
+    // Only the Migrate command runs migrations; other commands skip them
     // Determine application name prefix based on command
     let app_name_prefix = match &cli.command {
         Commands::Run { .. } => "soar-run",
@@ -996,7 +1010,7 @@ async fn main() -> Result<()> {
 
     // For Migrate command, handle errors specially to send notifications
     let (diesel_pool, migration_info) = if matches!(cli.command, Commands::Migrate {}) {
-        match setup_diesel_database(app_name_prefix).await {
+        match setup_diesel_database(app_name_prefix, true).await {
             Ok(result) => (
                 result.pool,
                 Some((result.applied_migrations, result.duration_secs)),
@@ -1022,7 +1036,7 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        let result = setup_diesel_database(app_name_prefix).await?;
+        let result = setup_diesel_database(app_name_prefix, false).await?;
         (result.pool, None)
     };
 

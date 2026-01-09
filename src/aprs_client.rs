@@ -139,11 +139,34 @@ impl AprsClient {
 
         // Spawn connection management task
         let health_for_connection = health_state.clone();
+        let queue_for_connection = queue.clone();
         let connection_handle = tokio::spawn(async move {
             let mut retry_count = 0;
             let mut current_delay = config.retry_delay_seconds;
 
             loop {
+                // Before connecting/reconnecting, wait for queue to be ready
+                // This prevents reconnecting when the queue is still full
+                if !queue_for_connection.is_ready_for_connection() {
+                    let capacity = queue_for_connection.capacity_percent();
+                    info!(
+                        "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
+                        capacity
+                    );
+                    metrics::counter!("aprs.connection_deferred_total").increment(1);
+
+                    // Wait for queue to drain
+                    while !queue_for_connection.is_ready_for_connection() {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    }
+
+                    let new_capacity = queue_for_connection.capacity_percent();
+                    info!(
+                        "Queue drained to {}% capacity, proceeding with reconnection",
+                        new_capacity
+                    );
+                }
+
                 if retry_count == 0 {
                     info!(
                         "Connecting to APRS server at {}:{}",
@@ -437,7 +460,7 @@ impl AprsClient {
                                     trace!("Received: {}", trimmed_line);
                                 }
 
-                                // Prepend ISO-8601 timestamp to message before sending to JetStream
+                                // Prepend ISO-8601 timestamp to message before sending to queue
                                 // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
                                 // This ensures the "received at" timestamp is accurate even if messages queue up
                                 let received_at = chrono::Utc::now();
@@ -445,7 +468,7 @@ impl AprsClient {
                                     format!("{} {}", received_at.to_rfc3339(), trimmed_line);
 
                                 // Send message to channel for processing with timeout
-                                // Use timeout to prevent indefinite blocking if JetStream publisher is stuck
+                                // Use timeout to prevent indefinite blocking if queue is full
                                 // If send doesn't complete within 10 seconds, disconnect and reconnect
                                 match timeout(
                                     Duration::from_secs(10),
@@ -455,13 +478,13 @@ impl AprsClient {
                                 {
                                     Ok(Ok(())) => {
                                         if is_server_message {
-                                            trace!("Queued server message for JetStream");
+                                            trace!("Queued server message");
                                             metrics::counter!(
                                                 "aprs.raw_message.queued.server_total"
                                             )
                                             .increment(1);
                                         } else {
-                                            trace!("Queued APRS message for JetStream");
+                                            trace!("Queued APRS message");
                                             metrics::counter!("aprs.raw_message.queued.aprs_total")
                                                 .increment(1);
 
@@ -499,17 +522,18 @@ impl AprsClient {
                                     }
                                     Err(_) => {
                                         // Timeout: queue send blocked for 10+ seconds
-                                        // This indicates JetStream publisher is stuck (all permits exhausted)
+                                        // This indicates the queue is full (disk at capacity)
+                                        // Disconnect to allow queue to drain before reconnecting
                                         let duration = connection_start.elapsed();
                                         error!(
-                                            "Queue send blocked for 10+ seconds after {:.1}s - JetStream publisher stuck, reconnecting",
+                                            "Queue send blocked for 10+ seconds after {:.1}s - queue full, disconnecting to allow drain",
                                             duration.as_secs_f64()
                                         );
                                         metrics::counter!("aprs.queue_send_timeout_total")
                                             .increment(1);
 
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                                            "Queue send timeout after {:.1}s - publisher stuck",
+                                            "Queue send timeout after {:.1}s - queue full, will reconnect when drained to 75%%",
                                             duration.as_secs_f64()
                                         ));
                                     }

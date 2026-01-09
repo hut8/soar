@@ -249,6 +249,28 @@ impl SbsClient {
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
+            // Before connecting/reconnecting, wait for queue to be ready
+            // This prevents reconnecting when the queue is still full
+            if !queue.is_ready_for_connection() {
+                let capacity = queue.capacity_percent();
+                info!(
+                    "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
+                    capacity
+                );
+                metrics::counter!("sbs.connection_deferred_total").increment(1);
+
+                // Wait for queue to drain
+                while !queue.is_ready_for_connection() {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+
+                let new_capacity = queue.capacity_percent();
+                info!(
+                    "Queue drained to {}% capacity, proceeding with reconnection",
+                    new_capacity
+                );
+            }
+
             let result =
                 Self::connect_and_process(&config, &raw_message_tx, health_state.clone()).await;
 
