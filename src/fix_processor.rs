@@ -1,6 +1,7 @@
 use num_traits::AsPrimitive;
 use tracing::Instrument;
 use tracing::{debug, error, trace, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::Fix;
 use crate::aircraft_repo::{AircraftPacketFields, AircraftRepository};
@@ -382,6 +383,9 @@ impl FixProcessor {
         // Step 2: Update receiver's latest_packet_at
         let receiver_id = updated_fix.receiver_id;
         let receiver_repo = self.receiver_repo.clone();
+        let receiver_span =
+            tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id);
+        let _ = receiver_span.set_parent(opentelemetry::Context::new());
         tokio::spawn(
             async move {
                 if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
@@ -391,9 +395,7 @@ impl FixProcessor {
                     );
                 }
             }
-            .instrument(
-                tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id),
-            ),
+            .instrument(receiver_span),
         );
 
         // Step 3: Update flight callsign if this fix has a flight_id and flight_number
