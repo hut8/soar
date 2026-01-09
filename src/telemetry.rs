@@ -93,8 +93,8 @@ fn get_trace_sampler(env: &str) -> Sampler {
             Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(0.01)))
         }
         "staging" => {
-            info!("Staging environment: using 10% trace sampling");
-            Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(0.10)))
+            info!("Staging environment: using 1% trace sampling");
+            Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(0.01)))
         }
         _ => {
             info!("Development environment: using 100% trace sampling");

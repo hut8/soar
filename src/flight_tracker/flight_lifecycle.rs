@@ -120,7 +120,7 @@ fn spawn_flight_enrichment_on_creation(
     let locations_repo = ctx.locations_repo.clone();
 
     // Create a new root span to prevent trace accumulation
-    let span = info_span!("flight_enrichment_creation", %flight_id);
+    let span = info_span!(parent: None, "flight_enrichment_creation", %flight_id);
     let _ = span.set_parent(opentelemetry::Context::new());
 
     tokio::spawn(
@@ -346,7 +346,7 @@ pub(crate) fn spawn_complete_flight(
     let device_clone = device.clone();
     let fix_clone = fix.clone();
 
-    let span = info_span!("flight_completion_background", %flight_id);
+    let span = info_span!(parent: None, "flight_completion_background", %flight_id);
     let _ = span.set_parent(opentelemetry::Context::new());
 
     tokio::spawn(
@@ -598,7 +598,7 @@ async fn complete_flight_in_background(
     let device_id_opt = device.id;
     let device_address = device.address;
 
-    let email_span = info_span!("flight_email_notification", %flight_id);
+    let email_span = info_span!(parent: None, "flight_email_notification", %flight_id);
     let _ = email_span.set_parent(opentelemetry::Context::new());
 
     tokio::spawn(
@@ -760,7 +760,7 @@ fn spawn_flight_enrichment_on_completion_direct(
     let locations_repo = locations_repo.clone();
 
     // Create a new root span to prevent trace accumulation
-    let span = info_span!("flight_enrichment_completion", %flight_id);
+    let span = info_span!(parent: None, "flight_enrichment_completion", %flight_id);
     let _ = span.set_parent(opentelemetry::Context::new());
 
     tokio::spawn(

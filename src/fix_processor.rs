@@ -383,8 +383,7 @@ impl FixProcessor {
         // Step 2: Update receiver's latest_packet_at
         let receiver_id = updated_fix.receiver_id;
         let receiver_repo = self.receiver_repo.clone();
-        let receiver_span =
-            tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id);
+        let receiver_span = tracing::debug_span!(parent: None, "update_receiver_timestamp", receiver_id = %receiver_id);
         let _ = receiver_span.set_parent(opentelemetry::Context::new());
         tokio::spawn(
             async move {
