@@ -124,12 +124,12 @@ fi
 ACTIVE_SERVICES=(
     "soar-run${SERVICE_SUFFIX}.service"
     "soar-web${SERVICE_SUFFIX}.service"
+    "soar-ingest${SERVICE_SUFFIX}.service"
 )
 
 # Manually-deployed services (installed but not automatically started)
 # These services change infrequently and are deployed via the regular deployment process
 MANUAL_SERVICES=(
-    "soar-ingest${SERVICE_SUFFIX}.service"
 )
 
 # Timer-invoked services (only installed, not enabled or started)
