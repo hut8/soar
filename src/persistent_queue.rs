@@ -383,9 +383,27 @@ where
                 .read_segment_offsets(&segment_name)
                 .ok_or_else(|| anyhow::anyhow!("Failed to read segment offsets"))?;
 
-            // If this commit drains the segment, delete it
+            // If this commit drains the segment, we may be able to delete it
             if new_read_offset >= write_offset {
-                self.delete_segment(&segment_name)?;
+                // Only delete if this is NOT the newest segment (the write segment).
+                // If it's the newest, concurrent appends may be writing to it, and
+                // we'd race with append_to_disk() which writes data before updating
+                // the header's write_offset. Deleting based on stale write_offset
+                // would drop those concurrent writes.
+                let segments = self.list_segments();
+                let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
+
+                if is_write_segment {
+                    // Can't delete - this is the current write segment.
+                    // Just update read_offset to mark it as empty.
+                    let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+                    file.seek(std::io::SeekFrom::Start(16))?;
+                    file.write_all(&new_read_offset.to_le_bytes())?;
+                    file.sync_all()?;
+                } else {
+                    // Safe to delete - writes are going to newer segments
+                    self.delete_segment(&segment_name)?;
+                }
             } else {
                 // Write new read_offset to disk
                 let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
@@ -678,10 +696,22 @@ where
 
         // Check if we've read everything in this segment
         if read_offset >= write_offset {
-            // Segment is drained, delete it and try the next one
+            // Segment is drained - only delete if it's NOT the write segment
+            // to avoid race with concurrent appends (same fix as in commit())
             drop(file);
-            self.delete_segment(&segment_name)?;
-            return Box::pin(self.read_from_disk()).await;
+            let segments = self.list_segments();
+            let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
+
+            if !is_write_segment {
+                // Safe to delete - not the write segment
+                self.delete_segment(&segment_name)?;
+                // Try to read from the next segment
+                return Box::pin(self.read_from_disk()).await;
+            } else {
+                // This is the write segment - don't delete, just return None
+                // to indicate no messages available from disk
+                return Ok(None);
+            }
         }
 
         // Seek to read position
@@ -1105,11 +1135,12 @@ mod tests {
             queue.commit().await.unwrap();
         }
 
-        // All segments should be deleted after draining
+        // After draining, only the write segment may remain (empty but not deleted
+        // to avoid race with concurrent appends). Non-write segments are deleted.
         let remaining_segments = queue.segment_count();
-        assert_eq!(
-            remaining_segments, 0,
-            "Expected 0 segments after drain, got {}",
+        assert!(
+            remaining_segments <= 1,
+            "Expected at most 1 segment (the write segment) after drain, got {}",
             remaining_segments
         );
     }
@@ -1148,7 +1179,7 @@ mod tests {
             queue.commit().await.unwrap();
         }
 
-        // Some segments should have been deleted
+        // Some segments should have been deleted (all except the write segment)
         let mid_segments = queue.segment_count();
         assert!(
             mid_segments < initial_segments,
@@ -1161,7 +1192,98 @@ mod tests {
             queue.commit().await.unwrap();
         }
 
-        // All segments should be gone
-        assert_eq!(queue.segment_count(), 0, "All segments should be deleted");
+        // After draining, only the write segment may remain (empty but not deleted
+        // to avoid race with concurrent appends). Non-write segments are deleted.
+        assert!(
+            queue.segment_count() <= 1,
+            "At most 1 segment (the write segment) should remain"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_drain_and_append_single_segment() {
+        // This test verifies that concurrent appends to the write segment
+        // are not lost when commit() drains that same segment.
+        // Regression test for: commit() deleting segment based on stale write_offset
+        // while append_to_disk() is concurrently writing to it.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue = Arc::new(
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap(),
+        );
+
+        // Buffer a single message to disk (creates one segment)
+        queue.send("initial".to_string()).await.unwrap();
+        assert_eq!(queue.segment_count(), 1);
+
+        // Connect consumer (enters drain mode since there's a backlog)
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        // Drain the initial message
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "initial");
+
+        // Before commit, append a new message to the same segment
+        // This simulates concurrent append during drain
+        queue.send("concurrent".to_string()).await.unwrap();
+
+        // Now commit - this should NOT delete the segment because:
+        // 1. It's the only/newest segment (the write segment)
+        // 2. The concurrent append just added data to it
+        queue.commit().await.unwrap();
+
+        // The concurrent message should NOT be lost
+        let msg2 = queue.recv().await.unwrap();
+        assert_eq!(msg2, "concurrent");
+        queue.commit().await.unwrap();
+
+        // Segment should still exist (it's the write segment) but be empty
+        // It will be cleaned up when finish_drain() runs after memory channel recv
+    }
+
+    #[tokio::test]
+    async fn test_write_segment_not_deleted_prematurely() {
+        // Verify that the current write segment is never deleted by commit(),
+        // even if it appears fully drained.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue =
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap();
+
+        // Send and drain a single message
+        queue.send("message1".to_string()).await.unwrap();
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "message1");
+        queue.commit().await.unwrap();
+
+        // The segment should NOT be deleted because it's the write segment
+        // (even though it's fully drained)
+        assert_eq!(
+            queue.segment_count(),
+            1,
+            "Write segment should not be deleted"
+        );
+
+        // Verify we can still write to it
+        queue.send("message2".to_string()).await.unwrap();
+
+        // And read the new message
+        let msg2 = queue.recv().await.unwrap();
+        assert_eq!(msg2, "message2");
+        queue.commit().await.unwrap();
     }
 }
