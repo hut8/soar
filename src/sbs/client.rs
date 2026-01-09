@@ -382,9 +382,16 @@ impl SbsClient {
         let message_timeout = Duration::from_secs(300); // 5 minute timeout
         let reader = BufReader::new(stream);
         let mut lines = reader.lines();
-        let mut message_count = 0u64;
         let mut last_stats_log = std::time::Instant::now();
         let connection_start = std::time::Instant::now();
+
+        // Initialize interval tracking in health state
+        {
+            let mut health = health_state.write().await;
+            if health.interval_start.is_none() {
+                health.interval_start = Some(std::time::Instant::now());
+            }
+        }
 
         loop {
             let result = tokio::time::timeout(message_timeout, lines.next_line()).await;
@@ -407,11 +414,15 @@ impl SbsClient {
                 Ok(Ok(None)) => {
                     // Connection closed
                     let duration = connection_start.elapsed();
+                    let total_messages = {
+                        let health = health_state.read().await;
+                        health.total_messages
+                    };
                     info!(
                         "SBS connection closed by server (IP: {}) after {:.1}s, received {} messages",
                         peer_addr_str,
                         duration.as_secs_f64(),
-                        message_count
+                        total_messages
                     );
                     metrics::gauge!("sbs.connection.connected").set(0.0);
 
@@ -435,18 +446,33 @@ impl SbsClient {
 
                     // Publish line with timestamp
                     Self::publish_line(raw_message_tx, line).await;
-                    message_count += 1;
 
-                    // Log stats every 10 seconds
+                    // Update stats in health state
+                    {
+                        let mut health = health_state.write().await;
+                        health.total_messages += 1;
+                        health.interval_messages += 1;
+                        health.last_message_time = Some(std::time::Instant::now());
+                    }
+
+                    // Update metrics gauge periodically (every 10 seconds)
                     if last_stats_log.elapsed().as_secs() >= 10 {
-                        let elapsed = last_stats_log.elapsed().as_secs_f64();
-                        let rate = message_count as f64 / elapsed;
-                        info!(
-                            "SBS stats: {:.1} msg/s, {} total messages",
-                            rate, message_count
-                        );
-                        metrics::gauge!("sbs.message_rate").set(rate);
-                        message_count = 0;
+                        let health = health_state.read().await;
+                        if let Some(interval_start) = health.interval_start {
+                            let elapsed = interval_start.elapsed().as_secs_f64();
+                            if elapsed > 0.0 {
+                                let rate = health.interval_messages as f64 / elapsed;
+                                metrics::gauge!("sbs.message_rate").set(rate);
+                            }
+                        }
+                        drop(health);
+
+                        // Reset interval counters
+                        {
+                            let mut health = health_state.write().await;
+                            health.interval_messages = 0;
+                            health.interval_start = Some(std::time::Instant::now());
+                        }
                         last_stats_log = std::time::Instant::now();
                     }
                 }

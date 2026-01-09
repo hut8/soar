@@ -197,6 +197,17 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let stats_beast_received = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_sbs_received = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
+    // Shared health states for read stats tracking (one per source type)
+    let aprs_health_shared = Arc::new(tokio::sync::RwLock::new(
+        soar::metrics::AprsIngestHealth::default(),
+    ));
+    let beast_health_shared = Arc::new(tokio::sync::RwLock::new(
+        soar::metrics::BeastIngestHealth::default(),
+    ));
+    let sbs_health_shared = Arc::new(tokio::sync::RwLock::new(
+        soar::metrics::BeastIngestHealth::default(),
+    ));
+
     // Create socket clients for sending to soar-run
     let mut ogn_socket_client = match soar::socket_client::SocketClient::connect(
         &socket_path,
@@ -471,6 +482,12 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let stats_ogn_rx = stats_ogn_received.clone();
     let stats_beast_rx = stats_beast_received.clone();
     let stats_sbs_rx = stats_sbs_received.clone();
+    let aprs_health_for_stats = aprs_health_shared.clone();
+    let beast_health_for_stats = beast_health_shared.clone();
+    let sbs_health_for_stats = sbs_health_shared.clone();
+    let ogn_enabled_for_stats = ogn_enabled;
+    let beast_enabled_for_stats = beast_enabled;
+    let sbs_enabled_for_stats = sbs_enabled;
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
@@ -510,16 +527,19 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                     .set(sbs_frames as f64 / 30.0);
             }
 
-            // Calculate average socket send time
-            let avg_send_time_ms = if sent_count > 0 {
+            // Format sent stats (rate + avg send time combined)
+            let sent_stats = if sent_count > 0 {
                 let avg = total_send_time as f64 / sent_count as f64;
                 if slow_count > 0 {
-                    format!("{:.1}ms ({} >100ms)", avg, slow_count)
+                    format!(
+                        "{{rate:{:.1}/s avg:{:.1}ms ({} >100ms)}}",
+                        sent_per_sec, avg, slow_count
+                    )
                 } else {
-                    format!("{:.1}ms", avg)
+                    format!("{{rate:{:.1}/s avg:{:.1}ms}}", sent_per_sec, avg)
                 }
             } else {
-                "N/A".to_string()
+                format!("{{rate:{:.1}/s}}", sent_per_sec)
             };
 
             // Get queue depths
@@ -584,19 +604,76 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 }
             };
 
+            // Build read stats section for enabled sources
+            let mut read_parts = Vec::new();
+            if ogn_enabled_for_stats {
+                let health = aprs_health_for_stats.read().await;
+                let rate = if let Some(interval_start) = health.interval_start {
+                    let elapsed = interval_start.elapsed().as_secs_f64();
+                    if elapsed > 0.0 {
+                        health.interval_messages as f64 / elapsed
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                };
+                read_parts.push(format!(
+                    "ogn={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, rate
+                ));
+            }
+            if beast_enabled_for_stats {
+                let health = beast_health_for_stats.read().await;
+                let rate = if let Some(interval_start) = health.interval_start {
+                    let elapsed = interval_start.elapsed().as_secs_f64();
+                    if elapsed > 0.0 {
+                        health.interval_messages as f64 / elapsed
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                };
+                read_parts.push(format!(
+                    "beast={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, rate
+                ));
+            }
+            if sbs_enabled_for_stats {
+                let health = sbs_health_for_stats.read().await;
+                let rate = if let Some(interval_start) = health.interval_start {
+                    let elapsed = interval_start.elapsed().as_secs_f64();
+                    if elapsed > 0.0 {
+                        health.interval_messages as f64 / elapsed
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                };
+                read_parts.push(format!(
+                    "sbs={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, rate
+                ));
+            }
+
+            // Format read section
+            let read_section = if read_parts.is_empty() {
+                String::new()
+            } else {
+                format!(" | read: {}", read_parts.join(" "))
+            };
+
             // Log comprehensive stats
             info!(
-                "Ingest Stats (30s): recv={:.1}/s (OGN:{:.1} Beast:{:.1} SBS:{:.1}) sent={:.1}/s | socket_send={} | drain_eta={} | queues: ogn={{{}}} beast={{{}}} sbs={{{}}}",
-                total_per_sec,
-                ogn_frames as f64 / 30.0,
-                beast_frames as f64 / 30.0,
-                sbs_frames as f64 / 30.0,
-                sent_per_sec,
-                avg_send_time_ms,
+                "stats: sent={} | drain_eta={} | queues: ogn={{{}}} beast={{{}}} sbs={{{}}}{}",
+                sent_stats,
                 drain_time_estimate,
                 format_queue(&ogn_depth),
                 format_queue(&beast_depth),
-                format_queue(&sbs_depth)
+                format_queue(&sbs_depth),
+                read_section
             );
         }
     });
@@ -627,19 +704,12 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             .build();
 
         let queue = ogn_queue.clone();
-        let _stats_rx = stats_ogn_received.clone();
-        let _stats_total = stats_frames_received.clone();
-
-        // Create wrapper health state for APRS client compatibility
-        let aprs_health = Arc::new(tokio::sync::RwLock::new(
-            soar::metrics::AprsIngestHealth::default(),
-        ));
+        let aprs_health = aprs_health_shared.clone();
 
         tokio::spawn(async move {
             let mut client = AprsClient::new(config);
 
             // The AprsClient's start_with_queue method will handle stats internally
-            // We wrap the queue to track our own stats as well
             loop {
                 match client
                     .start_with_queue(queue.clone(), aprs_health.clone())
@@ -671,20 +741,14 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
         let queue = beast_queue.clone();
         let stats_rx = stats_beast_received.clone();
-        let _stats_total = stats_frames_received.clone();
+        let beast_health = beast_health_shared.clone();
 
         info!("Spawning Beast client for {}:{}", server, port);
-
-        // Create wrapper health state for Beast client compatibility
-        let beast_health = Arc::new(tokio::sync::RwLock::new(
-            soar::metrics::BeastIngestHealth::default(),
-        ));
 
         tokio::spawn(async move {
             let mut client = BeastClient::new(config);
 
-            // The Beast client's start_with_queue tracks stats - pass our counters
-            // The stats counter updates both per-source and total
+            // The Beast client's start_with_queue tracks stats
             match client
                 .start_with_queue(queue, beast_health, Some(stats_rx))
                 .await
@@ -710,21 +774,16 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
         let queue = sbs_queue.clone();
         let stats_rx = stats_sbs_received.clone();
-        let _stats_total = stats_frames_received.clone();
+        let sbs_health = sbs_health_shared.clone();
 
         info!("Spawning SBS client for {}:{}", server, port);
-
-        // Create wrapper health state for SBS client compatibility
-        let beast_health = Arc::new(tokio::sync::RwLock::new(
-            soar::metrics::BeastIngestHealth::default(),
-        ));
 
         tokio::spawn(async move {
             let mut client = SbsClient::new(config);
 
-            // The SBS client's start_with_queue tracks stats - pass our counters
+            // The SBS client's start_with_queue tracks stats
             match client
-                .start_with_queue(queue, beast_health, Some(stats_rx))
+                .start_with_queue(queue, sbs_health, Some(stats_rx))
                 .await
             {
                 Ok(_) => {
