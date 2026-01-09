@@ -11,6 +11,7 @@ use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use tracing::{Instrument, debug, error, info_span, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use super::FlightProcessorContext;
@@ -118,6 +119,10 @@ fn spawn_flight_enrichment_on_creation(
     let airports_repo = ctx.airports_repo.clone();
     let locations_repo = ctx.locations_repo.clone();
 
+    // Create a new root span to prevent trace accumulation
+    let span = info_span!("flight_enrichment_creation", %flight_id);
+    let _ = span.set_parent(opentelemetry::Context::new());
+
     tokio::spawn(
         async move {
             let start = std::time::Instant::now();
@@ -211,7 +216,7 @@ fn spawn_flight_enrichment_on_creation(
                 flight_id
             );
         }
-        .instrument(info_span!("flight_enrichment_creation", %flight_id)),
+        .instrument(span),
     );
 }
 
@@ -733,6 +738,10 @@ fn spawn_flight_enrichment_on_completion_direct(
     let airports_repo = airports_repo.clone();
     let locations_repo = locations_repo.clone();
 
+    // Create a new root span to prevent trace accumulation
+    let span = info_span!("flight_enrichment_completion", %flight_id);
+    let _ = span.set_parent(opentelemetry::Context::new());
+
     tokio::spawn(
         async move {
             let start = std::time::Instant::now();
@@ -825,6 +834,6 @@ fn spawn_flight_enrichment_on_completion_direct(
                 start.elapsed().as_secs_f64()
             );
         }
-        .instrument(info_span!("flight_enrichment_completion", %flight_id)),
+        .instrument(span),
     );
 }

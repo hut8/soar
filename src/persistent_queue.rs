@@ -33,7 +33,10 @@ pub enum QueueState {
 #[derive(Debug, Clone)]
 pub struct QueueDepth {
     pub memory: usize,
-    pub disk: usize,
+    /// Actual data bytes remaining (write_offset - read_offset)
+    pub disk_data_bytes: u64,
+    /// Total file size on disk (may be larger than data_bytes due to consumed messages)
+    pub disk_file_bytes: u64,
 }
 
 /// A persistent file-backed queue with fast-path memory optimization
@@ -296,28 +299,175 @@ where
     pub async fn depth(&self) -> QueueDepth {
         QueueDepth {
             memory: self.memory_tx.len(),
-            disk: if self.file_path.exists() {
-                std::fs::metadata(&self.file_path)
-                    .map(|m| m.len() as usize)
-                    .unwrap_or(0)
-            } else {
-                0
-            },
+            disk_data_bytes: self.data_size_bytes(),
+            disk_file_bytes: self.file_size_bytes(),
+        }
+    }
+
+    /// Read the current offsets from the queue file header
+    /// Returns (write_offset, read_offset) or None if file doesn't exist or is invalid
+    fn read_offsets(&self) -> Option<(u64, u64)> {
+        use std::io::Read;
+
+        if !self.file_path.exists() {
+            return None;
+        }
+
+        let mut file = std::fs::File::open(&self.file_path).ok()?;
+        let mut header = [0u8; HEADER_SIZE];
+        file.read_exact(&mut header).ok()?;
+
+        // Verify magic bytes
+        if &header[0..8] != MAGIC_BYTES {
+            return None;
+        }
+
+        let write_offset = u64::from_le_bytes(header[8..16].try_into().ok()?);
+        let read_offset = u64::from_le_bytes(header[16..24].try_into().ok()?);
+
+        Some((write_offset, read_offset))
+    }
+
+    /// Get the actual data size in the queue (bytes not yet consumed)
+    /// This is write_offset - read_offset, NOT the file size
+    pub fn data_size_bytes(&self) -> u64 {
+        if let Some((write_offset, read_offset)) = self.read_offsets() {
+            write_offset.saturating_sub(read_offset)
+        } else {
+            0
+        }
+    }
+
+    /// Get the file size (total bytes on disk, including already-consumed data)
+    pub fn file_size_bytes(&self) -> u64 {
+        if self.file_path.exists() {
+            std::fs::metadata(&self.file_path)
+                .map(|m| m.len())
+                .unwrap_or(0)
+        } else {
+            0
         }
     }
 
     /// Check if the disk queue is at or near capacity
     /// Returns true if sending would likely fail due to size limit
-    /// Uses 95% threshold to allow some buffer before hard limit
+    /// Uses 95% threshold on actual data size to trigger backpressure
     pub fn is_at_capacity(&self) -> bool {
-        if let Some(max_size) = self.max_size_bytes
-            && self.file_path.exists()
-            && let Ok(metadata) = std::fs::metadata(&self.file_path)
-        {
-            // Use 95% threshold to trigger backpressure before we hit the hard limit
-            return metadata.len() >= (max_size * 95 / 100);
+        if let Some(max_size) = self.max_size_bytes {
+            let data_size = self.data_size_bytes();
+            // Backpressure when actual data is >= 95% of max
+            if data_size >= (max_size * 95 / 100) {
+                return true;
+            }
+            // Also check if file is physically full (can't append even if data is drained)
+            let file_size = self.file_size_bytes();
+            if file_size >= max_size && data_size > 0 {
+                // File is full but has unconsumed data - needs compaction
+                // Trigger compaction by returning at_capacity until file is compacted
+                return true;
+            }
         }
         false
+    }
+
+    /// Check if the queue is ready to accept new connections
+    /// Returns true if below 75% capacity (allows reconnection after backpressure)
+    pub fn is_ready_for_connection(&self) -> bool {
+        if let Some(max_size) = self.max_size_bytes {
+            let data_size = self.data_size_bytes();
+            let file_size = self.file_size_bytes();
+
+            // Allow reconnection when actual data is below 75% of max
+            if data_size < (max_size * 75 / 100) {
+                // But if file is physically full, we need compaction first
+                if file_size >= (max_size * 95 / 100) && data_size > 0 {
+                    // Trigger compaction
+                    if let Err(e) = self.compact_if_needed() {
+                        warn!("Failed to compact queue '{}': {}", self.name, e);
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+        // If no max size or file doesn't exist, always ready
+        true
+    }
+
+    /// Get current capacity usage as a percentage (0-100)
+    /// Based on actual data size, not file size
+    pub fn capacity_percent(&self) -> u8 {
+        if let Some(max_size) = self.max_size_bytes {
+            let data_size = self.data_size_bytes();
+            return ((data_size * 100) / max_size) as u8;
+        }
+        0
+    }
+
+    /// Compact the queue file by rewriting only unconsumed messages
+    /// This is needed when the file is full but most data has been consumed
+    fn compact_if_needed(&self) -> Result<()> {
+        use std::io::{Read, Seek, Write};
+
+        let Some((write_offset, read_offset)) = self.read_offsets() else {
+            return Ok(()); // No file or invalid
+        };
+
+        let file_size = self.file_size_bytes();
+        let data_size = write_offset.saturating_sub(read_offset);
+
+        // Only compact if file is mostly consumed (> 50% of file is dead space)
+        if read_offset <= HEADER_SIZE as u64 || data_size > file_size / 2 {
+            return Ok(()); // No need to compact
+        }
+
+        info!(
+            "Compacting queue '{}': file_size={}B, data_size={}B, dead_space={}B",
+            self.name,
+            file_size,
+            data_size,
+            read_offset - HEADER_SIZE as u64
+        );
+
+        // Read all remaining messages
+        let mut file = std::fs::File::open(&self.file_path)?;
+        file.seek(std::io::SeekFrom::Start(read_offset))?;
+        let mut remaining_data = vec![0u8; data_size as usize];
+        file.read_exact(&mut remaining_data)?;
+        drop(file);
+
+        // Rewrite the file with just the remaining data
+        let temp_path = self.file_path.with_extension("compact");
+        {
+            let mut temp_file = std::fs::File::create(&temp_path)?;
+
+            // Write new header
+            let new_write_offset = HEADER_SIZE as u64 + data_size;
+            let header = [
+                MAGIC_BYTES.as_slice(),
+                &new_write_offset.to_le_bytes(),
+                &(HEADER_SIZE as u64).to_le_bytes(), // read_offset back to start
+                &0u64.to_le_bytes(),                 // reserved
+            ]
+            .concat();
+            temp_file.write_all(&header)?;
+            temp_file.write_all(&remaining_data)?;
+            temp_file.sync_all()?;
+        }
+
+        // Atomically replace the old file
+        std::fs::rename(&temp_path, &self.file_path)?;
+
+        metrics::counter!(format!("queue.{}.compactions_total", self.name)).increment(1);
+        info!(
+            "Queue '{}' compacted: {}B -> {}B",
+            self.name,
+            file_size,
+            HEADER_SIZE as u64 + data_size
+        );
+
+        Ok(())
     }
 
     /// Get the queue name (for logging)

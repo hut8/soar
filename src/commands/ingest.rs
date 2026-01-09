@@ -527,35 +527,76 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             let beast_depth = beast_queue_for_stats.depth().await;
             let sbs_depth = sbs_queue_for_stats.depth().await;
 
-            // Update queue depth metrics
+            // Calculate total data remaining to drain
+            let total_data_remaining =
+                ogn_depth.disk_data_bytes + beast_depth.disk_data_bytes + sbs_depth.disk_data_bytes;
+
+            // Update queue depth metrics (using actual data bytes, not file size)
             metrics::gauge!("ingest.queue_depth", "source" => "ogn", "type" => "memory")
                 .set(ogn_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "ogn", "type" => "disk")
-                .set(ogn_depth.disk as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "ogn", "type" => "data")
+                .set(ogn_depth.disk_data_bytes as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "ogn", "type" => "file")
+                .set(ogn_depth.disk_file_bytes as f64);
             metrics::gauge!("ingest.queue_depth", "source" => "beast", "type" => "memory")
                 .set(beast_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "beast", "type" => "disk")
-                .set(beast_depth.disk as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "beast", "type" => "data")
+                .set(beast_depth.disk_data_bytes as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "beast", "type" => "file")
+                .set(beast_depth.disk_file_bytes as f64);
             metrics::gauge!("ingest.queue_depth", "source" => "sbs", "type" => "memory")
                 .set(sbs_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "sbs", "type" => "disk")
-                .set(sbs_depth.disk as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "sbs", "type" => "data")
+                .set(sbs_depth.disk_data_bytes as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "sbs", "type" => "file")
+                .set(sbs_depth.disk_file_bytes as f64);
+
+            // Calculate estimated drain time based on send rate
+            let drain_time_estimate = if sent_per_sec > 0.0 && total_data_remaining > 0 {
+                // Estimate ~100 bytes per message (rough average)
+                let est_messages_remaining = total_data_remaining / 100;
+                let est_seconds = est_messages_remaining as f64 / sent_per_sec;
+                if est_seconds > 3600.0 {
+                    format!("{:.1}h", est_seconds / 3600.0)
+                } else if est_seconds > 60.0 {
+                    format!("{:.1}m", est_seconds / 60.0)
+                } else {
+                    format!("{:.0}s", est_seconds)
+                }
+            } else if total_data_remaining > 0 {
+                "stalled".to_string()
+            } else {
+                "done".to_string()
+            };
+
+            // Format queue info with data size (not file size)
+            let format_queue = |depth: &soar::persistent_queue::QueueDepth| -> String {
+                if depth.disk_data_bytes == 0 && depth.disk_file_bytes == 0 {
+                    format!("mem:{}", depth.memory)
+                } else if depth.disk_data_bytes == depth.disk_file_bytes {
+                    format!("mem:{} data:{}B", depth.memory, depth.disk_data_bytes)
+                } else {
+                    // Show both data and file size when different (indicates need for compaction)
+                    format!(
+                        "mem:{} data:{}B file:{}B",
+                        depth.memory, depth.disk_data_bytes, depth.disk_file_bytes
+                    )
+                }
+            };
 
             // Log comprehensive stats
             info!(
-                "Ingest Stats (30s): recv={:.1}/s (OGN:{:.1} Beast:{:.1} SBS:{:.1}) sent={:.1}/s | socket_send={} | queues: ogn={{mem:{} disk:{}B}} beast={{mem:{} disk:{}B}} sbs={{mem:{} disk:{}B}}",
+                "Ingest Stats (30s): recv={:.1}/s (OGN:{:.1} Beast:{:.1} SBS:{:.1}) sent={:.1}/s | socket_send={} | drain_eta={} | queues: ogn={{{}}} beast={{{}}} sbs={{{}}}",
                 total_per_sec,
                 ogn_frames as f64 / 30.0,
                 beast_frames as f64 / 30.0,
                 sbs_frames as f64 / 30.0,
                 sent_per_sec,
                 avg_send_time_ms,
-                ogn_depth.memory,
-                ogn_depth.disk,
-                beast_depth.memory,
-                beast_depth.disk,
-                sbs_depth.memory,
-                sbs_depth.disk
+                drain_time_estimate,
+                format_queue(&ogn_depth),
+                format_queue(&beast_depth),
+                format_queue(&sbs_depth)
             );
         }
     });
