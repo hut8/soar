@@ -1,36 +1,55 @@
 # Pyroscope Server Configuration
 # Documentation: https://grafana.com/docs/pyroscope/latest/configure-server/
+#
+# IMPORTANT: "inmemory" ring stores are for cluster coordination only, NOT data!
+# Profile data is persisted to disk at pyroscopedb.data_path (/var/lib/pyroscope).
+#
+# Some settings (compactor retention, instance addresses) are CLI-only and are
+# configured in the systemd override: /etc/systemd/system/pyroscope.service.d/override.conf
+
+# Run all components in a single process (monolithic mode)
+target: all
 
 # Server configuration
 server:
-  # HTTP server configuration
   http_listen_address: "127.0.0.1"
   http_listen_port: 4040
+  grpc_listen_port: 4041
 
-# Storage configuration
-storage:
-  # Use local filesystem storage
-  backend: "filesystem"
-  filesystem:
-    path: "/var/lib/pyroscope"
+# Storage configuration - local filesystem for single-node
+pyroscopedb:
+  data_path: "/var/lib/pyroscope"
 
-# Retention configuration
-retention:
-  # Keep profiles for 30 days
-  profiles: 720h  # 30 days
+# Ingester configuration
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
 
-# Targets configuration - allow push from Alloy or SDKs
-targets:
-  # Enable push ingestion (for pyroscope SDKs and Alloy)
-  push:
-    enabled: true
+# Distributor configuration
+distributor:
+  ring:
+    kvstore:
+      store: inmemory
 
-# Metrics configuration
-metrics:
-  # Expose Prometheus metrics
-  enabled: true
+# Query scheduler configuration
+query_scheduler:
+  ring:
+    kvstore:
+      store: inmemory
 
-# Logging configuration
-log:
-  level: "info"
-  format: "logfmt"
+# Overrides exporter configuration
+overrides_exporter:
+  ring:
+    kvstore:
+      store: inmemory
+
+# Limits configuration
+limits:
+  max_profile_size_bytes: 4194304  # 4MB
+
+# Analytics/usage reporting - disable
+analytics:
+  reporting_enabled: false
