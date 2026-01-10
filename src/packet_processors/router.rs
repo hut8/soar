@@ -38,16 +38,17 @@ pub struct PacketRouter {
     server_status_tx: Option<flume::Sender<(String, chrono::DateTime<chrono::Utc>)>>,
 }
 
+/// Internal queue capacity for the PacketRouter worker pool
+pub const INTERNAL_QUEUE_CAPACITY: usize = 5_000;
+
 impl PacketRouter {
     /// Create a new PacketRouter with a generic processor
     ///
     /// Creates an internal queue of 5000 message tasks.
     /// Workers are spawned when start() is called after configuration.
     pub fn new(generic_processor: GenericProcessor) -> Self {
-        const INTERNAL_QUEUE_SIZE: usize = 5_000;
-
         let (internal_queue_tx, internal_queue_rx) =
-            flume::bounded::<MessageTask>(INTERNAL_QUEUE_SIZE);
+            flume::bounded::<MessageTask>(INTERNAL_QUEUE_CAPACITY);
 
         Self {
             generic_processor,
