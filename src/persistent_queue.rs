@@ -422,6 +422,15 @@ where
             }
 
             metrics::counter!(format!("queue.{}.messages.committed_total", self.name)).increment(1);
+
+            // Update messages_drained counter if in Draining state
+            let mut state = self.state.write().await;
+            if let QueueState::Draining {
+                messages_drained, ..
+            } = &mut *state
+            {
+                *messages_drained += 1;
+            }
         }
 
         Ok(())
