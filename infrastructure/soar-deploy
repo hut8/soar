@@ -29,6 +29,10 @@ set -e
 set -u
 set -o pipefail
 
+# Deployment log and status directory
+DEPLOY_LOG_DIR="/var/lib/soar/deploy/logs"
+DEPLOY_STATUS_DIR="/var/lib/soar/deploy/status"
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -73,6 +77,32 @@ if [ ! -d "$DEPLOY_DIR" ]; then
     exit 1
 fi
 
+# Create log and status directories
+mkdir -p "$DEPLOY_LOG_DIR"
+mkdir -p "$DEPLOY_STATUS_DIR"
+chown -R soar:soar /var/lib/soar/deploy
+
+# Generate a unique deployment ID based on the deploy directory name and environment
+# This allows the caller to predict the status file path
+DEPLOY_DIR_BASENAME=$(basename "$DEPLOY_DIR")
+DEPLOY_ID="${ENVIRONMENT}-${DEPLOY_DIR_BASENAME}"
+STATUS_FILE="$DEPLOY_STATUS_DIR/$DEPLOY_ID.status"
+
+# Write status file on exit (success or failure)
+write_status() {
+    local exit_code=$?
+    echo "$exit_code" > "$STATUS_FILE"
+    if [ $exit_code -eq 0 ]; then
+        log_info "Deployment completed successfully (exit code: $exit_code)"
+    else
+        log_error "Deployment failed (exit code: $exit_code)"
+    fi
+    log_info "Status written to: $STATUS_FILE"
+}
+trap write_status EXIT
+
+log_info "Deployment ID: $DEPLOY_ID"
+log_info "Status file: $STATUS_FILE"
 log_info "Starting SOAR deployment for $ENVIRONMENT from: $DEPLOY_DIR"
 
 # Self-update: Check if deployment script itself has changed
@@ -1179,6 +1209,11 @@ ls -t "$BACKUP_DIR"/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
 # Clean up old deployment directories (keep last 3)
 log_info "Cleaning up old deployment directories (keeping last 3)..."
 ls -td /tmp/soar/deploy/* 2>/dev/null | tail -n +4 | xargs rm -rf || true
+
+# Clean up old deployment logs and status files (keep last 10)
+log_info "Cleaning up old deployment logs and status files (keeping last 10)..."
+ls -t "$DEPLOY_LOG_DIR"/*.log 2>/dev/null | tail -n +11 | xargs rm -f || true
+ls -t "$DEPLOY_STATUS_DIR"/*.status 2>/dev/null | tail -n +11 | xargs rm -f || true
 
 if [ "$ALL_HEALTHY" = true ]; then
     log_info "${GREEN}Deployment completed successfully!${NC}"
