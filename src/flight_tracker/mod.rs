@@ -360,8 +360,8 @@ impl FlightTracker {
 
                 let elapsed = now.signed_duration_since(state.last_update_time);
                 if elapsed > timeout_threshold {
-                    info!(
-                        "Flight {} for device {} is stale (last update {} seconds ago)",
+                    debug!(
+                        "Flight {} for aircraft {} is stale (last update {} seconds ago)",
                         flight_id,
                         aircraft_id,
                         elapsed.num_seconds()

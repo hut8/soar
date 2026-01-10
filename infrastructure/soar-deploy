@@ -77,7 +77,7 @@ if [ ! -d "$DEPLOY_DIR" ]; then
     exit 1
 fi
 
-# Create log and status directories
+# Create log and status directories (this script runs as root via sudo)
 mkdir -p "$DEPLOY_LOG_DIR"
 mkdir -p "$DEPLOY_STATUS_DIR"
 chown -R soar:soar /var/lib/soar/deploy
@@ -87,6 +87,14 @@ chown -R soar:soar /var/lib/soar/deploy
 DEPLOY_DIR_BASENAME=$(basename "$DEPLOY_DIR")
 DEPLOY_ID="${ENVIRONMENT}-${DEPLOY_DIR_BASENAME}"
 STATUS_FILE="$DEPLOY_STATUS_DIR/$DEPLOY_ID.status"
+LOG_FILE="$DEPLOY_LOG_DIR/$DEPLOY_ID.log"
+
+# Print log file location BEFORE redirecting (so caller knows where to look)
+echo "Deployment log file: $LOG_FILE"
+
+# Redirect all output to log file using exec
+# This allows the script to be run detached while still capturing all output
+exec > "$LOG_FILE" 2>&1
 
 # Write status file on exit (success or failure)
 write_status() {

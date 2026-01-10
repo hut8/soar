@@ -733,8 +733,8 @@ jobs:
           echo "Log file: $LOG_FILE"
 
           # Run deployment in background with nohup to survive SSH disconnection
-          # The script writes a status file on completion that we poll for
-          ssh soar@staging.glider.flights "sudo mkdir -p /var/lib/soar/deploy/logs /var/lib/soar/deploy/status && sudo chown -R soar:soar /var/lib/soar/deploy && nohup sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR > $LOG_FILE 2>&1 &"
+          # soar-deploy creates log/status directories and redirects its own output
+          ssh soar@staging.glider.flights "nohup sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR &"
 
           # Give the background process a moment to start
           sleep 3
@@ -907,8 +907,8 @@ jobs:
           echo "Log file: $LOG_FILE"
 
           # Run deployment in background with nohup to survive SSH disconnection
-          # The script writes a status file on completion that we poll for
-          ssh soar@glider.flights "sudo mkdir -p /var/lib/soar/deploy/logs /var/lib/soar/deploy/status && sudo chown -R soar:soar /var/lib/soar/deploy && nohup sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR > $LOG_FILE 2>&1 &"
+          # soar-deploy creates log/status directories and redirects its own output
+          ssh soar@glider.flights "nohup sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR &"
 
           # Give the background process a moment to start
           sleep 3
