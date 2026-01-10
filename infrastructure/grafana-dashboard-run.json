@@ -414,7 +414,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"} * on() (changes(process_uptime_seconds{component=\"run\",environment=\"$environment\"}[30s]) > 0 or vector(0))",
+          "expr": "max(process_uptime_seconds{component=\"run\",environment=\"$environment\"}) by (component, environment)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"

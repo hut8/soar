@@ -151,7 +151,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     info!("Instance lock acquired for {}", lock_name);
 
     // Create persistent queues for buffering messages (separate queues per source)
-    let ogn_queue_path = std::path::PathBuf::from("/var/lib/soar/queues/ogn.queue");
+    // Queue directory is environment-aware: /var/lib/soar/queues in prod/staging,
+    // ~/.local/share/soar/queues in development (XDG spec)
+    let queue_dir = soar::queue_dir();
+    std::fs::create_dir_all(&queue_dir)
+        .with_context(|| format!("Failed to create queue directory: {:?}", queue_dir))?;
+
+    let ogn_queue_path = queue_dir.join("ogn.queue");
     let ogn_queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<String>::new(
             "ogn".to_string(),
@@ -162,7 +168,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         .expect("Failed to create OGN persistent queue"),
     );
 
-    let beast_queue_path = std::path::PathBuf::from("/var/lib/soar/queues/adsb-beast.queue");
+    let beast_queue_path = queue_dir.join("adsb-beast.queue");
     let beast_queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
             "adsb-beast".to_string(),
@@ -173,7 +179,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         .expect("Failed to create Beast persistent queue"),
     );
 
-    let sbs_queue_path = std::path::PathBuf::from("/var/lib/soar/queues/adsb-sbs.queue");
+    let sbs_queue_path = queue_dir.join("adsb-sbs.queue");
     let sbs_queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
             "adsb-sbs".to_string(),
@@ -184,7 +190,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         .expect("Failed to create SBS persistent queue"),
     );
 
-    info!("Created persistent queues at /var/lib/soar/queues/");
+    info!("Created persistent queues at {:?}", queue_dir);
 
     // Create shared counters for stats tracking (aggregate across all sources)
     let stats_frames_received = Arc::new(std::sync::atomic::AtomicU64::new(0));

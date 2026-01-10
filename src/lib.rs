@@ -127,6 +127,29 @@ pub fn socket_path() -> std::path::PathBuf {
     }
 }
 
+/// Get the persistent queue directory based on the environment.
+///
+/// Environment detection:
+/// - SOAR_ENV=production -> "/var/lib/soar/queues"
+/// - SOAR_ENV=staging -> "/var/lib/soar/queues"
+/// - SOAR_ENV unset or other -> "$XDG_DATA_HOME/soar/queues" (defaults to ~/.local/share/soar/queues)
+///
+/// In development mode, follows XDG Base Directory Specification to avoid
+/// requiring root permissions.
+pub fn queue_dir() -> std::path::PathBuf {
+    match std::env::var("SOAR_ENV").as_deref() {
+        Ok("production") | Ok("staging") => std::path::PathBuf::from("/var/lib/soar/queues"),
+        _ => {
+            // Development mode: use XDG_DATA_HOME or fallback to ~/.local/share
+            let data_home = std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+                format!("{}/.local/share", home)
+            });
+            std::path::PathBuf::from(format!("{}/soar/queues", data_home))
+        }
+    }
+}
+
 /// Get the NATS client name for a given process based on the environment.
 ///
 /// Environment detection:

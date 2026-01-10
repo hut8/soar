@@ -147,8 +147,6 @@ fn generate_version_info() {
         .expect("Failed to add git instructions")
         .emit()
         .expect("Failed to emit version info");
-
-    println!("cargo:warning=Version info generated from git");
 }
 
 /// Compile protobuf definitions for queue protocol
@@ -165,5 +163,4 @@ fn compile_protobufs() {
         .expect("Failed to compile protobuf definitions");
 
     println!("cargo:rerun-if-changed=proto/messages.proto");
-    println!("cargo:warning=Compiled protobuf definitions");
 }
