@@ -9,18 +9,18 @@ Requires=postgresql.service
 Type=oneshot
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 
 # Run archive command with 7-day retention (shorter than production for staging)
 # Archives all data (flights, fixes, receiver_statuses, raw_messages) 7+ days old
-ExecStart=/usr/local/bin/soar-staging archive --max-age-days 7 --archive-path /var/soar/archive-staging
+ExecStart=/usr/local/bin/soar-staging archive --max-age-days 7 --archive-path /var/lib/soar/archive-staging
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging
 
 # Security settings
 NoNewPrivileges=yes
-ReadWritePaths=-/var/soar/archive-staging
+ReadWritePaths=-/var/lib/soar/archive-staging
 
 # Process limits
 LimitNOFILE=65536

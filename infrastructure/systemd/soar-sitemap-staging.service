@@ -9,7 +9,7 @@ Requires=postgresql.service
 Type=oneshot
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 ExecStart=/usr/local/bin/soar-staging sitemap
 
 # Environment variables (staging environment)

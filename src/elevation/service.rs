@@ -42,13 +42,13 @@ pub struct ElevationService {
 
 impl ElevationService {
     /// Create a new ElevationService using ELEVATION_DATA_PATH env var
-    /// Defaults to /var/soar/elevation if not specified
+    /// Defaults to /var/lib/soar/elevation if not specified
     ///
     /// If S3 download is enabled (ELEVATION_S3_BUCKET env var set), missing tiles will be
     /// downloaded from S3 on-demand. The directory will be created if it doesn't exist.
     pub fn new() -> Result<Self> {
-        let storage_path =
-            env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
+        let storage_path = env::var("ELEVATION_DATA_PATH")
+            .unwrap_or_else(|_| "/var/lib/soar/elevation".to_string());
         let storage_path = PathBuf::from(storage_path);
 
         // Check if S3 download is enabled
@@ -82,15 +82,15 @@ impl ElevationService {
     /// Create a new ElevationService with S3 download capability
     ///
     /// Environment variables:
-    /// - ELEVATION_DATA_PATH: Local storage path (default: /var/soar/elevation)
+    /// - ELEVATION_DATA_PATH: Local storage path (default: /var/lib/soar/elevation)
     /// - ELEVATION_S3_BUCKET: S3 bucket name (default: "elevation-tiles-prod")
     /// - ELEVATION_S3_PREFIX: S3 key prefix (default: "skadi")
     /// - ELEVATION_S3_REGION: AWS region (default: "us-east-1")
     ///
     /// S3 is always enabled with a default bucket for automatic tile downloads
     pub async fn new_with_s3() -> Result<Self> {
-        let storage_path =
-            env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
+        let storage_path = env::var("ELEVATION_DATA_PATH")
+            .unwrap_or_else(|_| "/var/lib/soar/elevation".to_string());
         let storage_path = PathBuf::from(storage_path);
 
         // Create directory if it doesn't exist
@@ -161,13 +161,13 @@ impl ElevationService {
 
     /// Create a new ElevationService with custom cache sizes for specialized workloads
     /// Used by AGL backfill which needs a larger tile cache to avoid blocking real-time processing
-    /// Defaults to /var/soar/elevation if ELEVATION_DATA_PATH is not specified
+    /// Defaults to /var/lib/soar/elevation if ELEVATION_DATA_PATH is not specified
     pub fn with_custom_cache_sizes(
         elevation_cache_size: u64,
         tile_cache_size: u64,
     ) -> Result<Self> {
-        let storage_path =
-            env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
+        let storage_path = env::var("ELEVATION_DATA_PATH")
+            .unwrap_or_else(|_| "/var/lib/soar/elevation".to_string());
         let storage_path = PathBuf::from(storage_path);
 
         if !storage_path.exists() {
@@ -316,7 +316,7 @@ impl ElevationService {
     }
 
     /// Build the file path for a tile at the given lat/lon floor coordinates
-    /// Format: /var/soar/elevation/N45/N45E009.hgt.gz
+    /// Format: /var/lib/soar/elevation/N45/N45E009.hgt.gz
     fn get_tile_path(&self, lat_floor: i32, lon_floor: i32) -> PathBuf {
         let lat_prefix = if lat_floor < 0 { "S" } else { "N" };
         let lon_prefix = if lon_floor < 0 { "W" } else { "E" };
@@ -436,7 +436,7 @@ mod tests {
     fn test_get_tile_path() {
         // Create a test service with a dummy path (directory doesn't need to exist for this test)
         let service = ElevationService {
-            storage_path: PathBuf::from("/var/soar/elevation"),
+            storage_path: PathBuf::from("/var/lib/soar/elevation"),
             elevation_cache: Cache::builder().max_capacity(100).build(),
             tile_cache: Cache::builder().max_capacity(10).build(),
             s3_client: None,
@@ -448,28 +448,28 @@ mod tests {
         let path = service.get_tile_path(45, 9);
         assert_eq!(
             path,
-            PathBuf::from("/var/soar/elevation/N45/N45E009.hgt.gz")
+            PathBuf::from("/var/lib/soar/elevation/N45/N45E009.hgt.gz")
         );
 
         // Southern hemisphere, western
         let path = service.get_tile_path(-45, -9);
         assert_eq!(
             path,
-            PathBuf::from("/var/soar/elevation/S45/S45W009.hgt.gz")
+            PathBuf::from("/var/lib/soar/elevation/S45/S45W009.hgt.gz")
         );
 
         // Equator
         let path = service.get_tile_path(0, 0);
         assert_eq!(
             path,
-            PathBuf::from("/var/soar/elevation/N00/N00E000.hgt.gz")
+            PathBuf::from("/var/lib/soar/elevation/N00/N00E000.hgt.gz")
         );
 
         // Large coordinates
         let path = service.get_tile_path(90, 180);
         assert_eq!(
             path,
-            PathBuf::from("/var/soar/elevation/N90/N90E180.hgt.gz")
+            PathBuf::from("/var/lib/soar/elevation/N90/N90E180.hgt.gz")
         );
     }
 

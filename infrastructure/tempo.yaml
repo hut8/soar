@@ -2,7 +2,7 @@ server:
   http_listen_address: 127.0.0.1
   http_listen_port: 3200
   grpc_listen_address: 127.0.0.1
-  grpc_listen_port: 9096
+  grpc_listen_port: 9097
 
 distributor:
   receivers:
@@ -11,8 +11,14 @@ distributor:
         http:
           endpoint: 127.0.0.1:4320
 
+memberlist:
+  bind_addr:
+    - "127.0.0.1"
+  bind_port: 7946
+
 ingester:
   lifecycler:
+    address: 127.0.0.1
     ring:
       kvstore:
         store: inmemory

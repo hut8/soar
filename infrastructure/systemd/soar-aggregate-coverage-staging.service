@@ -9,7 +9,7 @@ Requires=postgresql.service
 Type=oneshot
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 
 # Aggregate coverage at all six resolutions (3, 4, 5, 6, 7, 8)
 # Auto-detects date range from database (aggregates from last coverage date + 1 to yesterday)
