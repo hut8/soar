@@ -4,9 +4,10 @@ server:
   http_listen_address: 127.0.0.1
   http_listen_port: 3100
   grpc_listen_address: 127.0.0.1
-  grpc_listen_port: 9097   # any free port
+  grpc_listen_port: 9098   # must not conflict with Tempo (9097)
 
 common:
+  instance_addr: 127.0.0.1
   path_prefix: /var/lib/loki
   storage:
     filesystem:
@@ -14,7 +15,6 @@ common:
       rules_directory: /var/lib/loki/rules
   replication_factor: 1
   ring:
-    instance_addr: 127.0.0.1
     kvstore:
       store: inmemory
 

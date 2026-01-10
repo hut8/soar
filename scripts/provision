@@ -209,6 +209,24 @@ else
     echo -e "${BLUE}'alloy' user already exists${NC}"
 fi
 
+# Create loki user if it doesn't exist
+if ! id "loki" &>/dev/null; then
+    echo -e "${BLUE}Creating 'loki' system user...${NC}"
+    sudo useradd --system --home-dir /var/lib/loki --shell /bin/false loki
+    echo -e "${GREEN}'loki' user created successfully${NC}"
+else
+    echo -e "${BLUE}'loki' user already exists${NC}"
+fi
+
+# Create tempo user if it doesn't exist
+if ! id "tempo" &>/dev/null; then
+    echo -e "${BLUE}Creating 'tempo' system user...${NC}"
+    sudo useradd --system --home-dir /var/lib/tempo --shell /bin/false tempo
+    echo -e "${GREEN}'tempo' user created successfully${NC}"
+else
+    echo -e "${BLUE}'tempo' user already exists${NC}"
+fi
+
 # Install sudoers configuration for deployment
 echo -e "${BLUE}Installing deployment sudoers configuration...${NC}"
 sudo cp infrastructure/sudoers.d/soar /etc/sudoers.d/
@@ -283,6 +301,22 @@ echo -e "${BLUE}Installing Grafana Alloy...${NC}"
 sudo apt-get install -y alloy
 
 echo -e "${GREEN}Grafana Alloy installed successfully${NC}"
+
+# Install Loki
+echo -e "${BLUE}Installing Grafana Loki...${NC}"
+
+# Loki is also in the Grafana repository
+sudo apt-get install -y loki
+
+echo -e "${GREEN}Grafana Loki installed successfully${NC}"
+
+# Install Tempo
+echo -e "${BLUE}Installing Grafana Tempo...${NC}"
+
+# Tempo is also in the Grafana repository
+sudo apt-get install -y tempo
+
+echo -e "${GREEN}Grafana Tempo installed successfully${NC}"
 
 # Install Caddy
 echo -e "${BLUE}Installing Caddy web server...${NC}"
@@ -429,8 +463,8 @@ sudo cp infrastructure/systemd/soar-migrate@.service /etc/systemd/system/
 
 # Create migration log directory
 echo -e "${BLUE}Creating migration log directory...${NC}"
-sudo mkdir -p /var/soar/logs/migrations
-sudo chown -R soar:soar /var/soar/logs/migrations
+sudo mkdir -p /var/lib/soar/logs/migrations
+sudo chown -R soar:soar /var/lib/soar/logs/migrations
 
 # Move environment file for production to match naming convention
 # For consistency, production uses /etc/soar/env-production (like staging uses env-staging)
@@ -475,14 +509,17 @@ if [ -f infrastructure/grafana-provisioning/dashboards/dashboards.yml ]; then
     echo "Grafana dashboard provisioning configuration installed"
 fi
 
-# Copy Grafana Prometheus datasource provisioning configuration
-if [ -f infrastructure/grafana-provisioning/datasources/prometheus.yml ]; then
-    sudo cp infrastructure/grafana-provisioning/datasources/prometheus.yml /etc/grafana/provisioning/datasources/
-    sudo chown grafana:grafana /etc/grafana/provisioning/datasources/prometheus.yml
-    echo "Grafana Prometheus datasource provisioning installed"
-else
-    echo -e "${YELLOW}Warning: infrastructure/grafana-provisioning/datasources/prometheus.yml not found${NC}"
-fi
+# Copy all Grafana datasource provisioning configurations (Prometheus, Loki, Tempo, Pyroscope)
+DATASOURCE_COUNT=0
+for datasource_file in infrastructure/grafana-provisioning/datasources/*.yaml infrastructure/grafana-provisioning/datasources/*.yml; do
+    if [ -f "$datasource_file" ]; then
+        sudo cp "$datasource_file" /etc/grafana/provisioning/datasources/
+        DATASOURCE_COUNT=$((DATASOURCE_COUNT + 1))
+        echo "  Installed datasource: $(basename "$datasource_file")"
+    fi
+done
+sudo chown -R grafana:grafana /etc/grafana/provisioning/datasources
+echo "Installed $DATASOURCE_COUNT Grafana datasource configuration(s)"
 
 # Copy Grafana dashboards
 DASHBOARD_COUNT=0
@@ -573,6 +610,49 @@ fi
 
 echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment with ${#CADDY_SITES[@]} site(s)${NC}"
 
+# Configure Loki
+echo -e "${BLUE}Configuring Loki...${NC}"
+sudo mkdir -p /etc/loki
+sudo mkdir -p /var/lib/loki
+sudo cp infrastructure/loki.yaml /etc/loki/config.yml
+sudo chown -R loki:loki /etc/loki
+sudo chown -R loki:loki /var/lib/loki
+echo -e "${GREEN}Loki configured${NC}"
+
+# Configure Tempo
+echo -e "${BLUE}Configuring Tempo...${NC}"
+sudo mkdir -p /etc/tempo
+sudo mkdir -p /var/lib/tempo
+sudo mkdir -p /var/lib/tempo/blocks
+sudo mkdir -p /var/lib/tempo/wal
+sudo mkdir -p /var/lib/tempo/generator/wal
+sudo cp infrastructure/tempo.yaml /etc/tempo/config.yml
+sudo chown -R tempo:tempo /etc/tempo
+sudo chown -R tempo:tempo /var/lib/tempo
+echo -e "${GREEN}Tempo configured${NC}"
+
+# Configure Pyroscope
+echo -e "${BLUE}Configuring Pyroscope...${NC}"
+sudo mkdir -p /etc/pyroscope
+sudo mkdir -p /var/lib/pyroscope
+sudo cp infrastructure/pyroscope-config.yml /etc/pyroscope/config.yml
+sudo chown -R pyroscope:pyroscope /etc/pyroscope
+sudo chown -R pyroscope:pyroscope /var/lib/pyroscope
+
+# Install Pyroscope systemd override for single-node deployment
+sudo mkdir -p /etc/systemd/system/pyroscope.service.d
+sudo cp infrastructure/pyroscope-systemd-override.conf /etc/systemd/system/pyroscope.service.d/override.conf
+echo -e "${GREEN}Pyroscope configured${NC}"
+
+# Configure Alloy
+echo -e "${BLUE}Configuring Alloy...${NC}"
+sudo mkdir -p /etc/alloy
+sudo mkdir -p /var/lib/alloy
+sudo cp infrastructure/alloy-config.alloy /etc/alloy/config.alloy
+sudo chown -R alloy:alloy /etc/alloy
+sudo chown -R alloy:alloy /var/lib/alloy
+echo -e "${GREEN}Alloy configured${NC}"
+
 # Enable infrastructure services
 # Note: SOAR application services are enabled by soar-deploy
 echo -e "${BLUE}Enabling infrastructure services...${NC}"
@@ -584,6 +664,8 @@ sudo systemctl enable grafana-server
 sudo systemctl enable caddy
 sudo systemctl enable pyroscope
 sudo systemctl enable alloy
+sudo systemctl enable loki
+sudo systemctl enable tempo
 
 # Start Prometheus if not already running
 if ! systemctl is-active --quiet prometheus; then
@@ -664,6 +746,32 @@ else
     echo -e "${BLUE}Alloy is already running${NC}"
 fi
 
+# Start Loki if not already running
+if ! systemctl is-active --quiet loki; then
+    echo -e "${BLUE}Starting Loki...${NC}"
+    sudo systemctl start loki
+    if systemctl is-active --quiet loki; then
+        echo -e "${GREEN}Loki started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Loki. Check logs with: journalctl -u loki -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Loki is already running${NC}"
+fi
+
+# Start Tempo if not already running
+if ! systemctl is-active --quiet tempo; then
+    echo -e "${BLUE}Starting Tempo...${NC}"
+    sudo systemctl start tempo
+    if systemctl is-active --quiet tempo; then
+        echo -e "${GREEN}Tempo started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Tempo. Check logs with: journalctl -u tempo -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Tempo is already running${NC}"
+fi
+
 # Configure Photon OpenSearch for single-node operation
 echo -e "${BLUE}Configuring Photon OpenSearch replica settings...${NC}"
 
@@ -701,9 +809,9 @@ fi
 
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
-sudo mkdir -p /var/soar/logs
-sudo mkdir -p /var/soar/archive
-sudo mkdir -p /var/soar/elevation
+sudo mkdir -p /var/lib/soar/logs
+sudo mkdir -p /var/lib/soar/archive
+sudo mkdir -p /var/lib/soar/elevation
 sudo mkdir -p /etc/soar
 sudo mkdir -p /var/lib/nats/jetstream
 sudo mkdir -p /storage/soar/backups/base
@@ -714,8 +822,8 @@ sudo mkdir -p /etc/alloy
 
 # Set ownership for soar user
 echo -e "${BLUE}Setting ownership for soar user...${NC}"
-sudo chown -R soar:soar /var/soar
-sudo chown -R soar:soar /var/soar/archive
+sudo chown -R soar:soar /var/lib/soar
+sudo chown -R soar:soar /var/lib/soar/archive
 sudo chown soar:soar /home/soar
 sudo chmod 755 /home/soar
 
@@ -756,15 +864,15 @@ if command -v rclone &> /dev/null; then
     # This allows resuming interrupted downloads efficiently
     sudo rclone copy --progress --size-only \
         :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi \
-        /var/soar/elevation
+        /var/lib/soar/elevation
 
     # Set ownership
-    sudo chown -R soar:soar /var/soar/elevation
+    sudo chown -R soar:soar /var/lib/soar/elevation
 
     echo -e "${GREEN}Elevation data download complete${NC}"
 else
     echo -e "${YELLOW}Warning: rclone not available. Skipping elevation data download.${NC}"
-    echo -e "${YELLOW}You will need to download elevation data manually to /var/soar/elevation${NC}"
+    echo -e "${YELLOW}You will need to download elevation data manually to /var/lib/soar/elevation${NC}"
     echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md for instructions${NC}"
 fi
 
@@ -888,6 +996,8 @@ echo "    sudo systemctl start photon"
 echo "    sudo systemctl start caddy"
 echo "    sudo systemctl start pyroscope"
 echo "    sudo systemctl start alloy"
+echo "    sudo systemctl start loki"
+echo "    sudo systemctl start tempo"
 echo
 echo "  Check service status:"
 echo "    sudo systemctl status nats-server"
@@ -898,6 +1008,8 @@ echo "    sudo systemctl status photon"
 echo "    sudo systemctl status caddy"
 echo "    sudo systemctl status pyroscope"
 echo "    sudo systemctl status alloy"
+echo "    sudo systemctl status loki"
+echo "    sudo systemctl status tempo"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
 echo "  sudo journalctl -u nats-server -f"
@@ -908,16 +1020,18 @@ echo "  sudo journalctl -u photon -f"
 echo "  sudo journalctl -u caddy -f"
 echo "  sudo journalctl -u pyroscope -f"
 echo "  sudo journalctl -u alloy -f"
+echo "  sudo journalctl -u loki -f"
+echo "  sudo journalctl -u tempo -f"
 echo
 echo -e "${YELLOW}Database verification:${NC}"
 echo "  sudo -u postgres psql -l  # List all databases"
 echo "  sudo -u postgres psql -d $DB_NAME -c '\\dx'  # List extensions in database"
 echo
 echo -e "${YELLOW}Elevation Data:${NC}"
-echo "  Location: /var/soar/elevation"
-echo "  Verify tiles: ls -lh /var/soar/elevation/"
-echo "  Test a tile: gzip -t /var/soar/elevation/N45/N45E009.hgt.gz"
-TILE_COUNT=$(find /var/soar/elevation -name '*.hgt.gz' 2>/dev/null | wc -l)
+echo "  Location: /var/lib/soar/elevation"
+echo "  Verify tiles: ls -lh /var/lib/soar/elevation/"
+echo "  Test a tile: gzip -t /var/lib/soar/elevation/N45/N45E009.hgt.gz"
+TILE_COUNT=$(find /var/lib/soar/elevation -name '*.hgt.gz' 2>/dev/null | wc -l)
 if [ "$TILE_COUNT" -eq 0 ]; then
     echo -e "  ${YELLOW}WARNING: No elevation tiles found!${NC}"
     echo "  rclone may have failed. See infrastructure/DEPLOYMENT.md for manual download."
@@ -1047,6 +1161,48 @@ if [[ "$ENVIRONMENT" == "staging" ]]; then
 fi
 echo ""
 echo "  Note: Alloy configuration is deployed via soar-deploy"
+echo
+echo -e "${YELLOW}Grafana Loki (Log Aggregation):${NC}"
+echo "  HTTP API: http://localhost:3100"
+echo "  gRPC API: localhost:9098"
+echo "  Configuration: /etc/loki/config.yml"
+echo "  Data directory: /var/lib/loki"
+echo "  Logs: sudo journalctl -u loki -f"
+echo "  Service status: sudo systemctl status loki"
+echo "  Grafana datasource: Automatically provisioned as 'Loki'"
+echo ""
+echo "  Features:"
+echo "    • Aggregates logs from SOAR services via OTLP"
+echo "    • Full-text search and structured metadata"
+echo "    • Integrated with Grafana for log visualization"
+echo "    • Links logs to traces via trace_id field"
+echo ""
+echo "  Access in Grafana:"
+echo "    1. Navigate to Explore → Select 'Loki' datasource"
+echo "    2. Use LogQL to query logs by service, level, or content"
+echo "    3. Click trace IDs to jump to Tempo traces"
+echo
+echo -e "${YELLOW}Grafana Tempo (Distributed Tracing):${NC}"
+echo "  HTTP API: http://localhost:3200"
+echo "  gRPC API: localhost:9097"
+echo "  OTLP HTTP receiver: http://localhost:4320"
+echo "  Configuration: /etc/tempo/config.yml"
+echo "  Data directory: /var/lib/tempo"
+echo "  Logs: sudo journalctl -u tempo -f"
+echo "  Service status: sudo systemctl status tempo"
+echo "  Grafana datasource: Automatically provisioned as 'Tempo'"
+echo "  Retention: 7 days (configured in config.yaml)"
+echo ""
+echo "  Features:"
+echo "    • Receives traces via OTLP from Alloy"
+echo "    • Service graph visualization"
+echo "    • Trace search by service, duration, or tags"
+echo "    • Links traces to logs and metrics"
+echo ""
+echo "  Access in Grafana:"
+echo "    1. Navigate to Explore → Select 'Tempo' datasource"
+echo "    2. Search traces by service name, duration, or trace ID"
+echo "    3. View service dependency graph and span details"
 echo
 echo -e "${BLUE}=========================================${NC}"
 echo -e "${BLUE}Database Migration System${NC}"

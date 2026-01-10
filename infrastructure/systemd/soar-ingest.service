@@ -12,7 +12,7 @@ Wants=network-online.target
 Type=simple
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 SyslogIdentifier=soar-ingest
 # Example: ExecStart=/usr/local/bin/soar ingest --ogn-server aprs.glidernet.org --beast radar:41365
 # Customize parameters based on deployment needs:

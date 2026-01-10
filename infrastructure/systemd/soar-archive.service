@@ -9,18 +9,18 @@ Requires=postgresql.service
 Type=oneshot
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 
 # Run archive command with 45-day retention
 # Archives all data (flights, fixes, receiver_statuses, raw_messages) 45+ days old
-ExecStart=/usr/local/bin/soar archive --max-age-days 45 --archive-path /var/soar/archive
+ExecStart=/usr/local/bin/soar archive --max-age-days 45 --archive-path /var/lib/soar/archive
 
 # Environment variables
 EnvironmentFile=/etc/soar/env-production
 
 # Security settings
 NoNewPrivileges=yes
-ReadWritePaths=-/var/soar/archive
+ReadWritePaths=-/var/lib/soar/archive
 
 # Process limits
 LimitNOFILE=65536

@@ -11,7 +11,7 @@ Requires=postgresql.service
 Type=simple
 User=soar
 Group=soar
-WorkingDirectory=/var/soar
+WorkingDirectory=/var/lib/soar
 ExecStart=/usr/local/bin/soar-staging web --interface 127.0.0.1 --port 61226
 ExecReload=/bin/kill -s HUP $MAINPID
 

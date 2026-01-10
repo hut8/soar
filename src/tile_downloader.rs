@@ -71,10 +71,10 @@ impl TileDownloader {
     }
 
     /// Get the full path where a tile should be cached
-    /// Checks both shared cache (/var/soar/elevation) and instance-specific cache
+    /// Checks both shared cache (/var/lib/soar/elevation) and instance-specific cache
     /// Returns the first existing path, or the instance-specific path for downloads
     fn tile_path(&self, tile_name: &str, resolution: Resolution) -> PathBuf {
-        let shared_cache = PathBuf::from("/var/soar/elevation")
+        let shared_cache = PathBuf::from("/var/lib/soar/elevation")
             .join(resolution.subdirectory())
             .join(format!("{}.tif", tile_name));
 

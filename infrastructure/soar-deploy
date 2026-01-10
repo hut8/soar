@@ -214,7 +214,7 @@ ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${MANUAL_SERVICES[@]}" "${TIMER_SERVICES[
 
 # Create temporary binary directory with timestamp
 TIMESTAMP=$(date +%s)
-TEMP_BIN_DIR="/var/soar/bin"
+TEMP_BIN_DIR="/var/lib/soar/bin"
 TEMP_BIN_PATH="$TEMP_BIN_DIR/soar-$TIMESTAMP"
 
 log_info "Creating temporary binary directory: $TEMP_BIN_DIR"

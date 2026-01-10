@@ -164,7 +164,7 @@ enum Commands {
         #[arg(long)]
         archive_dir: Option<String>,
 
-        /// Enable automatic archiving (uses /var/soar/archive if writable, otherwise $HOME/soar-archive/)
+        /// Enable automatic archiving (uses /var/lib/soar/archive if writable, otherwise $HOME/soar-archive/)
         #[arg(long)]
         archive: bool,
 
@@ -684,22 +684,22 @@ async fn setup_diesel_database(
 
 /// Determine the best archive directory to use
 fn determine_archive_dir() -> Result<String> {
-    let var_soar_archive = "/var/soar/archive";
+    let var_lib_soar_archive = "/var/lib/soar/archive";
 
-    // Check if /var/soar/archive exists and is writable
-    if Path::new(var_soar_archive).exists() {
+    // Check if /var/lib/soar/archive exists and is writable
+    if Path::new(var_lib_soar_archive).exists() {
         // Test if we can write to it by trying to create a temporary file
-        let test_file = format!("{}/test_write_{}", var_soar_archive, std::process::id());
+        let test_file = format!("{}/test_write_{}", var_lib_soar_archive, std::process::id());
         match fs::write(&test_file, b"test") {
             Ok(()) => {
                 // Clean up test file
                 let _ = fs::remove_file(&test_file);
-                info!("Using archive directory: {}", var_soar_archive);
-                return Ok(var_soar_archive.to_string());
+                info!("Using archive directory: {}", var_lib_soar_archive);
+                return Ok(var_lib_soar_archive.to_string());
             }
             Err(_) => {
                 info!(
-                    "/var/soar/archive exists but is not writable, falling back to $HOME/soar-archive/"
+                    "/var/lib/soar/archive exists but is not writable, falling back to $HOME/soar-archive/"
                 );
             }
         }
@@ -1142,7 +1142,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Sitemap { static_root } => {
             let sitemap_path = static_root.unwrap_or_else(|| {
-                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string())
+                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/lib/soar/sitemap".to_string())
             });
             handle_sitemap_generation(diesel_pool, sitemap_path).await
         }

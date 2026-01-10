@@ -2,7 +2,7 @@ server:
   http_listen_address: 127.0.0.1
   http_listen_port: 3200
   grpc_listen_address: 127.0.0.1
-  grpc_listen_port: 9096
+  grpc_listen_port: 9097
 
 distributor:
   receivers:
@@ -11,8 +11,14 @@ distributor:
         http:
           endpoint: 127.0.0.1:4320
 
+memberlist:
+  bind_addr:
+    - "127.0.0.1"
+  bind_port: 7946
+
 ingester:
   lifecycler:
+    address: 127.0.0.1
     ring:
       kvstore:
         store: inmemory
@@ -33,11 +39,15 @@ metrics_generator:
     span_metrics:
       dimensions:
         - service.namespace
+    local_blocks:
+      filter_server_spans: false
   storage:
     path: /var/lib/tempo/generator/wal
     remote_write:
       - url: http://127.0.0.1:9090/api/v1/write
         send_exemplars: true
+  traces_storage:
+    path: /var/lib/tempo/generator/traces
 
 compactor:
   compaction:
@@ -60,3 +70,4 @@ overrides:
       processors:
         - service-graphs
         - span-metrics
+        - local-blocks
