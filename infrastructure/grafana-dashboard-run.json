@@ -301,7 +301,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 55
       },
       "id": 9999,
       "options": {
@@ -329,7 +329,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_message_rate{component=\"ingest-ogn\",environment=\"$environment\"}",
+          "expr": "rate(socket_router_aprs_routed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "OGN/APRS (msg/s)",
           "range": true,
           "refId": "A"
@@ -340,14 +340,15 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_message_rate{component=\"ingest-adsb\",environment=\"$environment\"}",
-          "legendFormat": "ADS-B/Beast (msg/s)",
+          "expr": "rate(socket_router_beast_routed_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Beast/SBS (msg/s)",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Ingestion Message Rates",
-      "type": "timeseries"
+      "title": "Message Routing Rates",
+      "type": "timeseries",
+      "description": "Rate of messages routed from socket server to processing queues"
     },
     {
       "datasource": {
@@ -383,7 +384,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 5,
         "w": 24,
         "h": 8
       },
@@ -413,7 +414,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"}",
+          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"} * on() (changes(process_uptime_seconds{component=\"run\",environment=\"$environment\"}[30s]) > 0 or vector(0))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -470,7 +471,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 22,
         "w": 24,
         "h": 8
       },
@@ -567,7 +568,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 47,
         "w": 24,
         "h": 8
       },
@@ -705,7 +706,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 90,
+        "y": 80,
         "w": 24,
         "h": 8
       },
@@ -930,7 +931,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 132,
+        "y": 122,
         "w": 24,
         "h": 8
       },
@@ -997,7 +998,6 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
@@ -1033,112 +1033,23 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "\u00b5s"
         },
         "overrides": []
       },
       "gridPos": {
         "x": 0,
-        "y": 182,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1006,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "nats_fix_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "NATS Publisher",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "NATS Publisher Queue Depth",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "µs"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 186,
+        "y": 176,
         "w": 24,
         "h": 8
       },
       "id": 1050,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -1245,7 +1156,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 241,
+        "y": 63,
         "w": 24,
         "h": 8
       },
@@ -1446,7 +1357,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 308,
+        "y": 71,
         "w": 24,
         "h": 8
       },
@@ -1649,7 +1560,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 384,
+        "y": 374,
         "w": 24,
         "h": 8
       },
@@ -1709,135 +1620,6 @@
       ],
       "title": "Database Connection Pool Stats",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "Closed Events/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 0.01
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 468,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1010,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_socket_send_error_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Socket Send Errors/sec",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Socket Send Errors (Permanent Failures)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "datasource",
-        "uid": "-- Mixed --"
-      },
-      "description": "Explanation of queue closed errors and their significance",
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 561
-      },
-      "id": 1011,
-      "options": {
-        "code": {
-          "language": "markdown",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "# Socket Send Errors\n\n**Socket send errors** occur when the system fails to send messages through Unix domain sockets to downstream processors.\n\n## What causes them:\n- **Downstream process crashed or stopped** - The receiving process (like `soar-run`) is not running\n- **Socket buffer full** - The receiver is processing messages too slowly\n- **Permission errors** - Incorrect file permissions on the socket\n\n## What to do:\n1. **Check if soar-run is running**: `systemctl status soar-run` or `systemctl status soar-run-staging`\n2. **Check logs for errors**: `journalctl -u soar-run -n 100`\n3. **Verify socket permissions**: `ls -la /run/soar/`\n\nThese errors are **permanent failures** - the messages are lost and will not be retried.",
-        "mode": "markdown"
-      },
-      "pluginVersion": "12.2.1",
-      "title": "Socket Send Errors - What They Mean",
-      "type": "text"
     },
     {
       "datasource": {
@@ -1914,7 +1696,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 658,
+        "y": 648,
         "w": 24,
         "h": 8
       },
@@ -1969,7 +1751,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 666
+        "y": 656
       },
       "id": 1013,
       "panels": [],
@@ -2047,12 +1829,27 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Success.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
         "x": 0,
-        "y": 668,
+        "y": 658,
         "w": 24,
         "h": 8
       },
@@ -2083,7 +1880,7 @@
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_success_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Parse Success/sec",
+          "legendFormat": "APRS Parse Success/sec",
           "range": true,
           "refId": "A"
         },
@@ -2094,9 +1891,31 @@
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_failed_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Parse Failed/sec",
+          "legendFormat": "APRS Parse Failed/sec",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(beast_run_decode_success_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Beast/SBS Decode Success/sec",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(beast_run_decode_failed_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "legendFormat": "Beast/SBS Decode Failed/sec",
+          "range": true,
+          "refId": "D"
         }
       ],
       "title": "Parse Success/Failure Rate",
@@ -2209,7 +2028,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 685,
+        "y": 675,
         "w": 24,
         "h": 8
       },
@@ -2347,7 +2166,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 743,
+        "y": 733,
         "w": 24,
         "h": 8
       },
@@ -2487,7 +2306,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 785,
+        "y": 775,
         "w": 24,
         "h": 8
       },
@@ -2674,7 +2493,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 835
+        "y": 825
       },
       "id": 2001,
       "options": {
@@ -2771,7 +2590,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 835
+        "y": 825
       },
       "id": 2002,
       "options": {
@@ -2797,13 +2616,165 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(queue_send_blocked_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "sum by (queue) (rate(queue_send_blocked_total{component=\"run\",environment=\"$environment\"}[5m])) or sum by (queue) (queue_send_blocked_total{component=\"run\",environment=\"$environment\"} * 0)",
           "legendFormat": "{{queue}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Queue Send Blocked Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "p99 latency for each stage of the aircraft processing pipeline",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "ms",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 833
+      },
+      "id": 2004,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_upsert_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "device_upsert",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_fix_creation_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "fix_creation",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_fix_db_insert_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "db_insert",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_state_transition_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "state_transition",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_nats_publish_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "nats_publish",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(aprs_aircraft_total_processing_ms_bucket{component=\"run\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "total_processing",
+          "range": true,
+          "refId": "F"
+        }
+      ],
+      "title": "Aircraft Pipeline Latency (p99)",
       "type": "timeseries"
     },
     {
@@ -2868,7 +2839,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 843
+        "y": 841
       },
       "id": 2003,
       "options": {
@@ -2963,7 +2934,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 851,
+        "y": 849,
         "w": 24,
         "h": 8
       },
@@ -3089,7 +3060,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 893,
+        "y": 883,
         "w": 24,
         "h": 8
       },
@@ -3208,7 +3179,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 967,
+        "y": 957,
         "w": 24,
         "h": 8
       },
@@ -3299,7 +3270,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1049,
+        "y": 1039,
         "w": 24,
         "h": 8
       },
@@ -3372,108 +3343,6 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1139,
-        "w": 24,
-        "h": 8
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "socket_envelope_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "Socket Envelope Queue",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "aprs_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
-          "legendFormat": "APRS Processing Queue",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "OGN Intake Queue Depth",
-      "type": "timeseries",
-      "id": 1023
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
             "fillOpacity": 30,
             "gradientMode": "none",
             "hideFrom": {
@@ -3514,7 +3383,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1237,
+        "y": 1227,
         "w": 24,
         "h": 8
       },
@@ -3638,7 +3507,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1343,
+        "y": 1333,
         "w": 24,
         "h": 8
       },
@@ -3729,7 +3598,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1457,
+        "y": 1447,
         "w": 24,
         "h": 8
       },
@@ -3853,7 +3722,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1579,
+        "y": 1569,
         "w": 24,
         "h": 8
       },
@@ -3896,97 +3765,6 @@
       "title": "Socket Router Throughput",
       "type": "timeseries",
       "id": 1027
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1709,
-        "w": 24,
-        "h": 8
-      },
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_router_queue_disconnected_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
-          "legendFormat": "Disconnections",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Router Queue Disconnections",
-      "type": "timeseries",
-      "id": 1028
     },
     {
       "datasource": {
@@ -4048,7 +3826,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1777,
+        "y": 1767,
         "w": 24,
         "h": 8
       },
@@ -4093,7 +3871,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1785
+        "y": 1775
       },
       "id": 1030,
       "panels": [],
@@ -4159,7 +3937,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1787,
+        "y": 1777,
         "w": 24,
         "h": 8
       },
@@ -4233,7 +4011,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1804,
+        "y": 1794,
         "w": 24,
         "h": 8
       },
@@ -4330,7 +4108,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1829,
+        "y": 1819,
         "w": 24,
         "h": 8
       },
@@ -4456,7 +4234,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1863,
+        "y": 1853,
         "w": 24,
         "h": 8
       },
@@ -4566,7 +4344,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1905,
+        "y": 1895,
         "w": 24,
         "h": 8
       },
@@ -4695,7 +4473,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1955,
+        "y": 1945,
         "w": 24,
         "h": 8
       },
@@ -4763,7 +4541,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1963
+        "y": 1953
       },
       "id": 1037,
       "panels": [],
@@ -4804,7 +4582,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1965,
+        "y": 1955,
         "w": 12,
         "h": 8
       },
@@ -4873,7 +4651,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 1965,
+        "y": 1955,
         "w": 12,
         "h": 8
       },
@@ -4972,7 +4750,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1982,
+        "y": 1972,
         "w": 24,
         "h": 8
       },
@@ -5071,7 +4849,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2007,
+        "y": 1997,
         "w": 24,
         "h": 8
       },
@@ -5179,7 +4957,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2041,
+        "y": 2031,
         "w": 24,
         "h": 8
       },
@@ -5336,7 +5114,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2083,
+        "y": 2073,
         "w": 24,
         "h": 8
       },
@@ -5438,7 +5216,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2133,
+        "y": 2123,
         "w": 24,
         "h": 8
       },
@@ -5554,7 +5332,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2191,
+        "y": 2181,
         "w": 24,
         "h": 8
       },
@@ -5630,7 +5408,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 2258
+        "y": 2248
       },
       "id": 1045,
       "options": {
@@ -5706,7 +5484,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 2338,
+        "y": 2328,
         "w": 24,
         "h": 8
       },
@@ -5736,7 +5514,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_created_takeoff_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "sum(rate(flight_tracker_flight_created_takeoff_total{component=\"run\",environment=\"$environment\"}[5m])) or vector(0)",
           "legendFormat": "Takeoff",
           "range": true,
           "refId": "A"
@@ -5747,7 +5525,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_created_airborne_total{component=\"run\",environment=\"$environment\"}[5m])",
+          "expr": "sum(rate(flight_tracker_flight_created_airborne_total{component=\"run\",environment=\"$environment\"}[5m])) or vector(0)",
           "legendFormat": "Airborne",
           "range": true,
           "refId": "B"

@@ -296,12 +296,15 @@ pub(crate) async fn process_state_transition(
                 };
 
                 // Check position/distance reasonableness based on time and speed
+                // Track distance for histogram recording
+                let mut coalesce_distance_km: Option<f64> = None;
                 let position_reasonable = if let Some(state) =
                     ctx.aircraft_states.get(&fix.aircraft_id)
                     && let Some((last_lat, last_lng)) = state.last_position()
                 {
                     let actual_distance_m =
                         haversine_distance(last_lat, last_lng, fix.latitude, fix.longitude);
+                    coalesce_distance_km = Some(actual_distance_m / 1000.0);
 
                     // Get last known ground speed to estimate expected travel distance
                     let last_speed_knots = state
@@ -341,6 +344,10 @@ pub(crate) async fn process_state_transition(
                             "flight_tracker.coalesce.rejected.distance_impossible_total"
                         )
                         .increment(1);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
+                            .record(actual_distance_m / 1000.0);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                            .record(gap_hours);
                         false
                     } else if last_speed_knots > 25.0 && actual_distance_m < min_expected_distance_m
                     {
@@ -354,6 +361,10 @@ pub(crate) async fn process_state_transition(
                         );
                         metrics::counter!("flight_tracker.coalesce.rejected.likely_landed_total")
                             .increment(1);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
+                            .record(actual_distance_m / 1000.0);
+                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                            .record(gap_hours);
                         false
                     } else {
                         // Distance is reasonable for the time gap and last known speed
@@ -391,11 +402,21 @@ pub(crate) async fn process_state_transition(
                     }
 
                     metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
+                    if let Some(dist_km) = coalesce_distance_km {
+                        metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
+                            .record(dist_km);
+                    }
                     return Ok(fix);
                 } else if gap_hours >= 18.0 {
                     // Too long - create new flight
                     metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
                         .increment(1);
+                    metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                        .record(gap_hours);
+                    if let Some(dist_km) = coalesce_distance_km {
+                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
+                            .record(dist_km);
+                    }
                     // Fall through to create new flight
                 }
                 // If callsign mismatch and shouldn't coalesce, fall through to create new flight
@@ -440,7 +461,7 @@ pub(crate) async fn process_state_transition(
                             );
                         }
                     } else {
-                        metrics::counter!("flight_tracker.flight_created.mid_flight_total")
+                        metrics::counter!("flight_tracker.flight_created.airborne_total")
                             .increment(1);
                     }
                 }

@@ -228,6 +228,51 @@ impl CoverageRepository {
         features
     }
 
+    /// Get the set of (date, resolution) pairs that already have coverage data
+    /// Used to skip re-aggregating data that's already been computed
+    pub async fn get_existing_coverage_dimensions(
+        &self,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+        resolutions: &[i16],
+    ) -> Result<std::collections::HashSet<(NaiveDate, i16)>> {
+        let pool = self.pool.clone();
+        let resolutions = resolutions.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            #[derive(QueryableByName)]
+            struct ExistingDimension {
+                #[diesel(sql_type = sql_types::Date)]
+                date: NaiveDate,
+                #[diesel(sql_type = sql_types::SmallInt)]
+                resolution: i16,
+            }
+
+            let results: Vec<ExistingDimension> = diesel::sql_query(
+                r#"
+                SELECT DISTINCT date, resolution
+                FROM receiver_coverage_h3
+                WHERE date >= $1 AND date <= $2
+                  AND resolution = ANY($3)
+                "#,
+            )
+            .bind::<sql_types::Date, _>(start_date)
+            .bind::<sql_types::Date, _>(end_date)
+            .bind::<sql_types::Array<sql_types::SmallInt>, _>(resolutions)
+            .load(&mut conn)?;
+
+            let existing: std::collections::HashSet<(NaiveDate, i16)> = results
+                .into_iter()
+                .map(|r| (r.date, r.resolution))
+                .collect();
+
+            Ok(existing)
+        })
+        .await?
+    }
+
     /// Upsert coverage data in batches (used by aggregation command)
     pub async fn upsert_coverage_batch(
         &self,
