@@ -217,6 +217,8 @@ export interface FixWithExtras extends Fix {
 	model?: string; // Aircraft model (joined, not in Rust Fix)
 	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
+	aprsType?: string; // APRS message type (from sourceMetadata, used in WebSocket)
+	via?: string[]; // APRS via path (from sourceMetadata, used in WebSocket)
 }
 
 // User authentication and profile (now includes pilot fields)
