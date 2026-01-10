@@ -77,7 +77,7 @@ tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "fs", "sync
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
-ts-rs = { version = "10.0", features = ["chrono-impl", "uuid-impl", "serde-json-impl"] }
+ts-rs = { version = "11.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl", "format"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.19", features = ["v4", "v7", "serde"] }

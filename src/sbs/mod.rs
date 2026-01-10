@@ -1,6 +1,8 @@
 pub mod client;
+pub mod parser;
 
 pub use client::{SbsClient, SbsClientConfig};
+pub use parser::{SbsMessage, SbsMessageType, parse_sbs_message};
 
 use anyhow::Result;
 

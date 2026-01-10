@@ -26,6 +26,7 @@ use uuid::Uuid;
 // Queue size constants
 const NATS_INTAKE_QUEUE_SIZE: usize = 1000;
 const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
+const SBS_INTAKE_QUEUE_SIZE: usize = 1000;
 const AIRCRAFT_QUEUE_SIZE: usize = 1000;
 const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
 const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
@@ -274,6 +275,167 @@ fn extract_icao_from_message(message: &rs1090::prelude::Message) -> Result<u32> 
         debug!("No icao24 field in message, using CRC: {}", message.crc);
         Ok(message.crc)
     }
+}
+
+/// Process a received SBS (BaseStation) message
+/// The message format is: 8-byte timestamp (big-endian i64 microseconds) + UTF-8 CSV line
+/// SBS format is text-based CSV, unlike Beast which is binary.
+// Note: Intentionally NOT using #[tracing::instrument] here - it causes trace accumulation
+async fn process_sbs_message(
+    message_bytes: &[u8],
+    aircraft_repo: &AircraftRepository,
+    fix_processor: &FixProcessor,
+) {
+    let start_time = std::time::Instant::now();
+
+    // Track that we're processing a message
+    metrics::counter!("sbs.run.process_sbs_message.called_total").increment(1);
+
+    // Validate minimum message length (8-byte SOAR timestamp + at least some CSV content)
+    // Minimum SBS CSV: "MSG,1,,,A,,,,,," = 11 chars, so at least 8 + 11 = 19 bytes
+    if message_bytes.len() < 19 {
+        warn!(
+            "Invalid SBS message: too short ({} bytes, expected at least 19)",
+            message_bytes.len()
+        );
+        metrics::counter!("sbs.run.invalid_message_total").increment(1);
+        return;
+    }
+
+    // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
+    let timestamp_bytes: [u8; 8] = message_bytes[0..8].try_into().unwrap();
+    let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
+    let received_at =
+        DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(chrono::Utc::now);
+
+    // Calculate and record lag (difference between now and packet timestamp)
+    let now = chrono::Utc::now();
+    let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
+    metrics::gauge!("sbs.run.nats.lag_seconds").set(lag_seconds);
+
+    // Extract CSV line (remaining bytes as UTF-8)
+    let csv_bytes = &message_bytes[8..];
+    let csv_line = match std::str::from_utf8(csv_bytes) {
+        Ok(line) => line.trim(),
+        Err(e) => {
+            debug!("Failed to decode SBS message as UTF-8: {}", e);
+            metrics::counter!("sbs.run.decode.utf8_failed_total").increment(1);
+            return;
+        }
+    };
+
+    // Parse the SBS CSV message
+    let sbs_msg = match soar::sbs::parse_sbs_message(csv_line) {
+        Ok(msg) => {
+            metrics::counter!("sbs.run.decode.success_total").increment(1);
+            msg
+        }
+        Err(e) => {
+            debug!("Failed to parse SBS message '{}': {}", csv_line, e);
+            metrics::counter!("sbs.run.decode.failed_total").increment(1);
+            return;
+        }
+    };
+
+    // Extract ICAO address from the aircraft_id field (hex string)
+    let icao_address = match sbs_msg.icao_address() {
+        Some(icao) => icao,
+        None => {
+            debug!(
+                "Failed to parse ICAO address from SBS aircraft_id: '{}'",
+                sbs_msg.aircraft_id
+            );
+            metrics::counter!("sbs.run.icao_extraction_failed_total").increment(1);
+            return;
+        }
+    };
+
+    // Get or create aircraft by ICAO address
+    let aircraft = match aircraft_repo
+        .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
+        .await
+    {
+        Ok(aircraft) => aircraft,
+        Err(e) => {
+            warn!(
+                "Failed to get/create aircraft for ICAO {:06X}: {}",
+                icao_address, e
+            );
+            metrics::counter!("sbs.run.aircraft_lookup_failed_total").increment(1);
+            return;
+        }
+    };
+
+    // Only create a Fix if the message contains position data
+    // SBS MSG,3 (airborne position) contains lat/lon
+    if !sbs_msg.has_position() {
+        debug!(
+            "SBS message type {:?} does not contain position data",
+            sbs_msg.message_type
+        );
+        metrics::counter!("sbs.run.no_position_total").increment(1);
+        // Record processing latency even for non-position messages
+        let elapsed_ms = start_time.elapsed().as_millis() as f64;
+        metrics::histogram!("sbs.run.message_processing_latency_ms").record(elapsed_ms);
+        return;
+    }
+
+    // Determine if aircraft is active (ground speed >= 20 knots)
+    let is_active = sbs_msg.ground_speed.is_none_or(|speed| speed >= 20.0);
+
+    // Build source metadata for SBS-specific fields
+    let source_metadata = serde_json::json!({
+        "sbs_message_type": sbs_msg.message_type as u8,
+        "on_ground": sbs_msg.on_ground,
+        "alert": sbs_msg.alert,
+        "emergency": sbs_msg.emergency,
+        "spi": sbs_msg.spi,
+    });
+
+    // Generate a synthetic receiver ID for SBS sources
+    // This uses a deterministic UUID based on the SBS server identifier
+    let sbs_receiver_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, b"sbs-receiver-default");
+
+    // Build Fix from SBS message
+    let fix = soar::Fix {
+        id: Uuid::now_v7(),
+        source: format!("{:06X}", icao_address),
+        timestamp: received_at,
+        latitude: sbs_msg.latitude.unwrap(), // Safe: has_position() checks this
+        longitude: sbs_msg.longitude.unwrap(),
+        altitude_msl_feet: sbs_msg.altitude, // feet
+        altitude_agl_feet: None,             // Will be calculated later
+        flight_number: sbs_msg.callsign,
+        squawk: sbs_msg.squawk,
+        ground_speed_knots: sbs_msg.ground_speed,
+        track_degrees: sbs_msg.track,
+        climb_fpm: sbs_msg.vertical_rate,
+        turn_rate_rot: None, // SBS doesn't provide turn rate
+        source_metadata: Some(source_metadata),
+        flight_id: None, // Will be assigned by flight tracker
+        aircraft_id: aircraft.id,
+        received_at,
+        is_active,
+        receiver_id: sbs_receiver_id,
+        raw_message_id: Uuid::now_v7(), // Generate a unique ID for tracking
+        altitude_agl_valid: false,      // Will be calculated later
+        time_gap_seconds: None,         // Will be set by flight tracker
+    };
+
+    // Process the fix through FixProcessor
+    match fix_processor.process_fix(fix).await {
+        Ok(_) => {
+            metrics::counter!("sbs.run.fixes_processed_total").increment(1);
+        }
+        Err(e) => {
+            warn!("Failed to process SBS fix: {}", e);
+            metrics::counter!("sbs.run.fix_processing_failed_total").increment(1);
+        }
+    }
+
+    // Record processing latency
+    let elapsed_ms = start_time.elapsed().as_millis() as f64;
+    metrics::histogram!("sbs.run.message_processing_latency_ms").record(elapsed_ms);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -577,6 +739,21 @@ pub async fn handle_run(
         None
     };
 
+    // SBS intake queue: buffers raw SBS CSV messages from socket server
+    // SBS uses text-based CSV format (not binary like Beast)
+    // Only create if ADS-B is enabled (SBS is an alternative ADS-B source)
+    let sbs_intake_opt = if !no_adsb {
+        let (tx, rx) = flume::bounded::<Vec<u8>>(SBS_INTAKE_QUEUE_SIZE);
+        info!(
+            "Created SBS intake queue with capacity {}",
+            SBS_INTAKE_QUEUE_SIZE
+        );
+        Some((tx, rx))
+    } else {
+        info!("ADS-B consumer disabled, skipping SBS intake queue creation");
+        None
+    };
+
     // Create Unix socket server for receiving messages from ingesters
     let socket_path = soar::socket_path();
     let socket_server = soar::socket_server::SocketServer::start(&socket_path)
@@ -602,6 +779,7 @@ pub async fn handle_run(
     // Spawn envelope router task
     let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let sbs_intake_tx_for_router = sbs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
     tokio::spawn(async move {
         info!("Envelope router task started");
@@ -637,17 +815,32 @@ pub async fn handle_run(
                         }
                     }
                 }
-                soar::protocol::IngestSource::Beast | soar::protocol::IngestSource::Sbs => {
+                soar::protocol::IngestSource::Beast => {
                     if let Some(beast_tx) = &beast_intake_tx_for_router {
-                        // Beast/SBS messages are already binary (timestamp + data)
+                        // Beast messages are binary (timestamp + Beast frame)
                         if beast_tx.is_full() {
                             metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").increment(1);
                         }
                         if let Err(e) = beast_tx.send_async(envelope.data).await {
-                            error!("Failed to send Beast/SBS message to intake queue: {}", e);
+                            error!("Failed to send Beast message to intake queue: {}", e);
                             metrics::counter!("socket.router.beast_send_error_total").increment(1);
                         } else {
                             metrics::counter!("socket.router.beast_routed_total").increment(1);
+                        }
+                    }
+                }
+                soar::protocol::IngestSource::Sbs => {
+                    if let Some(sbs_tx) = &sbs_intake_tx_for_router {
+                        // SBS messages are text CSV (timestamp + CSV line bytes)
+                        if sbs_tx.is_full() {
+                            metrics::counter!("queue.send_blocked_total", "queue" => "sbs_intake")
+                                .increment(1);
+                        }
+                        if let Err(e) = sbs_tx.send_async(envelope.data).await {
+                            error!("Failed to send SBS message to intake queue: {}", e);
+                            metrics::counter!("socket.router.sbs_send_error_total").increment(1);
+                        } else {
+                            metrics::counter!("socket.router.sbs_routed_total").increment(1);
                         }
                     }
                 }
@@ -701,8 +894,7 @@ pub async fn handle_run(
     }
 
     // Spawn Beast intake queue workers (only if ADS-B is enabled)
-    // Multiple workers for parallel processing of Beast and SBS messages
-    // Both Beast and SBS formats are routed to this same intake queue (see envelope router)
+    // Multiple workers for parallel processing of Beast (binary) messages
     // Beast message processing involves database operations (aircraft lookup, raw message storage)
     // and CPR decoding, so we need multiple workers to handle high traffic volumes.
     // Using 200 workers: ADS-B traffic is ~30,000 msg/sec vs OGN's ~300 msg/sec (100x more)
@@ -749,6 +941,42 @@ pub async fn handle_run(
             });
         }
         info!("Spawned {} Beast intake queue workers", num_beast_workers);
+    }
+
+    // Spawn SBS intake queue workers (only if ADS-B is enabled)
+    // SBS (BaseStation) messages are text-based CSV, processed separately from Beast binary
+    // SBS typically has lower traffic than Beast, so fewer workers are needed
+    // Using 50 workers should be sufficient for most SBS data sources
+    if let (Some((sbs_aircraft_repo, _, _, _)), Some((_, sbs_intake_rx))) =
+        (beast_infrastructure.as_ref(), sbs_intake_opt.as_ref())
+    {
+        let num_sbs_workers = 50;
+        info!("Spawning {} SBS intake queue workers", num_sbs_workers);
+
+        for worker_id in 0..num_sbs_workers {
+            let sbs_aircraft_repo = sbs_aircraft_repo.clone();
+            let sbs_fix_processor = fix_processor.clone();
+            let sbs_intake_rx = sbs_intake_rx.clone();
+
+            tokio::spawn(async move {
+                while let Ok(message_bytes) = sbs_intake_rx.recv_async().await {
+                    // Note: No tracing spans here - they cause trace accumulation in Tempo
+                    let start_time = std::time::Instant::now();
+                    process_sbs_message(&message_bytes, &sbs_aircraft_repo, &sbs_fix_processor)
+                        .await;
+
+                    let duration = start_time.elapsed();
+                    metrics::histogram!("sbs.run.process_message_duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("sbs.run.intake.processed_total").increment(1);
+
+                    // Update SBS intake queue depth metric (sample from each worker)
+                    metrics::gauge!("sbs.intake_queue.depth").set(sbs_intake_rx.len() as f64);
+                }
+                info!("SBS intake queue worker {} stopped", worker_id);
+            });
+        }
+        info!("Spawned {} SBS intake queue workers", num_sbs_workers);
     }
 
     // Spawn dedicated worker pools for each processor type

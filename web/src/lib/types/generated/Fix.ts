@@ -14,8 +14,6 @@ export type Fix = {
 	 * APRS packet header information
 	 */
 	source: string;
-	aprsType: string;
-	via: Array<string | null>;
 	/**
 	 * Timestamp when this fix was received/parsed
 	 */
@@ -41,7 +39,7 @@ export type Fix = {
 	turnRateRot: number | null;
 	/**
 	 * Protocol-specific metadata stored as JSONB
-	 * For APRS: snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
+	 * For APRS: via, aprs_type, snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
 	 * For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
 	 */
 	sourceMetadata: JsonValue | null;
