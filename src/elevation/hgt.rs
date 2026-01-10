@@ -38,17 +38,27 @@ impl HGT {
     }
 
     /// Load HGT tile from gzipped file
+    ///
+    /// The decompression is performed in a blocking thread via `spawn_blocking`
+    /// to avoid blocking the async runtime, as GzDecoder uses synchronous I/O.
     pub async fn from_file(path: &Path, sw_lat_lng: (f64, f64)) -> Result<Self> {
         let compressed = fs::read(path)
             .await
             .with_context(|| format!("Failed to read HGT file: {:?}", path))?;
 
-        // Decompress
-        let mut decoder = GzDecoder::new(&compressed[..]);
-        let mut buffer = Vec::new();
-        decoder
-            .read_to_end(&mut buffer)
-            .context("Failed to decompress HGT file")?;
+        // Decompress in a blocking thread to avoid blocking the tokio runtime
+        // GzDecoder's read_to_end is synchronous and can take significant time
+        // for large tiles (~2.8MB decompressed for 3-arcsecond tiles)
+        let buffer = tokio::task::spawn_blocking(move || {
+            let mut decoder = GzDecoder::new(&compressed[..]);
+            let mut buffer = Vec::new();
+            decoder
+                .read_to_end(&mut buffer)
+                .context("Failed to decompress HGT file")?;
+            Ok::<_, anyhow::Error>(buffer)
+        })
+        .await
+        .context("Decompression task panicked")??;
 
         Self::new(buffer, sw_lat_lng)
     }

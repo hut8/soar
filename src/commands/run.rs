@@ -910,13 +910,13 @@ pub async fn handle_run(
             }
 
             // Internal router queue: 50% threshold
-            const INTERNAL_QUEUE_SIZE: usize = 1_000;
-            if internal_queue_depth > queue_warning_threshold(INTERNAL_QUEUE_SIZE) {
+            use soar::packet_processors::router::INTERNAL_QUEUE_CAPACITY;
+            if internal_queue_depth > queue_warning_threshold(INTERNAL_QUEUE_CAPACITY) {
                 let percent =
-                    (internal_queue_depth as f64 / INTERNAL_QUEUE_SIZE as f64 * 100.0) as usize;
+                    (internal_queue_depth as f64 / INTERNAL_QUEUE_CAPACITY as f64 * 100.0) as usize;
                 warn!(
                     "PacketRouter internal queue building up: {}/{} messages ({}% full)",
-                    internal_queue_depth, INTERNAL_QUEUE_SIZE, percent
+                    internal_queue_depth, INTERNAL_QUEUE_CAPACITY, percent
                 );
             }
 

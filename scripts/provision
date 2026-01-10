@@ -454,6 +454,7 @@ sudo systemctl daemon-reload
 echo -e "${BLUE}Configuring Prometheus...${NC}"
 sudo mkdir -p /etc/prometheus/jobs
 sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
+sudo cp infrastructure/prometheus-defaults /etc/default/prometheus
 
 # Set Prometheus ownership
 sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
