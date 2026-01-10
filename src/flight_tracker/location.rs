@@ -279,7 +279,7 @@ pub(crate) async fn create_start_end_location(
         }
         Err(e) => {
             metrics::counter!("flight_tracker.location.pelias.failure_total").increment(1);
-            info!(
+            debug!(
                 "Pelias reverse geocoding returned no result for {} location at ({}, {}): {:?}",
                 context, latitude, longitude, e
             );

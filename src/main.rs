@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 mod commands;
+mod log_format;
 mod migration_email_reporter;
 mod telemetry;
 
@@ -807,8 +808,10 @@ async fn main() -> Result<()> {
 
     let registry = tracing_subscriber::registry();
 
-    let fmt_layer =
-        filter::Filtered::new(tracing_subscriber::fmt::layer().without_time(), fmt_filter);
+    let fmt_layer = filter::Filtered::new(
+        tracing_subscriber::fmt::layer().event_format(log_format::TargetFirstFormat),
+        fmt_filter,
+    );
 
     match &cli.command {
         Commands::Run {
