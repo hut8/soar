@@ -11,3 +11,6 @@ bun.lockb
 # Test artifacts (created by Docker with root ownership)
 /playwright-report/
 /test-results/
+
+# Auto-generated TypeScript types from ts-rs (Rust build)
+/src/lib/types/generated/
