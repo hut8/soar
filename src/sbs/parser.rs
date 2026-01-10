@@ -271,8 +271,9 @@ mod tests {
 
     #[test]
     fn test_parse_msg_6_squawk() {
-        let line =
-            "MSG,6,1,1,738065,1,2008/11/28,23:48:18.611,2008/11/28,23:53:19.161,,,,,,,7541,0,0,0,0";
+        // SBS format: positions 10-16 are callsign,altitude,groundspeed,track,lat,lon,verticalrate
+        // Position 17 is squawk, so we need 7 empty fields after timestamp before squawk
+        let line = "MSG,6,1,1,738065,1,2008/11/28,23:48:18.611,2008/11/28,23:53:19.161,,,,,,,,7541,0,0,0,0";
         let msg = parse_sbs_message(line).unwrap();
 
         assert_eq!(msg.message_type, SbsMessageType::SurveillanceId);
