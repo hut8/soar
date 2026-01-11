@@ -915,6 +915,11 @@
 
 			airportMarkers.push(marker);
 		});
+
+		// Update runway overlays if they should be shown (runways come from airport data)
+		if (shouldShowRunways) {
+			displayRunwaysFromAirports();
+		}
 	}
 
 	function clearAirportMarkers(): void {
@@ -1242,34 +1247,11 @@
 		}, 500);
 	}
 
-	// Runway overlay functions
-	async function fetchRunwaysInViewport(): Promise<void> {
-		if (!map) return;
-
-		const bounds = map.getBounds();
-		if (!bounds) return;
-
-		const ne = bounds.getNorthEast();
-		const sw = bounds.getSouthWest();
-
-		try {
-			const response = await serverCall<DataResponse<Runway[]>>('/runways', {
-				params: {
-					west: sw.lng().toString(),
-					south: sw.lat().toString(),
-					east: ne.lng().toString(),
-					north: ne.lat().toString(),
-					limit: '500'
-				}
-			});
-			const runways = response.data;
-
-			if (Array.isArray(runways)) {
-				displayRunwaysOnMap(runways);
-			}
-		} catch (error) {
-			console.error('Error fetching runways:', error);
-		}
+	// Runway overlay functions - runways are extracted from airport data
+	function displayRunwaysFromAirports(): void {
+		// Extract all runways from the loaded airports
+		const allRunways: Runway[] = airports.flatMap((airport) => airport.runways || []);
+		displayRunwaysOnMap(allRunways);
 	}
 
 	function displayRunwaysOnMap(runways: Runway[]): void {
@@ -1370,13 +1352,13 @@
 				shouldShowRunways = shouldShow;
 
 				if (shouldShowRunways) {
-					fetchRunwaysInViewport();
+					displayRunwaysFromAirports();
 				} else {
 					clearRunwayOverlays();
 				}
 			} else if (shouldShowRunways) {
 				// Still showing runways, update them for the new viewport
-				fetchRunwaysInViewport();
+				displayRunwaysFromAirports();
 			}
 
 			runwayUpdateDebounceTimer = null;

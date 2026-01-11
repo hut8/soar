@@ -90,26 +90,6 @@ export interface ComboboxData {
 	club: ClubWithSoaring;
 }
 
-export interface RunwayEnd {
-	ident: string | null;
-	latitudeDeg: number | null;
-	longitudeDeg: number | null;
-	elevationFt: number | null;
-	headingDegt: number | null;
-	displacedThresholdFt: number | null;
-}
-
-export interface Runway {
-	id: number;
-	lengthFt: number | null;
-	widthFt: number | null;
-	surface: string | null;
-	lighted: boolean;
-	closed: boolean;
-	low: RunwayEnd;
-	high: RunwayEnd;
-}
-
 export interface Airport {
 	id: number;
 	ident: string;
