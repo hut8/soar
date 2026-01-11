@@ -1253,15 +1253,15 @@
 		const sw = bounds.getSouthWest();
 
 		try {
-			const params = new URLSearchParams({
-				west: sw.lng().toString(),
-				south: sw.lat().toString(),
-				east: ne.lng().toString(),
-				north: ne.lat().toString(),
-				limit: '500'
+			const response = await serverCall<DataResponse<Runway[]>>('/runways', {
+				params: {
+					west: sw.lng().toString(),
+					south: sw.lat().toString(),
+					east: ne.lng().toString(),
+					north: ne.lat().toString(),
+					limit: '500'
+				}
 			});
-
-			const response = await serverCall<DataResponse<Runway[]>>(`/runways?${params}`);
 			const runways = response.data;
 
 			if (Array.isArray(runways)) {
