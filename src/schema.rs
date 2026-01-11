@@ -41,13 +41,9 @@ pub mod sql_types {
     #[diesel(postgres_type(name = "engine_type"))]
     pub struct EngineType;
 
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "geography"))]
-    pub struct Geography;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "geometry"))]
-    pub struct Geometry;
+    // Use postgis_diesel types instead of generating our own
+    pub type Geography = postgis_diesel::sql_types::Geography;
+    pub type Geometry = postgis_diesel::sql_types::Geometry;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "light_sport_type"))]
@@ -72,6 +68,7 @@ pub mod sql_types {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
@@ -123,6 +120,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_analytics (aircraft_id) {
         aircraft_id -> Uuid,
         registration -> Nullable<Varchar>,
@@ -139,6 +139,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_approved_operations (id) {
         id -> Uuid,
         #[max_length = 6]
@@ -149,6 +152,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_models (manufacturer_code, model_code, series_code) {
         manufacturer_code -> Text,
         model_code -> Text,
@@ -171,6 +177,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_other_names (registration_number, seq) {
         #[max_length = 7]
         registration_number -> Varchar,
@@ -181,6 +190,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::AirworthinessClass;
     use super::sql_types::RegistrantType;
     use super::sql_types::LightSportType;
@@ -232,6 +242,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_types (icao_code) {
         icao_code -> Text,
         iata_code -> Nullable<Text>,
@@ -242,6 +255,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     airport_analytics_daily (airport_id, date) {
         airport_id -> Int4,
         date -> Date,
@@ -255,6 +271,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Geography;
 
     airports (id) {
@@ -297,6 +314,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     airspace_sync_log (id) {
         id -> Uuid,
         started_at -> Timestamptz,
@@ -313,6 +333,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::AirspaceClass;
     use super::sql_types::AirspaceType;
     use super::sql_types::AltitudeReference;
@@ -344,6 +365,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     club_analytics_daily (club_id, date) {
         club_id -> Uuid,
         date -> Date,
@@ -357,6 +381,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     club_tow_fees (id) {
         id -> Uuid,
         club_id -> Uuid,
@@ -369,6 +396,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     clubs (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -382,6 +412,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     countries (code) {
         #[max_length = 2]
         code -> Bpchar,
@@ -391,6 +424,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
@@ -426,6 +460,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     flight_analytics_daily (date) {
         date -> Date,
         flight_count -> Int4,
@@ -439,6 +476,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     flight_analytics_hourly (hour) {
         hour -> Timestamptz,
         flight_count -> Int4,
@@ -449,6 +489,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     flight_duration_buckets (bucket_name) {
         #[max_length = 20]
         bucket_name -> Varchar,
@@ -461,6 +504,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     flight_pilots (id) {
         id -> Uuid,
         flight_id -> Uuid,
@@ -475,6 +521,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::AddressType;
     use super::sql_types::TimeoutPhase;
 
@@ -520,6 +567,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Point;
 
     locations (id) {
@@ -538,6 +586,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
     raw_messages (id, received_at) {
@@ -552,6 +601,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     receiver_coverage_h3 (h3_index, resolution, receiver_id, date) {
         h3_index -> Int8,
         resolution -> Int2,
@@ -568,6 +620,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     receiver_statuses (id) {
         id -> Uuid,
         received_at -> Timestamptz,
@@ -605,6 +660,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Geography;
 
     receivers (id) {
@@ -631,6 +687,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     receivers_links (id) {
         id -> Int4,
         rel -> Nullable<Text>,
@@ -641,6 +700,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     receivers_photos (id) {
         id -> Int4,
         photo_url -> Text,
@@ -650,6 +712,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     regions (code) {
         #[max_length = 1]
         code -> Bpchar,
@@ -659,6 +724,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Geometry;
 
     runways (id) {
@@ -691,6 +757,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     server_messages (id) {
         id -> Uuid,
         software -> Text,
@@ -705,6 +774,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     spatial_ref_sys (srid) {
         srid -> Int4,
         #[max_length = 256]
@@ -718,6 +790,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     states (code) {
         #[max_length = 2]
         code -> Bpchar,
@@ -726,6 +801,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     status_codes (code) {
         code -> Text,
         description -> Text,
@@ -733,6 +811,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     type_aircraft (code) {
         #[max_length = 1]
         code -> Bpchar,
@@ -741,6 +822,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     type_engines (code) {
         code -> Int2,
         description -> Text,
@@ -748,6 +832,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     type_registrations (code) {
         #[max_length = 1]
         code -> Bpchar,
@@ -757,6 +844,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Geometry;
     use super::sql_types::Geography;
 
@@ -774,6 +862,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     users (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -805,6 +896,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     watchlist (user_id, aircraft_id) {
         user_id -> Uuid,
         aircraft_id -> Uuid,

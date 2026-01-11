@@ -2,14 +2,14 @@ use anyhow::Result;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use diesel::PgConnection;
-use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use diesel::sql_types::{Bool, Double};
 use diesel::upsert::excluded;
 use num_traits::{FromPrimitive, ToPrimitive};
+use postgis_diesel::functions::st_intersects;
 use tracing::info;
 
+use crate::postgis_functions::st_make_envelope;
 use crate::runways::Runway;
 use crate::schema::runways;
 
@@ -341,9 +341,6 @@ impl RunwaysRepository {
     ///
     /// Uses PostGIS ST_Intersects and ST_MakeEnvelope on the generated geometry
     /// columns (le_location_geom, he_location_geom) with GIST indexes.
-    ///
-    /// Note: Uses raw SQL with bind parameters because the schema-generated
-    /// Geometry type doesn't implement postgis_diesel's GeoType trait.
     pub async fn get_runways_in_bbox(
         &self,
         west: f64,
@@ -360,109 +357,30 @@ impl RunwaysRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Spatial filter using bind parameters for safety
-            // Checks if either runway endpoint intersects the bounding box
-            let spatial_filter = sql::<Bool>(
-                "(le_location_geom IS NOT NULL AND ST_Intersects(le_location_geom, ST_MakeEnvelope(",
-            )
-            .bind::<Double, _>(west)
-            .sql(", ")
-            .bind::<Double, _>(south)
-            .sql(", ")
-            .bind::<Double, _>(east)
-            .sql(", ")
-            .bind::<Double, _>(north)
-            .sql(", 4326))) OR (he_location_geom IS NOT NULL AND ST_Intersects(he_location_geom, ST_MakeEnvelope(")
-            .bind::<Double, _>(west)
-            .sql(", ")
-            .bind::<Double, _>(south)
-            .sql(", ")
-            .bind::<Double, _>(east)
-            .sql(", ")
-            .bind::<Double, _>(north)
-            .sql(", 4326)))");
+            // Create envelope for the bounding box
+            let envelope = st_make_envelope(west, south, east, north, 4326);
 
-            // Select only the columns we need (excludes geometry columns)
-            let results = runways::table
-                .select((
-                    dsl::id,
-                    dsl::airport_ref,
-                    dsl::airport_ident,
-                    dsl::length_ft,
-                    dsl::width_ft,
-                    dsl::surface,
-                    dsl::lighted,
-                    dsl::closed,
-                    dsl::le_ident,
-                    dsl::le_latitude_deg,
-                    dsl::le_longitude_deg,
-                    dsl::le_elevation_ft,
-                    dsl::le_heading_degt,
-                    dsl::le_displaced_threshold_ft,
-                    dsl::he_ident,
-                    dsl::he_latitude_deg,
-                    dsl::he_longitude_deg,
-                    dsl::he_elevation_ft,
-                    dsl::he_heading_degt,
-                    dsl::he_displaced_threshold_ft,
-                ))
-                .filter(spatial_filter)
+            // Check if either endpoint intersects the bounding box
+            let le_hits = dsl::le_location_geom.is_not_null().and(st_intersects(
+                dsl::le_location_geom.assume_not_null(),
+                envelope.assume_not_null(),
+            ));
+            let he_hits = dsl::he_location_geom.is_not_null().and(st_intersects(
+                dsl::he_location_geom.assume_not_null(),
+                envelope.assume_not_null(),
+            ));
+
+            let runway_models: Vec<RunwayModel> = runways::table
+                .filter(le_hits.or(he_hits))
                 .limit(limit_val)
-                .load::<(
-                    i32,
-                    i32,
-                    String,
-                    Option<i32>,
-                    Option<i32>,
-                    Option<String>,
-                    bool,
-                    bool,
-                    Option<String>,
-                    Option<BigDecimal>,
-                    Option<BigDecimal>,
-                    Option<i32>,
-                    Option<BigDecimal>,
-                    Option<i32>,
-                    Option<String>,
-                    Option<BigDecimal>,
-                    Option<BigDecimal>,
-                    Option<i32>,
-                    Option<BigDecimal>,
-                    Option<i32>,
-                )>(&mut conn)?;
+                .select(RunwayModel::as_select())
+                .load::<RunwayModel>(&mut conn)?;
 
-            Ok::<_, anyhow::Error>(results)
+            Ok::<_, anyhow::Error>(runway_models)
         })
         .await??;
 
-        // Convert tuples to Runway structs
-        let runways = result
-            .into_iter()
-            .map(|r| Runway {
-                id: r.0,
-                airport_ref: r.1,
-                airport_ident: r.2,
-                length_ft: r.3,
-                width_ft: r.4,
-                surface: r.5,
-                lighted: r.6,
-                closed: r.7,
-                le_ident: r.8,
-                le_latitude_deg: bigdecimal_to_f64(r.9),
-                le_longitude_deg: bigdecimal_to_f64(r.10),
-                le_elevation_ft: r.11,
-                le_heading_degt: bigdecimal_to_f64(r.12),
-                le_displaced_threshold_ft: r.13,
-                he_ident: r.14,
-                he_latitude_deg: bigdecimal_to_f64(r.15),
-                he_longitude_deg: bigdecimal_to_f64(r.16),
-                he_elevation_ft: r.17,
-                he_heading_degt: bigdecimal_to_f64(r.18),
-                he_displaced_threshold_ft: r.19,
-            })
-            .collect();
-
-        Ok(runways)
+        Ok(result.into_iter().map(Runway::from).collect())
     }
 
     /// Find nearest runway endpoints to a given point using PostGIS spatial functions
