@@ -5,7 +5,7 @@ use diesel::PgConnection;
 use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use diesel::sql_types::Bool;
+use diesel::sql_types::{Bool, Double};
 use diesel::upsert::excluded;
 use num_traits::{FromPrimitive, ToPrimitive};
 use tracing::info;
@@ -339,8 +339,11 @@ impl RunwaysRepository {
     /// Get runways within a bounding box using PostGIS spatial functions.
     /// Returns runways where either endpoint is within the bounding box.
     ///
-    /// Uses Diesel's query builder with an embedded SQL filter for PostGIS spatial
-    /// operations on the generated geometry columns (le_location_geom, he_location_geom).
+    /// Uses PostGIS ST_Intersects and ST_MakeEnvelope on the generated geometry
+    /// columns (le_location_geom, he_location_geom) with GIST indexes.
+    ///
+    /// Note: Uses raw SQL with bind parameters because the schema-generated
+    /// Geometry type doesn't implement postgis_diesel's GeoType trait.
     pub async fn get_runways_in_bbox(
         &self,
         west: f64,
@@ -357,15 +360,29 @@ impl RunwaysRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build spatial filter SQL with interpolated bbox values
-            // Uses generated geometry columns with GIST indexes for fast queries
-            let spatial_filter = format!(
-                "(le_location_geom IS NOT NULL AND ST_Intersects(le_location_geom, ST_MakeEnvelope({}, {}, {}, {}, 4326))) \
-                 OR (he_location_geom IS NOT NULL AND ST_Intersects(he_location_geom, ST_MakeEnvelope({}, {}, {}, {}, 4326)))",
-                west, south, east, north, west, south, east, north
-            );
+            // Spatial filter using bind parameters for safety
+            // Checks if either runway endpoint intersects the bounding box
+            let spatial_filter = sql::<Bool>(
+                "(le_location_geom IS NOT NULL AND ST_Intersects(le_location_geom, ST_MakeEnvelope(",
+            )
+            .bind::<Double, _>(west)
+            .sql(", ")
+            .bind::<Double, _>(south)
+            .sql(", ")
+            .bind::<Double, _>(east)
+            .sql(", ")
+            .bind::<Double, _>(north)
+            .sql(", 4326))) OR (he_location_geom IS NOT NULL AND ST_Intersects(he_location_geom, ST_MakeEnvelope(")
+            .bind::<Double, _>(west)
+            .sql(", ")
+            .bind::<Double, _>(south)
+            .sql(", ")
+            .bind::<Double, _>(east)
+            .sql(", ")
+            .bind::<Double, _>(north)
+            .sql(", 4326)))");
 
-            // Select only the columns we need (excludes le_location/he_location geography columns)
+            // Select only the columns we need (excludes geometry columns)
             let results = runways::table
                 .select((
                     dsl::id,
@@ -389,7 +406,7 @@ impl RunwaysRepository {
                     dsl::he_heading_degt,
                     dsl::he_displaced_threshold_ft,
                 ))
-                .filter(sql::<Bool>(&spatial_filter))
+                .filter(spatial_filter)
                 .limit(limit_val)
                 .load::<(
                     i32,

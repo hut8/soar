@@ -659,7 +659,7 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::Geography;
+    use super::sql_types::Geometry;
 
     runways (id) {
         id -> Int4,
@@ -674,19 +674,19 @@ diesel::table! {
         le_ident -> Nullable<Text>,
         le_latitude_deg -> Nullable<Numeric>,
         le_longitude_deg -> Nullable<Numeric>,
-        le_location -> Nullable<Geography>,
         le_elevation_ft -> Nullable<Int4>,
         le_heading_degt -> Nullable<Numeric>,
         le_displaced_threshold_ft -> Nullable<Int4>,
         he_ident -> Nullable<Text>,
         he_latitude_deg -> Nullable<Numeric>,
         he_longitude_deg -> Nullable<Numeric>,
-        he_location -> Nullable<Geography>,
         he_elevation_ft -> Nullable<Int4>,
         he_heading_degt -> Nullable<Numeric>,
         he_displaced_threshold_ft -> Nullable<Int4>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        le_location_geom -> Nullable<Geometry>,
+        he_location_geom -> Nullable<Geometry>,
     }
 }
 
