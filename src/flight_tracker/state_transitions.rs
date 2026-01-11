@@ -430,7 +430,7 @@ pub(crate) async fn process_state_transition(
                     }
                     // Fall through to create new flight
                 }
-                // If position_reasonable is false, metrics already recorded in that check
+                // If position_reasonable is false, metrics are already recorded in the position_reasonable validation above
             } else {
                 // No timed-out flight to consider coalescing with
                 metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
