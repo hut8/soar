@@ -506,7 +506,6 @@ pub async fn handle_run(
     let elevation_path =
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/lib/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
-    info!("Elevation processing mode: synchronous (inline)");
 
     info!(
         "Environment: {}",

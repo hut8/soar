@@ -340,10 +340,8 @@ pub(crate) async fn process_state_transition(
                             gap_hours,
                             absolute_max_distance_m / 1000.0
                         );
-                        metrics::counter!(
-                            "flight_tracker.coalesce.rejected.distance_impossible_total"
-                        )
-                        .increment(1);
+                        metrics::counter!("flight_tracker.coalesce.rejected.speed_distance_total")
+                            .increment(1);
                         metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
                             .record(actual_distance_m / 1000.0);
                         metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
@@ -359,8 +357,10 @@ pub(crate) async fn process_state_transition(
                             last_speed_knots,
                             min_expected_distance_m / 1000.0
                         );
-                        metrics::counter!("flight_tracker.coalesce.rejected.likely_landed_total")
-                            .increment(1);
+                        metrics::counter!(
+                            "flight_tracker.coalesce.rejected.probable_landing_total"
+                        )
+                        .increment(1);
                         metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
                             .record(actual_distance_m / 1000.0);
                         metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
@@ -418,8 +418,22 @@ pub(crate) async fn process_state_transition(
                             .record(dist_km);
                     }
                     // Fall through to create new flight
+                } else if !callsign_matches {
+                    // Callsign mismatch - create new flight
+                    metrics::counter!("flight_tracker.coalesce.rejected.callsign_total")
+                        .increment(1);
+                    metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
+                        .record(gap_hours);
+                    if let Some(dist_km) = coalesce_distance_km {
+                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
+                            .record(dist_km);
+                    }
+                    // Fall through to create new flight
                 }
-                // If callsign mismatch and shouldn't coalesce, fall through to create new flight
+                // If position_reasonable is false, metrics already recorded in that check
+            } else {
+                // No timed-out flight to consider coalescing with
+                metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
             }
 
             // Create new flight - check if takeoff or mid-flight

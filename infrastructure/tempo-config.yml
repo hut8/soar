@@ -1,0 +1,70 @@
+server:
+  http_listen_address: 127.0.0.1
+  http_listen_port: 3200
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: 9096
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 127.0.0.1:4320
+
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  trace_idle_period: 10s
+  max_block_bytes: 104857600
+  max_block_duration: 5m
+
+# Metrics generator for TraceQL metrics queries
+metrics_generator:
+  ring:
+    kvstore:
+      store: inmemory
+  processor:
+    service_graphs:
+      dimensions:
+        - service.namespace
+    span_metrics:
+      dimensions:
+        - service.namespace
+    # Enable local-blocks processor for TraceQL metrics (Grafana Traces Drilldown)
+    local_blocks:
+      filter_server_spans: false
+      flush_to_storage: true
+  storage:
+    path: /var/lib/tempo/generator/wal
+    remote_write:
+      - url: http://127.0.0.1:9090/api/v1/write
+        send_exemplars: true
+  # Required for local-blocks processor - stores trace data for metrics queries
+  traces_storage:
+    path: /var/lib/tempo/generator/traces
+
+compactor:
+  compaction:
+    block_retention: 168h  # 7 days
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/lib/tempo/blocks
+    wal:
+      path: /var/lib/tempo/wal
+
+overrides:
+  defaults:
+    ingestion:
+      rate_limit_bytes: 15000000
+      burst_size_bytes: 20000000
+    metrics_generator:
+      processors:
+        - service-graphs
+        - span-metrics
+        - local-blocks
