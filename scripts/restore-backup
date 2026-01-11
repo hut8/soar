@@ -84,7 +84,7 @@ class BackupInfo:
     @staticmethod
     def format_size(size_bytes: int) -> str:
         """Format size in human-readable format."""
-        if size_bytes == 0:
+        if size_bytes is None or size_bytes <= 0:
             return "unknown size"
         
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -509,8 +509,8 @@ Configuration:
         restore_script = args.restore_script
     else:
         # Try to find restore script in multiple locations
-        # This script is at /scripts/restore-backup
-        # The restore script is at /scripts/backup/restore
+        # This script (restore-backup) is in the scripts/ directory
+        # The restore script is at scripts/backup/restore (relative to scripts/)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
         possible_paths = [
