@@ -190,7 +190,7 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
-    /// Note: device_id and raw_message_id are required as they should be determined before Fix creation
+    /// Note: aircraft_id and raw_message_id are required as they should be determined before Fix creation
     /// receiver_id is optional (Some for APRS/OGN, None for ADS-B/Beast/SBS)
     pub fn from_aprs_packet(
         packet: AprsPacket,
