@@ -223,3 +223,116 @@ Or if using a virtual environment:
 ```bash
 python -m pip install psycopg[binary]
 ```
+
+## Backup and Restore Scripts
+
+The `backup/` directory contains scripts for database backup and restoration.
+
+### restore-backup - Interactive Backup Restoration
+
+The `restore-backup` script provides an interactive Terminal User Interface (TUI) for enumerating and restoring database backups from cloud storage (Wasabi S3).
+
+#### Features
+
+- Lists all available backups with timestamps and metadata
+- Interactive curses-based menu for backup selection
+- Displays backup size, age, and database information
+- Integrates with existing `restore` script for automatic restoration
+- Supports command-line mode for automation
+- Comprehensive error handling and user confirmations
+
+#### Usage
+
+```bash
+# Interactive TUI mode (default)
+./scripts/restore-backup
+
+# List available backups
+./scripts/restore-backup --list
+
+# Restore latest backup (with confirmation)
+./scripts/restore-backup --latest
+
+# Restore specific backup by date
+./scripts/restore-backup --date 2025-01-10
+
+# Show help
+./scripts/restore-backup --help
+```
+
+#### Interactive Mode
+
+In interactive mode, the script displays a navigable list of available backups:
+
+- **↑/↓** or **k/j**: Navigate through backups
+- **Enter**: Select a backup
+- **q** or **Esc**: Cancel and exit
+
+The latest backup is marked with a ★ symbol and displayed in green.
+
+#### Configuration
+
+The script reads configuration from `/etc/soar/backup-env`:
+
+```bash
+# Required settings
+BACKUP_RCLONE_REMOTE=wasabi
+BACKUP_RCLONE_BUCKET=soar-backup-prod
+RCLONE_CONFIG=/etc/soar/rclone.conf
+
+# Optional prefix path within bucket
+BACKUP_RCLONE_PATH=
+```
+
+#### Prerequisites
+
+- Python 3.6+ (uses standard library only)
+- rclone configured with Wasabi S3 credentials
+- `/etc/soar/backup-env` configuration file
+- `backup/restore` script in the same directory
+
+#### Security Warnings
+
+⚠️ **This is a DESTRUCTIVE operation**. The restore process will:
+
+1. Stop PostgreSQL
+2. DESTROY the current database
+3. Remove the current data directory
+4. Restore from the selected backup
+5. Replay WAL logs to the target point in time
+
+Expected downtime: 2-4 hours
+
+The script requires explicit confirmation before proceeding with restoration.
+
+#### Examples
+
+```bash
+# Interactive selection (safest)
+./scripts/restore-backup
+
+# Quick restore of latest backup
+./scripts/restore-backup --latest
+
+# Restore specific backup
+./scripts/restore-backup --date 2025-01-05
+
+# List backups with metadata
+./scripts/restore-backup --list
+
+# Use custom config file
+./scripts/restore-backup --config /path/to/backup-env
+```
+
+#### Exit Codes
+
+- `0`: Success
+- `1`: Failure
+- `2`: User cancelled
+
+### Other Backup Scripts
+
+- **backup/base-backup**: Creates full PostgreSQL base backups and uploads to Wasabi S3
+- **backup/restore**: Low-level restore script (called by restore-backup)
+- **backup/backup-verify**: Verifies backup integrity and completeness
+- **backup/wal-archive**: Archives WAL segments to cloud storage
