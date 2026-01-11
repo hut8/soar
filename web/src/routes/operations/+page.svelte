@@ -1302,7 +1302,7 @@
 
 			// Add endpoint markers (small dots at each end of runway)
 			const endpointColor = '#F59E0B'; // Amber
-			const endpointRadius = 8; // meters
+			const endpointRadius = 18; // meters
 
 			// Low end marker
 			if (runway.low.latitudeDeg !== null && runway.low.longitudeDeg !== null) {
