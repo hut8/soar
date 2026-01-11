@@ -416,7 +416,7 @@ diesel::table! {
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
-        receiver_id -> Uuid,
+        receiver_id -> Nullable<Uuid>,
         raw_message_id -> Uuid,
         altitude_agl_valid -> Bool,
         location_geom -> Nullable<Geometry>,

@@ -292,7 +292,7 @@ impl FixProcessor {
                             packet,
                             received_at,
                             aircraft_model.id,
-                            context.receiver_id,
+                            Some(context.receiver_id),
                             context.raw_message_id,
                         ) {
                             Ok(Some(fix)) => {
@@ -380,22 +380,23 @@ impl FixProcessor {
         metrics::histogram!("aprs.aircraft.flight_insert_ms")
             .record(flight_insert_start.elapsed().as_micros() as f64 / 1000.0);
 
-        // Step 2: Update receiver's latest_packet_at
-        let receiver_id = updated_fix.receiver_id;
-        let receiver_repo = self.receiver_repo.clone();
-        let receiver_span = tracing::debug_span!(parent: None, "update_receiver_timestamp", receiver_id = %receiver_id);
-        let _ = receiver_span.set_parent(opentelemetry::Context::new());
-        tokio::spawn(
-            async move {
-                if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
-                    error!(
-                        "Failed to update latest_packet_at for receiver {}: {}",
-                        receiver_id, e
-                    );
+        // Step 2: Update receiver's latest_packet_at (only for fixes with receiver_id)
+        if let Some(receiver_id) = updated_fix.receiver_id {
+            let receiver_repo = self.receiver_repo.clone();
+            let receiver_span = tracing::debug_span!(parent: None, "update_receiver_timestamp", receiver_id = %receiver_id);
+            let _ = receiver_span.set_parent(opentelemetry::Context::new());
+            tokio::spawn(
+                async move {
+                    if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
+                        error!(
+                            "Failed to update latest_packet_at for receiver {}: {}",
+                            receiver_id, e
+                        );
+                    }
                 }
-            }
-            .instrument(receiver_span),
-        );
+                .instrument(receiver_span),
+            );
+        }
 
         // Step 3: Update flight callsign if this fix has a flight_id and flight_number
         // IMPORTANT: Only update from NULL to a value, never from one non-null value to another.

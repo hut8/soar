@@ -106,7 +106,7 @@ mod tests {
             source_metadata: None,
             aircraft_id: uuid::Uuid::now_v7(),
             is_active: true, // 50 knots is active
-            receiver_id: uuid::Uuid::now_v7(),
+            receiver_id: Some(uuid::Uuid::now_v7()),
             raw_message_id: uuid::Uuid::now_v7(),
             altitude_agl_valid: false,
             time_gap_seconds: None,

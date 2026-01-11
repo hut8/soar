@@ -561,7 +561,7 @@ mod tests {
             aircraft_id: Uuid::new_v4(),
             received_at: timestamp,
             is_active: true,
-            receiver_id: Uuid::new_v4(),
+            receiver_id: Some(Uuid::new_v4()),
             raw_message_id: Uuid::new_v4(),
             altitude_agl_valid: false,
             time_gap_seconds: None,

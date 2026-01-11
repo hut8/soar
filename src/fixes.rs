@@ -60,7 +60,8 @@ pub struct Fix {
     pub is_active: bool,
 
     /// Receiver that reported this fix (from via array)
-    pub receiver_id: Uuid,
+    /// NULL for ADS-B/Beast and SBS data sources which don't have receiver information
+    pub receiver_id: Option<Uuid>,
 
     /// Reference to the raw message that contains the raw packet data
     pub raw_message_id: Uuid,
@@ -189,13 +190,13 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
-    /// Note: device_id, receiver_id, and raw_message_id are all required as they should be
-    /// determined before Fix creation
+    /// Note: device_id and raw_message_id are required as they should be determined before Fix creation
+    /// receiver_id is optional (Some for APRS/OGN, None for ADS-B/Beast/SBS)
     pub fn from_aprs_packet(
         packet: AprsPacket,
         received_at: DateTime<Utc>,
         aircraft_id: Uuid,
-        receiver_id: Uuid,
+        receiver_id: Option<Uuid>,
         raw_message_id: Uuid,
     ) -> Result<Option<Self>> {
         // For now, use received_at as the packet timestamp
@@ -357,7 +358,7 @@ mod tests {
             parsed,
             received_at,
             aircraft_id,
-            receiver_id,
+            Some(receiver_id),
             raw_message_id,
         )
         .expect("Failed to create Fix")
@@ -391,7 +392,7 @@ mod tests {
             parsed,
             received_at,
             aircraft_id,
-            receiver_id,
+            Some(receiver_id),
             raw_message_id,
         )
         .expect("Failed to create Fix")

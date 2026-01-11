@@ -122,7 +122,7 @@ struct FixDslRow {
     received_at: DateTime<Utc>,
     is_active: bool,
     altitude_agl_feet: Option<i32>,
-    receiver_id: Uuid,
+    receiver_id: Option<Uuid>,
     raw_message_id: Uuid,
     altitude_agl_valid: bool,
     time_gap_seconds: Option<i32>,
