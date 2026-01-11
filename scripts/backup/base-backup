@@ -264,9 +264,8 @@ main() {
     # Upload to Wasabi S3 using rclone
     log INFO "Uploading backup to Wasabi S3..."
 
-    # Use rclone copy with progress and multiple transfers
+    # Use rclone copy with multiple transfers (no progress to keep logs clean)
     if ! rclone copy \
-        --progress \
         --transfers "$PARALLEL_JOBS" \
         --s3-chunk-size 64M \
         --s3-upload-concurrency "$PARALLEL_JOBS" \
