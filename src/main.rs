@@ -795,7 +795,10 @@ async fn main() -> Result<()> {
         } else if is_staging {
             EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn")
         } else {
-            EnvFilter::new("debug,hyper_util=info,rustls=info,async_nats=warn")
+            // Development: debug by default, but suppress noisy OpenTelemetry internals
+            EnvFilter::new(
+                "debug,hyper_util=info,rustls=info,async_nats=warn,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
+            )
         }
     });
 

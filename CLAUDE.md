@@ -59,6 +59,24 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
   sudo cp target/debug/soar /usr/local/bin/soar-staging
   ```
 
+### CONFIGURATION FILE SYNCHRONIZATION (CRITICAL)
+When modifying configuration files on the local system (e.g., `/etc/tempo/config.yml`, `/etc/prometheus/prometheus.yml`), you **MUST** also update the corresponding config file in the `infrastructure/` directory in this repository. Both copies must be kept identical.
+
+**Config files and their repo locations:**
+- `/etc/tempo/config.yml` → `infrastructure/tempo-config.yml`
+- `/etc/loki/config.yml` → `infrastructure/loki-config.yml`
+- `/etc/prometheus/prometheus.yml` → `infrastructure/prometheus.yml`
+- `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy`
+- `/etc/pyroscope/config.yml` → `infrastructure/pyroscope-config.yml`
+
+**Process for config changes:**
+1. Edit the config file in `infrastructure/` first
+2. Copy to the system location: `sudo cp infrastructure/<file> /etc/<service>/<file>`
+3. Restart the service if needed: `sudo systemctl restart <service>`
+4. Commit the infrastructure/ change to git
+
+This ensures config changes are tracked in version control and can be reproduced across environments.
+
 ### DATABASE SAFETY RULES (CRITICAL)
 - **Development Database**: `soar_dev` - This is where you work
 - **Staging Database**: `soar_staging` - This should be queried before the production database; its schema will be more up-to-date and it should contain approximately the same data. It is read-only for development purposes.

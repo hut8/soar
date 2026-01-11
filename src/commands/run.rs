@@ -128,7 +128,7 @@ async fn process_beast_message(
     beast_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
     cpr_decoder: &Arc<CprDecoder>,
-    receiver_id: Uuid,
+    receiver_id: Option<Uuid>,
 ) {
     let start_time = std::time::Instant::now();
 
@@ -416,7 +416,7 @@ async fn process_sbs_message(
         aircraft_id: aircraft.id,
         received_at,
         is_active,
-        receiver_id: sbs_receiver_id,
+        receiver_id: Some(sbs_receiver_id),
         raw_message_id: Uuid::now_v7(), // Generate a unique ID for tracking
         altitude_agl_valid: false,      // Will be calculated later
         time_gap_seconds: None,         // Will be set by flight tracker
@@ -506,7 +506,6 @@ pub async fn handle_run(
     let elevation_path =
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/lib/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
-    info!("Elevation processing mode: synchronous (inline)");
 
     info!(
         "Environment: {}",
@@ -925,7 +924,7 @@ pub async fn handle_run(
                         &beast_repo_clone,
                         &beast_fix_processor,
                         &beast_cpr_decoder,
-                        beast_receiver_id,
+                        Some(beast_receiver_id),
                     )
                     .await;
 
