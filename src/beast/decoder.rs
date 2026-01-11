@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rs1090::prelude::*;
+use tracing::debug;
 
 /// Decoded Beast message with metadata
 #[derive(Debug, Clone)]
@@ -62,6 +63,9 @@ pub fn decode_beast_frame(
 
     // Decode the Mode S message using rs1090
     let message = Message::try_from(mode_s_payload).context("Failed to decode Mode S message")?;
+
+    // Log the full decoded message for debugging
+    debug!("Decoded ADS-B frame: {:?}", message);
 
     Ok(DecodedBeastMessage {
         timestamp: received_at,

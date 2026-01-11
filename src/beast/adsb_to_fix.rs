@@ -26,11 +26,13 @@ use crate::fixes::Fix;
 /// - `Ok(Some(Fix))` if valid position data is available
 /// - `Ok(None)` if message type doesn't produce fixes (shouldn't happen for position messages)
 /// - `Err` if position data is required but unavailable (incomplete CPR decoding)
+///
+/// Note: receiver_id is optional because ADS-B/Beast/SBS data sources don't have receiver information
 pub fn adsb_message_to_fix(
     message: &Message,
     raw_frame: &[u8],
     timestamp: DateTime<Utc>,
-    receiver_id: Uuid,
+    receiver_id: Option<Uuid>,
     aircraft_id: Uuid,
     raw_message_id: Uuid,
     cpr_decoder: Option<&CprDecoder>,
@@ -243,7 +245,6 @@ mod tests {
         let mode_s_payload = hex!("8d4bb463003d10000000001b5bec");
         let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
-        let receiver_id = Uuid::now_v7();
         let device_id = Uuid::now_v7();
         let raw_message_id = Uuid::now_v7();
 
@@ -252,7 +253,7 @@ mod tests {
             &decoded.message,
             &mode_s_payload,
             timestamp,
-            receiver_id,
+            None, // ADS-B has no receiver information
             device_id,
             raw_message_id,
             None, // No CPR decoder for this basic test
@@ -366,7 +367,6 @@ mod tests {
         let mode_s_payload = hex!("8D485020994409940838175B284F");
         let frame = wrap_in_beast_frame(&mode_s_payload);
         let timestamp = Utc::now();
-        let receiver_id = Uuid::now_v7();
         let device_id = Uuid::now_v7();
         let raw_message_id = Uuid::now_v7();
 
@@ -375,7 +375,7 @@ mod tests {
             &decoded.message,
             &mode_s_payload,
             timestamp,
-            receiver_id,
+            None, // ADS-B has no receiver information
             device_id,
             raw_message_id,
             None, // No CPR decoder for this test
