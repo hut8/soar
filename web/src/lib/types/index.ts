@@ -363,6 +363,32 @@ export interface AirspaceFeatureCollection {
 	features: Airspace[];
 }
 
+// Runway endpoint interface
+export interface RunwayEnd {
+	ident: string | null;
+	latitudeDeg: number | null;
+	longitudeDeg: number | null;
+	elevationFt: number | null;
+	headingDegt: number | null;
+	displacedThresholdFt: number | null;
+}
+
+// Runway interface matching backend RunwayView
+export interface Runway {
+	id: number;
+	airportIdent: string;
+	lengthFt: number | null;
+	widthFt: number | null;
+	surface: string | null;
+	lighted: boolean;
+	closed: boolean;
+	low: RunwayEnd;
+	high: RunwayEnd;
+	// Polygon representing the runway rectangle as [lat, lon] coordinates
+	// Array of 4 corner points: [low-left, low-right, high-right, high-left]
+	polyline: [number, number][];
+}
+
 // Coverage map - H3 hexagonal coverage visualization
 export interface CoverageHexProperties {
 	h3Index: string;

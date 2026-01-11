@@ -334,6 +334,133 @@ impl RunwaysRepository {
         Ok(result.into_iter().map(Runway::from).collect())
     }
 
+    /// Get runways within a bounding box using PostGIS spatial functions
+    /// Returns runways where either endpoint is within the bounding box
+    pub async fn get_runways_in_bbox(
+        &self,
+        west: f64,
+        south: f64,
+        east: f64,
+        north: f64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Runway>> {
+        let pool = self.pool.clone();
+        let limit = limit.unwrap_or(500);
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use raw SQL with PostGIS to find runways in bounding box
+            // A runway is included if either endpoint is within the box
+            let sql = r#"
+                SELECT DISTINCT ON (id)
+                    id, airport_ref, airport_ident, length_ft, width_ft, surface,
+                    lighted, closed, le_ident, le_latitude_deg, le_longitude_deg,
+                    le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                    he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
+                    he_heading_degt, he_displaced_threshold_ft
+                FROM runways
+                WHERE (
+                    le_location IS NOT NULL AND ST_Intersects(
+                        le_location,
+                        ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                    )
+                ) OR (
+                    he_location IS NOT NULL AND ST_Intersects(
+                        he_location,
+                        ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                    )
+                )
+                ORDER BY id
+                LIMIT $5
+            "#;
+
+            #[derive(Debug, QueryableByName)]
+            struct RunwayBboxResult {
+                #[diesel(sql_type = diesel::sql_types::Integer)]
+                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Integer)]
+                airport_ref: i32,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                airport_ident: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                length_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                width_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                surface: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                lighted: bool,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                closed: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                le_ident: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                le_latitude_deg: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                le_longitude_deg: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                le_elevation_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                le_heading_degt: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                le_displaced_threshold_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                he_ident: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                he_latitude_deg: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                he_longitude_deg: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                he_elevation_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                he_heading_degt: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                he_displaced_threshold_ft: Option<i32>,
+            }
+
+            let results: Vec<RunwayBboxResult> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(west)
+                .bind::<diesel::sql_types::Double, _>(south)
+                .bind::<diesel::sql_types::Double, _>(east)
+                .bind::<diesel::sql_types::Double, _>(north)
+                .bind::<diesel::sql_types::BigInt, _>(limit)
+                .load(&mut conn)?;
+
+            Ok::<Vec<RunwayBboxResult>, anyhow::Error>(results)
+        })
+        .await??;
+
+        // Convert to Runway structs
+        let runways = result
+            .into_iter()
+            .map(|r| Runway {
+                id: r.id,
+                airport_ref: r.airport_ref,
+                airport_ident: r.airport_ident,
+                length_ft: r.length_ft,
+                width_ft: r.width_ft,
+                surface: r.surface,
+                lighted: r.lighted,
+                closed: r.closed,
+                le_ident: r.le_ident,
+                le_latitude_deg: bigdecimal_to_f64(r.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(r.le_longitude_deg),
+                le_elevation_ft: r.le_elevation_ft,
+                le_heading_degt: bigdecimal_to_f64(r.le_heading_degt),
+                le_displaced_threshold_ft: r.le_displaced_threshold_ft,
+                he_ident: r.he_ident,
+                he_latitude_deg: bigdecimal_to_f64(r.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(r.he_longitude_deg),
+                he_elevation_ft: r.he_elevation_ft,
+                he_heading_degt: bigdecimal_to_f64(r.he_heading_degt),
+                he_displaced_threshold_ft: r.he_displaced_threshold_ft,
+            })
+            .collect();
+
+        Ok(runways)
+    }
+
     /// Find nearest runway endpoints to a given point using PostGIS spatial functions
     /// Returns runway endpoints within the specified distance (in meters) ordered by distance
     /// If airport_ref is provided, only returns runways at that airport
