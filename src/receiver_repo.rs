@@ -628,7 +628,7 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get receivers in a bounding box using receivers.location directly
+    /// Get receivers in a bounding box using latitude/longitude columns
     pub async fn get_receivers_in_bounding_box(
         &self,
         nw_lat: f64,
@@ -636,21 +636,19 @@ impl ReceiverRepository {
         se_lat: f64,
         se_lng: f64,
     ) -> Result<Vec<ReceiverModel>> {
-        use diesel::dsl::sql;
-
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
             let mut conn = pool.get()?;
 
-            // Filter receivers by bounding box using PostGIS on receivers.location
-            // ST_MakeEnvelope creates a rectangular polygon from the coordinates
+            // Filter receivers by bounding box using latitude/longitude columns
             let receiver_models = receivers::table
-                .filter(receivers::location.is_not_null())
-                .filter(sql::<diesel::sql_types::Bool>(&format!(
-                    "ST_Within(receivers.location::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
-                    nw_lng, se_lat, se_lng, nw_lat
-                )))
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .filter(receivers::latitude.ge(se_lat))
+                .filter(receivers::latitude.le(nw_lat))
+                .filter(receivers::longitude.ge(nw_lng))
+                .filter(receivers::longitude.le(se_lng))
                 .order(receivers::callsign.asc())
                 .limit(1000)
                 .select(ReceiverModel::as_select())
@@ -672,30 +670,31 @@ impl ReceiverRepository {
         page: i64,
         per_page: i64,
     ) -> Result<(Vec<ReceiverModel>, i64)> {
-        use diesel::dsl::sql;
-
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<(Vec<ReceiverModel>, i64)> {
             let mut conn = pool.get()?;
 
-            let bbox_filter = sql::<diesel::sql_types::Bool>(&format!(
-                "ST_Within(receivers.location::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
-                nw_lng, se_lat, se_lng, nw_lat
-            ));
-
             // Get total count
             let total_count: i64 = receivers::table
-                .filter(receivers::location.is_not_null())
-                .filter(bbox_filter.clone())
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .filter(receivers::latitude.ge(se_lat))
+                .filter(receivers::latitude.le(nw_lat))
+                .filter(receivers::longitude.ge(nw_lng))
+                .filter(receivers::longitude.le(se_lng))
                 .count()
                 .get_result(&mut conn)?;
 
             // Get paginated results
             let offset = (page - 1) * per_page;
             let receiver_models = receivers::table
-                .filter(receivers::location.is_not_null())
-                .filter(bbox_filter)
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .filter(receivers::latitude.ge(se_lat))
+                .filter(receivers::latitude.le(nw_lat))
+                .filter(receivers::longitude.ge(nw_lng))
+                .filter(receivers::longitude.le(se_lng))
                 .order(receivers::callsign.asc())
                 .limit(per_page)
                 .offset(offset)

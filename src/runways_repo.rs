@@ -6,8 +6,10 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
 use num_traits::{FromPrimitive, ToPrimitive};
+use postgis_diesel::functions::st_intersects;
 use tracing::info;
 
+use crate::postgis_functions::st_make_envelope;
 use crate::runways::Runway;
 use crate::schema::runways;
 
@@ -334,9 +336,60 @@ impl RunwaysRepository {
         Ok(result.into_iter().map(Runway::from).collect())
     }
 
+    /// Get runways within a bounding box using PostGIS spatial functions.
+    /// Returns runways where either endpoint is within the bounding box.
+    ///
+    /// Uses PostGIS ST_Intersects and ST_MakeEnvelope on the generated geometry
+    /// columns (le_location_geom, he_location_geom) with GIST indexes.
+    pub async fn get_runways_in_bbox(
+        &self,
+        west: f64,
+        south: f64,
+        east: f64,
+        north: f64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Runway>> {
+        use runways::dsl;
+
+        let pool = self.pool.clone();
+        let limit_val = limit.unwrap_or(500);
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Create envelope for the bounding box
+            let envelope = st_make_envelope(west, south, east, north, 4326);
+
+            // Check if either endpoint intersects the bounding box
+            let le_hits = dsl::le_location_geom.is_not_null().and(st_intersects(
+                dsl::le_location_geom.assume_not_null(),
+                envelope.assume_not_null(),
+            ));
+            let he_hits = dsl::he_location_geom.is_not_null().and(st_intersects(
+                dsl::he_location_geom.assume_not_null(),
+                envelope.assume_not_null(),
+            ));
+
+            let runway_models: Vec<RunwayModel> = runways::table
+                .filter(le_hits.or(he_hits))
+                .limit(limit_val)
+                .select(RunwayModel::as_select())
+                .load::<RunwayModel>(&mut conn)?;
+
+            Ok::<_, anyhow::Error>(runway_models)
+        })
+        .await??;
+
+        Ok(result.into_iter().map(Runway::from).collect())
+    }
+
     /// Find nearest runway endpoints to a given point using PostGIS spatial functions
     /// Returns runway endpoints within the specified distance (in meters) ordered by distance
     /// If airport_ref is provided, only returns runways at that airport
+    ///
+    /// Note: Uses raw SQL because Diesel doesn't natively support PostGIS functions
+    /// (ST_Distance, ST_DWithin) or UNION ALL queries with computed distance columns.
+    /// The generated geometry columns also aren't in the Diesel schema.
     pub async fn find_nearest_runway_endpoints(
         &self,
         latitude: f64,
@@ -400,6 +453,8 @@ impl RunwaysRepository {
 
             // Use raw SQL with PostGIS to find nearest runway endpoints
             // UNION two queries: one for low end, one for high end
+            // Use geometry for fast queries; distance in degrees * 111000 ≈ meters
+            // $3 is max_distance in degrees (converted from meters before query)
             // Build SQL with optional airport filter
             let (sql, airport_filter) = if airport_ref.is_some() {
                 (
@@ -410,19 +465,12 @@ impl RunwaysRepository {
                            le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
                            he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
                            he_heading_degt, he_displaced_threshold_ft,
-                           ST_Distance(
-                               le_location,
-                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-                           ) as distance_meters,
+                           ST_Distance(le_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326)) * 111000 as distance_meters,
                            'low_end' as endpoint_type
                     FROM runways
-                    WHERE le_location IS NOT NULL
+                    WHERE le_location_geom IS NOT NULL
                       AND airport_ref = $5
-                      AND ST_DWithin(
-                          le_location,
-                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                          $3
-                      )
+                      AND ST_DWithin(le_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326), $3)
                 )
                 UNION ALL
                 (
@@ -431,19 +479,12 @@ impl RunwaysRepository {
                            le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
                            he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
                            he_heading_degt, he_displaced_threshold_ft,
-                           ST_Distance(
-                               he_location,
-                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-                           ) as distance_meters,
+                           ST_Distance(he_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326)) * 111000 as distance_meters,
                            'high_end' as endpoint_type
                     FROM runways
-                    WHERE he_location IS NOT NULL
+                    WHERE he_location_geom IS NOT NULL
                       AND airport_ref = $5
-                      AND ST_DWithin(
-                          he_location,
-                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                          $3
-                      )
+                      AND ST_DWithin(he_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326), $3)
                 )
                 ORDER BY distance_meters
                 LIMIT $4
@@ -459,18 +500,11 @@ impl RunwaysRepository {
                            le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
                            he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
                            he_heading_degt, he_displaced_threshold_ft,
-                           ST_Distance(
-                               le_location,
-                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-                           ) as distance_meters,
+                           ST_Distance(le_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326)) * 111000 as distance_meters,
                            'low_end' as endpoint_type
                     FROM runways
-                    WHERE le_location IS NOT NULL
-                      AND ST_DWithin(
-                          le_location,
-                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                          $3
-                      )
+                    WHERE le_location_geom IS NOT NULL
+                      AND ST_DWithin(le_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326), $3)
                 )
                 UNION ALL
                 (
@@ -479,18 +513,11 @@ impl RunwaysRepository {
                            le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
                            he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
                            he_heading_degt, he_displaced_threshold_ft,
-                           ST_Distance(
-                               he_location,
-                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-                           ) as distance_meters,
+                           ST_Distance(he_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326)) * 111000 as distance_meters,
                            'high_end' as endpoint_type
                     FROM runways
-                    WHERE he_location IS NOT NULL
-                      AND ST_DWithin(
-                          he_location,
-                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
-                          $3
-                      )
+                    WHERE he_location_geom IS NOT NULL
+                      AND ST_DWithin(he_location_geom, ST_SetSRID(ST_MakePoint($2, $1), 4326), $3)
                 )
                 ORDER BY distance_meters
                 LIMIT $4
@@ -499,10 +526,13 @@ impl RunwaysRepository {
                 )
             };
 
+            // Convert meters to approximate degrees (1° ≈ 111km at equator)
+            let max_distance_degrees = max_distance_meters / 111000.0;
+
             let query = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Double, _>(latitude)
                 .bind::<diesel::sql_types::Double, _>(longitude)
-                .bind::<diesel::sql_types::Double, _>(max_distance_meters)
+                .bind::<diesel::sql_types::Double, _>(max_distance_degrees)
                 .bind::<diesel::sql_types::BigInt, _>(limit);
 
             let results: Vec<RunwayEndpointResult> = if airport_filter {
