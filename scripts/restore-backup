@@ -26,7 +26,7 @@ Requirements:
   - Python 3.6+
   - rclone configured with Wasabi remote
   - /etc/soar/backup-env configuration file
-  - Existing restore script at /home/runner/work/soar/soar/scripts/backup/restore
+  - Existing restore script (auto-detected in scripts/backup/restore)
 
 Exit codes:
   0 - Success
@@ -84,8 +84,11 @@ class BackupInfo:
     @staticmethod
     def format_size(size_bytes: int) -> str:
         """Format size in human-readable format."""
-        if size_bytes is None or size_bytes <= 0:
+        if size_bytes is None or size_bytes < 0:
             return "unknown size"
+        
+        if size_bytes == 0:
+            return "0 B"
         
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
             if size_bytes < 1024.0:
