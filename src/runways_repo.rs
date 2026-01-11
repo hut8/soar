@@ -336,6 +336,11 @@ impl RunwaysRepository {
 
     /// Get runways within a bounding box using PostGIS spatial functions
     /// Returns runways where either endpoint is within the bounding box
+    ///
+    /// Note: Uses raw SQL because Diesel doesn't natively support PostGIS functions
+    /// (ST_Intersects, ST_MakeEnvelope) or the generated geometry columns which
+    /// aren't in the Diesel schema. The postgis_diesel crate has limited support
+    /// for these operations.
     pub async fn get_runways_in_bbox(
         &self,
         west: f64,
@@ -465,6 +470,10 @@ impl RunwaysRepository {
     /// Find nearest runway endpoints to a given point using PostGIS spatial functions
     /// Returns runway endpoints within the specified distance (in meters) ordered by distance
     /// If airport_ref is provided, only returns runways at that airport
+    ///
+    /// Note: Uses raw SQL because Diesel doesn't natively support PostGIS functions
+    /// (ST_Distance, ST_DWithin) or UNION ALL queries with computed distance columns.
+    /// The generated geometry columns also aren't in the Diesel schema.
     pub async fn find_nearest_runway_endpoints(
         &self,
         latitude: f64,
