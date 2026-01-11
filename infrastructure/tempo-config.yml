@@ -42,7 +42,7 @@ metrics_generator:
     remote_write:
       - url: http://127.0.0.1:9090/api/v1/write
         send_exemplars: true
-  # Required for local-blocks processor - stores trace data for metrics queries
+  # Stores trace samples used by the local-blocks processor to generate TraceQL metrics (e.g. Grafana Traces drilldown)
   traces_storage:
     path: /var/lib/tempo/generator/traces
 
