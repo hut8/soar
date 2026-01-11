@@ -82,14 +82,11 @@ class TestRestoreBackupScript(unittest.TestCase):
             tmp_path = tmp.name
         
         try:
-            # Get current PATH and remove common rclone locations
+            # Get current PATH and keep only essential system paths
+            # Exclude common rclone installation locations
             current_path = os.environ.get('PATH', '')
-            # Create a PATH that excludes common rclone install locations
             filtered_paths = [p for p in current_path.split(':') 
-                            if 'rclone' not in p and p not in ['/usr/local/bin']]
-            # But keep system paths for python
-            filtered_paths = [p for p in current_path.split(':') 
-                            if p in ['/usr/bin', '/bin']]
+                            if p in ['/usr/bin', '/bin'] and 'rclone' not in p]
             
             result = subprocess.run(
                 [str(self.script_path), '--config', tmp_path, '--list'],

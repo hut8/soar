@@ -158,8 +158,13 @@ class BackupEnumerator:
     def __init__(self, config: BackupConfig):
         self.config = config
     
-    def list_backups(self) -> List[BackupInfo]:
-        """List all available backups."""
+    def list_backups(self, fetch_details: bool = True) -> List[BackupInfo]:
+        """List all available backups.
+        
+        Args:
+            fetch_details: If True, fetch size and metadata for each backup.
+                          If False, only return basic info (faster for large lists).
+        """
         backups = []
         
         # Construct the base path for backups
@@ -187,7 +192,21 @@ class BackupEnumerator:
                     
                     # Validate date format (YYYY-MM-DD)
                     if re.match(r'^\d{4}-\d{2}-\d{2}$', backup_date):
-                        backup_info = self.get_backup_info(backup_date)
+                        if fetch_details:
+                            backup_info = self.get_backup_info(backup_date)
+                        else:
+                            # Create basic info without fetching details
+                            try:
+                                timestamp = datetime.strptime(backup_date, '%Y-%m-%d')
+                            except ValueError:
+                                timestamp = None
+                            
+                            backup_info = BackupInfo(
+                                date=backup_date,
+                                timestamp=timestamp,
+                                size_bytes=0,  # Unknown
+                                metadata={}
+                            )
                         backups.append(backup_info)
         
         except FileNotFoundError:
@@ -489,11 +508,14 @@ Configuration:
     if args.restore_script:
         restore_script = args.restore_script
     else:
-        # Try to find restore script
+        # Try to find restore script in multiple locations
+        # Use __file__ to locate relative to this script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
         possible_paths = [
-            '/home/runner/work/soar/soar/scripts/backup/restore',
-            '/usr/local/bin/soar-restore',
-            os.path.join(os.path.dirname(__file__), 'backup', 'restore'),
+            os.path.join(script_dir, 'backup', 'restore'),  # Relative to this script
+            '/usr/local/bin/soar-restore',  # System installation
+            '/opt/soar/scripts/backup/restore',  # Alternative installation
         ]
         
         restore_script = None
