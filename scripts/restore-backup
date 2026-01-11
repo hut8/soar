@@ -173,12 +173,6 @@ class BackupEnumerator:
                 text=True,
                 check=True
             )
-        
-        except FileNotFoundError:
-            print("Error: rclone command not found", file=sys.stderr)
-            print("\nPlease install rclone:", file=sys.stderr)
-            print("  curl https://rclone.org/install.sh | sudo bash", file=sys.stderr)
-            sys.exit(1)
             
             # Parse the output
             for line in result.stdout.strip().split('\n'):
@@ -195,6 +189,7 @@ class BackupEnumerator:
                     if re.match(r'^\d{4}-\d{2}-\d{2}$', backup_date):
                         backup_info = self.get_backup_info(backup_date)
                         backups.append(backup_info)
+        
         except FileNotFoundError:
             print("Error: rclone command not found", file=sys.stderr)
             print("\nPlease install rclone:", file=sys.stderr)
