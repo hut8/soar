@@ -509,11 +509,12 @@ Configuration:
         restore_script = args.restore_script
     else:
         # Try to find restore script in multiple locations
-        # Use __file__ to locate relative to this script
+        # This script is at /scripts/restore-backup
+        # The restore script is at /scripts/backup/restore
         script_dir = os.path.dirname(os.path.abspath(__file__))
         
         possible_paths = [
-            os.path.join(script_dir, 'backup', 'restore'),  # Relative to this script
+            os.path.join(script_dir, 'backup', 'restore'),  # /scripts/backup/restore
             '/usr/local/bin/soar-restore',  # System installation
             '/opt/soar/scripts/backup/restore',  # Alternative installation
         ]
