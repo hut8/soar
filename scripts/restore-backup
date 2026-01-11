@@ -183,34 +183,36 @@ class BackupEnumerator:
             )
             
             # Parse the output
-            for line in result.stdout.strip().split('\n'):
-                if not line:
-                    continue
-                
-                # rclone lsd format: "         -1 2025-01-10 12:34:56         - 2025-01-10"
-                # We want the last field (directory name)
-                parts = line.split()
-                if len(parts) >= 5:
-                    backup_date = parts[-1]
+            stdout_stripped = result.stdout.strip()
+            if stdout_stripped:  # Only process if there's actual output
+                for line in stdout_stripped.split('\n'):
+                    if not line:
+                        continue
                     
-                    # Validate date format (YYYY-MM-DD)
-                    if re.match(r'^\d{4}-\d{2}-\d{2}$', backup_date):
-                        if fetch_details:
-                            backup_info = self.get_backup_info(backup_date)
-                        else:
-                            # Create basic info without fetching details
-                            try:
-                                timestamp = datetime.strptime(backup_date, '%Y-%m-%d')
-                            except ValueError:
-                                timestamp = None
-                            
-                            backup_info = BackupInfo(
-                                date=backup_date,
-                                timestamp=timestamp,
-                                size_bytes=0,  # Unknown
-                                metadata={}
-                            )
-                        backups.append(backup_info)
+                    # rclone lsd format: "         -1 2025-01-10 12:34:56         - 2025-01-10"
+                    # We want the last field (directory name)
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        backup_date = parts[-1]
+                        
+                        # Validate date format (YYYY-MM-DD)
+                        if re.match(r'^\d{4}-\d{2}-\d{2}$', backup_date):
+                            if fetch_details:
+                                backup_info = self.get_backup_info(backup_date)
+                            else:
+                                # Create basic info without fetching details
+                                try:
+                                    timestamp = datetime.strptime(backup_date, '%Y-%m-%d')
+                                except ValueError:
+                                    timestamp = None
+                                
+                                backup_info = BackupInfo(
+                                    date=backup_date,
+                                    timestamp=timestamp,
+                                    size_bytes=0,  # Unknown
+                                    metadata={}
+                                )
+                            backups.append(backup_info)
         
         except FileNotFoundError:
             print("Error: rclone command not found", file=sys.stderr)
@@ -298,12 +300,12 @@ class BackupTUI:
             stdscr.addstr(0, (width - len(header)) // 2, header)
             stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
             
-            # Draw instructions
-            instructions = "↑/↓: Navigate | Enter: Select | q/Esc: Cancel"
+            # Draw instructions (use ASCII for compatibility)
+            instructions = "Up/Down: Navigate | Enter: Select | q/Esc: Cancel"
             stdscr.addstr(1, (width - len(instructions)) // 2, instructions)
             
-            # Draw separator
-            stdscr.addstr(2, 0, "─" * width)
+            # Draw separator (use ASCII for compatibility)
+            stdscr.addstr(2, 0, "-" * width)
             
             # Calculate visible area
             visible_height = height - 5  # Reserve space for header and footer
@@ -325,10 +327,10 @@ class BackupTUI:
                 # Determine display style
                 if actual_index == self.selected:
                     stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-                    prefix = "► "
+                    prefix = "> "
                 elif actual_index == 0:
                     stdscr.attron(curses.color_pair(2))
-                    prefix = "★ "
+                    prefix = "* "
                 else:
                     prefix = "  "
                 
@@ -384,7 +386,7 @@ class BackupTUI:
 def confirm_restore(backup: BackupInfo) -> bool:
     """Ask user to confirm restore operation."""
     print("\n" + "=" * 70)
-    print("⚠️  WARNING: DESTRUCTIVE OPERATION ⚠️")
+    print("WARNING: DESTRUCTIVE OPERATION")
     print("=" * 70)
     print("\nYou are about to restore from backup:")
     print(f"  Date: {backup.date}")
@@ -432,21 +434,21 @@ def restore_backup(backup: BackupInfo, config: BackupConfig, restore_script: str
         
         if result.returncode == 0:
             print("\n" + "=" * 70)
-            print("✓ Restore completed successfully!")
+            print("[SUCCESS] Restore completed successfully!")
             print("=" * 70)
             return True
         else:
             print("\n" + "=" * 70)
-            print(f"✗ Restore failed with exit code {result.returncode}")
+            print(f"[FAILED] Restore failed with exit code {result.returncode}")
             print("=" * 70)
             return False
     
     except KeyboardInterrupt:
-        print("\n\n⚠️  Restore interrupted by user")
+        print("\n\n[WARNING] Restore interrupted by user")
         print("WARNING: Database may be in an inconsistent state!")
         return False
     except Exception as e:
-        print(f"\n\n✗ Error executing restore: {e}")
+        print(f"\n\n[ERROR] Error executing restore: {e}")
         return False
 
 
@@ -550,7 +552,7 @@ Configuration:
         print("Available backups:")
         print("-" * 70)
         for i, backup in enumerate(backups):
-            prefix = "★ LATEST" if i == 0 else " " * 9
+            prefix = "* LATEST" if i == 0 else " " * 9
             print(f"{prefix} {backup}")
             if backup.metadata:
                 if 'backup_timestamp' in backup.metadata:
