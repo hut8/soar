@@ -474,9 +474,17 @@ pub async fn handle_run(
         if no_adsb { "DISABLED" } else { "ENABLED" }
     );
 
+    // Initialize the metrics recorder FIRST so the global labels are applied
+    // before we initialize any metrics to zero
+    if is_production || is_staging {
+        info!("Initializing metrics recorder with component=run...");
+        soar::metrics::init_metrics_recorder(Some("run"));
+    }
+
     // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
-    // This MUST happen before starting the metrics server to avoid race conditions where
-    // Prometheus scrapes before metrics are initialized
+    // This MUST happen after the recorder is initialized (so global labels apply)
+    // and before starting the metrics server (to avoid race conditions where
+    // Prometheus scrapes before metrics are initialized)
     info!("Initializing soar-run metrics...");
     soar::metrics::initialize_run_metrics();
     info!("soar-run metrics initialized");
