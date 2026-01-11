@@ -352,6 +352,7 @@ impl RunwaysRepository {
 
             // Use raw SQL with PostGIS to find runways in bounding box
             // A runway is included if either endpoint is within the box
+            // Uses pre-computed geometry columns with GIST indexes for fast queries
             let sql = r#"
                 SELECT DISTINCT ON (id)
                     id, airport_ref, airport_ident, length_ft, width_ft, surface,
@@ -361,14 +362,14 @@ impl RunwaysRepository {
                     he_heading_degt, he_displaced_threshold_ft
                 FROM runways
                 WHERE (
-                    le_location IS NOT NULL AND ST_Intersects(
-                        le_location,
-                        ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                    le_location_geom IS NOT NULL AND ST_Intersects(
+                        le_location_geom,
+                        ST_MakeEnvelope($1, $2, $3, $4, 4326)
                     )
                 ) OR (
-                    he_location IS NOT NULL AND ST_Intersects(
-                        he_location,
-                        ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                    he_location_geom IS NOT NULL AND ST_Intersects(
+                        he_location_geom,
+                        ST_MakeEnvelope($1, $2, $3, $4, 4326)
                     )
                 )
                 ORDER BY id
