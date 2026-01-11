@@ -1,0 +1,600 @@
+#!/usr/bin/env python3
+"""
+restore-backup - Interactive backup restoration tool
+
+This script provides a TUI (Terminal User Interface) to enumerate available backups
+from cloud storage (Wasabi S3) and restore them interactively.
+
+Features:
+  - Lists all available backups with timestamps and metadata
+  - Interactive curses-based menu for backup selection
+  - Integrates with the existing restore script for automatic restoration
+  - Supports point-in-time recovery options
+  - Displays backup size and age information
+
+Usage:
+  restore-backup                    # Interactive TUI mode
+  restore-backup --list             # List backups and exit
+  restore-backup --latest           # Restore latest backup (with confirmation)
+  restore-backup --date YYYY-MM-DD  # Restore specific backup (with confirmation)
+  restore-backup --help             # Show help
+
+Configuration:
+  Reads from /etc/soar/backup-env (same as other backup scripts)
+
+Requirements:
+  - Python 3.6+
+  - rclone configured with Wasabi remote
+  - /etc/soar/backup-env configuration file
+  - Existing restore script at /home/runner/work/soar/soar/scripts/backup/restore
+
+Exit codes:
+  0 - Success
+  1 - Failure
+  2 - User cancelled
+"""
+
+import argparse
+import curses
+import json
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+
+@dataclass
+class BackupInfo:
+    """Information about a backup."""
+    date: str
+    timestamp: Optional[datetime]
+    size_bytes: int
+    metadata: dict
+    
+    def __str__(self) -> str:
+        age_str = self.get_age_string()
+        size_str = self.format_size(self.size_bytes)
+        return f"{self.date} ({age_str}, {size_str})"
+    
+    def get_age_string(self) -> str:
+        """Get human-readable age of backup."""
+        if not self.timestamp:
+            return "unknown age"
+        
+        now = datetime.now()
+        delta = now - self.timestamp
+        
+        if delta.days == 0:
+            return "today"
+        elif delta.days == 1:
+            return "1 day ago"
+        elif delta.days < 7:
+            return f"{delta.days} days ago"
+        elif delta.days < 30:
+            weeks = delta.days // 7
+            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+        else:
+            months = delta.days // 30
+            return f"{months} month{'s' if months > 1 else ''} ago"
+    
+    @staticmethod
+    def format_size(size_bytes: int) -> str:
+        """Format size in human-readable format."""
+        if size_bytes == 0:
+            return "unknown size"
+        
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} PB"
+
+
+class BackupConfig:
+    """Configuration for backup system."""
+    
+    def __init__(self, config_file: str = "/etc/soar/backup-env"):
+        self.config_file = config_file
+        self.config = {}
+        self.load_config()
+    
+    def load_config(self):
+        """Load configuration from backup-env file."""
+        if not os.path.exists(self.config_file):
+            raise FileNotFoundError(f"Configuration file not found: {self.config_file}")
+        
+        # Parse the shell environment file
+        with open(self.config_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Parse KEY=value format
+                match = re.match(r'^([A-Z_]+)=(.*)$', line)
+                if match:
+                    key, value = match.groups()
+                    # Remove quotes if present
+                    value = value.strip('"').strip("'")
+                    self.config[key] = value
+    
+    def get(self, key: str, default: str = "") -> str:
+        """Get configuration value."""
+        return self.config.get(key, default)
+    
+    @property
+    def rclone_remote(self) -> str:
+        return self.get('BACKUP_RCLONE_REMOTE', 'wasabi')
+    
+    @property
+    def rclone_bucket(self) -> str:
+        return self.get('BACKUP_RCLONE_BUCKET', 'soar-backup-prod')
+    
+    @property
+    def rclone_path(self) -> str:
+        return self.get('BACKUP_RCLONE_PATH', '')
+    
+    @property
+    def rclone_config(self) -> str:
+        return self.get('RCLONE_CONFIG', '/etc/soar/rclone.conf')
+    
+    @property
+    def backup_remote(self) -> str:
+        """Get the full rclone remote path."""
+        if self.rclone_path:
+            return f"{self.rclone_remote}:{self.rclone_bucket}/{self.rclone_path}"
+        else:
+            return f"{self.rclone_remote}:{self.rclone_bucket}"
+
+
+class BackupEnumerator:
+    """Enumerate backups from cloud storage."""
+    
+    def __init__(self, config: BackupConfig):
+        self.config = config
+    
+    def list_backups(self) -> List[BackupInfo]:
+        """List all available backups."""
+        backups = []
+        
+        # Construct the base path for backups
+        base_path = f"{self.config.backup_remote}/base"
+        
+        try:
+            # List directories in the base backup path
+            result = subprocess.run(
+                ['rclone', 'lsd', base_path, '--config', self.config.rclone_config],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        
+        except FileNotFoundError:
+            print("Error: rclone command not found", file=sys.stderr)
+            print("\nPlease install rclone:", file=sys.stderr)
+            print("  curl https://rclone.org/install.sh | sudo bash", file=sys.stderr)
+            sys.exit(1)
+            
+            # Parse the output
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                
+                # rclone lsd format: "         -1 2025-01-10 12:34:56         - 2025-01-10"
+                # We want the last field (directory name)
+                parts = line.split()
+                if len(parts) >= 5:
+                    backup_date = parts[-1]
+                    
+                    # Validate date format (YYYY-MM-DD)
+                    if re.match(r'^\d{4}-\d{2}-\d{2}$', backup_date):
+                        backup_info = self.get_backup_info(backup_date)
+                        backups.append(backup_info)
+        except FileNotFoundError:
+            print("Error: rclone command not found", file=sys.stderr)
+            print("\nPlease install rclone:", file=sys.stderr)
+            print("  curl https://rclone.org/install.sh | sudo bash", file=sys.stderr)
+            sys.exit(1)
+        
+        except subprocess.CalledProcessError as e:
+            print(f"Error listing backups: {e}", file=sys.stderr)
+            print(f"stderr: {e.stderr}", file=sys.stderr)
+            sys.exit(1)
+        
+        # Sort backups by date (newest first)
+        backups.sort(key=lambda b: b.date, reverse=True)
+        return backups
+    
+    def get_backup_info(self, backup_date: str) -> BackupInfo:
+        """Get detailed information about a specific backup."""
+        backup_path = f"{self.config.backup_remote}/base/{backup_date}"
+        
+        # Try to parse the date
+        try:
+            timestamp = datetime.strptime(backup_date, '%Y-%m-%d')
+        except ValueError:
+            timestamp = None
+        
+        # Try to get backup size
+        size_bytes = 0
+        try:
+            result = subprocess.run(
+                ['rclone', 'size', backup_path, '--json', '--config', self.config.rclone_config],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            size_data = json.loads(result.stdout)
+            size_bytes = size_data.get('bytes', 0)
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            pass
+        
+        # Try to get metadata
+        metadata = {}
+        try:
+            result = subprocess.run(
+                ['rclone', 'cat', f"{backup_path}/backup-metadata.json", '--config', self.config.rclone_config],
+                capture_output=True,
+                text=True,
+                check=False  # Don't fail if metadata doesn't exist
+            )
+            if result.returncode == 0:
+                metadata = json.loads(result.stdout)
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            pass
+        
+        return BackupInfo(
+            date=backup_date,
+            timestamp=timestamp,
+            size_bytes=size_bytes,
+            metadata=metadata
+        )
+
+
+class BackupTUI:
+    """Terminal User Interface for backup selection."""
+    
+    def __init__(self, backups: List[BackupInfo]):
+        self.backups = backups
+        self.selected = 0
+        self.scroll_offset = 0
+    
+    def run(self, stdscr) -> Optional[BackupInfo]:
+        """Run the TUI and return selected backup or None if cancelled."""
+        curses.curs_set(0)  # Hide cursor
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)  # Selected item
+        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Latest backup
+        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Header
+        
+        while True:
+            stdscr.clear()
+            height, width = stdscr.getmaxyx()
+            
+            # Draw header
+            header = "SOAR Backup Restoration - Select a Backup"
+            stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+            stdscr.addstr(0, (width - len(header)) // 2, header)
+            stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            
+            # Draw instructions
+            instructions = "↑/↓: Navigate | Enter: Select | q/Esc: Cancel"
+            stdscr.addstr(1, (width - len(instructions)) // 2, instructions)
+            
+            # Draw separator
+            stdscr.addstr(2, 0, "─" * width)
+            
+            # Calculate visible area
+            visible_height = height - 5  # Reserve space for header and footer
+            
+            # Adjust scroll offset if needed
+            if self.selected < self.scroll_offset:
+                self.scroll_offset = self.selected
+            elif self.selected >= self.scroll_offset + visible_height:
+                self.scroll_offset = self.selected - visible_height + 1
+            
+            # Draw backup list
+            for i, backup in enumerate(self.backups[self.scroll_offset:self.scroll_offset + visible_height]):
+                actual_index = i + self.scroll_offset
+                y = i + 3
+                
+                if y >= height - 2:  # Leave room for footer
+                    break
+                
+                # Determine display style
+                if actual_index == self.selected:
+                    stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                    prefix = "► "
+                elif actual_index == 0:
+                    stdscr.attron(curses.color_pair(2))
+                    prefix = "★ "
+                else:
+                    prefix = "  "
+                
+                # Format the line
+                line = f"{prefix}{backup}"
+                
+                # Add metadata if available
+                if backup.metadata:
+                    db_size = backup.metadata.get('database_size_bytes', 0)
+                    if db_size:
+                        line += f" | DB: {BackupInfo.format_size(db_size)}"
+                
+                # Truncate if too long
+                if len(line) > width - 1:
+                    line = line[:width - 4] + "..."
+                
+                stdscr.addstr(y, 0, line)
+                
+                # Reset attributes
+                if actual_index == self.selected:
+                    stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                elif actual_index == 0:
+                    stdscr.attroff(curses.color_pair(2))
+            
+            # Draw footer with scroll indicator
+            if len(self.backups) > visible_height:
+                footer = f"Showing {self.scroll_offset + 1}-{min(self.scroll_offset + visible_height, len(self.backups))} of {len(self.backups)}"
+                stdscr.addstr(height - 1, 0, footer)
+            
+            stdscr.refresh()
+            
+            # Handle input
+            key = stdscr.getch()
+            
+            if key == curses.KEY_UP and self.selected > 0:
+                self.selected -= 1
+            elif key == curses.KEY_DOWN and self.selected < len(self.backups) - 1:
+                self.selected += 1
+            elif key == ord('k') and self.selected > 0:  # Vim-style up
+                self.selected -= 1
+            elif key == ord('j') and self.selected < len(self.backups) - 1:  # Vim-style down
+                self.selected += 1
+            elif key == curses.KEY_HOME:
+                self.selected = 0
+            elif key == curses.KEY_END:
+                self.selected = len(self.backups) - 1
+            elif key == ord('\n') or key == curses.KEY_ENTER:
+                return self.backups[self.selected]
+            elif key == ord('q') or key == 27:  # q or Esc
+                return None
+
+
+def confirm_restore(backup: BackupInfo) -> bool:
+    """Ask user to confirm restore operation."""
+    print("\n" + "=" * 70)
+    print("⚠️  WARNING: DESTRUCTIVE OPERATION ⚠️")
+    print("=" * 70)
+    print("\nYou are about to restore from backup:")
+    print(f"  Date: {backup.date}")
+    print(f"  Age: {backup.get_age_string()}")
+    print(f"  Size: {backup.format_size(backup.size_bytes)}")
+    
+    if backup.metadata:
+        print("\nBackup details:")
+        if 'backup_timestamp' in backup.metadata:
+            print(f"  Timestamp: {backup.metadata['backup_timestamp']}")
+        if 'hostname' in backup.metadata:
+            print(f"  Source: {backup.metadata['hostname']}")
+        if 'database_size_bytes' in backup.metadata:
+            db_size = backup.metadata['database_size_bytes']
+            print(f"  Database size: {BackupInfo.format_size(db_size)}")
+    
+    print("\nThis will:")
+    print("  1. Stop PostgreSQL")
+    print("  2. DESTROY the current database")
+    print("  3. Restore from backup")
+    print("  4. Replay WAL logs to the latest available point")
+    print("\nEstimated downtime: 2-4 hours")
+    print("\n" + "=" * 70)
+    
+    response = input("\nType 'yes' to proceed (anything else to cancel): ").strip()
+    return response.lower() == 'yes'
+
+
+def restore_backup(backup: BackupInfo, config: BackupConfig, restore_script: str):
+    """Execute the restore script for the selected backup."""
+    print("\n" + "=" * 70)
+    print(f"Starting restore from backup: {backup.date}")
+    print("=" * 70)
+    
+    # Build restore command
+    cmd = [restore_script, '--base-backup', backup.date, '--latest', '--yes']
+    
+    print(f"\nExecuting: {' '.join(cmd)}")
+    print("\nRestore logs will be shown below...")
+    print("=" * 70 + "\n")
+    
+    try:
+        # Run restore script interactively
+        result = subprocess.run(cmd, check=False)
+        
+        if result.returncode == 0:
+            print("\n" + "=" * 70)
+            print("✓ Restore completed successfully!")
+            print("=" * 70)
+            return True
+        else:
+            print("\n" + "=" * 70)
+            print(f"✗ Restore failed with exit code {result.returncode}")
+            print("=" * 70)
+            return False
+    
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Restore interrupted by user")
+        print("WARNING: Database may be in an inconsistent state!")
+        return False
+    except Exception as e:
+        print(f"\n\n✗ Error executing restore: {e}")
+        return False
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description='Interactive backup restoration tool for SOAR',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  restore-backup                    # Interactive TUI mode
+  restore-backup --list             # List available backups
+  restore-backup --latest           # Restore latest backup
+  restore-backup --date 2025-01-10  # Restore specific backup
+
+Configuration:
+  This tool reads configuration from /etc/soar/backup-env
+  Ensure rclone is properly configured with Wasabi remote.
+"""
+    )
+    
+    parser.add_argument(
+        '--list',
+        action='store_true',
+        help='List available backups and exit'
+    )
+    
+    parser.add_argument(
+        '--latest',
+        action='store_true',
+        help='Restore the latest backup (with confirmation)'
+    )
+    
+    parser.add_argument(
+        '--date',
+        metavar='YYYY-MM-DD',
+        help='Restore specific backup by date'
+    )
+    
+    parser.add_argument(
+        '--config',
+        default='/etc/soar/backup-env',
+        help='Path to backup configuration file (default: /etc/soar/backup-env)'
+    )
+    
+    parser.add_argument(
+        '--restore-script',
+        help='Path to restore script (default: auto-detect)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Load configuration
+    try:
+        config = BackupConfig(args.config)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        print("\nPlease ensure /etc/soar/backup-env is properly configured.", file=sys.stderr)
+        sys.exit(1)
+    
+    # Find restore script
+    if args.restore_script:
+        restore_script = args.restore_script
+    else:
+        # Try to find restore script
+        possible_paths = [
+            '/home/runner/work/soar/soar/scripts/backup/restore',
+            '/usr/local/bin/soar-restore',
+            os.path.join(os.path.dirname(__file__), 'backup', 'restore'),
+        ]
+        
+        restore_script = None
+        for path in possible_paths:
+            if os.path.exists(path) and os.access(path, os.X_OK):
+                restore_script = path
+                break
+        
+        if not restore_script:
+            print("Error: Could not find restore script", file=sys.stderr)
+            print(f"Tried: {', '.join(possible_paths)}", file=sys.stderr)
+            print("\nUse --restore-script to specify the path manually.", file=sys.stderr)
+            sys.exit(1)
+    
+    # Enumerate backups
+    print("Enumerating backups from cloud storage...")
+    enumerator = BackupEnumerator(config)
+    backups = enumerator.list_backups()
+    
+    if not backups:
+        print("No backups found!", file=sys.stderr)
+        sys.exit(1)
+    
+    print(f"Found {len(backups)} backup(s)\n")
+    
+    # Handle --list mode
+    if args.list:
+        print("Available backups:")
+        print("-" * 70)
+        for i, backup in enumerate(backups):
+            prefix = "★ LATEST" if i == 0 else " " * 9
+            print(f"{prefix} {backup}")
+            if backup.metadata:
+                if 'backup_timestamp' in backup.metadata:
+                    print(f"           Timestamp: {backup.metadata['backup_timestamp']}")
+                if 'hostname' in backup.metadata:
+                    print(f"           Source: {backup.metadata['hostname']}")
+        print("-" * 70)
+        return
+    
+    # Handle --latest mode
+    if args.latest:
+        backup = backups[0]
+        print(f"Latest backup: {backup}")
+        
+        if not confirm_restore(backup):
+            print("\nRestore cancelled by user.")
+            sys.exit(2)
+        
+        success = restore_backup(backup, config, restore_script)
+        sys.exit(0 if success else 1)
+    
+    # Handle --date mode
+    if args.date:
+        # Find backup with matching date
+        backup = None
+        for b in backups:
+            if b.date == args.date:
+                backup = b
+                break
+        
+        if not backup:
+            print(f"Error: Backup not found for date: {args.date}", file=sys.stderr)
+            print(f"\nAvailable backups:", file=sys.stderr)
+            for b in backups:
+                print(f"  {b.date}", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Selected backup: {backup}")
+        
+        if not confirm_restore(backup):
+            print("\nRestore cancelled by user.")
+            sys.exit(2)
+        
+        success = restore_backup(backup, config, restore_script)
+        sys.exit(0 if success else 1)
+    
+    # Interactive TUI mode
+    try:
+        selected_backup = curses.wrapper(BackupTUI(backups).run)
+    except KeyboardInterrupt:
+        print("\n\nCancelled by user.")
+        sys.exit(2)
+    
+    if not selected_backup:
+        print("\nNo backup selected. Exiting.")
+        sys.exit(2)
+    
+    # Confirm and restore
+    if not confirm_restore(selected_backup):
+        print("\nRestore cancelled by user.")
+        sys.exit(2)
+    
+    success = restore_backup(selected_backup, config, restore_script)
+    sys.exit(0 if success else 1)
+
+
+if __name__ == '__main__':
+    main()
