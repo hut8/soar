@@ -32,6 +32,7 @@ pub mod clubs_repo;
 pub mod coverage;
 pub mod coverage_cache;
 pub mod coverage_repo;
+pub mod db;
 pub mod elevation;
 pub mod email;
 pub mod email_reporter;
