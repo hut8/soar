@@ -123,7 +123,7 @@ async fn aggregate_coverage_hexes(
     dates_to_process.sort();
 
     for date in dates_to_process {
-        info!("Processing coverage for date: {}", date);
+        info!("processing coverage for date: {}", date);
 
         // Get resolutions needed for this date
         let resolutions_for_date: Vec<i16> = needed_dimensions
