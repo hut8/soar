@@ -41,10 +41,6 @@ pub mod sql_types {
     #[diesel(postgres_type(name = "engine_type"))]
     pub struct EngineType;
 
-    // Use postgis_diesel types instead of generating our own
-    pub type Geography = postgis_diesel::sql_types::Geography;
-    pub type Geometry = postgis_diesel::sql_types::Geometry;
-
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "light_sport_type"))]
     pub struct LightSportType;
@@ -72,8 +68,6 @@ diesel::table! {
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
-    use super::sql_types::Geometry;
-    use super::sql_types::Geography;
     use super::sql_types::AircraftCategory;
     use super::sql_types::EngineType;
 
@@ -272,7 +266,6 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::Geography;
 
     airports (id) {
         id -> Int4,
@@ -337,8 +330,6 @@ diesel::table! {
     use super::sql_types::AirspaceClass;
     use super::sql_types::AirspaceType;
     use super::sql_types::AltitudeReference;
-    use super::sql_types::Geography;
-    use super::sql_types::Geometry;
 
     airspaces (id) {
         id -> Uuid,
@@ -425,8 +416,6 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::Geography;
-    use super::sql_types::Geometry;
 
     fixes (id, received_at) {
         id -> Uuid,
@@ -661,7 +650,6 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::Geography;
 
     receivers (id) {
         callsign -> Text,
@@ -725,7 +713,6 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::Geometry;
 
     runways (id) {
         id -> Int4,
@@ -845,8 +832,6 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::Geometry;
-    use super::sql_types::Geography;
 
     user_fixes (id) {
         id -> Uuid,
