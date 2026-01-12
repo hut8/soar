@@ -146,7 +146,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "e2e-build-v2"
+          shared-key: "e2e-build"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Cache Diesel CLI
@@ -344,7 +344,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "test-build-v2"
+          shared-key: "test-build"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
@@ -441,7 +441,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build-musl-v2"
+          shared-key: "release-build-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
@@ -534,7 +534,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build-arm64-musl-v2"
+          shared-key: "release-build-arm64-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
