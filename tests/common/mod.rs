@@ -49,6 +49,15 @@ const CONNECTION_CLEANUP_DELAY_MS: u64 = 50;
 // Delay to ensure template database metadata update is fully processed
 const TEMPLATE_MARKING_DELAY_MS: u64 = 20;
 
+// Delay after terminating connections before attempting to clone template
+const POST_TERMINATE_DELAY_MS: u64 = 100;
+
+// Maximum number of retries for template cloning
+const MAX_CLONE_RETRIES: u32 = 5;
+
+// Initial retry delay in milliseconds (doubles with each retry)
+const INITIAL_RETRY_DELAY_MS: u64 = 50;
+
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 /// Ensures the template database exists and has the latest migrations applied.
@@ -272,6 +281,9 @@ impl TestDatabase {
     /// Uses a file-based lock to ensure only one database is created at a time.
     /// This prevents "source database is being accessed by other users" errors
     /// when multiple tests try to clone from the template simultaneously.
+    ///
+    /// Implements retry logic with exponential backoff to handle transient
+    /// connection cleanup delays in PostgreSQL.
     async fn create_database(admin_url: &str, db_name: &str) -> Result<()> {
         use diesel::Connection;
         use fs2::FileExt;
@@ -314,32 +326,75 @@ impl TestDatabase {
                 .execute(&mut conn)
                 .context("Failed to terminate connections to template database")?;
 
-            // Create database from template
+            // Wait for PostgreSQL to fully process the connection terminations
+            thread::sleep(Duration::from_millis(POST_TERMINATE_DELAY_MS));
+
+            // Create database from template with retry logic
             // Note: db_name is randomly generated alphanumeric, safe from SQL injection
             let create_sql = format!(
                 "CREATE DATABASE \"{}\" TEMPLATE soar_test_template",
                 db_name
             );
 
-            let result = diesel::sql_query(&create_sql)
-                .execute(&mut conn)
-                .with_context(|| {
-                    format!(
-                        "Failed to create database '{}' from template.\n\
-                         \n\
-                         The template database 'soar_test_template' may not exist.\n\
-                         Run: ./scripts/setup-test-template.sh\n\
-                         \n\
-                         This creates the template database with all migrations applied.",
-                        db_name
-                    )
-                });
+            let mut last_error = None;
+            let mut retry_delay = INITIAL_RETRY_DELAY_MS;
 
-            // Lock is automatically released when lock_file is dropped
+            for attempt in 0..MAX_CLONE_RETRIES {
+                match diesel::sql_query(&create_sql).execute(&mut conn) {
+                    Ok(_) => {
+                        // Success! Release lock and return
+                        drop(lock_file);
+                        return Ok::<(), anyhow::Error>(());
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+
+                        // Check if this is a "being accessed by other users" error
+                        if error_msg.contains("is being accessed by other users")
+                            && attempt < MAX_CLONE_RETRIES - 1
+                        {
+                            // Retry with exponential backoff
+                            eprintln!(
+                                "Attempt {}/{}: Template database busy, retrying in {}ms...",
+                                attempt + 1,
+                                MAX_CLONE_RETRIES,
+                                retry_delay
+                            );
+
+                            thread::sleep(Duration::from_millis(retry_delay));
+                            retry_delay *= 2; // Exponential backoff
+                            last_error = Some(e);
+                            continue;
+                        }
+
+                        // Non-retryable error or max retries exceeded
+                        drop(lock_file);
+                        return Err(e).with_context(|| {
+                            format!(
+                                "Failed to create database '{}' from template.\n\
+                                 \n\
+                                 The template database 'soar_test_template' may not exist.\n\
+                                 Run: ./scripts/setup-test-template.sh\n\
+                                 \n\
+                                 This creates the template database with all migrations applied.",
+                                db_name
+                            )
+                        });
+                    }
+                }
+            }
+
+            // If we get here, all retries failed
             drop(lock_file);
-
-            result?;
-            Ok::<(), anyhow::Error>(())
+            if let Some(e) = last_error {
+                Err(e).context(format!(
+                    "Failed to create database '{}' after {} retries. \
+                     Template database may be under heavy load.",
+                    db_name, MAX_CLONE_RETRIES
+                ))
+            } else {
+                anyhow::bail!("Database creation failed unexpectedly")
+            }
         })
         .await
         .context("Database creation task panicked")?
