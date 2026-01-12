@@ -1,24 +1,21 @@
 #!/bin/bash
 #
-# restore - Restore PostgreSQL database from backup
+# restore - Restore PostgreSQL database from pg_dump backup
 #
-# This script restores the database from a pg_basebackup snapshot.
-# Backups are self-contained (created with --wal-method=stream).
+# This script restores a single database from a pg_dump backup file.
+# It drops and recreates the target database, then restores from the dump.
 #
-# **WARNING**: This is a DESTRUCTIVE operation. It will:
-#   1. Stop PostgreSQL
-#   2. Remove current data directory
-#   3. Restore from backup
-#   4. Start PostgreSQL
+# **WARNING**: This will DROP and recreate the target database!
+# Other databases on the same PostgreSQL instance are NOT affected.
 #
 # Usage:
 #   restore                           # Restore from latest backup
-#   restore --base-backup YYYY-MM-DD  # Restore from specific backup
+#   restore --backup YYYY-MM-DD       # Restore from specific backup
 #   restore --yes                     # Skip confirmation prompt
 #
 # Options:
-#   --base-backup YYYY-MM-DD  Use specific base backup (default: latest)
-#   --yes                     Skip confirmation prompt (dangerous!)
+#   --backup YYYY-MM-DD   Use specific backup (default: latest)
+#   --yes                 Skip confirmation prompt (dangerous!)
 #
 # Exit codes:
 #   0 - Success
@@ -39,13 +36,13 @@ fi
 source /etc/soar/backup-env
 
 # Parse arguments
-BASE_BACKUP=""
+BACKUP_DATE=""
 SKIP_CONFIRM=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --base-backup)
-            BASE_BACKUP="$2"
+        --backup|--base-backup)
+            BACKUP_DATE="$2"
             shift 2
             ;;
         --latest)
@@ -58,16 +55,16 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: restore [--base-backup YYYY-MM-DD] [--yes]" >&2
+            echo "Usage: restore [--backup YYYY-MM-DD] [--yes]" >&2
             exit 1
             ;;
     esac
 done
 
-# Rclone configuration from component variables (same as base-backup and wal-archive)
+# Rclone configuration
 RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-wasabi}"
 RCLONE_BUCKET="${BACKUP_RCLONE_BUCKET:-soar-backup-prod}"
-RCLONE_PATH="${BACKUP_RCLONE_PATH:-}"  # Optional prefix within bucket
+RCLONE_PATH="${BACKUP_RCLONE_PATH:-}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
 
 # Validate configuration
@@ -87,16 +84,16 @@ if [[ -n "$RCLONE_PATH" ]]; then
 else
     BACKUP_REMOTE="${RCLONE_REMOTE}:${RCLONE_BUCKET}"
 fi
+
 if [[ ! -f "$RCLONE_CONFIG" ]]; then
     echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
     exit 1
 fi
 
 # Directories - use fallbacks for non-root users
-TEMP_DIR="${BACKUP_TEMP_DIR:-/storage/soar/backups/base}"
+TEMP_DIR="${BACKUP_TEMP_DIR:-/var/lib/soar/backup-temp}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
 
-# If we can't create or write to the configured directories, use user-local fallbacks
 if ! mkdir -p "$TEMP_DIR" 2>/dev/null || ! [[ -w "$TEMP_DIR" ]]; then
     TEMP_DIR="${HOME}/.local/share/soar/backup-temp"
     mkdir -p "$TEMP_DIR"
@@ -109,16 +106,13 @@ fi
 # PostgreSQL configuration
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
-PGDATABASE="${TARGET_DATABASE:-${PGDATABASE:-soar}}"
+PGDATABASE="${PGDATABASE:-soar}"
 PGUSER="${PGUSER:-postgres}"
-PGDATA="${PGDATA:-/var/lib/postgresql/15/main}"
-PG_VERSION="${PG_VERSION:-15}"
+PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-4}"
 
 # Restore configuration
 RESTORE_DIR="$TEMP_DIR/restore-$(date +%Y%m%d-%H%M%S)"
 DOWNLOAD_DIR="$RESTORE_DIR/download"
-EXTRACT_DIR="$RESTORE_DIR/extract"
-BACKUP_FORMAT=""  # Set during download_base_backup (zstd or gzip)
 
 # Function to log messages (writes to stderr so it doesn't interfere with captured output)
 log() {
@@ -159,17 +153,17 @@ confirm_restore() {
     echo "╚════════════════════════════════════════════════════════════════╝"
     echo ""
     echo "This will:"
-    echo "  1. Stop PostgreSQL"
-    echo "  2. DESTROY current database: $PGDATABASE"
-    echo "  3. Remove data directory: $PGDATA"
-    echo "  4. Restore from backup"
-    echo "  5. Start PostgreSQL"
+    echo "  1. DROP the database: $PGDATABASE"
+    echo "  2. Recreate the database"
+    echo "  3. Restore from backup using pg_restore"
+    echo ""
+    echo "Other databases on this PostgreSQL instance will NOT be affected."
     echo ""
     echo "Database: $PGDATABASE"
-    echo "Data directory: $PGDATA"
+    echo "Server: $PGHOST:$PGPORT"
     echo "Backup source: $BACKUP_REMOTE"
     echo ""
-    read -p "Are you ABSOLUTELY SURE you want to continue? (type 'yes' to proceed): " response
+    read -p "Type 'yes' to proceed: " response
     echo ""
 
     if [[ "$response" != "yes" ]]; then
@@ -180,19 +174,19 @@ confirm_restore() {
     log INFO "User confirmed restore operation"
 }
 
-# Function to find base backup
-find_base_backup() {
-    log INFO "Finding appropriate base backup..."
+# Function to find backup
+find_backup() {
+    log INFO "Finding backup..."
 
-    if [[ -n "$BASE_BACKUP" ]]; then
+    if [[ -n "$BACKUP_DATE" ]]; then
         # User specified a specific backup
-        if rclone lsd "${BACKUP_REMOTE}/base/${BASE_BACKUP}/" \
+        if rclone lsd "${BACKUP_REMOTE}/base/${BACKUP_DATE}/" \
             --config "$RCLONE_CONFIG" \
             >/dev/null 2>&1; then
-            echo "$BASE_BACKUP"
+            echo "$BACKUP_DATE"
             return 0
         else
-            log ERROR "Specified base backup does not exist: $BASE_BACKUP"
+            log ERROR "Specified backup does not exist: $BACKUP_DATE"
             exit 1
         fi
     else
@@ -202,7 +196,7 @@ find_base_backup() {
             2>/dev/null | awk '{print $5}' | sort -r | head -1 || echo "")
 
         if [[ -z "$newest" ]]; then
-            log ERROR "No base backups found"
+            log ERROR "No backups found"
             exit 1
         fi
 
@@ -210,35 +204,34 @@ find_base_backup() {
     fi
 }
 
-# Function to download base backup
-download_base_backup() {
+# Function to download backup
+download_backup() {
     local backup_date="$1"
     local backup_prefix="${BACKUP_REMOTE}/base/${backup_date}"
 
-    log INFO "Downloading base backup: $backup_date"
+    log INFO "Downloading backup: $backup_date"
     log INFO "Source: $backup_prefix"
 
     mkdir -p "$DOWNLOAD_DIR"
 
-    # Download all files (no progress to keep logs clean)
+    # Download all files
     if ! rclone sync "$backup_prefix/" "$DOWNLOAD_DIR/" \
         --config "$RCLONE_CONFIG" \
-        >> "$LOG_DIR/restore.log" 2>&1; then
-        log ERROR "Failed to download base backup"
+        --progress \
+        2>&1 | tee -a "$LOG_DIR/restore.log"; then
+        log ERROR "Failed to download backup"
         exit 1
     fi
 
-    # Verify download - check for zstd (current) or gzip (legacy) format
-    if [[ -f "$DOWNLOAD_DIR/base.tar.zst" ]]; then
-        BACKUP_FORMAT="zstd"
-    elif [[ -f "$DOWNLOAD_DIR/base.tar.gz" ]]; then
-        BACKUP_FORMAT="gzip"
-    else
-        log ERROR "Base backup is incomplete (missing base.tar.zst or base.tar.gz)"
+    # Verify download - check for pg_dump format
+    if [[ ! -f "$DOWNLOAD_DIR/database.dump" ]]; then
+        log ERROR "Backup is incomplete (missing database.dump)"
+        log ERROR "This restore script requires pg_dump format backups."
+        log ERROR "Found files: $(ls -la "$DOWNLOAD_DIR/")"
         exit 1
     fi
 
-    log INFO "Base backup downloaded successfully"
+    log INFO "Backup downloaded successfully"
 
     # Show backup metadata if available
     if [[ -f "$DOWNLOAD_DIR/backup-metadata.json" ]]; then
@@ -249,129 +242,57 @@ download_base_backup() {
     fi
 }
 
-# Function to extract base backup
-extract_base_backup() {
-    log INFO "Extracting base backup (format: $BACKUP_FORMAT)..."
+# Function to restore database
+restore_database() {
+    local dump_file="$DOWNLOAD_DIR/database.dump"
 
-    mkdir -p "$EXTRACT_DIR"
+    log INFO "Dropping existing database: $PGDATABASE"
 
-    # Extract based on compression format
-    local extract_cmd
-    if [[ "$BACKUP_FORMAT" == "zstd" ]]; then
-        extract_cmd="tar --zstd -xf $DOWNLOAD_DIR/base.tar.zst -C $EXTRACT_DIR"
-    else
-        extract_cmd="tar xzf $DOWNLOAD_DIR/base.tar.gz -C $EXTRACT_DIR"
-    fi
+    # Terminate existing connections to the database
+    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -c \
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$PGDATABASE' AND pid <> pg_backend_pid();" \
+        >/dev/null 2>&1 || true
 
-    if ! $extract_cmd >> "$LOG_DIR/restore.log" 2>&1; then
-        log ERROR "Failed to extract base backup"
-        exit 1
-    fi
-
-    log INFO "Base backup extracted successfully"
-}
-
-# Function to stop PostgreSQL
-stop_postgresql() {
-    log INFO "Stopping PostgreSQL..."
-
-    if systemctl is-active --quiet postgresql; then
-        if ! sudo systemctl stop postgresql; then
-            log ERROR "Failed to stop PostgreSQL"
+    # Drop database if it exists
+    if psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -lqt | cut -d \| -f 1 | grep -qw "$PGDATABASE"; then
+        if ! dropdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE"; then
+            log ERROR "Failed to drop database: $PGDATABASE"
             exit 1
         fi
-        log INFO "PostgreSQL stopped"
+        log INFO "Database dropped"
     else
-        log INFO "PostgreSQL is not running"
+        log INFO "Database does not exist, will create new"
     fi
-}
 
-# Function to start PostgreSQL and wait for recovery
-start_postgresql() {
-    log INFO "Starting PostgreSQL..."
-
-    if ! sudo systemctl start postgresql; then
-        log ERROR "Failed to start PostgreSQL"
-        log ERROR "Check logs: sudo journalctl -u postgresql -n 100"
+    # Create fresh database
+    log INFO "Creating database: $PGDATABASE"
+    if ! createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE"; then
+        log ERROR "Failed to create database: $PGDATABASE"
         exit 1
     fi
 
-    # Wait for PostgreSQL to accept connections
-    log INFO "Waiting for PostgreSQL to accept connections..."
-    local retries=60
-    while [[ $retries -gt 0 ]]; do
-        if psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -c "SELECT 1" >/dev/null 2>&1; then
-            break
-        fi
-        sleep 2
-        ((retries--))
-    done
+    # Restore from dump using pg_restore
+    log INFO "Restoring from backup using pg_restore (parallel jobs: $PARALLEL_JOBS)..."
+    log INFO "This may take a while for large databases..."
 
-    if [[ $retries -eq 0 ]]; then
-        log ERROR "PostgreSQL failed to accept connections"
-        log ERROR "Check logs: sudo tail -50 /var/log/postgresql/postgresql-${PG_VERSION}-main.log"
-        exit 1
+    if ! pg_restore \
+        -h "$PGHOST" \
+        -p "$PGPORT" \
+        -U "$PGUSER" \
+        -d "$PGDATABASE" \
+        -j "$PARALLEL_JOBS" \
+        -v \
+        "$dump_file" \
+        2>&1 | tee -a "$LOG_DIR/restore.log"; then
+        # pg_restore returns non-zero on warnings too, check if database is accessible
+        if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1; then
+            log ERROR "pg_restore failed and database is not accessible"
+            exit 1
+        fi
+        log WARN "pg_restore completed with warnings (this is often normal)"
     fi
 
-    # Wait for recovery to complete (WAL replay from backup)
-    log INFO "Waiting for recovery to complete..."
-    retries=120  # 4 minutes max for WAL replay
-    while [[ $retries -gt 0 ]]; do
-        local in_recovery=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -t -c "SELECT pg_is_in_recovery()" 2>/dev/null | tr -d ' ')
-        if [[ "$in_recovery" == "f" ]]; then
-            log INFO "Recovery completed, PostgreSQL is ready"
-            return 0
-        fi
-        sleep 2
-        ((retries--))
-        if (( retries % 30 == 0 )); then
-            log INFO "Still recovering... (${retries} retries remaining)"
-        fi
-    done
-
-    log ERROR "Recovery did not complete in expected time"
-    log ERROR "Check logs: sudo tail -50 /var/log/postgresql/postgresql-${PG_VERSION}-main.log"
-    exit 1
-}
-
-# Function to backup current data directory
-backup_current_data() {
-    log INFO "Creating snapshot of current data directory..."
-
-    local snapshot_dir="/var/lib/postgresql/data-snapshot-$(date +%Y%m%d-%H%M%S)"
-
-    if [[ -d "$PGDATA" ]]; then
-        sudo mv "$PGDATA" "$snapshot_dir"
-        log INFO "Current data backed up to: $snapshot_dir"
-        log INFO "You can restore it with: sudo mv $snapshot_dir $PGDATA"
-    fi
-}
-
-# Function to restore data directory
-restore_data_directory() {
-    log INFO "Restoring data directory..."
-
-    # Remove current data directory
-    if [[ -d "$PGDATA" ]]; then
-        sudo rm -rf "$PGDATA"
-    fi
-
-    # Create new data directory
-    sudo mkdir -p "$PGDATA"
-    sudo chown postgres:postgres "$PGDATA"
-    sudo chmod 700 "$PGDATA"
-
-    # Copy extracted backup to data directory
-    sudo cp -a "$EXTRACT_DIR"/* "$PGDATA/"
-    sudo chown -R postgres:postgres "$PGDATA"
-
-    log INFO "Data directory restored"
-
-    # Create recovery.signal to tell PostgreSQL to replay included WAL
-    # (pg_basebackup with --wal-method=stream includes all needed WAL)
-    log INFO "Creating recovery.signal for WAL replay..."
-    sudo touch "$PGDATA/recovery.signal"
-    sudo chown postgres:postgres "$PGDATA/recovery.signal"
+    log INFO "Database restored successfully"
 }
 
 # Function to verify restore
@@ -388,14 +309,16 @@ verify_restore() {
     local db_size=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
         "SELECT pg_database_size('$PGDATABASE')" | tr -d ' ')
     local device_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
-        "SELECT COUNT(*) FROM devices" | tr -d ' ')
-    local latest_fix=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
-        "SELECT MAX(created_at) FROM fixes" | tr -d ' ')
+        "SELECT COUNT(*) FROM devices" 2>/dev/null | tr -d ' ' || echo "N/A")
+    local table_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'" | tr -d ' ')
 
     log INFO "Restored database stats:"
     log INFO "  Database size: $(numfmt --to=iec-i --suffix=B "$db_size")"
-    log INFO "  Device count: $device_count"
-    log INFO "  Latest fix timestamp: $latest_fix"
+    log INFO "  Tables: $table_count"
+    if [[ "$device_count" != "N/A" ]]; then
+        log INFO "  Devices: $device_count"
+    fi
 
     log INFO "Database verification passed"
 }
@@ -408,32 +331,20 @@ main() {
     log INFO "Starting database restore"
     log INFO "=========================================="
     log INFO "Database: $PGDATABASE"
-    log INFO "Data directory: $PGDATA"
+    log INFO "Server: $PGHOST:$PGPORT"
 
     # Confirm operation
     confirm_restore
 
-    # Find base backup
-    local base_backup=$(find_base_backup)
-    log INFO "Using base backup: $base_backup"
+    # Find backup
+    local backup=$(find_backup)
+    log INFO "Using backup: $backup"
 
-    # Download base backup
-    download_base_backup "$base_backup"
+    # Download backup
+    download_backup "$backup"
 
-    # Extract base backup
-    extract_base_backup
-
-    # Stop PostgreSQL
-    stop_postgresql
-
-    # Backup current data
-    backup_current_data
-
-    # Restore data directory
-    restore_data_directory
-
-    # Start PostgreSQL
-    start_postgresql
+    # Restore database
+    restore_database
 
     # Verify restore
     verify_restore
@@ -450,8 +361,7 @@ main() {
     log INFO ""
     log INFO "Next steps:"
     log INFO "  1. Verify application functionality"
-    log INFO "  2. Restart application services: sudo systemctl start soar-*"
-    log INFO "  3. Monitor logs for any issues"
+    log INFO "  2. Restart application services if needed"
     log INFO ""
 
     return 0

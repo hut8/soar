@@ -404,10 +404,10 @@ def confirm_restore(backup: BackupInfo) -> bool:
             print(f"  Database size: {BackupInfo.format_size(db_size)}")
     
     print("\nThis will:")
-    print("  1. Stop PostgreSQL")
-    print("  2. DESTROY the current database")
-    print("  3. Restore from backup")
-    print("  4. Start PostgreSQL")
+    print("  1. DROP the target database")
+    print("  2. Recreate the database")
+    print("  3. Restore from backup using pg_restore")
+    print("\nOther databases will NOT be affected.")
     print("\n" + "=" * 70)
     
     response = input("\nType 'yes' to proceed (anything else to cancel): ").strip()
@@ -421,7 +421,7 @@ def restore_backup(backup: BackupInfo, config: BackupConfig, restore_script: str
     print("=" * 70)
     
     # Build restore command
-    cmd = [restore_script, '--base-backup', backup.date, '--latest', '--yes']
+    cmd = [restore_script, '--backup', backup.date, '--yes']
     
     print(f"\nExecuting: {' '.join(cmd)}")
     print("\nRestore logs will be shown below...")
