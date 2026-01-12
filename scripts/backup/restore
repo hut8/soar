@@ -150,6 +150,7 @@ PG_VERSION="${PG_VERSION:-15}"
 RESTORE_DIR="$TEMP_DIR/restore-$(date +%Y%m%d-%H%M%S)"
 DOWNLOAD_DIR="$RESTORE_DIR/download"
 EXTRACT_DIR="$RESTORE_DIR/extract"
+BACKUP_FORMAT=""  # Set during download_base_backup (zstd or gzip)
 
 # Function to log messages
 log() {
@@ -261,9 +262,13 @@ download_base_backup() {
         exit 1
     fi
 
-    # Verify download
-    if [[ ! -f "$DOWNLOAD_DIR/base.tar.gz" ]]; then
-        log ERROR "Base backup is incomplete (missing base.tar.gz)"
+    # Verify download - check for zstd (current) or gzip (legacy) format
+    if [[ -f "$DOWNLOAD_DIR/base.tar.zst" ]]; then
+        BACKUP_FORMAT="zstd"
+    elif [[ -f "$DOWNLOAD_DIR/base.tar.gz" ]]; then
+        BACKUP_FORMAT="gzip"
+    else
+        log ERROR "Base backup is incomplete (missing base.tar.zst or base.tar.gz)"
         exit 1
     fi
 
@@ -280,12 +285,19 @@ download_base_backup() {
 
 # Function to extract base backup
 extract_base_backup() {
-    log INFO "Extracting base backup..."
+    log INFO "Extracting base backup (format: $BACKUP_FORMAT)..."
 
     mkdir -p "$EXTRACT_DIR"
 
-    # Extract base.tar.gz
-    if ! tar xzf "$DOWNLOAD_DIR/base.tar.gz" -C "$EXTRACT_DIR" >> "$LOG_DIR/restore.log" 2>&1; then
+    # Extract based on compression format
+    local extract_cmd
+    if [[ "$BACKUP_FORMAT" == "zstd" ]]; then
+        extract_cmd="tar --zstd -xf $DOWNLOAD_DIR/base.tar.zst -C $EXTRACT_DIR"
+    else
+        extract_cmd="tar xzf $DOWNLOAD_DIR/base.tar.gz -C $EXTRACT_DIR"
+    fi
+
+    if ! $extract_cmd >> "$LOG_DIR/restore.log" 2>&1; then
         log ERROR "Failed to extract base backup"
         exit 1
     fi

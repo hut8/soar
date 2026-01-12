@@ -212,11 +212,13 @@ verify_base_backup() {
         return 1
     fi
 
-    # Check for required files
-    if echo "$files" | grep -q "base.tar.gz"; then
-        check_result PASS "Base backup has base.tar.gz: $backup_date"
+    # Check for required files (zstd is current format, gzip is legacy)
+    if echo "$files" | grep -q "base.tar.zst"; then
+        check_result PASS "Base backup has base.tar.zst: $backup_date"
+    elif echo "$files" | grep -q "base.tar.gz"; then
+        check_result PASS "Base backup has base.tar.gz (legacy): $backup_date"
     else
-        check_result FAIL "Base backup missing base.tar.gz: $backup_date"
+        check_result FAIL "Base backup missing base.tar.zst or base.tar.gz: $backup_date"
         return 1
     fi
 
