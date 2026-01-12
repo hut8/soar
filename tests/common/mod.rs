@@ -354,6 +354,8 @@ impl TestDatabase {
                             && attempt < MAX_CLONE_RETRIES - 1
                         {
                             // Retry with exponential backoff
+                            // Using eprintln for visibility during test runs (consistent with
+                            // other test infrastructure logging in this module)
                             eprintln!(
                                 "Attempt {}/{}: Template database busy, retrying in {}ms...",
                                 attempt + 1,
@@ -386,15 +388,13 @@ impl TestDatabase {
 
             // If we get here, all retries failed
             drop(lock_file);
-            if let Some(e) = last_error {
-                Err(e).context(format!(
-                    "Failed to create database '{}' after {} retries. \
-                     Template database may be under heavy load.",
-                    db_name, MAX_CLONE_RETRIES
-                ))
-            } else {
-                anyhow::bail!("Database creation failed unexpectedly")
-            }
+            // last_error is guaranteed to be Some() since we only continue in the loop
+            // when there's an error
+            Err(last_error.expect("last_error should be set after retries")).context(format!(
+                "Failed to create database '{}' after {} retries. \
+                 Template database may be under heavy load.",
+                db_name, MAX_CLONE_RETRIES
+            ))
         })
         .await
         .context("Database creation task panicked")?
