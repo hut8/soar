@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use chrono::DateTime;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use soar::adsb_accumulator::AdsbAccumulator;
 use soar::aircraft::AddressType;
 use soar::aircraft_repo::AircraftRepository;
-use soar::beast::cpr_decoder::CprDecoder;
-use soar::beast::{adsb_message_to_fix, decode_beast_frame};
+use soar::beast::decode_beast_frame;
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
@@ -102,13 +102,16 @@ async fn process_aprs_message(
             // For OGNFNT sources with invalid lat/lon, log as trace instead of error
             // These are common and expected issues with this data source
             let error_str = e.to_string();
+            // For OGNFNT sources with common parsing issues, log as debug/trace instead of info
+            // These are expected issues with this data source and not actionable
             if actual_message.contains("OGNFNT")
                 && (error_str.contains("Invalid Latitude")
-                    || error_str.contains("Invalid Longitude"))
+                    || error_str.contains("Invalid Longitude")
+                    || error_str.contains("Unsupported Position Format"))
             {
                 trace!("Failed to parse APRS message '{actual_message}': {e}");
             } else {
-                info!("Failed to parse APRS message '{actual_message}': {e}");
+                debug!("Failed to parse APRS message '{actual_message}': {e}");
             }
         }
     }
@@ -127,7 +130,7 @@ async fn process_beast_message(
     aircraft_repo: &AircraftRepository,
     beast_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
-    cpr_decoder: &Arc<CprDecoder>,
+    accumulator: &Arc<AdsbAccumulator>,
     receiver_id: Option<Uuid>,
 ) {
     let start_time = std::time::Instant::now();
@@ -221,26 +224,67 @@ async fn process_beast_message(
         }
     };
 
-    // Convert ADS-B message to Fix using CPR decoder for position
-    let fix_opt = match adsb_message_to_fix(
+    // Process ADS-B message through accumulator (combines position/velocity/callsign)
+    let fix_result = match accumulator.process_adsb_message(
         &decoded.message,
         raw_frame,
         received_at,
-        receiver_id,
-        aircraft.id,
-        raw_message_id,
-        Some(cpr_decoder.as_ref()),
+        icao_address,
     ) {
-        Ok(fix_opt) => fix_opt,
+        Ok(result) => result,
         Err(e) => {
-            debug!("Failed to convert ADS-B message to fix: {}", e);
+            debug!("Failed to process ADS-B message: {}", e);
             metrics::counter!("beast.run.adsb_to_fix_failed_total").increment(1);
             return;
         }
     };
 
-    // If we got a Fix, process it through FixProcessor
-    if let Some(fix) = fix_opt {
+    // If we got a partial fix, complete it and process through FixProcessor
+    if let Some((partial_fix, trigger)) = fix_result {
+        // Determine if aircraft is active (ground speed >= 20 knots)
+        let is_active = partial_fix
+            .ground_speed_knots
+            .is_none_or(|speed| speed >= 20.0);
+
+        // Build source metadata with ADS-B-specific fields and trigger
+        let mut metadata = serde_json::Map::new();
+        metadata.insert("protocol".to_string(), serde_json::json!("adsb"));
+        metadata.insert(
+            "trigger".to_string(),
+            serde_json::json!(trigger.to_string()),
+        );
+        if partial_fix.position_age_ms > 0 {
+            metadata.insert(
+                "position_age_ms".to_string(),
+                serde_json::json!(partial_fix.position_age_ms),
+            );
+        }
+
+        let fix = soar::Fix {
+            id: Uuid::now_v7(),
+            source: partial_fix.icao_hex,
+            timestamp: partial_fix.timestamp,
+            latitude: partial_fix.latitude,
+            longitude: partial_fix.longitude,
+            altitude_msl_feet: partial_fix.altitude_feet,
+            altitude_agl_feet: None, // Will be calculated later
+            flight_number: partial_fix.callsign,
+            squawk: partial_fix.squawk,
+            ground_speed_knots: partial_fix.ground_speed_knots,
+            track_degrees: partial_fix.track_degrees,
+            climb_fpm: partial_fix.vertical_rate_fpm,
+            turn_rate_rot: None, // ADS-B doesn't provide turn rate
+            source_metadata: Some(serde_json::Value::Object(metadata)),
+            flight_id: None, // Will be assigned by flight tracker
+            aircraft_id: aircraft.id,
+            received_at,
+            is_active,
+            receiver_id,
+            raw_message_id,
+            altitude_agl_valid: false, // Will be calculated later
+            time_gap_seconds: None,    // Will be set by flight tracker
+        };
+
         match fix_processor.process_fix(fix).await {
             Ok(_) => {
                 metrics::counter!("beast.run.fixes_processed_total").increment(1);
@@ -251,8 +295,8 @@ async fn process_beast_message(
             }
         }
     } else {
-        // No fix created (message didn't contain position/velocity data)
-        debug!("ADS-B message did not produce a fix (no position/velocity)");
+        // No fix created (insufficient data - need valid position)
+        debug!("ADS-B message did not produce a fix (insufficient data for valid fix)");
         metrics::counter!("beast.run.no_fix_created_total").increment(1);
     }
 
@@ -285,6 +329,7 @@ async fn process_sbs_message(
     message_bytes: &[u8],
     aircraft_repo: &AircraftRepository,
     fix_processor: &FixProcessor,
+    accumulator: &Arc<AdsbAccumulator>,
 ) {
     let start_time = std::time::Instant::now();
 
@@ -350,87 +395,115 @@ async fn process_sbs_message(
         }
     };
 
-    // Get or create aircraft by ICAO address
-    let aircraft = match aircraft_repo
-        .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
-        .await
-    {
-        Ok(aircraft) => aircraft,
+    // Process SBS message through accumulator (combines position/velocity/callsign)
+    let fix_result = match accumulator.process_sbs_message(&sbs_msg, received_at) {
+        Ok(result) => result,
         Err(e) => {
-            warn!(
-                "Failed to get/create aircraft for ICAO {:06X}: {}",
-                icao_address, e
-            );
-            metrics::counter!("sbs.run.aircraft_lookup_failed_total").increment(1);
+            debug!("Failed to process SBS message: {}", e);
+            metrics::counter!("sbs.run.accumulator_failed_total").increment(1);
             return;
         }
     };
 
-    // Only create a Fix if the message contains position data
-    // SBS MSG,3 (airborne position) contains lat/lon
-    if !sbs_msg.has_position() {
+    // If we got a partial fix, we need to look up the aircraft and complete the fix
+    if let Some((partial_fix, trigger)) = fix_result {
+        // Get or create aircraft by ICAO address
+        let aircraft = match aircraft_repo
+            .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
+            .await
+        {
+            Ok(aircraft) => aircraft,
+            Err(e) => {
+                warn!(
+                    "Failed to get/create aircraft for ICAO {:06X}: {}",
+                    icao_address, e
+                );
+                metrics::counter!("sbs.run.aircraft_lookup_failed_total").increment(1);
+                return;
+            }
+        };
+
+        // Determine if aircraft is active (ground speed >= 20 knots)
+        let is_active = partial_fix
+            .ground_speed_knots
+            .is_none_or(|speed| speed >= 20.0);
+
+        // Build source metadata for SBS-specific fields with trigger
+        let mut metadata = serde_json::Map::new();
+        metadata.insert("protocol".to_string(), serde_json::json!("sbs"));
+        metadata.insert(
+            "sbs_message_type".to_string(),
+            serde_json::json!(sbs_msg.message_type as u8),
+        );
+        metadata.insert(
+            "trigger".to_string(),
+            serde_json::json!(trigger.to_string()),
+        );
+        if partial_fix.position_age_ms > 0 {
+            metadata.insert(
+                "position_age_ms".to_string(),
+                serde_json::json!(partial_fix.position_age_ms),
+            );
+        }
+        if let Some(on_ground) = sbs_msg.on_ground {
+            metadata.insert("on_ground".to_string(), serde_json::json!(on_ground));
+        }
+        if let Some(alert) = sbs_msg.alert {
+            metadata.insert("alert".to_string(), serde_json::json!(alert));
+        }
+        if let Some(emergency) = sbs_msg.emergency {
+            metadata.insert("emergency".to_string(), serde_json::json!(emergency));
+        }
+        if let Some(spi) = sbs_msg.spi {
+            metadata.insert("spi".to_string(), serde_json::json!(spi));
+        }
+
+        // Generate a synthetic receiver ID for SBS sources
+        let sbs_receiver_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, b"sbs-receiver-default");
+
+        // Build Fix from partial fix
+        let fix = soar::Fix {
+            id: Uuid::now_v7(),
+            source: partial_fix.icao_hex,
+            timestamp: partial_fix.timestamp,
+            latitude: partial_fix.latitude,
+            longitude: partial_fix.longitude,
+            altitude_msl_feet: partial_fix.altitude_feet,
+            altitude_agl_feet: None, // Will be calculated later
+            flight_number: partial_fix.callsign,
+            squawk: partial_fix.squawk,
+            ground_speed_knots: partial_fix.ground_speed_knots,
+            track_degrees: partial_fix.track_degrees,
+            climb_fpm: partial_fix.vertical_rate_fpm,
+            turn_rate_rot: None, // SBS doesn't provide turn rate
+            source_metadata: Some(serde_json::Value::Object(metadata)),
+            flight_id: None, // Will be assigned by flight tracker
+            aircraft_id: aircraft.id,
+            received_at,
+            is_active,
+            receiver_id: Some(sbs_receiver_id),
+            raw_message_id: Uuid::now_v7(), // Generate a unique ID for tracking
+            altitude_agl_valid: false,      // Will be calculated later
+            time_gap_seconds: None,         // Will be set by flight tracker
+        };
+
+        // Process the fix through FixProcessor
+        match fix_processor.process_fix(fix).await {
+            Ok(_) => {
+                metrics::counter!("sbs.run.fixes_processed_total").increment(1);
+            }
+            Err(e) => {
+                warn!("Failed to process SBS fix: {}", e);
+                metrics::counter!("sbs.run.fix_processing_failed_total").increment(1);
+            }
+        }
+    } else {
+        // No fix created (insufficient data - need valid position)
         debug!(
-            "SBS message type {:?} does not contain position data",
+            "SBS message type {:?} did not produce a fix (insufficient data)",
             sbs_msg.message_type
         );
-        metrics::counter!("sbs.run.no_position_total").increment(1);
-        // Record processing latency even for non-position messages
-        let elapsed_ms = start_time.elapsed().as_millis() as f64;
-        metrics::histogram!("sbs.run.message_processing_latency_ms").record(elapsed_ms);
-        return;
-    }
-
-    // Determine if aircraft is active (ground speed >= 20 knots)
-    let is_active = sbs_msg.ground_speed.is_none_or(|speed| speed >= 20.0);
-
-    // Build source metadata for SBS-specific fields
-    let source_metadata = serde_json::json!({
-        "sbs_message_type": sbs_msg.message_type as u8,
-        "on_ground": sbs_msg.on_ground,
-        "alert": sbs_msg.alert,
-        "emergency": sbs_msg.emergency,
-        "spi": sbs_msg.spi,
-    });
-
-    // Generate a synthetic receiver ID for SBS sources
-    // This uses a deterministic UUID based on the SBS server identifier
-    let sbs_receiver_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, b"sbs-receiver-default");
-
-    // Build Fix from SBS message
-    let fix = soar::Fix {
-        id: Uuid::now_v7(),
-        source: format!("{:06X}", icao_address),
-        timestamp: received_at,
-        latitude: sbs_msg.latitude.unwrap(), // Safe: has_position() checks this
-        longitude: sbs_msg.longitude.unwrap(),
-        altitude_msl_feet: sbs_msg.altitude, // feet
-        altitude_agl_feet: None,             // Will be calculated later
-        flight_number: sbs_msg.callsign,
-        squawk: sbs_msg.squawk,
-        ground_speed_knots: sbs_msg.ground_speed,
-        track_degrees: sbs_msg.track,
-        climb_fpm: sbs_msg.vertical_rate,
-        turn_rate_rot: None, // SBS doesn't provide turn rate
-        source_metadata: Some(source_metadata),
-        flight_id: None, // Will be assigned by flight tracker
-        aircraft_id: aircraft.id,
-        received_at,
-        is_active,
-        receiver_id: Some(sbs_receiver_id),
-        raw_message_id: Uuid::now_v7(), // Generate a unique ID for tracking
-        altitude_agl_valid: false,      // Will be calculated later
-        time_gap_seconds: None,         // Will be set by flight tracker
-    };
-
-    // Process the fix through FixProcessor
-    match fix_processor.process_fix(fix).await {
-        Ok(_) => {
-            metrics::counter!("sbs.run.fixes_processed_total").increment(1);
-        }
-        Err(e) => {
-            warn!("Failed to process SBS fix: {}", e);
-            metrics::counter!("sbs.run.fix_processing_failed_total").increment(1);
-        }
+        metrics::counter!("sbs.run.no_fix_created_total").increment(1);
     }
 
     // Record processing latency
@@ -640,14 +713,16 @@ pub async fn handle_run(
     let aircraft_position_processor =
         AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
-    // Create Beast processing infrastructure (only if ADS-B is enabled)
+    // Create Beast/SBS processing infrastructure (only if ADS-B is enabled)
+    // Both Beast (binary ADS-B) and SBS (text CSV) share the same accumulator
     let beast_infrastructure = if !no_adsb {
         let aircraft_repo = AircraftRepository::new(diesel_pool.clone());
         let beast_repo = RawMessagesRepository::new(diesel_pool.clone());
 
-        // Create CPR decoder for ADS-B position decoding
+        // Create ADS-B accumulator for combining position/velocity/callsign data
+        // Wraps CPR decoder and adds state accumulation across message types
         // TODO: Configure reference position from receiver location if available
-        let cpr_decoder = Arc::new(CprDecoder::new(None));
+        let adsb_accumulator = Arc::new(AdsbAccumulator::new(None));
 
         // Get Beast receiver ID from environment or use default
         // This allows multiple Beast receivers to be configured via BEAST_RECEIVER_ID env var
@@ -668,7 +743,12 @@ pub async fn handle_run(
 
         info!("Beast receiver ID: {}", beast_receiver_id);
 
-        Some((aircraft_repo, beast_repo, cpr_decoder, beast_receiver_id))
+        Some((
+            aircraft_repo,
+            beast_repo,
+            adsb_accumulator,
+            beast_receiver_id,
+        ))
     } else {
         None
     };
@@ -895,11 +975,11 @@ pub async fn handle_run(
     // Spawn Beast intake queue workers (only if ADS-B is enabled)
     // Multiple workers for parallel processing of Beast (binary) messages
     // Beast message processing involves database operations (aircraft lookup, raw message storage)
-    // and CPR decoding, so we need multiple workers to handle high traffic volumes.
+    // and state accumulation, so we need multiple workers to handle high traffic volumes.
     // Using 200 workers: ADS-B traffic is ~30,000 msg/sec vs OGN's ~300 msg/sec (100x more)
     // With 200 workers at ~150 msg/sec per worker, we can handle up to 30k msg/sec
     if let (
-        Some((beast_aircraft_repo, beast_repo_clone, beast_cpr_decoder, beast_receiver_id)),
+        Some((beast_aircraft_repo, beast_repo_clone, beast_accumulator, beast_receiver_id)),
         Some((_, beast_intake_rx)),
     ) = (beast_infrastructure.as_ref(), beast_intake_opt.as_ref())
     {
@@ -910,7 +990,7 @@ pub async fn handle_run(
             let beast_aircraft_repo = beast_aircraft_repo.clone();
             let beast_repo_clone = beast_repo_clone.clone();
             let beast_fix_processor = fix_processor.clone();
-            let beast_cpr_decoder = beast_cpr_decoder.clone();
+            let beast_accumulator = beast_accumulator.clone();
             let beast_receiver_id = *beast_receiver_id;
             let beast_intake_rx = beast_intake_rx.clone();
 
@@ -923,7 +1003,7 @@ pub async fn handle_run(
                         &beast_aircraft_repo,
                         &beast_repo_clone,
                         &beast_fix_processor,
-                        &beast_cpr_decoder,
+                        &beast_accumulator,
                         Some(beast_receiver_id),
                     )
                     .await;
@@ -946,7 +1026,8 @@ pub async fn handle_run(
     // SBS (BaseStation) messages are text-based CSV, processed separately from Beast binary
     // SBS typically has lower traffic than Beast, so fewer workers are needed
     // Using 50 workers should be sufficient for most SBS data sources
-    if let (Some((sbs_aircraft_repo, _, _, _)), Some((_, sbs_intake_rx))) =
+    // SBS shares the same accumulator with Beast for consistent state tracking
+    if let (Some((sbs_aircraft_repo, _, sbs_accumulator, _)), Some((_, sbs_intake_rx))) =
         (beast_infrastructure.as_ref(), sbs_intake_opt.as_ref())
     {
         let num_sbs_workers = 50;
@@ -955,14 +1036,20 @@ pub async fn handle_run(
         for worker_id in 0..num_sbs_workers {
             let sbs_aircraft_repo = sbs_aircraft_repo.clone();
             let sbs_fix_processor = fix_processor.clone();
+            let sbs_accumulator = sbs_accumulator.clone();
             let sbs_intake_rx = sbs_intake_rx.clone();
 
             tokio::spawn(async move {
                 while let Ok(message_bytes) = sbs_intake_rx.recv_async().await {
                     // Note: No tracing spans here - they cause trace accumulation in Tempo
                     let start_time = std::time::Instant::now();
-                    process_sbs_message(&message_bytes, &sbs_aircraft_repo, &sbs_fix_processor)
-                        .await;
+                    process_sbs_message(
+                        &message_bytes,
+                        &sbs_aircraft_repo,
+                        &sbs_fix_processor,
+                        &sbs_accumulator,
+                    )
+                    .await;
 
                     let duration = start_time.elapsed();
                     metrics::histogram!("sbs.run.process_message_duration_ms")

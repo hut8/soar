@@ -4,6 +4,7 @@
 //! and optionally archive all incoming messages to daily log files.
 
 pub mod actions;
+pub mod adsb_accumulator;
 pub mod aircraft;
 pub mod aircraft_images;
 pub mod aircraft_images_client;
