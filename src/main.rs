@@ -285,20 +285,22 @@ enum Commands {
     /// - TEST_USER_FIRST_NAME (default: Test)
     /// - TEST_USER_LAST_NAME (default: User)
     SeedTestData {},
-    /// Aggregate position fixes into H3 coverage hexes
+    /// Run all scheduled aggregation tasks
     ///
-    /// Processes position fixes from the specified date range and aggregates them into H3
-    /// hexagonal coverage zones. Updates coverage statistics including fix counts, timestamps,
-    /// and altitude information for visualization and analysis.
+    /// Aggregates data for analytics and coverage visualization. This includes:
+    /// - H3 coverage hexes from position fixes
+    /// - Flight analytics (daily/hourly stats, duration buckets)
+    /// - Aircraft analytics (per-aircraft stats with z-scores)
+    /// - Club and airport analytics
     ///
     /// If start/end dates are omitted, automatically determines what needs aggregation by:
     /// - Finding the most recent coverage date in the database
     /// - Aggregating from (last coverage date + 1) to yesterday
-    /// - If no coverage exists, starts from the oldest fix date
+    /// - If no coverage exists, defaults to 30 days ago
     ///
-    /// Example: soar aggregate-coverage --start-date 2025-12-25 --end-date 2025-12-26 --resolutions 6,7,8
-    /// Example: soar aggregate-coverage --resolutions 6,7,8  (auto-detect date range)
-    AggregateCoverage {
+    /// Example: soar run-aggregates --start-date 2025-12-25 --end-date 2025-12-26 --resolutions 6,7,8
+    /// Example: soar run-aggregates --resolutions 6,7,8  (auto-detect date range)
+    RunAggregates {
         /// Start date for aggregation (YYYY-MM-DD). If omitted, auto-detects from database.
         #[arg(long)]
         start_date: Option<chrono::NaiveDate>,
@@ -749,7 +751,7 @@ async fn main() -> Result<()> {
         Commands::VerifyRuntime { .. } => "verify-runtime",
         Commands::DumpUnifiedDdb { .. } => "dump-unified-ddb",
         Commands::SeedTestData { .. } => "seed-test-data",
-        Commands::AggregateCoverage { .. } => "aggregate-coverage",
+        Commands::RunAggregates { .. } => "run-aggregates",
     };
 
     // Initialize OpenTelemetry tracer with component name
@@ -795,7 +797,10 @@ async fn main() -> Result<()> {
         } else if is_staging {
             EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn")
         } else {
-            EnvFilter::new("debug,hyper_util=info,rustls=info,async_nats=warn")
+            // Development: debug by default, but suppress noisy OpenTelemetry internals
+            EnvFilter::new(
+                "debug,hyper_util=info,rustls=info,async_nats=warn,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
+            )
         }
     });
 
@@ -1100,7 +1105,7 @@ async fn main() -> Result<()> {
         Commands::Sitemap { .. } => "soar-sitemap",
         Commands::Migrate {} => "soar-migrate",
         Commands::SeedTestData {} => "soar-seed-test-data",
-        Commands::AggregateCoverage { .. } => "soar-aggregate-coverage",
+        Commands::RunAggregates { .. } => "soar-run-aggregates",
         // These should not reach here due to early returns
         Commands::Ingest { .. } => unreachable!(),
         Commands::VerifyRuntime { .. } => unreachable!(),
@@ -1316,14 +1321,11 @@ async fn main() -> Result<()> {
 
             Ok(())
         }
-        Commands::AggregateCoverage {
+        Commands::RunAggregates {
             start_date,
             end_date,
             resolutions,
-        } => {
-            commands::aggregate_coverage(diesel_pool, start_date, end_date, resolutions.clone())
-                .await
-        }
+        } => commands::run_aggregates(diesel_pool, start_date, end_date, resolutions.clone()).await,
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
         Commands::DumpUnifiedDdb { .. } => {
             // This should never be reached due to early return above

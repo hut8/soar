@@ -48,8 +48,6 @@
   "rust-analyzer.cargo.buildScripts.enable": true,
   "rust-analyzer.procMacro.enable": true,
   "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.checkOnSave.command": "clippy",
-  "rust-analyzer.inlayHints.enable": true,
   "rust-analyzer.inlayHints.chainingHints.enable": true,
   "rust-analyzer.inlayHints.parameterHints.enable": true,
   "rust-analyzer.inlayHints.typeHints.enable": true,
@@ -126,5 +124,6 @@
   "git.confirmSync": false,
 
   // Recommended extensions for the project
-  "extensions.ignoreRecommendations": false
+"extensions.ignoreRecommendations": false,
+"rust-analyzer.checkOnSave": true
 }

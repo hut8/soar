@@ -9,6 +9,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # bincode is pinned to 1.3.3 due to the project being archived and unmaintained
+      # See: https://github.com/hut8/soar/pull/852
+      # Do not update bincode to prevent potential security issues with unmaintained versions
+      - dependency-name: "bincode"
     groups:
       major:
         applies-to: version-updates

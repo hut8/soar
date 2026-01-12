@@ -1,30 +1,24 @@
 #!/bin/bash
 #
-# SOAR Deployment Script
+# SOAR Local Deployment Script
 #
-# Deploy SOAR locally or to a remote production server.
-# This script mimics the GitHub Actions deployment workflow.
+# Deploys SOAR locally by creating a deployment bundle and invoking soar-deploy.
+# This script mimics the GitHub Actions deployment workflow for local use.
 #
 # Usage:
-#   ./scripts/deploy              # Deploy current branch (prompts for server or local)
-#   ./scripts/deploy my-branch    # Deploy specific branch
+#   ./scripts/deploy staging     # Deploy to staging environment
+#   ./scripts/deploy production  # Deploy to production environment
 #
-#   # Local deployment (on the same server):
-#   LOCAL_DEPLOY=1 ./scripts/deploy
-#   DEPLOY_SERVER=local ./scripts/deploy
+# Prerequisites:
+#   - Script must be run from the project root directory
+#   - User must have sudo access
 #
-#   # Remote deployment:
-#   DEPLOY_SERVER=prod.example.com ./scripts/deploy
+# Note: The script always runs 'cargo build --release' to ensure the binary is up-to-date
 #
-# Environment variables (optional):
-#   SENTRY_AUTH_TOKEN    - Sentry authentication token
-#   SENTRY_ORG           - Sentry organization slug
-#   SENTRY_PROJECT       - Sentry project slug
-#   SSH_PRIVATE_KEY_PATH - Path to SSH private key (default: ~/.ssh/id_rsa)
-#   DEPLOY_SERVER        - Deployment server hostname, or 'local'/'localhost' for local deploy
-#   LOCAL_DEPLOY         - Set to 1 to force local deployment
-#   SKIP_SENTRY          - Set to 1 to skip Sentry steps
-#   SKIP_TESTS           - Set to 1 to skip running tests (not recommended)
+# What this script does:
+#   1. Creates a deployment bundle with binary and infrastructure files
+#   2. Installs soar-deploy to /usr/local/bin/soar-deploy
+#   3. Invokes soar-deploy with the specified environment
 #
 
 set -e
@@ -64,128 +58,43 @@ cleanup() {
 
 trap cleanup EXIT
 
+# Check arguments
+if [ $# -lt 1 ]; then
+    log_error "Usage: $0 <staging|production>"
+    exit 1
+fi
+
+ENVIRONMENT="$1"
+
+# Validate environment
+if [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "production" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'staging' or 'production')"
+    exit 1
+fi
+
 # Check if we're in the project root
 if [ ! -f "Cargo.toml" ] || [ ! -d "web" ]; then
     log_error "This script must be run from the project root directory"
     exit 1
 fi
 
-# Determine branch to deploy
-BRANCH="${1:-}"
-if [ -z "$BRANCH" ]; then
-    BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    log_info "No branch specified, using current branch: $BRANCH"
-else
-    log_info "Deploying branch: $BRANCH"
-fi
-
-# Verify branch exists
-if ! git rev-parse --verify "$BRANCH" > /dev/null 2>&1; then
-    log_error "Branch '$BRANCH' does not exist"
-    exit 1
-fi
-
-# Check for uncommitted changes
-if [ -n "$(git status --porcelain)" ]; then
-    log_warn "You have uncommitted changes in your working directory"
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log_info "Deployment cancelled"
-        exit 1
-    fi
-fi
-
-# Checkout branch if not already on it
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
-    log_step "Checking out branch: $BRANCH"
-    git checkout "$BRANCH"
-fi
-
-# Get commit SHA (short form for Sentry)
-COMMIT_SHA=$(git rev-parse HEAD)
-SHORT_SHA="${COMMIT_SHA:0:7}"
-log_info "Commit SHA: $COMMIT_SHA (short: $SHORT_SHA)"
-
-# Run tests unless explicitly skipped
-if [ "${SKIP_TESTS:-0}" != "1" ]; then
-    log_step "Running tests"
-
-    log_info "Running web tests..."
-    cd web
-    npm run lint
-    npm run check
-    cd ..
-
-    log_info "Running Rust tests..."
-    cargo fmt --check
-    cargo clippy --all-targets --all-features -- -D warnings
-    cargo test
-else
-    log_warn "Skipping tests (SKIP_TESTS=1)"
-fi
-
-# Build web project
-log_step "Building web project"
-cd web
-npm ci
-npm run build
-cd ..
-
-# Build release binary
+# Always build release binary to ensure it's up-to-date
 log_step "Building release binary"
-cargo build --release --verbose
+log_info "Running 'cargo build --release' to ensure binary is up-to-date..."
+cargo build --release || { log_error "Build failed"; exit 1; }
+BINARY_PATH="target/release/soar"
+log_info "Build complete: $BINARY_PATH"
 
-# Verify binary was built
-if [ ! -f "target/release/soar" ]; then
-    log_error "Release binary not found at target/release/soar"
-    exit 1
-fi
-
-log_info "Binary size: $(du -h target/release/soar | cut -f1)"
-
-# Handle Sentry integration (optional)
-if [ "${SKIP_SENTRY:-0}" != "1" ]; then
-    if [ -n "${SENTRY_AUTH_TOKEN:-}" ] && [ -n "${SENTRY_ORG:-}" ] && [ -n "${SENTRY_PROJECT:-}" ]; then
-        log_step "Uploading debug symbols to Sentry"
-
-        # Check if sentry-cli is installed
-        if ! command -v sentry-cli &> /dev/null; then
-            log_warn "sentry-cli not found, installing..."
-            curl -sL https://sentry.io/get-cli/ | bash
-        fi
-
-        # Upload debug symbols
-        sentry-cli debug-files upload \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT" \
-            ./target/release/soar
-
-        log_step "Creating Sentry release"
-        sentry-cli releases new "$SHORT_SHA" \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT"
-
-        sentry-cli releases set-commits "$SHORT_SHA" --auto --ignore-missing \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT"
-
-        sentry-cli releases finalize "$SHORT_SHA" \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT"
-
-        log_info "Sentry release created: $SHORT_SHA"
-    else
-        log_warn "Sentry credentials not configured, skipping Sentry steps"
-        log_info "Set SENTRY_AUTH_TOKEN, SENTRY_ORG, and SENTRY_PROJECT to enable"
-    fi
+# Get version info
+if git describe --tags --always >/dev/null 2>&1; then
+    VERSION=$(git describe --tags --always --dirty 2>/dev/null)
 else
-    log_warn "Skipping Sentry integration (SKIP_SENTRY=1)"
+    VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 fi
+log_info "Version: $VERSION"
 
 # Prepare deployment package
-log_step "Preparing deployment package"
+log_step "Preparing deployment package for $ENVIRONMENT"
 
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 TEMP_DIR=$(mktemp -d)
@@ -195,25 +104,27 @@ mkdir -p "$DEPLOY_PKG"
 log_info "Creating deployment package in: $DEPLOY_PKG"
 
 # Copy binary
-cp target/release/soar "$DEPLOY_PKG/"
+cp "$BINARY_PATH" "$DEPLOY_PKG/soar"
+chmod +x "$DEPLOY_PKG/soar"
 
 # Copy deployment script
 if [ -f "infrastructure/soar-deploy" ]; then
     cp infrastructure/soar-deploy "$DEPLOY_PKG/"
 else
-    log_warn "infrastructure/soar-deploy not found"
+    log_error "infrastructure/soar-deploy not found"
+    exit 1
 fi
 
 # Copy service files from infrastructure/systemd
 if [ -d "infrastructure/systemd" ]; then
-    cp infrastructure/systemd/*.service "$DEPLOY_PKG/" 2>/dev/null || log_warn "No service files found in infrastructure/systemd"
-    cp infrastructure/systemd/*.timer "$DEPLOY_PKG/" 2>/dev/null || log_warn "No timer files found in infrastructure/systemd"
-    cp infrastructure/systemd/*.target "$DEPLOY_PKG/" 2>/dev/null || log_warn "No target files found in infrastructure/systemd"
+    cp infrastructure/systemd/*.service "$DEPLOY_PKG/" 2>/dev/null || log_warn "No service files found"
+    cp infrastructure/systemd/*.timer "$DEPLOY_PKG/" 2>/dev/null || log_warn "No timer files found"
+    cp infrastructure/systemd/*.target "$DEPLOY_PKG/" 2>/dev/null || log_warn "No target files found"
 
     # Copy systemd template files (used for Grafana SMTP configuration)
-    if ls infrastructure/systemd/*.template 1> /dev/null 2>&1; then
+    if ls infrastructure/systemd/*.template 1>/dev/null 2>&1; then
         mkdir -p "$DEPLOY_PKG/systemd"
-        cp infrastructure/systemd/*.template "$DEPLOY_PKG/systemd/" 2>/dev/null || true
+        cp infrastructure/systemd/*.template "$DEPLOY_PKG/systemd/"
         log_info "Systemd template files included"
     fi
     log_info "Systemd service/timer/target files included"
@@ -227,12 +138,6 @@ if [ -d "infrastructure/prometheus-jobs" ]; then
     log_info "Prometheus job files included"
 fi
 
-# Copy Prometheus scrape-configs files (backward compatibility)
-if [ -d "infrastructure/prometheus-scrape-configs" ]; then
-    cp -r infrastructure/prometheus-scrape-configs "$DEPLOY_PKG/"
-    log_info "Prometheus scrape-configs files included (legacy support)"
-fi
-
 # Copy Grafana provisioning configuration
 if [ -d "infrastructure/grafana-provisioning" ]; then
     cp -r infrastructure/grafana-provisioning "$DEPLOY_PKG/"
@@ -240,22 +145,10 @@ if [ -d "infrastructure/grafana-provisioning" ]; then
 fi
 
 # Copy Grafana dashboard files
-if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+if compgen -G "infrastructure/grafana-dashboard-*.json" >/dev/null; then
     cp infrastructure/grafana-dashboard-*.json "$DEPLOY_PKG/"
     DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
     log_info "Grafana dashboards included: $DASHBOARD_COUNT"
-fi
-
-# Copy Pyroscope configuration
-if [ -f "infrastructure/pyroscope-config.yml" ]; then
-    cp infrastructure/pyroscope-config.yml "$DEPLOY_PKG/"
-    log_info "Pyroscope configuration included"
-fi
-
-# Copy Alloy configuration
-if [ -f "infrastructure/alloy-config.alloy" ]; then
-    cp infrastructure/alloy-config.alloy "$DEPLOY_PKG/"
-    log_info "Alloy configuration included"
 fi
 
 # Copy backup scripts directory
@@ -266,148 +159,37 @@ if [ -d "scripts/backup" ]; then
 fi
 
 # Create version file
-echo "$SHORT_SHA" > "$DEPLOY_PKG/VERSION"
+echo "$VERSION" >"$DEPLOY_PKG/VERSION"
 
 log_info "Deployment package contents:"
 ls -lh "$DEPLOY_PKG/"
 
-# Determine deployment mode (local or remote)
-DEPLOY_SERVER="${DEPLOY_SERVER:-}"
-LOCAL_DEPLOY="${LOCAL_DEPLOY:-0}"
+# Create deployment directory
+log_step "Setting up deployment directory"
 
-# Check if we're doing a local deployment
-if [ "$LOCAL_DEPLOY" = "1" ] || [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
-    LOCAL_DEPLOY=1
-    log_info "Local deployment mode"
+DEPLOY_BASE_DIR="/tmp/soar/deploy"
+DEPLOY_DIR="$DEPLOY_BASE_DIR/$TIMESTAMP"
 
-    # Verify /usr/local/bin/soar-deploy exists
-    if [ ! -f "/usr/local/bin/soar-deploy" ]; then
-        log_error "/usr/local/bin/soar-deploy not found"
-        log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
-        exit 1
-    fi
-else
-    # Remote deployment mode
-    if [ -z "$DEPLOY_SERVER" ]; then
-        read -p "Enter deployment server hostname (or 'local' for local deployment): " DEPLOY_SERVER
-        if [ -z "$DEPLOY_SERVER" ]; then
-            log_error "Deployment server not specified"
-            exit 1
-        fi
+sudo mkdir -p "$DEPLOY_DIR"
+sudo cp -r "$DEPLOY_PKG"/* "$DEPLOY_DIR/"
+sudo chown -R soar:soar "$DEPLOY_DIR" 2>/dev/null || sudo chown -R root:root "$DEPLOY_DIR"
 
-        if [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
-            LOCAL_DEPLOY=1
-            log_info "Local deployment mode"
+log_info "Deployment package ready at: $DEPLOY_DIR"
 
-            # Verify /usr/local/bin/soar-deploy exists
-            if [ ! -f "/usr/local/bin/soar-deploy" ]; then
-                log_error "/usr/local/bin/soar-deploy not found"
-                log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
-                exit 1
-            fi
-        fi
-    fi
-fi
+# Install soar-deploy unconditionally
+log_step "Installing soar-deploy"
 
-if [ "$LOCAL_DEPLOY" = "1" ]; then
-    # Local deployment - copy to /tmp and invoke directly
-    log_step "Preparing local deployment"
+sudo rm -f /usr/local/bin/soar-deploy
+sudo install -m 755 -o root -g root infrastructure/soar-deploy /usr/local/bin/soar-deploy
+log_info "Installed soar-deploy to /usr/local/bin/soar-deploy"
 
-    # Create user-owned temp directory for deployment
-    DEPLOY_BASE_DIR="${TMPDIR:-/tmp}/soar-deploy"
-    mkdir -p "$DEPLOY_BASE_DIR"
-    DEPLOY_DIR="$DEPLOY_BASE_DIR/$TIMESTAMP"
-    log_info "Creating deployment directory: $DEPLOY_DIR"
-    mkdir -p "$DEPLOY_DIR"
+# Execute deployment
+log_step "Executing deployment for $ENVIRONMENT"
 
-    log_info "Copying deployment package..."
-    cp -r "$DEPLOY_PKG"/* "$DEPLOY_DIR/"
+log_info "Running: sudo /usr/local/bin/soar-deploy $ENVIRONMENT $DEPLOY_DIR"
+sudo /usr/local/bin/soar-deploy "$ENVIRONMENT" "$DEPLOY_DIR"
 
-    log_info "Deployment package ready at: $DEPLOY_DIR"
-
-    # Execute deployment
-    log_step "Executing local deployment"
-
-    log_info "Deployment will:"
-    log_info "  1. Stop soar-run service"
-    log_info "  2. Run database migrations (soar-ingest and web keep running)"
-    log_info "  3. Stop remaining services and install new binary"
-    log_info "  4. Restart all services (soar-run, soar-web, soar-ingest)"
-    echo
-
-    log_info "Executing deployment script..."
-    sudo /usr/local/bin/soar-deploy "$DEPLOY_DIR"
-
-    # Check deployment result
-    if [ $? -eq 0 ]; then
-        log_step "Deployment completed successfully!"
-        log_info "Deployed commit: $SHORT_SHA"
-        log_info "Branch: $BRANCH"
-        log_info "Timestamp: $TIMESTAMP"
-    else
-        log_error "Deployment failed!"
-        exit 1
-    fi
-else
-    # Remote deployment - use SSH
-    log_info "Deployment server: $DEPLOY_SERVER"
-
-    # Test SSH connection
-    log_step "Testing SSH connection"
-    if ! ssh -o ConnectTimeout=5 "soar@$DEPLOY_SERVER" "echo 'SSH connection successful'" > /dev/null 2>&1; then
-        log_error "Failed to connect to soar@$DEPLOY_SERVER"
-        log_info "Make sure:"
-        log_info "  1. The server is reachable"
-        log_info "  2. Your SSH key is configured"
-        log_info "  3. The 'soar' user exists on the server"
-        exit 1
-    fi
-
-    log_info "SSH connection successful"
-
-    # Upload deployment package
-    log_step "Uploading deployment package"
-
-    # Create user-owned temp directory for deployment on remote server
-    REMOTE_DEPLOY_DIR="\${TMPDIR:-/tmp}/soar-deploy/$TIMESTAMP"
-    log_info "Creating remote deployment directory: $REMOTE_DEPLOY_DIR"
-    ssh "soar@$DEPLOY_SERVER" "mkdir -p \${TMPDIR:-/tmp}/soar-deploy && mkdir -p $REMOTE_DEPLOY_DIR"
-
-    log_info "Uploading files..."
-    scp -r "$DEPLOY_PKG"/* "soar@$DEPLOY_SERVER:$REMOTE_DEPLOY_DIR/"
-
-    log_info "Deployment package uploaded"
-
-    # Execute deployment
-    log_step "Executing deployment on server"
-
-    log_info "Deploying to $DEPLOY_SERVER"
-    log_info "Deployment will:"
-    log_info "  1. Stop soar-run service"
-    log_info "  2. Run database migrations (soar-ingest and web keep running)"
-    log_info "  3. Stop remaining services and install new binary"
-    log_info "  4. Restart all services (soar-run, soar-web, soar-ingest)"
-    echo
-
-    log_info "Executing deployment script..."
-    ssh "soar@$DEPLOY_SERVER" "sudo /usr/local/bin/soar-deploy $REMOTE_DEPLOY_DIR"
-
-    # Check deployment result
-    if [ $? -eq 0 ]; then
-        log_step "Deployment completed successfully!"
-        log_info "Deployed commit: $SHORT_SHA"
-        log_info "Branch: $BRANCH"
-        log_info "Timestamp: $TIMESTAMP"
-    else
-        log_error "Deployment failed!"
-        exit 1
-    fi
-fi
-
-# Return to original branch if we switched
-if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
-    log_info "Returning to original branch: $CURRENT_BRANCH"
-    git checkout "$CURRENT_BRANCH"
-fi
-
-log_info "Done!"
+log_step "Deployment completed!"
+log_info "Environment: $ENVIRONMENT"
+log_info "Version: $VERSION"
+log_info "Timestamp: $TIMESTAMP"

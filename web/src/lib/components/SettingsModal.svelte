@@ -130,10 +130,10 @@
 		}
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		if (browser) {
-			loadSettings();
-			// Notify parent of initial settings
+			await loadSettings();
+			// Notify parent of initial settings AFTER loading completes
 			if (onSettingsChange) {
 				onSettingsChange({
 					showCompassRose,

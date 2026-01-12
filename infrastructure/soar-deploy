@@ -25,9 +25,7 @@
 #   same arguments to ensure the latest deployment logic is used.
 #
 
-set -e
-set -u
-set -o pipefail
+set -euo pipefail
 
 # Deployment log and status directory
 DEPLOY_LOG_DIR="/var/lib/soar/deploy/logs"
@@ -177,20 +175,20 @@ if [ "$ENVIRONMENT" = "staging" ]; then
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
-        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
+        "soar-run-aggregates${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
-        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
+        "soar-run-aggregates${SERVICE_SUFFIX}.timer"
     )
 else
     TIMER_SERVICES=(
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
-        "soar-aggregate-coverage${SERVICE_SUFFIX}.service"
+        "soar-run-aggregates${SERVICE_SUFFIX}.service"
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
     )
@@ -198,7 +196,7 @@ else
         "soar-pull-data${SERVICE_SUFFIX}.timer"
         "soar-sitemap${SERVICE_SUFFIX}.timer"
         "soar-archive${SERVICE_SUFFIX}.timer"
-        "soar-aggregate-coverage${SERVICE_SUFFIX}.timer"
+        "soar-run-aggregates${SERVICE_SUFFIX}.timer"
         "soar-backup-base${SERVICE_SUFFIX}.timer"
         "soar-backup-verify${SERVICE_SUFFIX}.timer"
     )
@@ -1023,8 +1021,42 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
     fi
 fi
 
-# Install Pyroscope and Alloy configuration files
-log_info "Installing Pyroscope and Alloy configuration..."
+# Install observability stack configuration files (Tempo, Loki, Pyroscope, Alloy)
+log_info "Installing observability stack configuration..."
+
+# Install Tempo configuration
+if [ -f "$DEPLOY_DIR/tempo-config.yml" ]; then
+    log_info "Installing Tempo configuration..."
+    sudo cp "$DEPLOY_DIR/tempo-config.yml" /etc/tempo/config.yml
+    sudo chown tempo:nogroup /etc/tempo/config.yml
+    sudo chmod 644 /etc/tempo/config.yml
+    log_info "Tempo configuration installed"
+
+    # Restart Tempo if running to pick up new config
+    if systemctl is-active --quiet tempo; then
+        log_info "Restarting Tempo to apply new configuration..."
+        systemctl restart tempo || log_warn "Failed to restart Tempo"
+    fi
+else
+    log_warn "Tempo configuration file not found in deployment directory"
+fi
+
+# Install Loki configuration
+if [ -f "$DEPLOY_DIR/loki-config.yml" ]; then
+    log_info "Installing Loki configuration..."
+    sudo cp "$DEPLOY_DIR/loki-config.yml" /etc/loki/config.yml
+    sudo chown loki:nogroup /etc/loki/config.yml 2>/dev/null || sudo chown nobody:nogroup /etc/loki/config.yml
+    sudo chmod 644 /etc/loki/config.yml
+    log_info "Loki configuration installed"
+
+    # Restart Loki if running to pick up new config
+    if systemctl is-active --quiet loki; then
+        log_info "Restarting Loki to apply new configuration..."
+        systemctl restart loki || log_warn "Failed to restart Loki"
+    fi
+else
+    log_warn "Loki configuration file (loki-config.yml) not found in deployment directory"
+fi
 
 # Install Pyroscope configuration
 if [ -f "$DEPLOY_DIR/pyroscope-config.yml" ]; then

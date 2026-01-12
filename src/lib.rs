@@ -59,6 +59,7 @@ pub mod packet_processors;
 pub mod persistent_queue;
 pub mod pilots;
 pub mod pilots_repo;
+pub mod postgis_functions;
 pub mod protocol;
 pub mod raw_messages_repo;
 pub mod receiver_repo;

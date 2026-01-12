@@ -50,6 +50,7 @@ pub struct RunwayEnd {
 #[serde(rename_all = "camelCase")]
 pub struct RunwayView {
     pub id: i32,
+    pub airport_ident: String,
     pub length_ft: Option<i32>,
     pub width_ft: Option<i32>,
     pub surface: Option<String>,
@@ -89,6 +90,7 @@ impl RunwayView {
 
         Self {
             id: runway.id,
+            airport_ident: runway.airport_ident,
             length_ft: runway.length_ft,
             width_ft: runway.width_ft,
             surface: runway.surface,

@@ -1,0 +1,41 @@
+# SOAR Aggregation Timer
+#
+# This systemd timer automatically runs the `soar run-aggregates` command once daily at 2:00 AM.
+# It processes the previous day's position fixes into H3 hexagonal coverage zones and
+# aggregates flight analytics (daily/hourly stats, duration buckets, aircraft/club/airport analytics).
+#
+# Installation:
+#   sudo cp soar-run-aggregates.service soar-run-aggregates.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-run-aggregates.timer
+#   sudo systemctl start soar-run-aggregates.timer
+#
+# Check status:
+#   sudo systemctl status soar-run-aggregates.timer
+#   sudo systemctl list-timers soar-run-aggregates.timer
+#
+# Manual execution:
+#   sudo systemctl start soar-run-aggregates.service
+#
+# View logs:
+#   sudo journalctl -u soar-run-aggregates.service -f
+
+[Unit]
+Description=SOAR Aggregation Timer - Run Daily at 2 AM
+Requires=soar-run-aggregates.service
+
+[Timer]
+# Run daily at 2:00 AM local time
+OnCalendar=*-*-* 02:00:00
+
+# If the system was down when the timer should have triggered, run it as soon as possible
+Persistent=yes
+
+# Add some randomization to avoid server load spikes
+RandomizedDelaySec=300
+
+# Ensure the service isn't triggered more than once per day even if the system time changes
+AccuracySec=30min
+
+[Install]
+WantedBy=timers.target soar@production.target
