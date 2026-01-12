@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# base-backup - Create full PostgreSQL base backup and upload to Wasabi S3
+# base-backup - Create PostgreSQL database backup and upload to Wasabi S3
 #
-# This script creates a physical backup of the PostgreSQL database using
-# pg_basebackup, compresses it, uploads to Wasabi S3 via rclone, and manages retention.
+# This script creates a logical backup of a single PostgreSQL database using
+# pg_dump, uploads to Wasabi S3 via rclone, and manages retention.
 #
 # Usage:
 #   base-backup [--no-cleanup]
@@ -20,7 +20,7 @@
 #   Requires rclone configured with Wasabi remote
 #
 # Scheduling:
-#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday midnight)
+#   Run via systemd timer: soar-backup-base.timer (daily)
 
 set -euo pipefail
 
@@ -204,11 +204,11 @@ main() {
     local start_time=$(date +%s)
 
     log INFO "=========================================="
-    log INFO "Starting base backup: $BACKUP_NAME"
+    log INFO "Starting database backup: $BACKUP_NAME"
     log INFO "=========================================="
     log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
     log INFO "Destination: ${BACKUP_REMOTE_PATH}"
-    log INFO "Compression: zstd (multi-threaded)"
+    log INFO "Method: pg_dump (custom format with zstd compression)"
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
     # Check database connectivity
@@ -227,38 +227,34 @@ main() {
         "SELECT pg_database_size('$PGDATABASE')" | tr -d ' ')
     log INFO "Current database size: $(numfmt --to=iec-i --suffix=B "$db_size")"
 
-    # Create base backup using pg_basebackup
-    log INFO "Creating base backup with pg_basebackup..."
+    # Create database backup using pg_dump
+    log INFO "Creating database backup with pg_dump..."
     mkdir -p "$BACKUP_LOCAL_DIR"
 
-    # Use zstd compression level (configurable via BACKUP_COMPRESSION_LEVEL)
-    # Valid range: -131072 to 22, default is 3 (good balance of speed and compression)
-    # Note: The compression level parameter is not for parallelism
-    local compression_level=${BACKUP_COMPRESSION_LEVEL:-3}
-    log INFO "Using zstd compression level $compression_level"
+    # Use custom format (-Fc) which is compressed and supports parallel restore
+    # Use parallel jobs for faster dump of large databases
+    local dump_file="$BACKUP_LOCAL_DIR/database.dump"
 
-    # Use --wal-method=stream to stream WAL in parallel with the backup
-    # This prevents "WAL segment has already been removed" errors on large databases
-    # where the backup takes longer than wal_keep_size allows
-    if ! pg_basebackup \
+    log INFO "Using $PARALLEL_JOBS parallel jobs"
+
+    if ! pg_dump \
         -h "$PGHOST" \
         -p "$PGPORT" \
         -U "$PGUSER" \
-        -D "$BACKUP_LOCAL_DIR" \
-        -Ft \
-        -P \
-        -v \
-        --wal-method=stream \
-        --compress=zstd:${compression_level} \
-        --label="$BACKUP_NAME"; then
-        log ERROR "pg_basebackup failed"
+        -d "$PGDATABASE" \
+        -Fc \
+        -Z zstd:3 \
+        -j "$PARALLEL_JOBS" \
+        -f "$dump_file" \
+        -v; then
+        log ERROR "pg_dump failed"
         exit 1
     fi
 
-    log INFO "Base backup completed successfully"
+    log INFO "Database backup completed successfully"
 
     # Get backup size
-    local backup_size=$(du -sb "$BACKUP_LOCAL_DIR" | cut -f1)
+    local backup_size=$(du -sb "$dump_file" | cut -f1)
     log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
 
     # Upload to Wasabi S3 using rclone
@@ -295,11 +291,13 @@ main() {
   "backup_name": "$BACKUP_NAME",
   "backup_date": "$BACKUP_DATE",
   "backup_timestamp": "$BACKUP_TIMESTAMP",
+  "backup_type": "pg_dump",
+  "backup_format": "custom",
   "database": "$PGDATABASE",
   "database_size_bytes": $db_size,
   "backup_size_bytes": $backup_size,
   "compression": "zstd",
-  "compression_threads": $(nproc),
+  "parallel_jobs": $PARALLEL_JOBS,
   "hostname": "$(hostname)",
   "postgresql_version": "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "SHOW server_version" | tr -d ' ')",
   "completed_at": "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
@@ -381,8 +379,9 @@ EOF
     log INFO "=========================================="
 
     # Send success notification
-    notify "SUCCESS" "Base backup completed successfully on $(hostname)
+    notify "SUCCESS" "Database backup completed successfully on $(hostname)
 Backup: $BACKUP_NAME
+Database: $PGDATABASE
 Duration: $duration_formatted
 Database size: $(numfmt --to=iec-i --suffix=B "$db_size")
 Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")

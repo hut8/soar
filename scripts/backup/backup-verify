@@ -35,14 +35,30 @@ source /etc/soar/backup-env
 # Parse arguments
 SPECIFIC_BACKUP="${1:-}"
 
+# Rclone configuration from component variables (same as base-backup and wal-archive)
+RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-wasabi}"
+RCLONE_BUCKET="${BACKUP_RCLONE_BUCKET:-soar-backup-prod}"
+RCLONE_PATH="${BACKUP_RCLONE_PATH:-}"  # Optional prefix within bucket
+RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+
 # Validate configuration
-if [[ -z "${BACKUP_REMOTE:-}" ]]; then
-    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_RCLONE_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-# Rclone configuration
-RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+if [[ -z "${BACKUP_RCLONE_BUCKET:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_BUCKET not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+# Construct full remote path
+if [[ -n "$RCLONE_PATH" ]]; then
+    BACKUP_REMOTE="${RCLONE_REMOTE}:${RCLONE_BUCKET}/${RCLONE_PATH}"
+else
+    BACKUP_REMOTE="${RCLONE_REMOTE}:${RCLONE_BUCKET}"
+fi
+
 if [[ ! -f "$RCLONE_CONFIG" ]]; then
     echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
     exit 1
@@ -196,11 +212,15 @@ verify_base_backup() {
         return 1
     fi
 
-    # Check for required files
-    if echo "$files" | grep -q "base.tar.gz"; then
-        check_result PASS "Base backup has base.tar.gz: $backup_date"
+    # Check for required files (database.dump for pg_dump format, base.tar.* for legacy pg_basebackup)
+    if echo "$files" | grep -q "database.dump"; then
+        check_result PASS "Backup has database.dump (pg_dump format): $backup_date"
+    elif echo "$files" | grep -q "base.tar.zst"; then
+        check_result PASS "Backup has base.tar.zst (legacy pg_basebackup): $backup_date"
+    elif echo "$files" | grep -q "base.tar.gz"; then
+        check_result PASS "Backup has base.tar.gz (legacy pg_basebackup): $backup_date"
     else
-        check_result FAIL "Base backup missing base.tar.gz: $backup_date"
+        check_result FAIL "Backup missing database.dump or base.tar.*: $backup_date"
         return 1
     fi
 
