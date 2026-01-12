@@ -47,7 +47,7 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
     WEB_PORT="61225"
     DOMAIN="glider.flights"
     # Caddy site configs to install for production
-    CADDY_SITES=("glider.flights" "photon.glider.flights" "pelias.glider.flights" "grafana.glider.flights")
+    CADDY_SITES=("glider.flights" "pelias.glider.flights" "grafana.glider.flights")
 else
     DB_NAME="soar_staging"
     ENV_FILE="/etc/soar/env-staging"
@@ -90,47 +90,114 @@ if [[ "$OS" != "ubuntu" ]] && [[ "$OS" != "debian" ]]; then
     exit 1
 fi
 
-# Install PostgreSQL 18
-echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
+# ============================================================================
+# APT Repository Setup
+# ============================================================================
+# Install all APT repositories first, then run apt-get update once
+# This is more efficient than updating after each repo addition
 
-# Add PostgreSQL APT repository
-echo "Adding PostgreSQL APT repository..."
+echo -e "${BLUE}Setting up APT repositories...${NC}"
+
+# Install prerequisites for adding repositories
 sudo apt-get update
-sudo apt-get install -y wget ca-certificates lsb-release gnupg
+sudo apt-get install -y wget ca-certificates lsb-release gnupg curl
 
-# Add PostgreSQL GPG key (modern method, not using deprecated apt-key)
+# Create keyrings directories
 sudo mkdir -p /etc/apt/keyrings
-if [ ! -f /etc/apt/keyrings/postgresql.gpg ]; then
-    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
-        sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+sudo mkdir -p /usr/share/keyrings
+
+REPOS_ADDED=false
+
+# PostgreSQL repository
+if [ ! -f /etc/apt/sources.list.d/pgdg.list ]; then
+    echo -e "${BLUE}Adding PostgreSQL APT repository...${NC}"
+    if [ ! -f /etc/apt/keyrings/postgresql.gpg ]; then
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
+        sudo tee /etc/apt/sources.list.d/pgdg.list
+    REPOS_ADDED=true
+else
+    echo -e "${BLUE}PostgreSQL repository already configured${NC}"
 fi
 
-# Add PostgreSQL repository with signed-by
-echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
-    sudo tee /etc/apt/sources.list.d/pgdg.list
+# TimescaleDB repository
+if [ ! -f /etc/apt/sources.list.d/timescaledb.list ]; then
+    echo -e "${BLUE}Adding TimescaleDB APT repository...${NC}"
+    if [ ! -f /usr/share/keyrings/timescaledb.gpg ]; then
+        curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | \
+            sudo gpg --dearmor -o /usr/share/keyrings/timescaledb.gpg
+    fi
+    echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
+        sudo tee /etc/apt/sources.list.d/timescaledb.list
+    REPOS_ADDED=true
+else
+    echo -e "${BLUE}TimescaleDB repository already configured${NC}"
+fi
 
-# Install PostgreSQL 18 and PostGIS
-sudo apt-get update
+# Grafana repository (includes Grafana, Pyroscope, Alloy, Loki, Tempo)
+if [ ! -f /etc/apt/sources.list.d/grafana.list ]; then
+    echo -e "${BLUE}Adding Grafana APT repository...${NC}"
+    if [ ! -f /etc/apt/keyrings/grafana.gpg ]; then
+        wget -q -O - https://apt.grafana.com/gpg.key | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | \
+        sudo tee /etc/apt/sources.list.d/grafana.list
+    REPOS_ADDED=true
+else
+    echo -e "${BLUE}Grafana repository already configured${NC}"
+fi
+
+# Caddy repository
+if [ ! -f /etc/apt/sources.list.d/caddy-stable.list ]; then
+    echo -e "${BLUE}Adding Caddy APT repository...${NC}"
+    if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+            sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    fi
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
+        sudo tee /etc/apt/sources.list.d/caddy-stable.list
+    REPOS_ADDED=true
+else
+    echo -e "${BLUE}Caddy repository already configured${NC}"
+fi
+
+# GitHub CLI repository
+if [ ! -f /etc/apt/sources.list.d/github-cli.list ]; then
+    echo -e "${BLUE}Adding GitHub CLI APT repository...${NC}"
+    if [ ! -f /etc/apt/keyrings/githubcli-archive-keyring.gpg ]; then
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    fi
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
+        sudo tee /etc/apt/sources.list.d/github-cli.list
+    REPOS_ADDED=true
+else
+    echo -e "${BLUE}GitHub CLI repository already configured${NC}"
+fi
+
+# Run apt-get update once if any repos were added
+if [ "$REPOS_ADDED" = true ]; then
+    echo -e "${BLUE}Updating package lists after adding repositories...${NC}"
+    sudo apt-get update
+fi
+
+echo -e "${GREEN}APT repositories configured${NC}"
+
+# ============================================================================
+# Package Installation
+# ============================================================================
+
+# Install PostgreSQL 18
+echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
 sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman uuid-runtime
 
 echo -e "${GREEN}PostgreSQL 18 installed successfully${NC}"
 
 # Install TimescaleDB
 echo -e "${BLUE}Installing TimescaleDB...${NC}"
-
-# Add TimescaleDB GPG key
-sudo mkdir -p /usr/share/keyrings
-if [ ! -f /usr/share/keyrings/timescaledb.gpg ]; then
-    curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | \
-        sudo gpg --dearmor -o /usr/share/keyrings/timescaledb.gpg
-fi
-
-# Add TimescaleDB repository
-echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
-    sudo tee /etc/apt/sources.list.d/timescaledb.list
-
-# Install TimescaleDB packages
-sudo apt-get update
 sudo apt-get install -y timescaledb-toolkit-postgresql-18 timescaledb-tools timescaledb-2-postgresql-18
 
 echo -e "${GREEN}TimescaleDB installed successfully${NC}"
@@ -260,28 +327,11 @@ fi
 
 # Install Prometheus
 echo -e "${BLUE}Installing Prometheus...${NC}"
-sudo apt-get update
 sudo apt-get install -y prometheus
 echo -e "${GREEN}Prometheus installed successfully${NC}"
 
 # Install Grafana
 echo -e "${BLUE}Installing Grafana...${NC}"
-
-# Add Grafana APT repository
-sudo apt-get install -y gnupg
-
-# Add Grafana GPG key (modern method, not using deprecated apt-key)
-sudo mkdir -p /etc/apt/keyrings
-if [ ! -f /etc/apt/keyrings/grafana.gpg ]; then
-    wget -q -O - https://apt.grafana.com/gpg.key | \
-        sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
-fi
-
-# Add Grafana repository with signed-by
-echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | \
-    sudo tee /etc/apt/sources.list.d/grafana.list
-
-sudo apt-get update
 sudo apt-get install -y grafana
 
 echo -e "${GREEN}Grafana installed successfully${NC}"
@@ -320,25 +370,14 @@ echo -e "${GREEN}Grafana Tempo installed successfully${NC}"
 
 # Install Caddy
 echo -e "${BLUE}Installing Caddy web server...${NC}"
-
-# Install Caddy from official Cloudsmith repository
-sudo apt-get install -y debian-keyring debian-archive-keyring curl
-
-# Add Caddy GPG key (Cloudsmith expects it in /usr/share/keyrings/)
-sudo mkdir -p /usr/share/keyrings
-if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
-        sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-fi
-
-# Add Caddy repository (uses signed-by pointing to /usr/share/keyrings/)
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
-    sudo tee /etc/apt/sources.list.d/caddy-stable.list
-
-sudo apt-get update
 sudo apt-get install -y caddy
 
 echo -e "${GREEN}Caddy installed successfully${NC}"
+
+# Install GitHub CLI
+echo -e "${BLUE}Installing GitHub CLI...${NC}"
+sudo apt-get install -y gh
+echo -e "${GREEN}GitHub CLI installed successfully${NC}"
 
 # Install prometheus-nats-exporter binary if not already installed
 if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
@@ -358,104 +397,12 @@ else
     echo -e "${BLUE}prometheus-nats-exporter already installed${NC}"
 fi
 
-# Install Photon geocoding server
-echo -e "${BLUE}Installing Photon geocoding server...${NC}"
-
-# Install Java and dependencies if not already installed
-if ! command -v java &> /dev/null; then
-    echo "Installing Java..."
-    sudo apt-get update
-    sudo apt-get install -y openjdk-21-jre-headless wget curl pbzip2
-    echo -e "${GREEN}Java and dependencies installed successfully${NC}"
-else
-    echo -e "${BLUE}Java already installed: $(java -version 2>&1 | head -n 1)${NC}"
-    # Ensure pbzip2 is installed for faster decompression
-    if ! command -v pbzip2 &> /dev/null; then
-        echo "Installing pbzip2 for faster decompression..."
-        sudo apt-get install -y pbzip2 curl
-    fi
-fi
-
-# Create photon user if it doesn't exist
-if ! id "photon" &>/dev/null; then
-    echo "Creating 'photon' system user..."
-    sudo useradd --system --home-dir /opt/photon --shell /bin/false photon
-    echo -e "${GREEN}'photon' user created successfully${NC}"
-else
-    echo -e "${BLUE}'photon' user already exists${NC}"
-fi
-
-# Create directory structure
-echo "Creating Photon directories..."
-sudo mkdir -p /opt/photon
-sudo mkdir -p /var/lib/photon
-
-# Set ownership
-sudo chown -R photon:photon /opt/photon
-sudo chown -R photon:photon /var/lib/photon
-
-# Download Photon JAR if not already installed
-PHOTON_JAR="photon-opensearch-0.7.4.jar"
-PHOTON_URL="https://github.com/komoot/photon/releases/download/0.7.4/photon-opensearch-0.7.4.jar"
-
-if [ ! -f "/opt/photon/${PHOTON_JAR}" ]; then
-    echo "Downloading Photon OpenSearch 0.7.4..."
-
-    (
-        cd /opt/photon
-        sudo -u photon wget -q "$PHOTON_URL" || { echo -e "${RED}Failed to download Photon JAR${NC}"; exit 1; }
-        sudo -u photon ln -sf "${PHOTON_JAR}" photon.jar
-    )
-    echo -e "${GREEN}Photon JAR downloaded successfully${NC}"
-else
-    echo -e "${BLUE}Photon JAR already installed${NC}"
-    # Ensure symlink exists
-    if [ ! -L "/opt/photon/photon.jar" ]; then
-        sudo -u photon ln -sf "${PHOTON_JAR}" /opt/photon/photon.jar
-    fi
-fi
-
-# Download Photon data if not already downloaded
-if [ ! -d "/var/lib/photon/photon_data" ] || [ -z "$(ls -A /var/lib/photon 2>/dev/null)" ]; then
-    echo -e "${BLUE}Downloading Photon geocoding data (this may take a while)...${NC}"
-    echo -e "${YELLOW}Note: This will download ~50-100GB of worldwide geocoding data${NC}"
-    echo -e "${YELLOW}Using parallel decompression with pbzip2 for faster extraction${NC}"
-
-    # Ensure directory exists
-    sudo mkdir -p /var/lib/photon
-    sudo chown photon:photon /var/lib/photon
-
-    (
-        cd /var/lib/photon
-        # Download, decompress with pbzip2, and extract in one pipeline
-        # This is much faster than wget + tar xjf as it decompresses in parallel
-        sudo -u photon bash -lc '
-          wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 \
-          | pbzip2 -cd \
-          | tar -x
-        ' || {
-            echo -e "${YELLOW}Warning: Failed to download Photon data. You can download it manually later.${NC}"
-            echo -e "${YELLOW}Manual command: cd /var/lib/photon && sudo -u photon bash -lc 'wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 | pbzip2 -cd | tar -x'${NC}"
-            echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md or docs/photon-deployment.md for instructions${NC}"
-        }
-
-        if [ -d "photon_data" ]; then
-            echo -e "${GREEN}Photon data extracted successfully${NC}"
-        fi
-    )
-else
-    echo -e "${BLUE}Photon data already exists${NC}"
-fi
-
-echo -e "${GREEN}Photon installation complete${NC}"
-
 # Copy infrastructure service files
 # Note: SOAR application service files (soar-run, soar-web, etc.) are installed by soar-deploy
 # Note: Pyroscope and Alloy service files are provided by their packages, not installed here
 echo -e "${BLUE}Installing infrastructure systemd service files...${NC}"
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
 sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
-sudo cp infrastructure/photon.service /etc/systemd/system/
 
 # Install migration service (templated for staging/production)
 echo -e "${BLUE}Installing migration service...${NC}"
@@ -614,7 +561,7 @@ echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment with ${#CADDY_SIT
 echo -e "${BLUE}Configuring Loki...${NC}"
 sudo mkdir -p /etc/loki
 sudo mkdir -p /var/lib/loki
-sudo cp infrastructure/loki.yaml /etc/loki/config.yml
+sudo cp infrastructure/loki-config.yml /etc/loki/config.yml
 sudo chown -R loki:loki /etc/loki
 sudo chown -R loki:loki /var/lib/loki
 echo -e "${GREEN}Loki configured${NC}"
@@ -658,7 +605,6 @@ echo -e "${GREEN}Alloy configured${NC}"
 echo -e "${BLUE}Enabling infrastructure services...${NC}"
 sudo systemctl enable nats-server.service
 sudo systemctl enable prometheus-nats-exporter.service
-sudo systemctl enable photon.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
 sudo systemctl enable caddy
@@ -704,20 +650,6 @@ if ! systemctl is-active --quiet caddy; then
     fi
 else
     echo -e "${BLUE}Caddy is already running${NC}"
-fi
-
-# Start Photon if not already running
-if ! systemctl is-active --quiet photon; then
-    echo -e "${BLUE}Starting Photon...${NC}"
-    sudo systemctl start photon
-    if systemctl is-active --quiet photon; then
-        echo -e "${GREEN}Photon started successfully${NC}"
-    else
-        echo -e "${YELLOW}Warning: Failed to start Photon. Check logs with: journalctl -u photon -n 50${NC}"
-        echo -e "${YELLOW}Note: Photon requires geocoding data to be present in /var/lib/photon/photon_data${NC}"
-    fi
-else
-    echo -e "${BLUE}Photon is already running${NC}"
 fi
 
 # Start Pyroscope if not already running
@@ -772,41 +704,6 @@ else
     echo -e "${BLUE}Tempo is already running${NC}"
 fi
 
-# Configure Photon OpenSearch for single-node operation
-echo -e "${BLUE}Configuring Photon OpenSearch replica settings...${NC}"
-
-# Wait for Photon OpenSearch to be ready (max 60 seconds)
-PHOTON_READY=false
-for i in {1..12}; do
-    if curl -s -f "http://127.0.0.1:9201/_cluster/health" >/dev/null 2>&1; then
-        PHOTON_READY=true
-        break
-    fi
-    echo "Waiting for Photon OpenSearch to be ready... ($i/12)"
-    sleep 5
-done
-
-if [ "$PHOTON_READY" = true ]; then
-    # Set cluster default to 0 replicas for single-node operation
-    echo "Setting cluster default number_of_replicas to 0..."
-    curl -s -X PUT "http://127.0.0.1:9201/_cluster/settings" \
-        -H 'Content-Type: application/json' \
-        -d '{"persistent":{"cluster.default_number_of_replicas":0}}' >/dev/null 2>&1
-
-    # Update existing photon index if it exists
-    if curl -s -f "http://127.0.0.1:9201/photon" >/dev/null 2>&1; then
-        echo "Updating existing photon index to 0 replicas..."
-        curl -s -X PUT "http://127.0.0.1:9201/photon/_settings" \
-            -H 'Content-Type: application/json' \
-            -d '{"index":{"number_of_replicas":0}}' >/dev/null 2>&1
-    fi
-
-    echo -e "${GREEN}Photon OpenSearch configured for single-node operation${NC}"
-else
-    echo -e "${YELLOW}Warning: Photon OpenSearch not ready, skipping replica configuration${NC}"
-    echo -e "${YELLOW}You may need to manually configure replicas. See infrastructure/DEPLOYMENT.md${NC}"
-fi
-
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/lib/soar/logs
@@ -850,7 +747,6 @@ echo -e "${BLUE}Setting up elevation data...${NC}"
 # Check if rclone is installed
 if ! command -v rclone &> /dev/null; then
     echo "Installing rclone..."
-    sudo apt-get update
     sudo apt-get install -y rclone
 fi
 
@@ -969,11 +865,6 @@ echo
 echo -e "${YELLOW}2. Set up additional environment variables in $ENV_FILE:${NC}"
 echo "   - NATS_URL (e.g., nats://localhost:4222)"
 echo "   - APRS_CALLSIGN (for APRS-IS connection)"
-if [[ "$ENVIRONMENT" == "production" ]]; then
-    echo "   - PHOTON_BASE_URL=https://photon.glider.flights"
-else
-    echo "   - PHOTON_BASE_URL=https://photon.glider.flights (or http://localhost:2322 for dev)"
-fi
 echo "   - Any other application-specific configuration"
 echo
 echo -e "${YELLOW}3. Run database migrations:${NC}"
@@ -992,7 +883,6 @@ echo "    sudo systemctl start nats-server"
 echo "    sudo systemctl start prometheus"
 echo "    sudo systemctl start prometheus-nats-exporter"
 echo "    sudo systemctl start grafana-server"
-echo "    sudo systemctl start photon"
 echo "    sudo systemctl start caddy"
 echo "    sudo systemctl start pyroscope"
 echo "    sudo systemctl start alloy"
@@ -1004,7 +894,6 @@ echo "    sudo systemctl status nats-server"
 echo "    sudo systemctl status prometheus"
 echo "    sudo systemctl status prometheus-nats-exporter"
 echo "    sudo systemctl status grafana-server"
-echo "    sudo systemctl status photon"
 echo "    sudo systemctl status caddy"
 echo "    sudo systemctl status pyroscope"
 echo "    sudo systemctl status alloy"
@@ -1016,7 +905,6 @@ echo "  sudo journalctl -u nats-server -f"
 echo "  sudo journalctl -u prometheus -f"
 echo "  sudo journalctl -u prometheus-nats-exporter -f"
 echo "  sudo journalctl -u grafana-server -f"
-echo "  sudo journalctl -u photon -f"
 echo "  sudo journalctl -u caddy -f"
 echo "  sudo journalctl -u pyroscope -f"
 echo "  sudo journalctl -u alloy -f"
@@ -1079,7 +967,7 @@ echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
 echo
 echo -e "${YELLOW}  NOTE: Site-based configuration (modular)${NC}"
 echo "    Each site has its own config file in /etc/soar/caddy/"
-echo "    Production sites: glider.flights, photon.glider.flights, grafana.glider.flights"
+echo "    Production sites: glider.flights, pelias.glider.flights, grafana.glider.flights"
 echo "    Staging sites: staging.glider.flights, grafana.staging.glider.flights"
 echo "    Multiple environments can coexist - files are imported by main Caddyfile"
 echo
@@ -1091,31 +979,6 @@ done
 echo
 echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
 echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
-echo
-echo -e "${YELLOW}Photon Geocoding Server:${NC}"
-echo "  Local API endpoint: http://localhost:2322"
-if [[ "$ENVIRONMENT" == "production" ]]; then
-    echo "  Public API endpoint: https://photon.glider.flights"
-fi
-echo "  OpenSearch API: http://localhost:9201"
-echo "  Application directory: /opt/photon"
-echo "  Data directory: /var/lib/photon"
-echo "  Logs: sudo journalctl -u photon -f"
-echo "  Test forward geocoding: curl 'http://localhost:2322/api?q=Berlin'"
-echo "  Test reverse geocoding: curl 'http://localhost:2322/reverse?lon=13.388860&lat=52.517037'"
-echo "  Configuration: /etc/systemd/system/photon.service"
-echo "  Documentation: docs/photon-deployment.md"
-echo ""
-echo "  OpenSearch Cluster Health:"
-echo "    Check cluster status: curl 'http://localhost:9201/_cluster/health?pretty'"
-echo "    View shards: curl 'http://localhost:9201/_cat/shards?v'"
-echo "    Single-node config: number_of_replicas set to 0 (green cluster health)"
-if [ -d "/var/lib/photon/photon_data" ]; then
-    echo "  Status: Data installed ✓"
-else
-    echo "  Status: Data not installed (download manually)"
-    echo "  Download data: See docs/photon-deployment.md for instructions"
-fi
 echo
 echo -e "${YELLOW}Pyroscope Continuous Profiling:${NC}"
 echo "  Local Web UI: http://localhost:4040"
