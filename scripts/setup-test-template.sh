@@ -113,13 +113,16 @@ fi
 echo -e "${GREEN}✓ Migrations completed${NC}"
 echo ""
 
-# Step 5: Mark as template and prevent connections
-echo -e "${YELLOW}[5/5] Marking database as template and preventing connections...${NC}"
-psql -d postgres -c "UPDATE pg_database SET datistemplate = TRUE, datallowconn = FALSE WHERE datname = '${TEMPLATE_DB_NAME}';" || {
+# Step 5: Mark as template
+echo -e "${YELLOW}[5/5] Marking database as template...${NC}"
+# Note: We only set datistemplate=TRUE (not datallowconn=FALSE) because PostgreSQL
+# needs to connect to the template database when creating new databases from it.
+# Setting datistemplate=TRUE is sufficient to prevent accidental user connections.
+psql -d postgres -c "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '${TEMPLATE_DB_NAME}';" || {
     echo -e "${YELLOW}Warning: Could not mark database as template${NC}"
     echo "This is not critical, but prevents accidental connections to the template."
 }
-echo -e "${GREEN}✓ Database marked as template (connections disabled)${NC}"
+echo -e "${GREEN}✓ Database marked as template${NC}"
 echo ""
 
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
