@@ -11,6 +11,9 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use rs1090::decode::adsb::{ADSB, ME};
+use rs1090::decode::bds::bds09::AirborneVelocitySubType;
+use rs1090::decode::{Capability, DF};
 use rs1090::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -196,25 +199,23 @@ pub struct AdsbAccumulator {
     message_count: AtomicU64,
 }
 
+impl Default for AdsbAccumulator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdsbAccumulator {
-    /// Create a new accumulator with optional CPR reference position
+    /// Create a new accumulator
     ///
-    /// If a reference position is provided (e.g., receiver location), CPR decoding
-    /// can use "local" mode which is faster and works with a single frame.
-    pub fn new(reference: Option<rs1090::decode::cpr::Position>) -> Self {
+    /// Uses global CPR decoding which requires both even and odd frames
+    /// to decode a position.
+    pub fn new() -> Self {
         Self {
             states: Arc::new(DashMap::new()),
-            cpr_decoder: CprDecoder::new(reference),
+            cpr_decoder: CprDecoder::new(),
             message_count: AtomicU64::new(0),
         }
-    }
-
-    /// Create an accumulator with a reference position from lat/lon
-    pub fn with_reference(latitude: f64, longitude: f64) -> Self {
-        Self::new(Some(rs1090::decode::cpr::Position {
-            latitude,
-            longitude,
-        }))
     }
 
     /// Process an ADS-B message and potentially emit a fix
@@ -350,87 +351,98 @@ impl AdsbAccumulator {
         Ok(data)
     }
 
-    /// Extract velocity data from ADS-B velocity message (TC 19)
+    /// Extract the ADSB struct from a DF17 message
+    fn get_adsb<'a>(&self, message: &'a Message) -> Option<&'a ADSB> {
+        match &message.df {
+            DF::ExtendedSquitterADSB(adsb) => Some(adsb),
+            _ => None,
+        }
+    }
+
+    /// Extract velocity data from ADS-B velocity message (BDS09, TC 19)
     fn extract_adsb_velocity(
         &self,
         message: &Message,
         timestamp: DateTime<Utc>,
     ) -> Option<VelocityData> {
-        // Serialize to JSON to check for velocity fields
-        let json = serde_json::to_value(message).ok()?;
+        let adsb = self.get_adsb(message)?;
 
-        // Check if this is a velocity message (has groundspeed field)
-        if json.get("groundspeed").is_some() {
-            let ground_speed_knots = json
-                .get("groundspeed")
-                .and_then(|v| v.as_f64())
-                .map(|v| v as f32);
+        // BDS09 contains velocity data
+        if let ME::BDS09(velocity) = &adsb.message {
+            // Extract ground speed and track from GroundSpeedDecoding subtype
+            let (ground_speed_knots, track_degrees) = match &velocity.velocity {
+                AirborneVelocitySubType::GroundSpeedDecoding(gsd) => {
+                    (Some(gsd.groundspeed as f32), Some(gsd.track as f32))
+                }
+                AirborneVelocitySubType::AirspeedSubsonic(asd) => {
+                    // Airspeed messages have heading instead of track, and airspeed instead of groundspeed
+                    (
+                        asd.airspeed.map(|a| a as f32),
+                        asd.heading.map(|h| h as f32),
+                    )
+                }
+                AirborneVelocitySubType::AirspeedSupersonic(asd) => {
+                    (asd.airspeed.map(|a| a as f32), asd.heading)
+                }
+                _ => (None, None),
+            };
 
-            let track_degrees = json.get("track").and_then(|v| v.as_f64()).map(|v| v as f32);
+            // Vertical rate is in ft/min
+            let vertical_rate_fpm = velocity.vertical_rate.map(|v| v as i32);
 
-            let vertical_rate_fpm = json
-                .get("vertical_rate")
-                .and_then(|v| v.as_i64())
-                .map(|v| v as i32);
-
-            Some(VelocityData {
+            return Some(VelocityData {
                 ground_speed_knots,
                 track_degrees,
                 vertical_rate_fpm,
                 timestamp,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// Extract callsign from ADS-B identification message (TC 1-4)
-    fn extract_adsb_callsign(&self, message: &Message) -> Option<String> {
-        let json = serde_json::to_value(message).ok()?;
-
-        json.get("callsign")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-    }
-
-    /// Extract altitude from ADS-B position message (without full CPR decoding)
-    fn extract_adsb_altitude(&self, message: &Message) -> Option<i32> {
-        let json = serde_json::to_value(message).ok()?;
-
-        json.get("altitude")
-            .and_then(|v| v.as_i64())
-            .map(|v| v as i32)
-    }
-
-    /// Extract on_ground status from ADS-B message
-    ///
-    /// Ground status can come from:
-    /// 1. "capability" field in DF17 messages: "ground" or "airborne"
-    /// 2. "vs" (Vertical Status) field in DF11: 0=airborne, 1=on_ground
-    fn extract_adsb_on_ground(&self, message: &Message) -> Option<bool> {
-        let json = serde_json::to_value(message).ok()?;
-
-        // Check capability field first (DF17 messages)
-        if let Some(capability) = json.get("capability").and_then(|v| v.as_str()) {
-            return match capability {
-                "ground" => Some(true),
-                "airborne" => Some(false),
-                _ => None, // "uncertain" or other values
-            };
-        }
-
-        // Check vertical status field (DF11 messages)
-        // vs = 0: airborne, vs = 1: on ground
-        if let Some(vs) = json.get("vs").and_then(|v| v.as_u64()) {
-            return match vs {
-                0 => Some(false), // airborne
-                1 => Some(true),  // on ground
-                _ => None,
-            };
+            });
         }
 
         None
+    }
+
+    /// Extract callsign from ADS-B identification message (BDS08, TC 1-4)
+    fn extract_adsb_callsign(&self, message: &Message) -> Option<String> {
+        let adsb = self.get_adsb(message)?;
+
+        // BDS08 contains aircraft identification (callsign)
+        if let ME::BDS08 { inner, .. } = &adsb.message {
+            let callsign = inner.callsign.trim().to_string();
+            if !callsign.is_empty() {
+                return Some(callsign);
+            }
+        }
+
+        None
+    }
+
+    /// Extract altitude from ADS-B position message (BDS05, without full CPR decoding)
+    fn extract_adsb_altitude(&self, message: &Message) -> Option<i32> {
+        let adsb = self.get_adsb(message)?;
+
+        // BDS05 contains airborne position with altitude
+        if let ME::BDS05 { inner, .. } = &adsb.message {
+            return inner.alt.map(|a| a as i32);
+        }
+
+        None
+    }
+
+    /// Extract on_ground status from ADS-B capability field
+    ///
+    /// The capability field in DF17 messages indicates ground/airborne status:
+    /// - AG_GROUND: on ground
+    /// - AG_AIRBORNE: airborne
+    /// - Others: unknown
+    fn extract_adsb_on_ground(&self, message: &Message) -> Option<bool> {
+        let adsb = self.get_adsb(message)?;
+
+        match adsb.capability {
+            Capability::AG_GROUND => Some(true),
+            Capability::AG_AIRBORNE => Some(false),
+            // AG_LEVEL1, AG_RESERVED, AG_GROUND_AIRBORNE, AG_DR0 don't give definitive status
+            _ => None,
+        }
     }
 
     /// Extract data from an SBS message
@@ -756,16 +768,13 @@ mod tests {
 
     #[test]
     fn test_accumulator_creation() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         assert_eq!(acc.tracked_aircraft_count(), 0);
-
-        let acc_with_ref = AdsbAccumulator::with_reference(37.7749, -122.4194);
-        assert_eq!(acc_with_ref.tracked_aircraft_count(), 0);
     }
 
     #[test]
     fn test_sbs_position_extraction() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
         let sbs_msg = SbsMessage {
@@ -800,7 +809,7 @@ mod tests {
 
     #[test]
     fn test_sbs_velocity_only() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
         let sbs_msg = SbsMessage {
@@ -835,7 +844,7 @@ mod tests {
 
     #[test]
     fn test_velocity_with_cached_position_emits_fix() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
         // First, add a position via MSG,3
@@ -900,7 +909,7 @@ mod tests {
 
     #[test]
     fn test_velocity_without_position_no_fix() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
         // Send velocity-only message for aircraft with no cached position
@@ -934,7 +943,7 @@ mod tests {
 
     #[test]
     fn test_expired_position_no_fix() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let old_time = Utc::now() - chrono::Duration::seconds(15);
         let now = Utc::now();
 
@@ -991,7 +1000,7 @@ mod tests {
 
     #[test]
     fn test_zero_position_rejected() {
-        let acc = AdsbAccumulator::new(None);
+        let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
         // Try to add (0, 0) position

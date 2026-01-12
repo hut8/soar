@@ -758,8 +758,7 @@ pub async fn handle_run(
 
         // Create ADS-B accumulator for combining position/velocity/callsign data
         // Wraps CPR decoder and adds state accumulation across message types
-        // TODO: Configure reference position from receiver location if available
-        let adsb_accumulator = Arc::new(AdsbAccumulator::new(None));
+        let adsb_accumulator = Arc::new(AdsbAccumulator::new());
 
         // Get Beast receiver ID from environment or use default
         // This allows multiple Beast receivers to be configured via BEAST_RECEIVER_ID env var
