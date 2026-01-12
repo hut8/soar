@@ -101,6 +101,13 @@ ELASTICSEARCH_CONFIG_CHANGED=false
 
 if ! grep -q "# Pelias configuration" /etc/elasticsearch/elasticsearch.yml 2>/dev/null; then
     echo -e "${BLUE}Adding Pelias configuration to elasticsearch.yml...${NC}"
+
+    # Remove any existing xpack.security settings to avoid duplicates (ES 8 has these by default)
+    sed -i '/^xpack\.security\.enabled/d' /etc/elasticsearch/elasticsearch.yml
+    sed -i '/^xpack\.security\.enrollment\.enabled/d' /etc/elasticsearch/elasticsearch.yml
+    sed -i '/^xpack\.security\.http\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+    sed -i '/^xpack\.security\.transport\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+
     cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
 
 # Pelias configuration
