@@ -720,13 +720,13 @@
 			receivers = response.data.filter((receiver: Receiver) => {
 				// Basic validation
 				if (!receiver) {
-					logger.error('Invalid receiver: null or undefined {receiver}', { receiver });
+					logger.error('Invalid receiver: null or undefined: {receiver}', { receiver });
 					return false;
 				}
 
 				// Validate latitude and longitude are numbers
 				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number') {
-					logger.error('Invalid receiver: latitude or longitude is not a number {receiver}', {
+					logger.error('Invalid receiver: latitude or longitude is not a number: {receiver}', {
 						receiver
 					});
 					return false;
