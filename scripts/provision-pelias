@@ -99,16 +99,27 @@ fi
 # Configure for Pelias
 ELASTICSEARCH_CONFIG_CHANGED=false
 
-if ! grep -q "# Pelias configuration" /etc/elasticsearch/elasticsearch.yml 2>/dev/null; then
-    echo -e "${BLUE}Adding Pelias configuration to elasticsearch.yml...${NC}"
+# Clean up elasticsearch.yml to ensure no duplicate settings
+# ES 8 ships with xpack.security defaults that conflict with our Pelias config
+echo -e "${BLUE}Cleaning up elasticsearch.yml...${NC}"
 
-    # Remove any existing xpack.security settings to avoid duplicates (ES 8 has these by default)
-    sed -i '/^xpack\.security\.enabled/d' /etc/elasticsearch/elasticsearch.yml
-    sed -i '/^xpack\.security\.enrollment\.enabled/d' /etc/elasticsearch/elasticsearch.yml
-    sed -i '/^xpack\.security\.http\.ssl/d' /etc/elasticsearch/elasticsearch.yml
-    sed -i '/^xpack\.security\.transport\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+# Remove any existing Pelias configuration block (we'll re-add it fresh)
+sed -i '/# Pelias configuration/,/^$/d' /etc/elasticsearch/elasticsearch.yml 2>/dev/null || true
 
-    cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
+# Remove ES 8 default xpack.security settings (we'll set our own)
+sed -i '/^xpack\.security\.enabled/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^xpack\.security\.enrollment\.enabled/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^xpack\.security\.http\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^xpack\.security\.transport\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+
+# Remove other settings we'll configure
+sed -i '/^cluster\.initial_master_nodes/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^network\.host/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^http\.port/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^discovery\.type/d' /etc/elasticsearch/elasticsearch.yml
+
+echo -e "${BLUE}Adding Pelias configuration to elasticsearch.yml...${NC}"
+cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
 
 # Pelias configuration
 discovery.type: single-node
@@ -123,20 +134,7 @@ xpack.security.enabled: false
 xpack.security.http.ssl.enabled: false
 xpack.security.transport.ssl.enabled: false
 EOF
-    ELASTICSEARCH_CONFIG_CHANGED=true
-else
-    echo -e "${BLUE}Pelias configuration section found in elasticsearch.yml${NC}"
-    # Ensure network.host is set to 127.0.0.1 (localhost only - not exposed to internet)
-    if ! grep -q "^network.host: 127.0.0.1" /etc/elasticsearch/elasticsearch.yml; then
-        echo -e "${YELLOW}Updating network.host to 127.0.0.1 (localhost only)...${NC}"
-        if grep -q "^network.host:" /etc/elasticsearch/elasticsearch.yml; then
-            sed -i 's/^network.host:.*/network.host: 127.0.0.1/' /etc/elasticsearch/elasticsearch.yml
-        else
-            sed -i '/# Pelias configuration/a network.host: 127.0.0.1' /etc/elasticsearch/elasticsearch.yml
-        fi
-        ELASTICSEARCH_CONFIG_CHANGED=true
-    fi
-fi
+ELASTICSEARCH_CONFIG_CHANGED=true
 
 # Set JVM heap size (8GB - adjust based on RAM)
 mkdir -p /etc/elasticsearch/jvm.options.d
