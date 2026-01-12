@@ -206,7 +206,7 @@ echo -e "${GREEN}APT repositories configured${NC}"
 
 # Install PostgreSQL 18
 echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
-sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman uuid-runtime
+sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman postgresql-18-h3 uuid-runtime
 
 echo -e "${GREEN}PostgreSQL 18 installed successfully${NC}"
 
@@ -870,6 +870,11 @@ echo -e "${BLUE}Enabling pg_partman extension on '$DB_NAME' database...${NC}"
 sudo -u postgres psql -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS partman;"
 sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
 echo -e "${GREEN}pg_partman enabled on '$DB_NAME' database${NC}"
+
+# Enable h3 extension on database
+echo -e "${BLUE}Enabling h3 extension on '$DB_NAME' database...${NC}"
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS h3;"
+echo -e "${GREEN}h3 enabled on '$DB_NAME' database${NC}"
 
 echo -e "${GREEN}Database setup complete!${NC}"
 echo
