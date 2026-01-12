@@ -34,6 +34,8 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::sync::Once;
+use std::thread;
+use std::time::Duration;
 
 // Embed migrations at compile time
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
@@ -113,7 +115,7 @@ fn ensure_template_migrated() {
         // Small delay to ensure the connection is fully cleaned up by PostgreSQL
         // This prevents "source database is being accessed by other users" errors
         // when tests run in parallel
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(50));
 
         // Re-mark as template
         if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
@@ -128,7 +130,7 @@ fn ensure_template_migrated() {
         }
 
         // Final delay to ensure template marking is fully processed
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(20));
     });
 }
 
