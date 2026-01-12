@@ -48,7 +48,7 @@ CREATE INDEX idx_coverage_h3_index
 -- Table and column comments
 COMMENT ON TABLE receiver_coverage_h3 IS
     'Aggregated receiver coverage using Uber H3 hexagonal spatial indexes.
-     Updated daily via aggregate-coverage command. Supports multiple resolutions for zoom-based visualization.';
+     Updated daily via run-aggregates command. Supports multiple resolutions for zoom-based visualization.';
 
 COMMENT ON COLUMN receiver_coverage_h3.h3_index IS
     'H3 cell index stored as BIGINT. Convert to/from using h3o Rust crate.';

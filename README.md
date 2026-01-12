@@ -22,7 +22,7 @@ SOAR is an application under active development that will automate many duty-man
   - Multi-resolution H3 spatial indexing (resolutions 6, 7, 8 for different zoom levels)
   - Pre-aggregated coverage statistics including fix counts, coverage hours, and altitude ranges
   - Filterable by time range, altitude, and receiver
-  - Daily batch aggregation via `soar aggregate-coverage` command
+  - Daily batch aggregation via `soar run-aggregates` command
   - Persistent historical coverage data independent of fix retention policies
 
 ## Data Processing Flow
