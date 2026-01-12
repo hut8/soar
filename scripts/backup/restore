@@ -286,7 +286,7 @@ stop_postgresql() {
     fi
 }
 
-# Function to start PostgreSQL
+# Function to start PostgreSQL and wait for recovery
 start_postgresql() {
     log INFO "Starting PostgreSQL..."
 
@@ -296,19 +296,41 @@ start_postgresql() {
         exit 1
     fi
 
-    # Wait for PostgreSQL to be ready
-    log INFO "Waiting for PostgreSQL to be ready..."
-    local retries=30
+    # Wait for PostgreSQL to accept connections
+    log INFO "Waiting for PostgreSQL to accept connections..."
+    local retries=60
     while [[ $retries -gt 0 ]]; do
         if psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -c "SELECT 1" >/dev/null 2>&1; then
-            log INFO "PostgreSQL is ready"
-            return 0
+            break
         fi
         sleep 2
         ((retries--))
     done
 
-    log ERROR "PostgreSQL failed to become ready"
+    if [[ $retries -eq 0 ]]; then
+        log ERROR "PostgreSQL failed to accept connections"
+        log ERROR "Check logs: sudo tail -50 /var/log/postgresql/postgresql-${PG_VERSION}-main.log"
+        exit 1
+    fi
+
+    # Wait for recovery to complete (WAL replay from backup)
+    log INFO "Waiting for recovery to complete..."
+    retries=120  # 4 minutes max for WAL replay
+    while [[ $retries -gt 0 ]]; do
+        local in_recovery=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -t -c "SELECT pg_is_in_recovery()" 2>/dev/null | tr -d ' ')
+        if [[ "$in_recovery" == "f" ]]; then
+            log INFO "Recovery completed, PostgreSQL is ready"
+            return 0
+        fi
+        sleep 2
+        ((retries--))
+        if (( retries % 30 == 0 )); then
+            log INFO "Still recovering... (${retries} retries remaining)"
+        fi
+    done
+
+    log ERROR "Recovery did not complete in expected time"
+    log ERROR "Check logs: sudo tail -50 /var/log/postgresql/postgresql-${PG_VERSION}-main.log"
     exit 1
 }
 
@@ -344,6 +366,12 @@ restore_data_directory() {
     sudo chown -R postgres:postgres "$PGDATA"
 
     log INFO "Data directory restored"
+
+    # Create recovery.signal to tell PostgreSQL to replay included WAL
+    # (pg_basebackup with --wal-method=stream includes all needed WAL)
+    log INFO "Creating recovery.signal for WAL replay..."
+    sudo touch "$PGDATA/recovery.signal"
+    sudo chown postgres:postgres "$PGDATA/recovery.signal"
 }
 
 # Function to verify restore
