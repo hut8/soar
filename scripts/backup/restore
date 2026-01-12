@@ -120,11 +120,13 @@ DOWNLOAD_DIR="$RESTORE_DIR/download"
 EXTRACT_DIR="$RESTORE_DIR/extract"
 BACKUP_FORMAT=""  # Set during download_base_backup (zstd or gzip)
 
-# Function to log messages
+# Function to log messages (writes to stderr so it doesn't interfere with captured output)
 log() {
     local level="$1"
     shift
-    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] [$level] Restore: $*" | tee -a "$LOG_DIR/restore.log"
+    local msg="[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] [$level] Restore: $*"
+    echo "$msg" >> "$LOG_DIR/restore.log"
+    echo "$msg" >&2
 }
 
 # Function to cleanup on exit
