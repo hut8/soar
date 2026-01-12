@@ -173,7 +173,7 @@ jobs:
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
           # Run migrations (includes h3 extension setup)
-          diesel migration run
+          diesel migration run --locked-schema
 
           # Build the project to get the seed-test-data command
           # IMPORTANT: Must use --cfg tokio_unstable for console-subscriber
@@ -374,7 +374,7 @@ jobs:
       - name: Run migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
-        run: diesel migration run
+        run: diesel migration run --locked-schema
 
       - name: Setup test template database
         env:
