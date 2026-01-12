@@ -6,6 +6,11 @@
 .logs
 .mcp.json
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
 # Web build artifacts
 web/build/
 
