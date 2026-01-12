@@ -128,12 +128,12 @@ fi
 TEMP_DIR="${BACKUP_TEMP_DIR:-/storage/soar/backups/base}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
 
-# If we can't write to the configured directories, use user-local fallbacks
-if ! mkdir -p "$TEMP_DIR" 2>/dev/null; then
+# If we can't create or write to the configured directories, use user-local fallbacks
+if ! mkdir -p "$TEMP_DIR" 2>/dev/null || ! [[ -w "$TEMP_DIR" ]]; then
     TEMP_DIR="${HOME}/.local/share/soar/backup-temp"
     mkdir -p "$TEMP_DIR"
 fi
-if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+if ! mkdir -p "$LOG_DIR" 2>/dev/null || ! [[ -w "$LOG_DIR" ]]; then
     LOG_DIR="${HOME}/.local/share/soar/logs"
     mkdir -p "$LOG_DIR"
 fi
