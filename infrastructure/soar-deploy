@@ -25,9 +25,7 @@
 #   same arguments to ensure the latest deployment logic is used.
 #
 
-set -e
-set -u
-set -o pipefail
+set -euo pipefail
 
 # Deployment log and status directory
 DEPLOY_LOG_DIR="/var/lib/soar/deploy/logs"
