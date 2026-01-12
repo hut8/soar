@@ -43,6 +43,12 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 // Ensure migrations only run once per test session
 static MIGRATIONS_RUN: Once = Once::new();
 
+// Delay to ensure PostgreSQL fully processes connection cleanup before template operations
+const CONNECTION_CLEANUP_DELAY_MS: u64 = 50;
+
+// Delay to ensure template database metadata update is fully processed
+const TEMPLATE_MARKING_DELAY_MS: u64 = 20;
+
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 /// Ensures the template database exists and has the latest migrations applied.
@@ -79,7 +85,6 @@ fn ensure_template_migrated() {
                 if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
                     let _ = diesel::sql_query("CREATE EXTENSION IF NOT EXISTS postgis")
                         .execute(&mut template_conn);
-                    // Explicitly close connection
                     drop(template_conn);
                 }
             }
@@ -91,7 +96,6 @@ fn ensure_template_migrated() {
             )
             .execute(&mut admin_conn);
 
-            // Explicitly close admin connection
             drop(admin_conn);
         }
 
@@ -108,14 +112,12 @@ fn ensure_template_migrated() {
                 }
             }
 
-            // Explicitly drop the connection to ensure it's closed before re-marking the template
             drop(template_conn);
         }
 
-        // Small delay to ensure the connection is fully cleaned up by PostgreSQL
+        // Small delay to ensure connections are fully cleaned up by PostgreSQL
         // This prevents "source database is being accessed by other users" errors
-        // when tests run in parallel
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(CONNECTION_CLEANUP_DELAY_MS));
 
         // Re-mark as template
         if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
@@ -125,12 +127,11 @@ fn ensure_template_migrated() {
             )
             .execute(&mut admin_conn);
 
-            // Explicitly close admin connection
             drop(admin_conn);
         }
 
         // Final delay to ensure template marking is fully processed
-        thread::sleep(Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(TEMPLATE_MARKING_DELAY_MS));
     });
 }
 
