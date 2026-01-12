@@ -1,5 +1,5 @@
 [Unit]
-Description=SOAR Coverage Aggregation - Aggregate position fixes into H3 coverage hexes
+Description=SOAR Aggregation (Staging) - Aggregate coverage hexes and flight analytics
 Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -12,11 +12,12 @@ Group=soar
 WorkingDirectory=/var/lib/soar
 
 # Aggregate coverage at all six resolutions (3, 4, 5, 6, 7, 8)
+# Also aggregates flight analytics (daily/hourly stats, duration buckets, aircraft/club/airport analytics)
 # Auto-detects date range from database (aggregates from last coverage date + 1 to yesterday)
-ExecStart=/usr/local/bin/soar aggregate-coverage --resolutions 3,4,5,6,7,8
+ExecStart=/usr/local/bin/soar-staging run-aggregates --resolutions 3,4,5,6,7,8
 
-# Environment variables
-EnvironmentFile=/etc/soar/env-production
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
 
 # Security settings
 NoNewPrivileges=yes
@@ -28,4 +29,4 @@ LimitNOFILE=65536
 TimeoutStartSec=infinity
 
 [Install]
-WantedBy=multi-user.target soar@production.target
+WantedBy=multi-user.target soar@staging.target

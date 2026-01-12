@@ -128,32 +128,45 @@ During high-throughput processing (600+ fixes/second), these triggers caused:
 - Updates both departure and arrival airport records
 - Only triggers when `departure_airport_id` or `arrival_airport_id` is set
 
-## Alternative: Batch Analytics
+## Current Implementation: Batch Analytics via `run-aggregates`
 
-Instead of real-time triggers, analytics can be computed via:
+The analytics are now populated via the `soar run-aggregates` command, which runs daily.
 
-1. **Scheduled Jobs**: Run hourly/daily aggregation queries
-2. **Materialized Views**: Refresh periodically with `REFRESH MATERIALIZED VIEW`
-3. **Application-Level Batching**: Queue analytics updates and process in batches
+### Usage
 
-Example batch query for daily flight analytics:
-```sql
-INSERT INTO flight_analytics_daily (date, flight_count, total_duration_seconds, ...)
-SELECT
-    DATE(takeoff_time) as date,
-    COUNT(*) as flight_count,
-    SUM(EXTRACT(EPOCH FROM (landing_time - takeoff_time))) as total_duration_seconds,
-    ...
-FROM flights
-WHERE takeoff_time >= $1 AND takeoff_time < $2
-GROUP BY DATE(takeoff_time)
-ON CONFLICT (date) DO UPDATE SET
-    flight_count = EXCLUDED.flight_count,
-    total_duration_seconds = EXCLUDED.total_duration_seconds,
-    ...;
+```bash
+# Run with default 30-day lookback
+soar run-aggregates
+
+# Run for specific date range
+soar run-aggregates --start-date 2026-01-01 --end-date 2026-01-10
+
+# Also specify H3 resolutions for coverage
+soar run-aggregates --resolutions 6,7,8
 ```
+
+### What It Aggregates
+
+The command populates all six analytics tables:
+
+1. **flight_analytics_daily** - Daily flight counts, durations, distances
+2. **flight_analytics_hourly** - Hourly flight counts and active devices
+3. **flight_duration_buckets** - Distribution of flight durations (full recompute)
+4. **aircraft_analytics** - Per-aircraft stats with z-scores (full recompute)
+5. **club_analytics_daily** - Per-club daily statistics
+6. **airport_analytics_daily** - Per-airport departure/arrival counts
+
+### Implementation Details
+
+- Date-based tables use `ON CONFLICT DO UPDATE` for incremental updates
+- `flight_duration_buckets` and `aircraft_analytics` are fully recomputed each run
+- Z-scores are calculated based on `flight_count_30d` distribution
+- The command also runs H3 coverage aggregation
+
+See `src/commands/run_aggregates.rs` for the implementation.
 
 ## Migration History
 
 - **Created**: Migration `2025-11-17-210459-0000_add_analytics_triggers`
-- **Removed**: Migration `2026-01-08-XXXXXX-0000_remove_analytics_triggers` (this removal)
+- **Removed**: Migration `2026-01-08-230945-0000_remove_analytics_triggers`
+- **Batch Aggregation**: Implemented in `run-aggregates` command (2026-01-12)

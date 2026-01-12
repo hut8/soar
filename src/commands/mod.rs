@@ -1,4 +1,3 @@
-pub mod aggregate_coverage;
 pub mod archive;
 pub mod dump_unified_ddb;
 pub mod ingest;
@@ -6,10 +5,10 @@ pub mod load_data;
 pub mod pull_airspaces;
 pub mod pull_data;
 pub mod run;
+pub mod run_aggregates;
 pub mod seed_test_data;
 pub mod sitemap;
 
-pub use aggregate_coverage::aggregate_coverage;
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_unified_ddb::handle_dump_unified_ddb;
 pub use ingest::handle_ingest;
@@ -17,5 +16,6 @@ pub use load_data::handle_load_data;
 pub use pull_airspaces::handle_pull_airspaces;
 pub use pull_data::handle_pull_data;
 pub use run::handle_run;
+pub use run_aggregates::run_aggregates;
 pub use seed_test_data::handle_seed_test_data;
 pub use sitemap::handle_sitemap_generation;
