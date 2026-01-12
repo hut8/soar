@@ -187,14 +187,43 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
             &[0.1, 0.5, 1.0, 2.0, 4.0, 6.0, 12.0, 18.0, 24.0],
         )
         .expect("failed to set buckets for flight_tracker.coalesce.rejected.gap_hours")
+        // Configure Beast message processing latency histogram with millisecond buckets
+        // Buckets: 1ms, 2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1000ms
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "beast.run.message_processing_latency_ms".to_string(),
+            ),
+            &[1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0],
+        )
+        .expect("failed to set buckets for beast.run.message_processing_latency_ms")
+        // Configure SBS message processing latency histogram with millisecond buckets
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full(
+                "sbs.run.message_processing_latency_ms".to_string(),
+            ),
+            &[1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0],
+        )
+        .expect("failed to set buckets for sbs.run.message_processing_latency_ms")
         .install_recorder()
         .expect("failed to install Prometheus recorder")
 }
 
-/// CPU profiling handler
-/// Returns a flamegraph SVG when profiling is complete
-async fn profile_handler() -> impl IntoResponse {
-    info!("Starting CPU profiling for 30 seconds");
+/// Query parameters for CPU profiling endpoint
+#[derive(Debug, serde::Deserialize)]
+struct ProfileParams {
+    /// Duration in seconds (default: 10, max: 60)
+    seconds: Option<u64>,
+}
+
+/// CPU profiling handler compatible with Pyroscope scraping
+/// Returns profiling data in pprof protobuf format
+/// Accepts `seconds` query parameter to control duration (default: 10s, max: 60s)
+async fn profile_handler(
+    axum::extract::Query(params): axum::extract::Query<ProfileParams>,
+) -> impl IntoResponse {
+    // Parse duration from query param, default to 10 seconds, max 60 seconds
+    let duration_secs = params.seconds.unwrap_or(10).min(60);
+    info!("Starting CPU profiling for {} seconds", duration_secs);
 
     // Create a profiler guard
     let guard = match pprof::ProfilerGuardBuilder::default()
@@ -207,47 +236,81 @@ async fn profile_handler() -> impl IntoResponse {
             warn!("Failed to create profiler: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to start profiler".to_string(),
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )],
+                Vec::new(),
             );
         }
     };
 
-    // Profile for 30 seconds
-    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+    // Profile for specified duration
+    tokio::time::sleep(tokio::time::Duration::from_secs(duration_secs)).await;
 
-    // Generate report
+    // Generate pprof report (protobuf format for Pyroscope compatibility)
     match guard.report().build() {
         Ok(report) => {
-            // Generate flamegraph
             let mut body = Vec::new();
-            if let Err(e) = report.flamegraph(&mut body) {
-                warn!("Failed to generate flamegraph: {}", e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to generate flamegraph".to_string(),
-                );
+            match report.pprof() {
+                Ok(profile) => {
+                    if let Err(e) = profile.write_to_vec(&mut body) {
+                        warn!("Failed to serialize pprof: {}", e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            [(
+                                axum::http::header::CONTENT_TYPE,
+                                "text/plain; charset=utf-8",
+                            )],
+                            Vec::new(),
+                        );
+                    }
+                    info!(
+                        "CPU profiling completed, generated pprof ({} bytes)",
+                        body.len()
+                    );
+                    (
+                        StatusCode::OK,
+                        [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+                        body,
+                    )
+                }
+                Err(e) => {
+                    warn!("Failed to generate pprof: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        [(
+                            axum::http::header::CONTENT_TYPE,
+                            "text/plain; charset=utf-8",
+                        )],
+                        Vec::new(),
+                    )
+                }
             }
-
-            info!(
-                "CPU profiling completed, generated flamegraph ({} bytes)",
-                body.len()
-            );
-            (StatusCode::OK, String::from_utf8_lossy(&body).to_string())
         }
         Err(e) => {
             warn!("Failed to build profiling report: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to build profiling report".to_string(),
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )],
+                Vec::new(),
             )
         }
     }
 }
 
-/// Heap profiling handler
+/// Heap profiling handler compatible with Pyroscope scraping
 /// Returns profiling data in pprof protobuf format
-async fn heap_profile_handler() -> impl IntoResponse {
-    info!("Generating heap profile");
+/// Accepts `seconds` query parameter to control duration (default: 10s, max: 60s)
+async fn heap_profile_handler(
+    axum::extract::Query(params): axum::extract::Query<ProfileParams>,
+) -> impl IntoResponse {
+    // Parse duration from query param, default to 10 seconds, max 60 seconds
+    let duration_secs = params.seconds.unwrap_or(10).min(60);
+    info!("Generating heap profile ({} seconds)", duration_secs);
 
     // Create a profiler guard
     let guard = match pprof::ProfilerGuardBuilder::default()
@@ -258,36 +321,67 @@ async fn heap_profile_handler() -> impl IntoResponse {
         Ok(g) => g,
         Err(e) => {
             warn!("Failed to create profiler: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Vec::new());
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )],
+                Vec::new(),
+            );
         }
     };
 
-    // Profile for 10 seconds
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    // Profile for specified duration
+    tokio::time::sleep(tokio::time::Duration::from_secs(duration_secs)).await;
 
     // Generate pprof report
     match guard.report().build() {
         Ok(report) => {
             let mut body = Vec::new();
-            if let Err(e) = report.pprof() {
-                warn!("Failed to generate pprof: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, Vec::new());
-            }
-
-            if let Ok(profile) = report.pprof() {
-                if let Err(e) = profile.write_to_vec(&mut body) {
-                    warn!("Failed to serialize pprof: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, Vec::new());
+            match report.pprof() {
+                Ok(profile) => {
+                    if let Err(e) = profile.write_to_vec(&mut body) {
+                        warn!("Failed to serialize pprof: {}", e);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            [(
+                                axum::http::header::CONTENT_TYPE,
+                                "text/plain; charset=utf-8",
+                            )],
+                            Vec::new(),
+                        );
+                    }
+                    info!("Heap profile generated ({} bytes)", body.len());
+                    (
+                        StatusCode::OK,
+                        [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+                        body,
+                    )
                 }
-                info!("Heap profile generated ({} bytes)", body.len());
-                (StatusCode::OK, body)
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Vec::new())
+                Err(e) => {
+                    warn!("Failed to generate pprof: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        [(
+                            axum::http::header::CONTENT_TYPE,
+                            "text/plain; charset=utf-8",
+                        )],
+                        Vec::new(),
+                    )
+                }
             }
         }
         Err(e) => {
             warn!("Failed to build profiling report: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Vec::new())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                )],
+                Vec::new(),
+            )
         }
     }
 }
@@ -543,6 +637,8 @@ pub fn initialize_run_metrics() {
     metrics::counter!("socket.router.aprs_send_error_total").absolute(0);
     metrics::counter!("socket.router.beast_routed_total").absolute(0);
     metrics::counter!("socket.router.beast_send_error_total").absolute(0);
+    metrics::counter!("socket.router.sbs_routed_total").absolute(0);
+    metrics::counter!("socket.router.sbs_send_error_total").absolute(0);
     metrics::counter!("socket.router.decode_error_total").absolute(0);
     metrics::gauge!("socket.envelope_intake_queue.depth").set(0.0);
 
@@ -581,6 +677,7 @@ pub fn initialize_run_metrics() {
         .absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "end_landing").absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "end_timeout").absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "unknown").absolute(0);
 
     // Beast (ADS-B) processing metrics
     metrics::counter!("beast.run.process_beast_message.called_total").absolute(0);
@@ -603,6 +700,26 @@ pub fn initialize_run_metrics() {
     metrics::gauge!("beast.run.nats.lag_seconds").set(0.0);
     metrics::gauge!("beast.intake_queue.depth").set(0.0);
     metrics::histogram!("beast.run.message_processing_latency_ms").record(0.0);
+
+    // SBS (BaseStation) processing metrics
+    metrics::counter!("sbs.run.process_sbs_message.called_total").absolute(0);
+    metrics::counter!("sbs.run.invalid_message_total").absolute(0);
+    metrics::counter!("sbs.run.decode.success_total").absolute(0);
+    metrics::counter!("sbs.run.decode.failed_total").absolute(0);
+    metrics::counter!("sbs.run.decode.utf8_failed_total").absolute(0);
+    metrics::counter!("sbs.run.icao_extraction_failed_total").absolute(0);
+    metrics::counter!("sbs.run.aircraft_lookup_failed_total").absolute(0);
+    metrics::counter!("sbs.run.raw_message_stored_total").absolute(0);
+    metrics::counter!("sbs.run.raw_message_store_failed_total").absolute(0);
+    metrics::counter!("sbs.run.accumulator_failed_total").absolute(0);
+    metrics::counter!("sbs.run.fixes_processed_total").absolute(0);
+    metrics::counter!("sbs.run.fix_processing_failed_total").absolute(0);
+    metrics::counter!("sbs.run.no_fix_created_total").absolute(0);
+    metrics::counter!("sbs.run.intake.processed_total").absolute(0);
+    metrics::gauge!("sbs.run.nats.lag_seconds").set(0.0);
+    metrics::gauge!("sbs.intake_queue.depth").set(0.0);
+    metrics::histogram!("sbs.run.message_processing_latency_ms").record(0.0);
+    metrics::histogram!("sbs.run.process_message_duration_ms").record(0.0);
 
     // Queue depth metrics (pipeline order)
     metrics::gauge!("aprs.router_queue.depth").set(0.0);
@@ -870,11 +987,11 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
     info!("Health check available at http://{}/health", addr);
     info!("Readiness check available at http://{}/ready", addr);
     info!(
-        "CPU profiling available at http://{}/debug/pprof/profile (30s flamegraph)",
+        "CPU profiling available at http://{}/debug/pprof/profile?seconds=N (pprof format, default 10s)",
         addr
     );
     info!(
-        "Heap profiling available at http://{}/debug/pprof/heap (10s pprof)",
+        "Heap profiling available at http://{}/debug/pprof/heap?seconds=N (pprof format, default 10s)",
         addr
     );
 

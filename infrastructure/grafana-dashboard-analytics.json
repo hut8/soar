@@ -176,7 +176,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  date as time,\n  (SELECT COUNT(*) FROM flights f\n   JOIN aircraft d ON f.aircraft_id = d.id\n   WHERE f.takeoff_time::date = fad.date\n   AND d.aircraft_type_ogn = 'glider') as \"Glider Flights\",\n  tow_flight_count as \"Tow Flights\"\nFROM flight_analytics_daily fad\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
+          "rawSql": "SELECT\n  date as time,\n  flight_count - tow_flight_count as \"Glider Flights\",\n  tow_flight_count as \"Tow Flights\"\nFROM flight_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -1040,6 +1040,13 @@
           ]
         },
         "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "tooltip": {
           "mode": "single",
           "sort": "none"
@@ -1054,7 +1061,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  flight_type,\n  COUNT(*) as count\nFROM (\n  SELECT\n    CASE\n      WHEN departure_airport_id IS NULL OR arrival_airport_id IS NULL THEN 'Truncated'\n      WHEN departure_airport_id = arrival_airport_id THEN 'Local'\n      ELSE 'Cross-Country'\n    END as flight_type\n  FROM flights\n  WHERE takeoff_time >= NOW() - INTERVAL '30 days'\n) AS categorized\nGROUP BY flight_type",
+          "rawSql": "SELECT\n  SUM(cross_country_count) as \"Cross-Country\",\n  SUM(flight_count - cross_country_count) as \"Local/Other\"\nFROM flight_analytics_daily\nWHERE date >= CURRENT_DATE - 30",
           "refId": "A",
           "sql": {
             "columns": [],

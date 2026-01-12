@@ -150,6 +150,8 @@ discovery.relabel "soar_ingest_staging" {
 }
 
 // CPU profiling scraper - scrapes /debug/pprof/profile
+// SOAR services return pprof protobuf format with configurable duration via ?seconds=N
+// Default: 10 seconds profiling, so we need scrape timeout > 10s
 pyroscope.scrape "soar_cpu" {
   targets = concat(
     discovery.relabel.soar_run.output,
@@ -159,6 +161,10 @@ pyroscope.scrape "soar_cpu" {
   )
 
   forward_to = [pyroscope.write.endpoint.receiver]
+
+  // Scrape every 60 seconds with a 15s timeout (profile takes 10s by default)
+  scrape_interval = "60s"
+  scrape_timeout  = "15s"
 
   profiling_config {
     profile.process_cpu {

@@ -843,4 +843,9 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.health.beast_connected").set(0.0);
     metrics::gauge!("ingest.health.sbs_connected").set(0.0);
     metrics::gauge!("ingest.health.socket_connected").set(0.0);
+
+    // Queue capacity pause metrics (backpressure events)
+    metrics::counter!("queue.capacity_pause_total", "queue" => "ogn").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "beast").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "sbs").absolute(0);
 }

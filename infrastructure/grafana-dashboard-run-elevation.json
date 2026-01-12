@@ -171,45 +171,12 @@
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_sync_processed_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Sync Processed/sec",
+          "legendFormat": "Processed/sec",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(aprs_elevation_processed_total{component=\"run\",environment=\"$environment\"}[5m]))",
-          "legendFormat": "Async Processed/sec",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_elevation_queued_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Async Queued/sec",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_elevation_channel_closed_total{component=\"run\",environment=\"$environment\"}[5m])",
-          "legendFormat": "Async Channel Closed Errors/sec",
-          "range": true,
-          "refId": "E"
         }
       ],
-      "title": "Elevation Tasks (Sync + Async)",
+      "title": "Elevation Processing Rate",
       "type": "timeseries"
     },
     {
@@ -303,7 +270,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
-          "legendFormat": "Sync P50",
+          "legendFormat": "P50",
           "range": true,
           "refId": "A"
         },
@@ -314,7 +281,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
-          "legendFormat": "Sync P95",
+          "legendFormat": "P95",
           "range": true,
           "refId": "B"
         },
@@ -325,45 +292,12 @@
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
-          "legendFormat": "Sync P99",
+          "legendFormat": "P99",
           "range": true,
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
-          "legendFormat": "Async P50",
-          "range": true,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
-          "legendFormat": "Async P95",
-          "range": true,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
-          "legendFormat": "Async P99",
-          "range": true,
-          "refId": "F"
         }
       ],
-      "title": "Elevation Processing Duration (Sync + Async)",
+      "title": "Elevation Processing Duration",
       "type": "timeseries"
     },
     {
