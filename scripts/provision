@@ -628,7 +628,7 @@ echo -e "${GREEN}Alloy configured${NC}"
 NETDATA_CONF="/etc/netdata/netdata.conf"
 if [ -f "$NETDATA_CONF" ]; then
     echo -e "${BLUE}Configuring netdata to disable otel plugin (conflicts with Alloy)...${NC}"
-    if grep -q "^\[plugins\]" "$NETDATA_CONF" && grep -q "otel.*=.*no" "$NETDATA_CONF"; then
+    if grep -q "^\[plugins\]" "$NETDATA_CONF" && grep -q "^[[:space:]]*otel[[:space:]]*=[[:space:]]*no" "$NETDATA_CONF"; then
         echo -e "${BLUE}netdata otel plugin already disabled${NC}"
     else
         # Add [plugins] section with otel = no if not already present
@@ -636,9 +636,9 @@ if [ -f "$NETDATA_CONF" ]; then
             echo "" >> "$NETDATA_CONF"
             echo "[plugins]" >> "$NETDATA_CONF"
         fi
-        if ! grep -q "otel.*=.*no" "$NETDATA_CONF"; then
-            # Add otel = no after [plugins] section
-            sed -i '/^\[plugins\]/a\    otel = no' "$NETDATA_CONF"
+        if ! grep -q "^[[:space:]]*otel[[:space:]]*=[[:space:]]*no" "$NETDATA_CONF"; then
+            # Add otel = no after [plugins] section (use tab for netdata config style)
+            sed -i '/^\[plugins\]/a\\totel = no' "$NETDATA_CONF"
             echo -e "${GREEN}Disabled netdata otel plugin${NC}"
             # Restart netdata if it's running to apply the change
             if systemctl is-active --quiet netdata; then
