@@ -18,6 +18,7 @@
 		Receiver,
 		Airspace,
 		AirspaceFeatureCollection,
+		Runway,
 		Fix,
 		Airport,
 		DataListResponse,
@@ -70,6 +71,12 @@
 	let airspacePolygons: google.maps.Polygon[] = [];
 	let shouldShowAirspaces: boolean = false;
 	let airspaceUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Runway display variables
+	let runwayPolygons: google.maps.Polygon[] = [];
+	let runwayEndpointMarkers: google.maps.Circle[] = [];
+	let shouldShowRunways: boolean = false;
+	let runwayUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Zoom debounce timer
 	let zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -409,6 +416,16 @@
 		}
 	});
 
+	$effect(() => {
+		if (!currentSettings.showRunwayOverlays && shouldShowRunways) {
+			clearRunwayOverlays();
+			shouldShowRunways = false;
+		} else if (currentSettings.showRunwayOverlays && map) {
+			// Re-check if we should show runways
+			checkAndUpdateRunways();
+		}
+	});
+
 	// Get singleton instances
 	const aircraftRegistry = AircraftRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
@@ -566,6 +583,7 @@
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
 			setTimeout(checkAndUpdateReceivers, 100); // Check receivers as well
 			setTimeout(checkAndUpdateAirspaces, 100); // Check airspaces as well
+			setTimeout(checkAndUpdateRunways, 100); // Check runways as well
 			// Update aircraft marker scaling on zoom change
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability
@@ -607,6 +625,7 @@
 			checkAndUpdateAirports();
 			checkAndUpdateReceivers();
 			checkAndUpdateAirspaces();
+			checkAndUpdateRunways();
 
 			// Always fetch aircraft in viewport after panning
 			await fetchAndDisplayDevicesInViewport();
@@ -620,10 +639,11 @@
 			saveMapState();
 		});
 
-		// Initial check for airports, receivers, and airspaces
+		// Initial check for airports, receivers, airspaces, and runways
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
 		setTimeout(checkAndUpdateReceivers, 1000);
 		setTimeout(checkAndUpdateAirspaces, 1000);
+		setTimeout(checkAndUpdateRunways, 1000);
 
 		// Initial area tracker availability check
 		setTimeout(updateAreaTrackerAvailability, 1000);
@@ -895,6 +915,11 @@
 
 			airportMarkers.push(marker);
 		});
+
+		// Update runway overlays if they should be shown (runways come from airport data)
+		if (shouldShowRunways) {
+			displayRunwaysFromAirports();
+		}
 	}
 
 	function clearAirportMarkers(): void {
@@ -1219,6 +1244,124 @@
 			}
 
 			airspaceUpdateDebounceTimer = null;
+		}, 500);
+	}
+
+	// Runway overlay functions - runways are extracted from airport data
+	function displayRunwaysFromAirports(): void {
+		// Extract all runways from the loaded airports
+		const allRunways: Runway[] = airports.flatMap((airport) => airport.runways || []);
+		displayRunwaysOnMap(allRunways);
+	}
+
+	function displayRunwaysOnMap(runways: Runway[]): void {
+		// Clear existing runway overlays
+		clearRunwayOverlays();
+
+		runways.forEach((runway) => {
+			// Only display if we have a valid polyline (4 corner points)
+			if (runway.polyline && runway.polyline.length === 4) {
+				// Convert [lat, lon] array to Google Maps LatLngLiteral
+				const path = runway.polyline.map((coord) => ({
+					lat: coord[0],
+					lng: coord[1]
+				}));
+
+				// Create runway rectangle polygon
+				const polygon = new google.maps.Polygon({
+					paths: path,
+					strokeColor: '#4A5568', // Gray-600
+					strokeOpacity: 0.9,
+					strokeWeight: 1,
+					fillColor: '#2D3748', // Gray-700
+					fillOpacity: 0.7,
+					map: map,
+					zIndex: 40 // Below airspaces (50), airports (100), and receivers (150)
+				});
+
+				runwayPolygons.push(polygon);
+			}
+
+			// Add endpoint markers (small dots at each end of runway)
+			const endpointColor = '#F59E0B'; // Amber
+			const endpointRadius = 18; // meters
+
+			// Low end marker
+			if (runway.low.latitudeDeg !== null && runway.low.longitudeDeg !== null) {
+				const lowMarker = new google.maps.Circle({
+					center: { lat: runway.low.latitudeDeg, lng: runway.low.longitudeDeg },
+					radius: endpointRadius,
+					strokeColor: endpointColor,
+					strokeOpacity: 1,
+					strokeWeight: 2,
+					fillColor: endpointColor,
+					fillOpacity: 0.8,
+					map: map,
+					zIndex: 45
+				});
+				runwayEndpointMarkers.push(lowMarker);
+			}
+
+			// High end marker
+			if (runway.high.latitudeDeg !== null && runway.high.longitudeDeg !== null) {
+				const highMarker = new google.maps.Circle({
+					center: { lat: runway.high.latitudeDeg, lng: runway.high.longitudeDeg },
+					radius: endpointRadius,
+					strokeColor: endpointColor,
+					strokeOpacity: 1,
+					strokeWeight: 2,
+					fillColor: endpointColor,
+					fillOpacity: 0.8,
+					map: map,
+					zIndex: 45
+				});
+				runwayEndpointMarkers.push(highMarker);
+			}
+		});
+
+		console.log(
+			`[RUNWAYS] Displayed ${runways.length} runways (${runwayPolygons.length} polygons, ${runwayEndpointMarkers.length} endpoint markers)`
+		);
+	}
+
+	function clearRunwayOverlays(): void {
+		runwayPolygons.forEach((polygon) => {
+			polygon.setMap(null);
+		});
+		runwayPolygons = [];
+
+		runwayEndpointMarkers.forEach((marker) => {
+			marker.setMap(null);
+		});
+		runwayEndpointMarkers = [];
+	}
+
+	function checkAndUpdateRunways(): void {
+		// Clear any existing debounce timer
+		if (runwayUpdateDebounceTimer !== null) {
+			clearTimeout(runwayUpdateDebounceTimer);
+		}
+
+		// Debounce runway updates by 500ms to prevent excessive API calls
+		runwayUpdateDebounceTimer = setTimeout(() => {
+			const area = calculateViewportArea();
+			// Show runways at a more zoomed in level than airspaces (smaller area threshold)
+			const shouldShow = area < 5000 && currentSettings.showRunwayOverlays;
+
+			if (shouldShow !== shouldShowRunways) {
+				shouldShowRunways = shouldShow;
+
+				if (shouldShowRunways) {
+					displayRunwaysFromAirports();
+				} else {
+					clearRunwayOverlays();
+				}
+			} else if (shouldShowRunways) {
+				// Still showing runways, update them for the new viewport
+				displayRunwaysFromAirports();
+			}
+
+			runwayUpdateDebounceTimer = null;
 		}, 500);
 	}
 
