@@ -250,30 +250,34 @@ pub(crate) async fn timeout_flight(
 
     debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
-    // Get last fix from in-memory state for reverse geocoding
-    // No need to query database - we already have the last fix in aircraft state
-    let end_location_id = if let Some(state) = ctx.aircraft_states.get(&aircraft_id) {
-        if let Some(last_fix) = state.last_fix() {
-            create_start_end_location(
-                ctx.locations_repo,
-                last_fix.lat,
-                last_fix.lng,
-                "end (timeout)",
-            )
-            .await
-        } else {
+    // Get last fix coordinates from in-memory state for reverse geocoding
+    // IMPORTANT: Extract data and release DashMap lock BEFORE any async operations
+    // to avoid holding synchronous locks across await points (causes deadlocks)
+    let (last_fix_coords, has_state) = if let Some(state) = ctx.aircraft_states.get(&aircraft_id) {
+        (state.last_fix().map(|f| (f.lat, f.lng)), true)
+    } else {
+        (None, false)
+    };
+    // DashMap lock is now released - safe to do async work
+
+    let end_location_id = match (last_fix_coords, has_state) {
+        (Some((lat, lng)), _) => {
+            create_start_end_location(ctx.locations_repo, lat, lng, "end (timeout)").await
+        }
+        (None, true) => {
             debug!(
                 "No fixes in aircraft state for timed out flight {}, skipping end location creation",
                 flight_id
             );
             None
         }
-    } else {
-        debug!(
-            "No aircraft state found for timed out flight {}, skipping end location creation",
-            flight_id
-        );
-        None
+        (None, false) => {
+            debug!(
+                "No aircraft state found for timed out flight {}, skipping end location creation",
+                flight_id
+            );
+            None
+        }
     };
 
     // Mark flight as timed out in database WITH phase information and end location

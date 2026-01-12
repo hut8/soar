@@ -226,21 +226,29 @@ pub(crate) async fn process_state_transition(
                 }
 
                 // Check for tow release (towtugs only)
-                if is_towtug
-                    && let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
-                    && towing::check_tow_release(&state, fix.climb_fpm)
-                {
+                // IMPORTANT: Extract data and release DashMap lock BEFORE any async operations
+                // to avoid holding synchronous locks across await points (causes deadlocks)
+                let tow_release_info = if is_towtug {
+                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                        if towing::check_tow_release(&state, fix.climb_fpm) {
+                            state.towing_info.as_ref().map(|ti| ti.glider_flight_id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                // DashMap lock is now released - safe to do async work
+
+                if let Some(glider_flight_id) = tow_release_info {
                     // Record tow release
-                    if let Some(towing_info) = &state.towing_info
-                        && let Some(altitude_ft) = fix.altitude_msl_feet
-                    {
+                    if let Some(altitude_ft) = fix.altitude_msl_feet {
                         let _ = ctx
                             .flights_repo
-                            .update_tow_release(
-                                towing_info.glider_flight_id,
-                                altitude_ft,
-                                fix.timestamp,
-                            )
+                            .update_tow_release(glider_flight_id, altitude_ft, fix.timestamp)
                             .await;
                     }
 
