@@ -55,6 +55,12 @@ const POST_TERMINATE_DELAY_MS: u64 = 100;
 // Maximum number of retries for template cloning
 const MAX_CLONE_RETRIES: u32 = 5;
 
+// Compile-time assertion to ensure we have at least one retry attempt
+const _: () = assert!(
+    MAX_CLONE_RETRIES > 0,
+    "MAX_CLONE_RETRIES must be greater than 0"
+);
+
 // Initial retry delay in milliseconds (doubles with each retry)
 const INITIAL_RETRY_DELAY_MS: u64 = 50;
 
