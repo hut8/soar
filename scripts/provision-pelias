@@ -106,15 +106,16 @@ echo -e "${BLUE}Cleaning up elasticsearch.yml...${NC}"
 # Remove any existing Pelias configuration block (we'll re-add it fresh)
 sed -i '/# Pelias configuration/,/^$/d' /etc/elasticsearch/elasticsearch.yml 2>/dev/null || true
 
-# Remove ES 8 default xpack.security settings (we'll set our own)
-sed -i '/^xpack\.security\.enabled/d' /etc/elasticsearch/elasticsearch.yml
-sed -i '/^xpack\.security\.enrollment\.enabled/d' /etc/elasticsearch/elasticsearch.yml
-sed -i '/^xpack\.security\.http\.ssl/d' /etc/elasticsearch/elasticsearch.yml
-sed -i '/^xpack\.security\.transport\.ssl/d' /etc/elasticsearch/elasticsearch.yml
+# Remove ES 8 security auto-configuration block entirely (added on first install)
+sed -i '/^#----------------------- BEGIN SECURITY AUTO CONFIGURATION/,/^#----------------------- END SECURITY AUTO CONFIGURATION/d' /etc/elasticsearch/elasticsearch.yml 2>/dev/null || true
+
+# Remove any remaining ES 8 default xpack.security settings (we'll set our own)
+sed -i '/^xpack\.security/d' /etc/elasticsearch/elasticsearch.yml
 
 # Remove other settings we'll configure
 sed -i '/^cluster\.initial_master_nodes/d' /etc/elasticsearch/elasticsearch.yml
 sed -i '/^network\.host/d' /etc/elasticsearch/elasticsearch.yml
+sed -i '/^http\.host/d' /etc/elasticsearch/elasticsearch.yml
 sed -i '/^http\.port/d' /etc/elasticsearch/elasticsearch.yml
 sed -i '/^discovery\.type/d' /etc/elasticsearch/elasticsearch.yml
 
