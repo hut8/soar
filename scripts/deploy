@@ -10,9 +10,10 @@
 #   ./scripts/deploy production  # Deploy to production environment
 #
 # Prerequisites:
-#   - Binary must already be built (target/release/soar or target/debug/soar)
 #   - Script must be run from the project root directory
 #   - User must have sudo access
+#
+# Note: The script always runs 'cargo build --release' to ensure the binary is up-to-date
 #
 # What this script does:
 #   1. Creates a deployment bundle with binary and infrastructure files
@@ -77,17 +78,12 @@ if [ ! -f "Cargo.toml" ] || [ ! -d "web" ]; then
     exit 1
 fi
 
-# Find the binary - prefer release build, fall back to debug
-if [ -f "target/release/soar" ]; then
-    BINARY_PATH="target/release/soar"
-    log_info "Using release binary: $BINARY_PATH"
-elif [ -f "target/debug/soar" ]; then
-    BINARY_PATH="target/debug/soar"
-    log_warn "Using debug binary: $BINARY_PATH (consider building release for production)"
-else
-    log_error "Binary not found. Build with 'cargo build --release' first."
-    exit 1
-fi
+# Always build release binary to ensure it's up-to-date
+log_step "Building release binary"
+log_info "Running 'cargo build --release' to ensure binary is up-to-date..."
+cargo build --release || { log_error "Build failed"; exit 1; }
+BINARY_PATH="target/release/soar"
+log_info "Build complete: $BINARY_PATH"
 
 # Get version info
 if git describe --tags --always >/dev/null 2>&1; then
