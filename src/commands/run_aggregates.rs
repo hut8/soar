@@ -100,7 +100,7 @@ async fn aggregate_coverage_hexes(
 
     // Log each needed dimension
     for (date, resolution) in &needed_dimensions {
-        info!("Found dimension: date={} resolution={}", date, resolution);
+        info!("Finding dimension: date={} resolution={}", date, resolution);
     }
 
     // Calculate summary statistics
@@ -108,7 +108,7 @@ async fn aggregate_coverage_hexes(
     let unique_resolutions: HashSet<i16> = needed_dimensions.iter().map(|(_, r)| *r).collect();
 
     info!(
-        "Found total dimensions: {} resolutions across {} dates",
+        "Finding total dimensions: {} resolutions across {} dates",
         unique_resolutions.len(),
         unique_dates.len()
     );
