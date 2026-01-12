@@ -9,7 +9,7 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use rs1090::decode::cpr::{Position, decode_positions};
+use rs1090::decode::cpr::decode_positions;
 use rs1090::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -28,32 +28,26 @@ pub struct DecodedPosition {
 
 /// CPR decoder that maintains state for even/odd frame pairing
 pub struct CprDecoder {
-    /// Reference position for local decoding (e.g., receiver location)
-    reference: Option<Position>,
     /// Cache of recent messages per aircraft (ICAO address)
     /// This is wrapped in Arc<Mutex<>> to allow shared access from async tasks
     message_cache: Arc<Mutex<HashMap<u32, Vec<TimedMessage>>>>,
 }
 
+impl Default for CprDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CprDecoder {
-    /// Create a new CPR decoder with optional reference position
+    /// Create a new CPR decoder
     ///
-    /// If a reference position is provided (e.g., receiver location), the decoder
-    /// can use "local" CPR decoding which is faster and works with a single frame.
-    /// Without a reference, "global" decoding is used which requires both frames.
-    pub fn new(reference: Option<Position>) -> Self {
+    /// Uses "global" CPR decoding which requires both even and odd frames
+    /// to decode a position.
+    pub fn new() -> Self {
         Self {
-            reference,
             message_cache: Arc::new(Mutex::new(HashMap::new())),
         }
-    }
-
-    /// Create a decoder with a reference position from lat/lon
-    pub fn with_reference(latitude: f64, longitude: f64) -> Self {
-        Self::new(Some(Position {
-            latitude,
-            longitude,
-        }))
     }
 
     /// Process a new ADS-B message and attempt to decode position
@@ -104,7 +98,8 @@ impl CprDecoder {
     ) -> Result<Option<DecodedPosition>> {
         // Call rs1090's decode_positions which will modify messages in place
         // to populate position info in the Message objects
-        decode_positions(messages, self.reference, &None);
+        // Uses global CPR decoding (no reference position)
+        decode_positions(messages, None, &None);
 
         // Check if any message now has a decoded position
         for msg in messages.iter() {
@@ -181,16 +176,13 @@ mod tests {
 
     #[test]
     fn test_cpr_decoder_creation() {
-        let decoder = CprDecoder::new(None);
+        let decoder = CprDecoder::new();
         assert_eq!(decoder.cached_aircraft_count(), 0);
-
-        let decoder_with_ref = CprDecoder::with_reference(37.0, -122.0);
-        assert!(decoder_with_ref.reference.is_some());
     }
 
     #[test]
     fn test_cache_expiry() {
-        let decoder = CprDecoder::new(None);
+        let decoder = CprDecoder::new();
 
         // Add a message
         let frame = hex!("8D40621D58C382D690C8AC2863A7");
@@ -213,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_position_decoding_requires_both_frames() {
-        let decoder = CprDecoder::new(None);
+        let decoder = CprDecoder::new();
 
         // Single even frame - should not decode position yet
         let even_frame = hex!("8D40621D58C382D690C8AC2863A7");
@@ -227,21 +219,6 @@ mod tests {
 
         // Should return None - need both frames
         assert!(result.is_none(), "Should not decode with only one frame");
-    }
-
-    #[test]
-    fn test_cpr_with_reference_position() {
-        // Test that decoder can be created with a reference position
-        // Reference position allows "local" CPR decoding which is faster
-        let san_francisco_lat = 37.7749;
-        let san_francisco_lon = -122.4194;
-
-        let decoder = CprDecoder::with_reference(san_francisco_lat, san_francisco_lon);
-
-        assert!(decoder.reference.is_some());
-        let ref_pos = decoder.reference.unwrap();
-        assert_eq!(ref_pos.latitude, san_francisco_lat);
-        assert_eq!(ref_pos.longitude, san_francisco_lon);
     }
 
     // Note: Testing actual CPR decoding with real even/odd paired frames requires

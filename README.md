@@ -178,6 +178,34 @@ flowchart TB
 - **Flight Tracking**: Fix Processor and Flight Tracker analyze aircraft movement patterns
 - **NATS Publisher**: Publishes fixes to NATS Pub/Sub for real-time web clients
 
+### ADS-B Message State Accumulation
+
+ADS-B/Mode S transmits different data in separate message types. Unlike OGN/APRS where each message contains complete position data, ADS-B requires accumulating state across multiple messages to build a complete picture.
+
+The `AdsbAccumulator` maintains per-aircraft state with a 10-second TTL and emits fixes when sufficient data is available.
+
+| BDS Code | Type Code | Message Type | State Updated | Triggers Fix? |
+|----------|-----------|--------------|---------------|---------------|
+| BDS05 | TC 9-18 | Airborne Position | `position.latitude`, `position.longitude`, `altitude_feet` | Yes (if valid lat/lon) |
+| BDS06 | TC 5-8 | Surface Position | `position.latitude`, `position.longitude` | Yes (if valid lat/lon) |
+| BDS08 | TC 1-4 | Aircraft Identification | `callsign` | Only if position cached |
+| BDS09 | TC 19 | Airborne Velocity | `velocity.ground_speed_knots`, `velocity.track_degrees`, `velocity.vertical_rate_fpm` | Only if position cached |
+| BDS61 | TC 28 | Aircraft Status (Emergency) | Not extracted | No |
+| BDS62 | TC 29 | Target State/Status | Not extracted | No |
+| BDS65 | TC 31 | Aircraft Operational Status | Not extracted | No |
+
+**Example: BDS65 (Operational Status) message**
+```
+Message { df: ExtendedSquitterADSB(ADSB { icao24: a8a391, message: BDS65(Airborne(OperationStatusAirborne { ... })) }) }
+```
+This message type contains ADS-B version info, NIC/NAC/SIL integrity values, and capability flags. It does **not** update accumulated state and will **not** trigger a fix.
+
+**Fix Emission Rules:**
+1. A fix is emitted when any message updates state AND we have a valid cached position (lat/lon not 0,0)
+2. Each fix includes a `trigger` field in metadata indicating what caused it: `position`, `velocity`, `altitude`, `identification`
+3. If a velocity message arrives but no position is cached, the velocity is stored but no fix is emitted
+4. Position data older than 10 seconds is considered expired and won't be used
+
 **Storage**
 - **PostgreSQL + PostGIS**: All processed data (devices, fixes, flights, receivers, airports)
 - **NATS Pub/Sub**: Real-time broadcasting to web clients (subjects: `aircraft.area.*`)
