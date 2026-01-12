@@ -13,7 +13,7 @@
 #   - Script must be run from the project root directory
 #   - User must have sudo access
 #
-# Note: If no binary exists, the script will automatically run 'cargo build --release'
+# Note: The script always runs 'cargo build --release' to ensure the binary is up-to-date
 #
 # What this script does:
 #   1. Creates a deployment bundle with binary and infrastructure files
@@ -78,20 +78,12 @@ if [ ! -f "Cargo.toml" ] || [ ! -d "web" ]; then
     exit 1
 fi
 
-# Find the binary - prefer release build, fall back to debug, or build if needed
-if [ -f "target/release/soar" ]; then
-    BINARY_PATH="target/release/soar"
-    log_info "Using release binary: $BINARY_PATH"
-elif [ -f "target/debug/soar" ]; then
-    BINARY_PATH="target/debug/soar"
-    log_warn "Using debug binary: $BINARY_PATH (consider building release for production)"
-else
-    log_step "Building release binary"
-    log_info "No binary found, running 'cargo build --release'..."
-    cargo build --release
-    BINARY_PATH="target/release/soar"
-    log_info "Build complete: $BINARY_PATH"
-fi
+# Always build release binary to ensure it's up-to-date
+log_step "Building release binary"
+log_info "Running 'cargo build --release' to ensure binary is up-to-date..."
+cargo build --release || { log_error "Build failed"; exit 1; }
+BINARY_PATH="target/release/soar"
+log_info "Build complete: $BINARY_PATH"
 
 # Get version info
 if git describe --tags --always >/dev/null 2>&1; then
