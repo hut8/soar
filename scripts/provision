@@ -100,15 +100,15 @@ echo -e "${BLUE}Setting up APT repositories...${NC}"
 
 # Install prerequisites for adding repositories
 # Only update if prerequisites are missing (more efficient on subsequent runs)
-PREREQS_MISSING=false
+NEED_PREREQ_INSTALL=false
 for pkg in wget ca-certificates lsb-release gnupg curl; do
     if ! dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
-        PREREQS_MISSING=true
+        NEED_PREREQ_INSTALL=true
         break
     fi
 done
 
-if [ "$PREREQS_MISSING" = true ]; then
+if [ "$NEED_PREREQ_INSTALL" = true ]; then
     echo -e "${BLUE}Installing prerequisites for repository setup...${NC}"
     sudo apt-get update
     sudo apt-get install -y wget ca-certificates lsb-release gnupg curl
