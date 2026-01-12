@@ -120,9 +120,12 @@ fn ensure_template_migrated() {
         thread::sleep(Duration::from_millis(CONNECTION_CLEANUP_DELAY_MS));
 
         // Re-mark as template
+        // Note: We only set datistemplate=TRUE (not datallowconn=FALSE) because PostgreSQL
+        // needs to connect to the template database when creating new databases from it.
+        // Setting datistemplate=TRUE is sufficient to prevent accidental user connections.
         if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
             let _ = diesel::sql_query(
-                "UPDATE pg_database SET datistemplate = TRUE, datallowconn = FALSE \
+                "UPDATE pg_database SET datistemplate = TRUE \
                  WHERE datname = 'soar_test_template'",
             )
             .execute(&mut admin_conn);
