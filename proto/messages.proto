@@ -23,6 +23,6 @@ message Envelope {
   // Raw message payload (format depends on source)
   // - OGN: UTF-8 encoded APRS message string
   // - BEAST: Raw binary Beast frame
-  // - SBS: Raw binary SBS frame
+  // - SBS: UTF-8 encoded SBS/BaseStation CSV line
   bytes data = 3;
 }
