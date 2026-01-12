@@ -456,6 +456,10 @@ sudo mkdir -p /etc/prometheus/jobs
 sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
 sudo cp infrastructure/prometheus-defaults /etc/default/prometheus
 
+# Install Prometheus systemd override (enables remote-write-receiver for Tempo)
+sudo mkdir -p /etc/systemd/system/prometheus.service.d
+sudo cp infrastructure/prometheus-systemd-override.conf /etc/systemd/system/prometheus.service.d/override.conf
+
 # Set Prometheus ownership
 sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
 sudo chown prometheus:prometheus /etc/prometheus/jobs

@@ -2,5 +2,5 @@
 # This file is sourced by the systemd service as EnvironmentFile.
 # Install to: /etc/default/prometheus
 
-# Enable remote-write-receiver to allow Tempo to push metrics
-ARGS="--enable-feature=remote-write-receiver"
+# Enable remote-write-receiver to allow Tempo to push span metrics
+ARGS="--web.enable-remote-write-receiver"
