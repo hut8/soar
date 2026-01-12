@@ -241,10 +241,18 @@ async fn process_beast_message(
 
     // If we got a partial fix, complete it and process through FixProcessor
     if let Some((partial_fix, trigger)) = fix_result {
-        // Determine if aircraft is active (ground speed >= 20 knots)
-        let is_active = partial_fix
-            .ground_speed_knots
-            .is_none_or(|speed| speed >= 20.0);
+        // Determine if aircraft is active (in flight vs on ground)
+        // Use on_ground field from ADS-B capability if available, otherwise fall back to ground speed
+        let is_active = match partial_fix.on_ground {
+            Some(true) => false, // On ground = not active
+            Some(false) => true, // Airborne = active
+            None => {
+                // Fallback: ground speed >= 20 knots indicates active
+                partial_fix
+                    .ground_speed_knots
+                    .is_none_or(|speed| speed >= 20.0)
+            }
+        };
 
         // Build source metadata with ADS-B-specific fields and trigger
         let mut metadata = serde_json::Map::new();
@@ -328,6 +336,7 @@ fn extract_icao_from_message(message: &rs1090::prelude::Message) -> Result<u32> 
 async fn process_sbs_message(
     message_bytes: &[u8],
     aircraft_repo: &AircraftRepository,
+    sbs_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
     accumulator: &Arc<AdsbAccumulator>,
 ) {
@@ -395,6 +404,28 @@ async fn process_sbs_message(
         }
     };
 
+    // Store raw SBS message in database (stored as UTF-8 bytes with 'adsb' source)
+    // SBS and Beast are both ADS-B data, just different wire formats
+    let raw_message_id = match sbs_repo
+        .insert_beast(NewBeastMessage::new(
+            csv_bytes.to_vec(),
+            received_at,
+            None, // receiver_id - SBS has no receiver concept
+            None, // unparsed field
+        ))
+        .await
+    {
+        Ok(id) => {
+            metrics::counter!("sbs.run.raw_message_stored_total").increment(1);
+            id
+        }
+        Err(e) => {
+            warn!("Failed to store raw SBS message: {}", e);
+            metrics::counter!("sbs.run.raw_message_store_failed_total").increment(1);
+            return;
+        }
+    };
+
     // Process SBS message through accumulator (combines position/velocity/callsign)
     let fix_result = match accumulator.process_sbs_message(&sbs_msg, received_at) {
         Ok(result) => result,
@@ -423,10 +454,18 @@ async fn process_sbs_message(
             }
         };
 
-        // Determine if aircraft is active (ground speed >= 20 knots)
-        let is_active = partial_fix
-            .ground_speed_knots
-            .is_none_or(|speed| speed >= 20.0);
+        // Determine if aircraft is active (in flight vs on ground)
+        // Use on_ground field from SBS if available, otherwise fall back to ground speed
+        let is_active = match partial_fix.on_ground {
+            Some(true) => false, // On ground = not active
+            Some(false) => true, // Airborne = active
+            None => {
+                // Fallback: ground speed >= 20 knots indicates active
+                partial_fix
+                    .ground_speed_knots
+                    .is_none_or(|speed| speed >= 20.0)
+            }
+        };
 
         // Build source metadata for SBS-specific fields with trigger
         let mut metadata = serde_json::Map::new();
@@ -458,10 +497,8 @@ async fn process_sbs_message(
             metadata.insert("spi".to_string(), serde_json::json!(spi));
         }
 
-        // Generate a synthetic receiver ID for SBS sources
-        let sbs_receiver_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, b"sbs-receiver-default");
-
         // Build Fix from partial fix
+        // Note: SBS/ADS-B protocols don't have a receiver concept, so receiver_id is None
         let fix = soar::Fix {
             id: Uuid::now_v7(),
             source: partial_fix.icao_hex,
@@ -481,10 +518,10 @@ async fn process_sbs_message(
             aircraft_id: aircraft.id,
             received_at,
             is_active,
-            receiver_id: Some(sbs_receiver_id),
-            raw_message_id: Uuid::now_v7(), // Generate a unique ID for tracking
-            altitude_agl_valid: false,      // Will be calculated later
-            time_gap_seconds: None,         // Will be set by flight tracker
+            receiver_id: None,         // SBS doesn't have receiver data
+            raw_message_id,            // FK to raw_messages table
+            altitude_agl_valid: false, // Will be calculated later
+            time_gap_seconds: None,    // Will be set by flight tracker
         };
 
         // Process the fix through FixProcessor
@@ -1027,7 +1064,7 @@ pub async fn handle_run(
     // SBS typically has lower traffic than Beast, so fewer workers are needed
     // Using 50 workers should be sufficient for most SBS data sources
     // SBS shares the same accumulator with Beast for consistent state tracking
-    if let (Some((sbs_aircraft_repo, _, sbs_accumulator, _)), Some((_, sbs_intake_rx))) =
+    if let (Some((sbs_aircraft_repo, sbs_repo, sbs_accumulator, _)), Some((_, sbs_intake_rx))) =
         (beast_infrastructure.as_ref(), sbs_intake_opt.as_ref())
     {
         let num_sbs_workers = 50;
@@ -1035,6 +1072,7 @@ pub async fn handle_run(
 
         for worker_id in 0..num_sbs_workers {
             let sbs_aircraft_repo = sbs_aircraft_repo.clone();
+            let sbs_repo = sbs_repo.clone();
             let sbs_fix_processor = fix_processor.clone();
             let sbs_accumulator = sbs_accumulator.clone();
             let sbs_intake_rx = sbs_intake_rx.clone();
@@ -1046,6 +1084,7 @@ pub async fn handle_run(
                     process_sbs_message(
                         &message_bytes,
                         &sbs_aircraft_repo,
+                        &sbs_repo,
                         &sbs_fix_processor,
                         &sbs_accumulator,
                     )

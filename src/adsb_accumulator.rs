@@ -14,6 +14,7 @@ use dashmap::DashMap;
 use rs1090::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{debug, trace};
 
 use crate::beast::cpr_decoder::CprDecoder;
@@ -110,6 +111,9 @@ pub struct AccumulatedAircraftState {
     /// Last known squawk code
     pub squawk: Option<String>,
 
+    /// Whether aircraft is on ground (from ADS-B capability or SBS on_ground)
+    pub on_ground: Option<bool>,
+
     /// Timestamp of last update (for entry expiry)
     pub last_update: DateTime<Utc>,
 }
@@ -122,6 +126,7 @@ impl AccumulatedAircraftState {
             velocity: None,
             callsign: None,
             squawk: None,
+            on_ground: None,
             last_update: Utc::now(),
         }
     }
@@ -170,7 +175,13 @@ pub struct PartialFix {
     pub timestamp: DateTime<Utc>,
     /// Age of position data in milliseconds (how old the cached position is)
     pub position_age_ms: i64,
+    /// Whether aircraft is on the ground (from ADS-B capability or SBS on_ground field)
+    /// true = on ground, false = airborne, None = unknown
+    pub on_ground: Option<bool>,
 }
+
+/// How often to run cleanup (every N messages)
+const CLEANUP_INTERVAL: u64 = 1000;
 
 /// Thread-safe accumulator for combining ADS-B/SBS message data
 pub struct AdsbAccumulator {
@@ -180,6 +191,9 @@ pub struct AdsbAccumulator {
 
     /// CPR decoder for ADS-B position decoding
     cpr_decoder: CprDecoder,
+
+    /// Message counter for periodic cleanup (avoids cleanup on every message)
+    message_count: AtomicU64,
 }
 
 impl AdsbAccumulator {
@@ -191,6 +205,7 @@ impl AdsbAccumulator {
         Self {
             states: Arc::new(DashMap::new()),
             cpr_decoder: CprDecoder::new(reference),
+            message_count: AtomicU64::new(0),
         }
     }
 
@@ -227,9 +242,9 @@ impl AdsbAccumulator {
         // Try to emit a fix
         let result = self.try_emit_fix(icao_address, timestamp, trigger);
 
-        // Lazy cleanup of expired states (do this periodically, not every message)
-        // Only cleanup every ~100 messages to avoid overhead
-        if icao_address.is_multiple_of(100) {
+        // Periodic cleanup of expired states (every CLEANUP_INTERVAL messages)
+        let count = self.message_count.fetch_add(1, Ordering::Relaxed);
+        if count.is_multiple_of(CLEANUP_INTERVAL) {
             self.cleanup_expired(timestamp);
         }
 
@@ -266,8 +281,10 @@ impl AdsbAccumulator {
         // Try to emit a fix
         let result = self.try_emit_fix(icao_address, timestamp, trigger);
 
-        // Lazy cleanup
-        if icao_address % 100 == 0 {
+        // Periodic cleanup - shares counter with ADS-B processing
+        // (already incremented in process_adsb_message, but SBS also increments)
+        let count = self.message_count.fetch_add(1, Ordering::Relaxed);
+        if count.is_multiple_of(CLEANUP_INTERVAL) {
             self.cleanup_expired(timestamp);
         }
 
@@ -325,6 +342,11 @@ impl AdsbAccumulator {
             data.altitude_only = Some(altitude);
         }
 
+        // Extract on_ground status from capability field or vertical status
+        if let Some(on_ground) = self.extract_adsb_on_ground(message) {
+            data.on_ground = Some(on_ground);
+        }
+
         Ok(data)
     }
 
@@ -379,6 +401,36 @@ impl AdsbAccumulator {
         json.get("altitude")
             .and_then(|v| v.as_i64())
             .map(|v| v as i32)
+    }
+
+    /// Extract on_ground status from ADS-B message
+    ///
+    /// Ground status can come from:
+    /// 1. "capability" field in DF17 messages: "ground" or "airborne"
+    /// 2. "vs" (Vertical Status) field in DF11: 0=airborne, 1=on_ground
+    fn extract_adsb_on_ground(&self, message: &Message) -> Option<bool> {
+        let json = serde_json::to_value(message).ok()?;
+
+        // Check capability field first (DF17 messages)
+        if let Some(capability) = json.get("capability").and_then(|v| v.as_str()) {
+            return match capability {
+                "ground" => Some(true),
+                "airborne" => Some(false),
+                _ => None, // "uncertain" or other values
+            };
+        }
+
+        // Check vertical status field (DF11 messages)
+        // vs = 0: airborne, vs = 1: on ground
+        if let Some(vs) = json.get("vs").and_then(|v| v.as_u64()) {
+            return match vs {
+                0 => Some(false), // airborne
+                1 => Some(true),  // on ground
+                _ => None,
+            };
+        }
+
+        None
     }
 
     /// Extract data from an SBS message
@@ -456,6 +508,16 @@ impl AdsbAccumulator {
             }
         }
 
+        // on_ground can be present in any SBS message type
+        if let Some(on_ground) = sbs_msg.on_ground {
+            data.on_ground = Some(on_ground);
+        }
+
+        // For surface position messages (MSG,2), aircraft is definitely on ground
+        if sbs_msg.message_type == SbsMessageType::EsSurfacePosition {
+            data.on_ground = Some(true);
+        }
+
         data
     }
 
@@ -514,6 +576,11 @@ impl AdsbAccumulator {
             }
         }
 
+        // Update on_ground status (from ADS-B capability or SBS on_ground field)
+        if let Some(on_ground) = data.on_ground {
+            state.on_ground = Some(on_ground);
+        }
+
         state.last_update = timestamp;
         trigger
     }
@@ -549,6 +616,7 @@ impl AdsbAccumulator {
             squawk: state.squawk.clone(),
             timestamp,
             position_age_ms,
+            on_ground: state.on_ground,
         };
 
         trace!(
@@ -598,6 +666,7 @@ struct MessageData {
     callsign: Option<String>,
     squawk: Option<String>,
     altitude_only: Option<i32>,
+    on_ground: Option<bool>,
 }
 
 impl MessageData {
@@ -607,6 +676,7 @@ impl MessageData {
             && self.callsign.is_none()
             && self.squawk.is_none()
             && self.altitude_only.is_none()
+            && self.on_ground.is_none()
     }
 }
 
