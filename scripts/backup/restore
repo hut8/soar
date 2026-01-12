@@ -229,10 +229,9 @@ download_base_backup() {
 
     mkdir -p "$DOWNLOAD_DIR"
 
-    # Download all files
+    # Download all files (no progress to keep logs clean)
     if ! rclone sync "$backup_prefix/" "$DOWNLOAD_DIR/" \
         --config "$RCLONE_CONFIG" \
-        --progress \
         >> "$LOG_DIR/restore.log" 2>&1; then
         log ERROR "Failed to download base backup"
         exit 1

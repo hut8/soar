@@ -9,6 +9,9 @@
 //! from the `soar_test_template` template database. This provides complete isolation
 //! between tests, allowing them to run in parallel without interference.
 //!
+//! Migrations are automatically run on the template database before the first test,
+//! ensuring the schema is always up-to-date.
+//!
 //! # Usage
 //!
 //! ```no_run
@@ -29,8 +32,92 @@
 use anyhow::{Context, Result};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use std::sync::Once;
+
+// Embed migrations at compile time
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
+
+// Ensure migrations only run once per test session
+static MIGRATIONS_RUN: Once = Once::new();
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
+
+/// Ensures the template database exists and has the latest migrations applied.
+/// This is called automatically by `TestDatabase::new()` and only runs once per test session.
+fn ensure_template_migrated() {
+    MIGRATIONS_RUN.call_once(|| {
+        dotenvy::dotenv().ok();
+
+        let base_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
+
+        // Connect to postgres database for admin operations
+        let admin_url = base_url
+            .replace("/soar_test", "/postgres")
+            .replace("/soar_test_template", "/postgres");
+
+        let template_url = base_url.replace("/soar_test", "/soar_test_template");
+
+        // Create template database if it doesn't exist
+        if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
+            // Check if template exists
+            let exists: Result<bool, _> = diesel::sql_query(
+                "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'soar_test_template')",
+            )
+            .get_result::<TemplateExists>(&mut admin_conn)
+            .map(|r| r.exists);
+
+            if exists != Ok(true) {
+                // Create template database
+                let _ = diesel::sql_query("CREATE DATABASE soar_test_template")
+                    .execute(&mut admin_conn);
+
+                // Create PostGIS extension
+                if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
+                    let _ = diesel::sql_query("CREATE EXTENSION IF NOT EXISTS postgis")
+                        .execute(&mut template_conn);
+                }
+            }
+
+            // Unmark as template temporarily to allow connections for migrations
+            let _ = diesel::sql_query(
+                "UPDATE pg_database SET datistemplate = FALSE, datallowconn = TRUE \
+                 WHERE datname = 'soar_test_template'",
+            )
+            .execute(&mut admin_conn);
+        }
+
+        // Run pending migrations on template
+        if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
+            match template_conn.run_pending_migrations(MIGRATIONS) {
+                Ok(applied) => {
+                    if !applied.is_empty() {
+                        eprintln!("Applied {} migration(s) to test template", applied.len());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to run migrations on template: {}", e);
+                }
+            }
+        }
+
+        // Re-mark as template
+        if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
+            let _ = diesel::sql_query(
+                "UPDATE pg_database SET datistemplate = TRUE, datallowconn = FALSE \
+                 WHERE datname = 'soar_test_template'",
+            )
+            .execute(&mut admin_conn);
+        }
+    });
+}
+
+#[derive(QueryableByName)]
+struct TemplateExists {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    exists: bool,
+}
 
 /// Manages an isolated test database created from a template.
 ///
@@ -82,6 +169,9 @@ impl TestDatabase {
     /// let pool = test_db.pool();
     /// ```
     pub async fn new() -> Result<Self> {
+        // Ensure template database has latest migrations (runs once per test session)
+        ensure_template_migrated();
+
         // Load environment variables
         dotenvy::dotenv().ok();
 

@@ -4,6 +4,9 @@
 [print_schema]
 file = "src/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId", "Clone"]
+import_types = ["diesel::sql_types::*", "postgis_diesel::sql_types::*"]
+# Don't generate local Geometry/Geography types - use postgis_diesel's instead
+except_custom_type_definitions = ["Geography", "Geometry"]
 
 [migrations_directory]
 dir = "migrations"
