@@ -7,7 +7,10 @@
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+	import { getLogger } from '$lib/logging';
 	import type { ClubWithSoaring, DataListResponse } from '$lib/types';
+
+	const logger = getLogger(['soar', 'ClubsPage']);
 
 	interface PlaceLocation {
 		lat(): number;
@@ -34,7 +37,7 @@
 
 	// Handle place selection from autocomplete
 	function handlePlaceSelect(event: Event) {
-		console.log('Place select event:', event);
+		logger.debug('Place select event: {event}', { event });
 
 		const target = event.target as PlaceAutocompleteElement;
 		let place: PlaceResult | null | undefined = null;
@@ -43,25 +46,28 @@
 		const eventWithPlace = event as Event & { place?: PlaceResult };
 		if (eventWithPlace.place) {
 			place = eventWithPlace.place;
-			console.log('Place from event:', place);
+			logger.debug('Place from event: {place}', { place });
 		}
 		// Method 2: Check the target's value property
 		else if (target?.value) {
 			place = target.value;
-			console.log('Place from target.value:', place);
+			logger.debug('Place from target.value: {place}', { place });
 		}
 		// Method 3: Check autocompleteElement
 		else if (autocompleteElement) {
 			place = (autocompleteElement as PlaceAutocompleteElement).value;
-			console.log('Place from autocompleteElement:', place);
+			logger.debug('Place from autocompleteElement: {place}', { place });
 		}
 
 		if (place?.location) {
 			selectedLatitude = place.location.lat();
 			selectedLongitude = place.location.lng();
-			console.log('Coordinates set:', selectedLatitude, selectedLongitude);
+			logger.debug('Coordinates set: {lat}, {lng}', {
+				lat: selectedLatitude,
+				lng: selectedLongitude
+			});
 		} else {
-			console.warn('No location found in place object:', place);
+			logger.warn('No location found in place object: {place}', { place });
 		}
 	}
 
@@ -128,7 +134,7 @@
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;
 			clubs = []; // Clear any previous results on error
-			console.error('Error searching clubs:', err);
+			logger.error('Error searching clubs: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -153,7 +159,7 @@
 					searchClubs();
 				},
 				(error) => {
-					console.error('Error getting location:', error);
+					logger.error('Error getting location: {error}', { error });
 				}
 			);
 		}

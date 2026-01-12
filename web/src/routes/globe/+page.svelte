@@ -9,6 +9,9 @@
 	import GlobeControls from '$lib/components/cesium/GlobeControls.svelte';
 	import TimelineController from '$lib/components/cesium/TimelineController.svelte';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'Globe']);
 
 	let cesiumContainer: HTMLDivElement | undefined = $state();
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,7 +102,9 @@
 						}
 					})
 					.catch((error: Error) => {
-						console.warn('Failed to load Cesium World Terrain, using default ellipsoid:', error);
+						logger.warn('Failed to load Cesium World Terrain, using default ellipsoid: {error}', {
+							error
+						});
 					});
 
 				// Set initial camera position to CONUS center
@@ -163,19 +168,21 @@
 				viewer.selectedEntityChanged.addEventListener(() => {
 					const selected = viewer.selectedEntity;
 					if (selected && selected.properties?.aircraftId) {
-						console.log('[GLOBE] Selected aircraft entity:', {
-							id: selected.id,
-							name: selected.name,
-							properties: {
-								aircraftId: selected.properties.aircraftId?.getValue(),
-								registration: selected.properties.registration?.getValue(),
-								fixId: selected.properties.fixId?.getValue(),
-								altitude: selected.properties.altitude?.getValue(),
-								timestamp: selected.properties.timestamp?.getValue(),
-								isOld: selected.properties.isOld?.getValue()
-							},
-							position: selected.position,
-							description: selected.description
+						logger.debug('[GLOBE] Selected aircraft entity: {data}', {
+							data: {
+								id: selected.id,
+								name: selected.name,
+								properties: {
+									aircraftId: selected.properties.aircraftId?.getValue(),
+									registration: selected.properties.registration?.getValue(),
+									fixId: selected.properties.fixId?.getValue(),
+									altitude: selected.properties.altitude?.getValue(),
+									timestamp: selected.properties.timestamp?.getValue(),
+									isOld: selected.properties.isOld?.getValue()
+								},
+								position: selected.position,
+								description: selected.description
+							}
 						});
 					}
 				});
@@ -183,7 +190,7 @@
 				// Mark viewer as ready for child components
 				viewerReady = true;
 			} catch (error) {
-				console.error('Failed to load Cesium:', error);
+				logger.error('Failed to load Cesium: {error}', { error });
 				cesiumLoading = false;
 				cesiumError = error instanceof Error ? error.message : 'Failed to load 3D globe library';
 			}

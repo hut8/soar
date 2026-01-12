@@ -3,6 +3,9 @@
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ReceiverCoverage']);
 	import { Loader, Calendar, Layers, Radio, Filter, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import type { CoverageHexProperties, CoverageGeoJsonResponse, Receiver } from '$lib/types';
@@ -66,9 +69,9 @@
 
 			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
 			receivers = response.data || [];
-			console.log(`Loaded ${receivers.length} receivers in current view`);
+			logger.debug('Loaded {count} receivers in current view', { count: receivers.length });
 		} catch (err) {
-			console.error('Failed to load receivers:', err);
+			logger.error('Failed to load receivers: {error}', { error: err });
 		}
 	}
 
@@ -256,17 +259,19 @@
 
 				// If we hit the limit and we're not at the lowest resolution, try a lower resolution
 				if (count >= 5000 && currentResolution > 3) {
-					console.log(
-						`Hit limit with ${count} hexagons at resolution ${currentResolution}, trying lower resolution...`
+					logger.debug(
+						'Hit limit with {count} hexagons at resolution {resolution}, trying lower resolution',
+						{ count, resolution: currentResolution }
 					);
 					currentResolution--;
 					attempts++;
 				} else {
 					// Success! Update the resolution display if it changed
 					if (currentResolution !== selectedResolution && autoResolution) {
-						console.log(
-							`Auto-adjusted from resolution ${selectedResolution} to ${currentResolution} to stay under limit`
-						);
+						logger.debug('Auto-adjusted from resolution {from} to {to} to stay under limit', {
+							from: selectedResolution,
+							to: currentResolution
+						});
 					}
 					resolution = currentResolution;
 					break;
@@ -278,7 +283,10 @@
 			}
 
 			hexCount = response.features?.length || 0;
-			console.log(`Loaded ${hexCount} coverage hexagons at resolution ${resolution}`);
+			logger.debug('Loaded {count} coverage hexagons at resolution {resolution}', {
+				count: hexCount,
+				resolution
+			});
 
 			// Remove existing coverage layer if it exists
 			if (map.getLayer('coverage-hexes')) {
@@ -393,7 +401,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load coverage: ${errorMessage}`;
-			console.error('Coverage load error:', err);
+			logger.error('Coverage load error: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -440,7 +448,7 @@
 			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
 			receiverSearchResults = response.data || [];
 		} catch (err) {
-			console.error('Failed to search receivers:', err);
+			logger.error('Failed to search receivers: {error}', { error: err });
 			receiverSearchResults = [];
 		}
 	}

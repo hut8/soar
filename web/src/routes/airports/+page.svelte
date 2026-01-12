@@ -3,7 +3,10 @@
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { formatSnakeCase } from '$lib/formatters';
+	import { getLogger } from '$lib/logging';
 	import type { Airport, DataListResponse } from '$lib/types';
+
+	const logger = getLogger(['soar', 'AirportsPage']);
 
 	let airports: Airport[] = [];
 	let loading = false;
@@ -27,7 +30,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search airports: ${errorMessage}`;
-			console.error('Error searching airports:', err);
+			logger.error('Error searching airports: {error}', { error: err });
 			airports = [];
 		} finally {
 			loading = false;

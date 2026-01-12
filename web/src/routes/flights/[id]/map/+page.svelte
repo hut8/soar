@@ -11,6 +11,9 @@
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'FlightMap']);
 
 	let { data }: { data: PageData } = $props();
 
@@ -327,7 +330,7 @@
 				updateMap();
 			}
 		} catch (err) {
-			console.error('Failed to poll for flight updates:', err);
+			logger.error('Failed to poll for flight updates: {error}', { error: err });
 		}
 	}
 
@@ -579,7 +582,7 @@
 				addFixMarkers(fixesInOrder);
 			});
 		} catch (error) {
-			console.error('Failed to load Google Maps:', error);
+			logger.error('Failed to load Google Maps: {error}', { error });
 		}
 
 		// Start polling if flight is in progress
@@ -714,13 +717,15 @@
 			receivers = response.data.filter((receiver: Receiver) => {
 				// Basic validation
 				if (!receiver) {
-					console.error('Invalid receiver: null or undefined', receiver);
+					logger.error('Invalid receiver: null or undefined: {receiver}', { receiver });
 					return false;
 				}
 
 				// Validate latitude and longitude are numbers
 				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number') {
-					console.error('Invalid receiver: latitude or longitude is not a number', receiver);
+					logger.error('Invalid receiver: latitude or longitude is not a number: {receiver}', {
+						receiver
+					});
 					return false;
 				}
 
@@ -776,7 +781,7 @@
 				});
 			}
 		} catch (err) {
-			console.error('Failed to fetch receivers:', err);
+			logger.error('Failed to fetch receivers: {error}', { error: err });
 		} finally {
 			isLoadingReceivers = false;
 		}

@@ -7,6 +7,9 @@
 	import { toaster } from '$lib/toaster';
 	import { auth } from '$lib/stores/auth';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'SettingsModal']);
 
 	// Props
 	let { showModal = $bindable(), onSettingsChange } = $props();
@@ -58,7 +61,9 @@
 					return;
 				}
 			} catch (e) {
-				console.warn('Failed to load settings from backend, falling back to localStorage:', e);
+				logger.warn('Failed to load settings from backend, falling back to localStorage: {error}', {
+					error: e
+				});
 			}
 		}
 
@@ -76,7 +81,7 @@
 				positionFixWindow =
 					settings.positionFixWindow ?? (settings.trailLength ? settings.trailLength[0] : 8);
 			} catch (e) {
-				console.warn('Failed to load settings from localStorage:', e);
+				logger.warn('Failed to load settings from localStorage: {error}', { error: e });
 				positionFixWindow = 8;
 			}
 		} else {
@@ -110,7 +115,7 @@
 					body: JSON.stringify(settings)
 				});
 			} catch (e) {
-				console.warn('Failed to save settings to backend:', e);
+				logger.warn('Failed to save settings to backend: {error}', { error: e });
 				toaster.warning({
 					title: 'Settings saved locally only'
 				});
@@ -159,7 +164,7 @@
 					title: 'Aircraft cache cleared successfully'
 				});
 			} catch (error) {
-				console.error('Failed to clear device cache:', error);
+				logger.error('Failed to clear device cache: {error}', { error });
 				toaster.error({
 					title: 'Failed to clear device cache'
 				});

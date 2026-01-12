@@ -1,6 +1,12 @@
 import * as Sentry from '@sentry/sveltekit';
 import { replayIntegration } from '@sentry/sveltekit';
 import type { HandleClientError } from '@sveltejs/kit';
+import { configureLogging, getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'hooks']);
+
+// Initialize logging
+configureLogging();
 
 // Determine if we should enable Sentry
 // Only enable on staging (staging.glider.flights) and production (glider.flights)
@@ -37,8 +43,8 @@ export const handleError: HandleClientError = ({ error, event }) => {
 	if (shouldEnableSentry()) {
 		Sentry.captureException(error, { contexts: { sveltekit: { event } } });
 	} else {
-		// Log to console in development/test
-		console.error('Client error:', error, event);
+		// Log in development/test
+		logger.error('Client error: {error}', { error, event });
 	}
 
 	return {
@@ -51,9 +57,9 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 	navigator.serviceWorker
 		.register('/service-worker.js')
 		.then((registration) => {
-			console.log('Service Worker registered with scope:', registration.scope);
+			logger.info('Service Worker registered with scope: {scope}', { scope: registration.scope });
 		})
 		.catch((error) => {
-			console.error('Service Worker registration failed:', error);
+			logger.error('Service Worker registration failed: {error}', { error });
 		});
 }

@@ -3,6 +3,9 @@ import { serverCall } from '$lib/api/server';
 import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import { getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'AircraftRegistry']);
 
 // Initialize dayjs plugins
 dayjs.extend(utc);
@@ -108,7 +111,7 @@ export class AircraftRegistry {
 					});
 				}
 			} catch (error) {
-				console.error('Error in AircraftRegistry subscriber:', error);
+				logger.error('Error in AircraftRegistry subscriber: {error}', { error });
 			}
 		});
 	}
@@ -132,7 +135,7 @@ export class AircraftRegistry {
 
 		// If not found in cache, fetch from API
 		if (!aircraft) {
-			console.log(`[REGISTRY] Aircraft ${aircraftId} not found in cache, fetching from API`);
+			logger.debug('Aircraft {aircraftId} not found in cache, fetching from API', { aircraftId });
 			aircraft = await this.updateAircraftFromAPI(aircraftId);
 		}
 
@@ -143,7 +146,9 @@ export class AircraftRegistry {
 	public setAircraft(aircraft: Aircraft): void {
 		// Validate that aircraft has a valid ID
 		if (!aircraft.id) {
-			console.warn('Attempted to set aircraft with undefined ID, skipping:', aircraft);
+			logger.warn('Attempted to set aircraft with undefined ID, skipping: {aircraft}', {
+				aircraft
+			});
 			return;
 		}
 
@@ -160,12 +165,12 @@ export class AircraftRegistry {
 				// currentFix is already a Fix object (or should be)
 				const fix = aircraft.currentFix as Fix;
 				existingFixes = [fix];
-				console.log('[REGISTRY] Initialized aircraft with currentFix:', {
+				logger.debug('Initialized aircraft with currentFix: {aircraftId} {fixTimestamp}', {
 					aircraftId: aircraft.id,
 					fixTimestamp: fix.timestamp
 				});
 			} catch (error) {
-				console.warn('[REGISTRY] Failed to parse currentFix:', error);
+				logger.warn('Failed to parse currentFix: {error}', { error });
 			}
 		}
 
@@ -226,7 +231,10 @@ export class AircraftRegistry {
 			this.setAircraft(response.data);
 			return this.getAircraft(aircraftId);
 		} catch (error) {
-			console.warn('Failed to fetch aircraft from API:', aircraftId, error);
+			logger.warn('Failed to fetch aircraft from API: {aircraftId} {error}', {
+				aircraftId,
+				error
+			});
 			return null;
 		}
 	}
@@ -242,7 +250,7 @@ export class AircraftRegistry {
 
 			return this.getAircraft(aircraft.id);
 		} catch (error) {
-			console.warn(`Failed to update aircraft from aircraft data:`, error);
+			logger.warn('Failed to update aircraft from aircraft data: {error}', { error });
 			return null;
 		}
 	}
@@ -252,45 +260,52 @@ export class AircraftRegistry {
 		fix: Fix,
 		allowApiFallback: boolean = true
 	): Promise<Aircraft | null> {
-		console.log('[REGISTRY] Adding fix to aircraft:', {
+		logger.debug('Adding fix to aircraft: {aircraftId} {timestamp} {lat} {lng}', {
 			aircraftId: fix.aircraftId,
 			timestamp: fix.timestamp,
-			position: { lat: fix.latitude, lng: fix.longitude }
+			lat: fix.latitude,
+			lng: fix.longitude
 		});
 
 		const aircraftId = fix.aircraftId;
 		if (!aircraftId) {
-			console.warn('[REGISTRY] No aircraftId in fix, cannot add');
+			logger.warn('No aircraftId in fix, cannot add');
 			return null;
 		}
 
 		let aircraft = this.getAircraft(aircraftId);
 		if (!aircraft) {
-			console.log(
-				'[REGISTRY] Aircraft not found in cache for fix:',
-				aircraftId,
-				'attempting to fetch from API'
+			logger.debug(
+				'Aircraft not found in cache for fix: {aircraftId}, attempting to fetch from API',
+				{
+					aircraftId
+				}
 			);
 
 			// Always try to fetch from API when we don't have the aircraft
 			// The backend is the source of truth for aircraft data
 			if (allowApiFallback) {
 				try {
-					console.log(`[REGISTRY] Fetching aircraft from API for:`, aircraftId);
+					logger.debug('Fetching aircraft from API for: {aircraftId}', { aircraftId });
 					aircraft = await this.updateAircraftFromAPI(aircraftId);
 				} catch (error) {
-					console.warn('[REGISTRY] Failed to fetch aircraft from API for:', aircraftId, error);
+					logger.warn('Failed to fetch aircraft from API for: {aircraftId} {error}', {
+						aircraftId,
+						error
+					});
 				}
 			}
 
 			// If we still don't have aircraft data, we can't show this fix
 			// Don't create "minimal" aircraft - the backend should have all aircraft data
 			if (!aircraft) {
-				console.warn('[REGISTRY] Cannot display fix - aircraft not found in backend:', aircraftId);
+				logger.warn('Cannot display fix - aircraft not found in backend: {aircraftId}', {
+					aircraftId
+				});
 				return null;
 			}
 		} else {
-			console.log('[REGISTRY] Using existing aircraft:', {
+			logger.debug('Using existing aircraft: {aircraftId} {registration} {existingFixCount}', {
 				aircraftId,
 				registration: aircraft.registration,
 				existingFixCount: aircraft.fixes?.length || 0
@@ -306,7 +321,9 @@ export class AircraftRegistry {
 		// Always persist aircraft (setAircraft will normalize registration to "Unknown" if needed)
 		this.setAircraft(aircraft);
 
-		console.log('[REGISTRY] Fix added to aircraft. New fix count:', aircraft.fixes?.length || 0);
+		logger.debug('Fix added to aircraft. New fix count: {count}', {
+			count: aircraft.fixes?.length || 0
+		});
 
 		// Notify subscribers about the fix
 		this.notifySubscribers({
@@ -315,7 +332,7 @@ export class AircraftRegistry {
 			fix
 		});
 
-		console.log('[REGISTRY] Notified subscribers about fix_added');
+		logger.debug('Notified subscribers about fix_added');
 
 		return aircraft;
 	}
@@ -401,11 +418,11 @@ export class AircraftRegistry {
 		const staleAircraftIds = this.getStaleAircraft();
 
 		if (staleAircraftIds.length === 0) {
-			console.log('[REGISTRY] No stale aircraft to refresh');
+			logger.debug('No stale aircraft to refresh');
 			return;
 		}
 
-		console.log(`[REGISTRY] Refreshing ${staleAircraftIds.length} stale aircraft`);
+		logger.debug('Refreshing {count} stale aircraft', { count: staleAircraftIds.length });
 
 		// Refresh aircraft in parallel with rate limiting (max 5 at a time)
 		const batchSize = 5;
@@ -414,7 +431,7 @@ export class AircraftRegistry {
 			await Promise.allSettled(batch.map((aircraftId) => this.updateAircraftFromAPI(aircraftId)));
 		}
 
-		console.log('[REGISTRY] Finished refreshing stale aircraft');
+		logger.debug('Finished refreshing stale aircraft');
 	}
 
 	// Start periodic refresh of stale aircraft
@@ -458,7 +475,10 @@ export class AircraftRegistry {
 			}
 			return [];
 		} catch (error) {
-			console.warn(`Failed to load recent fixes for aircraft ${aircraftId}:`, error);
+			logger.warn('Failed to load recent fixes for aircraft {aircraftId}: {error}', {
+				aircraftId,
+				error
+			});
 			return [];
 		}
 	}

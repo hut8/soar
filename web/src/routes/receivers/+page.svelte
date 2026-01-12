@@ -17,6 +17,9 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Receiver, PaginatedDataResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ReceiverSearch']);
 
 	dayjs.extend(relativeTime);
 
@@ -56,7 +59,7 @@
 
 	// Handle place selection from autocomplete
 	function handlePlaceSelect(event: Event) {
-		console.log('Place select event:', event);
+		logger.debug('Place select event: {event}', { event });
 
 		// The gmp-place-autocomplete element provides the place through multiple methods
 		// Try event.target first, then autocompleteElement
@@ -67,25 +70,28 @@
 		const eventWithPlace = event as Event & { place?: PlaceResult };
 		if (eventWithPlace.place) {
 			place = eventWithPlace.place;
-			console.log('Place from event:', place);
+			logger.debug('Place from event: {place}', { place });
 		}
 		// Method 2: Check the target's value property
 		else if (target?.value) {
 			place = target.value;
-			console.log('Place from target.value:', place);
+			logger.debug('Place from target.value: {place}', { place });
 		}
 		// Method 3: Check autocompleteElement
 		else if (autocompleteElement) {
 			place = (autocompleteElement as PlaceAutocompleteElement).value;
-			console.log('Place from autocompleteElement:', place);
+			logger.debug('Place from autocompleteElement: {place}', { place });
 		}
 
 		if (place?.location) {
 			selectedLatitude = place.location.lat();
 			selectedLongitude = place.location.lng();
-			console.log('Coordinates set:', selectedLatitude, selectedLongitude);
+			logger.debug('Coordinates set: {lat}, {lng}', {
+				lat: selectedLatitude,
+				lng: selectedLongitude
+			});
 		} else {
-			console.warn('No location found in place object:', place);
+			logger.warn('No location found in place object: {place}', { place });
 		}
 	}
 
@@ -137,7 +143,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search receivers: ${errorMessage}`;
-			console.error('Error searching receivers:', err);
+			logger.error('Error searching receivers: {error}', { error: err });
 			receivers = [];
 		} finally {
 			loading = false;
@@ -191,7 +197,7 @@
 			} else {
 				error = 'Failed to get your location';
 			}
-			console.error('Geolocation error:', err);
+			logger.error('Geolocation error: {error}', { error: err });
 		} finally {
 			gettingLocation = false;
 		}
@@ -238,7 +244,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receivers: ${errorMessage}`;
-			console.error('Error loading recent receivers:', err);
+			logger.error('Error loading recent receivers: {error}', { error: err });
 			receivers = [];
 		} finally {
 			loading = false;

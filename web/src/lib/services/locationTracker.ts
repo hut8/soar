@@ -3,6 +3,9 @@ import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import { serverCall } from '$lib/api/server';
 import { calculateDistance } from '$lib/geography';
+import { getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'locationTracker']);
 
 // Configuration constants
 const MIN_DISTANCE_KM = 0.03048; // 100 feet in km
@@ -151,7 +154,7 @@ async function sendUserFix(position: GeolocationPosition): Promise<void> {
 	} catch (error) {
 		// serverCall already handles 401 with toast + logout
 		// Just log other errors silently to avoid spamming the console
-		console.warn('Error sending user fix:', error);
+		logger.warn('Error sending user fix: {error}', { error });
 	}
 }
 
@@ -172,14 +175,14 @@ function handlePositionUpdate(position: GeolocationPosition): void {
 function handlePositionError(error: GeolocationPositionError): void {
 	switch (error.code) {
 		case error.PERMISSION_DENIED:
-			console.log('Location tracking: permission denied');
+			logger.info('Location tracking: permission denied');
 			stopTracking();
 			break;
 		case error.POSITION_UNAVAILABLE:
-			console.warn('Location tracking: position unavailable');
+			logger.warn('Location tracking: position unavailable');
 			break;
 		case error.TIMEOUT:
-			console.warn('Location tracking: timeout');
+			logger.warn('Location tracking: timeout');
 			break;
 	}
 }
@@ -213,7 +216,7 @@ export function startTracking(): void {
 
 	const geolocation = navigator.geolocation;
 	if (!geolocation) {
-		console.log('Location tracking: geolocation not supported');
+		logger.info('Location tracking: geolocation not supported');
 		return;
 	}
 
@@ -224,9 +227,9 @@ export function startTracking(): void {
 				beginWatching();
 			} else if (result.state === 'prompt') {
 				// Don't prompt automatically - only track if already granted
-				console.log('Location tracking: permission not yet granted');
+				logger.info('Location tracking: permission not yet granted');
 			} else {
-				console.log('Location tracking: permission denied');
+				logger.info('Location tracking: permission denied');
 			}
 		});
 	} else {
@@ -266,7 +269,7 @@ function beginWatching(): void {
 		maximumAge: 30000 // Accept cached positions up to 30 seconds old
 	});
 
-	console.log('Location tracking: started');
+	logger.info('Location tracking: started');
 }
 
 /**
@@ -288,7 +291,7 @@ export function stopTracking(): void {
 	isTracking = false;
 	lastFix = null;
 	currentOrientation = null;
-	console.log('Location tracking: stopped');
+	logger.info('Location tracking: stopped');
 }
 
 /**

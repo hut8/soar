@@ -2,6 +2,9 @@ import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { serverCall } from '$lib/api/server';
 import type { Flight, Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
+import { getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'FlightDetailsLoader']);
 
 export const load: PageLoad = async ({ params, fetch }) => {
 	const { id } = params;
@@ -28,7 +31,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			fixesPromise
 		};
 	} catch (err) {
-		console.error('Failed to load flight:', err);
+		logger.error('Failed to load flight: {error}', { error: err });
 		throw error(404, 'Flight not found');
 	}
 };

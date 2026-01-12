@@ -6,6 +6,9 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { User } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ClubPilots']);
 
 	interface Club {
 		id: string;
@@ -47,7 +50,7 @@
 			const response = await serverCall<Club>(`/clubs/${clubId}`);
 			club = response;
 		} catch (err) {
-			console.error('Error loading club:', err);
+			logger.error('Error loading club: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load club';
 		} finally {
 			loadingClub = false;
@@ -61,7 +64,7 @@
 			const response = await serverCall<{ pilots: User[] }>(`/clubs/${clubId}/pilots`);
 			pilots = response.pilots || [];
 		} catch (err) {
-			console.error('Error loading pilots:', err);
+			logger.error('Error loading pilots: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load pilots';
 		} finally {
 			loadingPilots = false;
@@ -113,7 +116,7 @@
 			// Close modal
 			closeAddModal();
 		} catch (err) {
-			console.error('Error adding pilot:', err);
+			logger.error('Error adding pilot: {error}', { error: err });
 			formError = err instanceof Error ? err.message : 'Failed to add pilot';
 		} finally {
 			submitting = false;

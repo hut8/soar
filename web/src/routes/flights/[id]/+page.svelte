@@ -48,6 +48,9 @@
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'FlightDetail']);
 
 	dayjs.extend(relativeTime);
 	dayjs.extend(durationPlugin);
@@ -542,7 +545,7 @@
 			);
 			nearbyFlights = response.data;
 		} catch (err) {
-			console.error('Failed to fetch nearby flights:', err);
+			logger.error('Failed to fetch nearby flights: {error}', { error: err });
 		} finally {
 			isLoadingNearbyFlights = false;
 		}
@@ -666,7 +669,10 @@
 					}>(`/flights/${nearbyFlight.id}/fixes`)
 						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
 						.catch((err) => {
-							console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+							logger.error('Failed to fetch fixes for nearby flight {id}: {error}', {
+								id: nearbyFlight.id,
+								error: err
+							});
 							return null;
 						})
 				);
@@ -685,7 +691,7 @@
 				updateNearbyFlightPaths();
 			}
 		} catch (err) {
-			console.error('Failed to fetch nearby flights:', err);
+			logger.error('Failed to fetch nearby flights: {error}', { error: err });
 		} finally {
 			isLoadingNearbyFlights = false;
 		}
@@ -714,13 +720,15 @@
 			receivers = response.data.filter((receiver: Receiver) => {
 				// Basic validation
 				if (!receiver) {
-					console.error('Invalid receiver: null or undefined', receiver);
+					logger.error('Invalid receiver: null or undefined: {receiver}', { receiver });
 					return false;
 				}
 
 				// Validate latitude and longitude are numbers
 				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number') {
-					console.error('Invalid receiver: latitude or longitude is not a number', receiver);
+					logger.error('Invalid receiver: latitude or longitude is not a number: {receiver}', {
+						receiver
+					});
 					return false;
 				}
 
@@ -776,7 +784,7 @@
 				});
 			}
 		} catch (err) {
-			console.error('Failed to fetch receivers:', err);
+			logger.error('Failed to fetch receivers: {error}', { error: err });
 		} finally {
 			isLoadingReceivers = false;
 		}
@@ -791,7 +799,7 @@
 			);
 			aircraftImages = response.data.images || [];
 		} catch (err) {
-			console.error('Failed to load aircraft images:', err);
+			logger.error('Failed to load aircraft images: {error}', { error: err });
 			aircraftImages = [];
 		} finally {
 			isLoadingImages = false;
@@ -839,7 +847,7 @@
 				updateMap();
 			}
 		} catch (err) {
-			console.error('Failed to poll for flight updates:', err);
+			logger.error('Failed to poll for flight updates: {error}', { error: err });
 		}
 	}
 
@@ -1225,7 +1233,7 @@
 					});
 				});
 			} catch (error) {
-				console.error('Failed to load Google Maps:', error);
+				logger.error('Failed to load Google Maps: {error}', { error });
 			}
 
 			// Start polling if flight is in progress
@@ -1359,7 +1367,7 @@
 			flightGaps = response.data;
 			showGaps = true;
 		} catch (err) {
-			console.error('Failed to fetch flight gaps:', err);
+			logger.error('Failed to fetch flight gaps: {error}', { error: err });
 		} finally {
 			isLoadingGaps = false;
 		}

@@ -3,6 +3,9 @@
 	import Plotly from 'plotly.js-dist-min';
 	import { theme } from '$lib/stores/theme';
 	import type { Fix } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'FlightProfile']);
 
 	let {
 		fixes,
@@ -248,7 +251,7 @@
 				chartContainer.addEventListener('plotly_click', clickListener);
 			}
 		} catch (error) {
-			console.error('Failed to create flight profile chart:', error);
+			logger.error('Failed to create flight profile chart: {error}', { error });
 		}
 	}
 

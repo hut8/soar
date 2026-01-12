@@ -13,6 +13,9 @@
 	import { browser } from '$app/environment';
 	import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
 	import { getAircraftTitle } from '$lib/formatters';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'cesium', 'AircraftLayer']);
 
 	// Props
 	let { viewer }: { viewer: Viewer } = $props();
@@ -58,7 +61,7 @@
 				lonMax: CesiumMath.toDegrees(rectangle.east)
 			};
 		} catch (error) {
-			console.error('Error computing viewport bounds:', error);
+			logger.error('Error computing viewport bounds: {error}', { error });
 			return null;
 		}
 	}
@@ -87,7 +90,7 @@
 		try {
 			return viewer.camera.positionCartographic.height;
 		} catch (error) {
-			console.error('Error getting camera height:', error);
+			logger.error('Error getting camera height: {error}', { error });
 			return 10000000; // Default to very high (zoomed out)
 		}
 	}
@@ -130,12 +133,14 @@
 
 			const { items, total, clustered } = response;
 
-			console.log(
-				`[GLOBE] Loaded ${items.length} items (total: ${total}, clustered: ${clustered})`
-			);
+			logger.debug('[GLOBE] Loaded {count} items (total: {total}, clustered: {clustered})', {
+				count: items.length,
+				total,
+				clustered
+			});
 
 			if (clustered) {
-				console.log('[GLOBE] Response is clustered, rendering cluster entities');
+				logger.debug('[GLOBE] Response is clustered, rendering cluster entities');
 
 				// Enter clustered mode
 				isClusteredMode = true;
@@ -158,9 +163,11 @@
 					}
 				}
 
-				console.log(`[GLOBE] ${clusterEntities.size} cluster entities on globe`);
+				logger.debug('[GLOBE] {count} cluster entities on globe', {
+					count: clusterEntities.size
+				});
 			} else {
-				console.log('[GLOBE] Response has individual aircraft, rendering aircraft entities');
+				logger.debug('[GLOBE] Response has individual aircraft, rendering aircraft entities');
 
 				// Exit clustered mode
 				isClusteredMode = false;
@@ -229,10 +236,12 @@
 					}
 				}
 
-				console.log(`[GLOBE] ${aircraftEntities.size} aircraft entities on globe`);
+				logger.debug('[GLOBE] {count} aircraft entities on globe', {
+					count: aircraftEntities.size
+				});
 			}
 		} catch (error) {
-			console.error('Error loading aircraft:', error);
+			logger.error('Error loading aircraft: {error}', { error });
 		} finally {
 			isLoading = false;
 		}
@@ -366,15 +375,15 @@
 		// Clear any existing timer
 		stopClusterRefreshTimer();
 
-		console.log('[GLOBE CLUSTER] Starting 60-second refresh timer');
+		logger.debug('[GLOBE CLUSTER] Starting 60-second refresh timer');
 
 		clusterRefreshTimer = setInterval(async () => {
 			// Only refresh if the page is visible (user has the tab active)
 			if (browser && document.visibilityState === 'visible') {
-				console.log('[GLOBE CLUSTER] Tab is visible, refreshing clusters...');
+				logger.debug('[GLOBE CLUSTER] Tab is visible, refreshing clusters...');
 				await loadAircraftInViewport();
 			} else {
-				console.log('[GLOBE CLUSTER] Tab is hidden, skipping refresh');
+				logger.debug('[GLOBE CLUSTER] Tab is hidden, skipping refresh');
 			}
 		}, 60000); // 60 seconds
 	}
@@ -384,7 +393,7 @@
 	 */
 	function stopClusterRefreshTimer(): void {
 		if (clusterRefreshTimer) {
-			console.log('[GLOBE CLUSTER] Stopping refresh timer');
+			logger.debug('[GLOBE CLUSTER] Stopping refresh timer');
 			clearInterval(clusterRefreshTimer);
 			clusterRefreshTimer = null;
 		}
@@ -397,7 +406,9 @@
 		// IMPORTANT: Ignore all fix feed events when in clustered mode
 		// In clustered mode, we only show cluster entities, not individual aircraft
 		if (isClusteredMode) {
-			console.log('[GLOBE CLUSTER] Ignoring fix feed event in clustered mode:', event.type);
+			logger.debug('[GLOBE CLUSTER] Ignoring fix feed event in clustered mode: {eventType}', {
+				eventType: event.type
+			});
 			return;
 		}
 
@@ -413,7 +424,9 @@
 			if (!aircraft) {
 				// Aircraft not loaded yet - skip this fix
 				// The aircraft should be loaded from the backend via the AircraftRegistry
-				console.warn('[CESIUM] Received fix for unknown aircraft, skipping:', aircraftId);
+				logger.warn('[CESIUM] Received fix for unknown aircraft, skipping: {aircraftId}', {
+					aircraftId
+				});
 				return;
 			}
 
@@ -441,7 +454,7 @@
 				updateAircraftPosition(aircraft, latestFix as Fix);
 			}
 		} else if (event.type === 'connection_opened') {
-			console.log('WebSocket connected - updating area subscriptions');
+			logger.debug('WebSocket connected - updating area subscriptions');
 			updateAreaSubscriptions();
 		}
 	}
@@ -512,7 +525,9 @@
 			if (selected && selected.properties?.isCluster?.getValue()) {
 				// User clicked on a cluster - zoom to its bounds
 				const bounds = selected.properties.clusterBounds.getValue();
-				console.log('[GLOBE CLUSTER] Clicked on cluster, zooming to bounds:', bounds);
+				logger.debug('[GLOBE CLUSTER] Clicked on cluster, zooming to bounds: {bounds}', {
+					bounds
+				});
 
 				const rectangle = Rectangle.fromDegrees(
 					bounds.west,

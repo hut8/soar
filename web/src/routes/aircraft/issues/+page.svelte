@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { AlertTriangle, Radio, ChevronLeft, ChevronRight, Search } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
 	import { onMount } from 'svelte';
 	import type { Aircraft, PaginatedDataResponse } from '$lib/types';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import { getFlagPath } from '$lib/formatters';
+
+	const logger = getLogger(['soar', 'AircraftIssuesPage']);
 
 	let duplicateDevices = $state<Aircraft[]>([]);
 	let loading = $state(false);
@@ -41,7 +44,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load aircraft issues: ${errorMessage}`;
-			console.error('Error loading aircraft issues:', err);
+			logger.error('Error loading aircraft issues: {error}', { error: err });
 			duplicateDevices = [];
 		} finally {
 			loading = false;

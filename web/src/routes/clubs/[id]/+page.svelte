@@ -18,6 +18,7 @@
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import { getLogger } from '$lib/logging';
 	import type {
 		ClubWithSoaring,
 		User,
@@ -29,6 +30,8 @@
 		DataListResponse
 	} from '$lib/types';
 	import { getStatusCodeDescription, getAircraftTypeOgnDescription } from '$lib/formatters';
+
+	const logger = getLogger(['soar', 'ClubDetailsPage']);
 
 	// Local interface for club aircraft data which may include model and registration info
 	interface ClubAircraftData extends Aircraft {
@@ -72,7 +75,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load club: ${errorMessage}`;
-			console.error('Error loading club:', err);
+			logger.error('Error loading club: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -92,7 +95,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aircraftError = `Failed to load aircraft: ${errorMessage}`;
-			console.error('Error loading aircraft:', err);
+			logger.error('Error loading aircraft: {error}', { error: err });
 		} finally {
 			loadingAircraft = false;
 		}
@@ -112,7 +115,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			airportError = `Failed to load airport: ${errorMessage}`;
-			console.error('Error loading airport:', err);
+			logger.error('Error loading airport: {error}', { error: err });
 		} finally {
 			loadingAirport = false;
 		}
@@ -134,7 +137,7 @@
 			// Load aircraft now that user is part of the club
 			await loadAircraft();
 		} catch (err) {
-			console.error('Error setting club:', err);
+			logger.error('Error setting club: {error}', { error: err });
 			// You could add a toast notification here
 		} finally {
 			settingClub = false;

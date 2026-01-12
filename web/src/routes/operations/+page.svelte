@@ -33,6 +33,9 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'Operations']);
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -155,7 +158,9 @@
 
 	// Handle aircraft marker click
 	function handleAircraftClick(aircraft: Aircraft) {
-		console.log('[AIRCRAFT CLICK] Aircraft clicked:', aircraft.registration || aircraft.address);
+		logger.debug('[AIRCRAFT CLICK] Aircraft clicked: {registration}', {
+			registration: aircraft.registration || aircraft.address
+		});
 		selectedAircraft = aircraft;
 		showAircraftStatusModal = true;
 	}
@@ -253,9 +258,9 @@
 
 		try {
 			localStorage.setItem(MAP_STATE_KEY, JSON.stringify(state));
-			console.log('[MAP] Saved map state:', state);
+			logger.debug('[MAP] Saved map state: {state}', { state });
 		} catch (e) {
-			console.warn('[MAP] Failed to save map state to localStorage:', e);
+			logger.warn('[MAP] Failed to save map state to localStorage: {error}', { error: e });
 		}
 	}
 
@@ -274,10 +279,12 @@
 				const parsedZoom = zoom ? parseInt(zoom, 10) : 13;
 
 				if (!isNaN(parsedLat) && !isNaN(parsedLng) && !isNaN(parsedZoom)) {
-					console.log('[MAP] Using URL parameters:', {
-						lat: parsedLat,
-						lng: parsedLng,
-						zoom: parsedZoom
+					logger.debug('[MAP] Using URL parameters: {params}', {
+						params: {
+							lat: parsedLat,
+							lng: parsedLng,
+							zoom: parsedZoom
+						}
 					});
 					return { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom };
 				}
@@ -293,14 +300,14 @@
 			const saved = localStorage.getItem(MAP_STATE_KEY);
 			if (saved) {
 				const state: MapState = JSON.parse(saved);
-				console.log('[MAP] Loaded saved map state:', state);
+				logger.debug('[MAP] Loaded saved map state: {state}', { state });
 				return state;
 			}
 		} catch (e) {
-			console.warn('[MAP] Failed to load map state from localStorage:', e);
+			logger.warn('[MAP] Failed to load map state from localStorage: {error}', { error: e });
 		}
 
-		console.log('[MAP] Using default CONUS center');
+		logger.debug('[MAP] Using default CONUS center');
 		return { center: CONUS_CENTER, zoom: 4 };
 	}
 
@@ -310,9 +317,9 @@
 
 		try {
 			localStorage.setItem(AREA_TRACKER_KEY, JSON.stringify(areaTrackerActive));
-			console.log('[AREA TRACKER] Saved state:', areaTrackerActive);
+			logger.debug('[AREA TRACKER] Saved state: {state}', { state: areaTrackerActive });
 		} catch (e) {
-			console.warn('[AREA TRACKER] Failed to save state to localStorage:', e);
+			logger.warn('[AREA TRACKER] Failed to save state to localStorage: {error}', { error: e });
 		}
 	}
 
@@ -322,7 +329,7 @@
 
 		// When limit is disabled, area tracker is always on
 		if (!AREA_TRACKER_LIMIT_ENABLED) {
-			console.log('[AREA TRACKER] Limit disabled, area tracker always on');
+			logger.debug('[AREA TRACKER] Limit disabled, area tracker always on');
 			return true;
 		}
 
@@ -330,14 +337,14 @@
 			const saved = localStorage.getItem(AREA_TRACKER_KEY);
 			if (saved !== null) {
 				const state = JSON.parse(saved);
-				console.log('[AREA TRACKER] Loaded saved state:', state);
+				logger.debug('[AREA TRACKER] Loaded saved state: {state}', { state });
 				return state;
 			}
 		} catch (e) {
-			console.warn('[AREA TRACKER] Failed to load state from localStorage:', e);
+			logger.warn('[AREA TRACKER] Failed to load state from localStorage: {error}', { error: e });
 		}
 
-		console.log('[AREA TRACKER] Using default state: true');
+		logger.debug('[AREA TRACKER] Using default state: true');
 		return true;
 	}
 
@@ -347,9 +354,9 @@
 
 		try {
 			localStorage.setItem(MAP_TYPE_KEY, mapType);
-			console.log('[MAP TYPE] Saved map type:', mapType);
+			logger.debug('[MAP TYPE] Saved map type: {mapType}', { mapType });
 		} catch (e) {
-			console.warn('[MAP TYPE] Failed to save map type to localStorage:', e);
+			logger.warn('[MAP TYPE] Failed to save map type to localStorage: {error}', { error: e });
 		}
 	}
 
@@ -360,14 +367,14 @@
 		try {
 			const saved = localStorage.getItem(MAP_TYPE_KEY);
 			if (saved === 'satellite' || saved === 'roadmap') {
-				console.log('[MAP TYPE] Loaded saved map type:', saved);
+				logger.debug('[MAP TYPE] Loaded saved map type: {saved}', { saved });
 				return saved;
 			}
 		} catch (e) {
-			console.warn('[MAP TYPE] Failed to load map type from localStorage:', e);
+			logger.warn('[MAP TYPE] Failed to load map type from localStorage: {error}', { error: e });
 		}
 
-		console.log('[MAP TYPE] Using default: satellite');
+		logger.debug('[MAP TYPE] Using default: satellite');
 		return 'satellite';
 	}
 
@@ -380,7 +387,7 @@
 			mapType === 'satellite' ? google.maps.MapTypeId.SATELLITE : google.maps.MapTypeId.ROADMAP
 		);
 		saveMapType();
-		console.log('[MAP TYPE] Toggled to:', mapType);
+		logger.debug('[MAP TYPE] Toggled to: {mapType}', { mapType });
 	}
 
 	// Reactive effects for settings changes
@@ -451,7 +458,9 @@
 			// IMPORTANT: Ignore all aircraft registry events when in clustered mode
 			// In clustered mode, we only show cluster markers, not individual aircraft
 			if (isClusteredMode) {
-				console.log('[CLUSTERED MODE] Ignoring aircraft registry event:', event.type);
+				logger.debug('[CLUSTERED MODE] Ignoring aircraft registry event: {type}', {
+					type: event.type
+				});
 				return;
 			}
 
@@ -463,7 +472,10 @@
 					updateAircraftMarkerFromAircraft(event.aircraft);
 				}
 			} else if (event.type === 'fix_added') {
-				console.log('Fix added to aircraft:', event.aircraft.id, event.fix);
+				logger.debug('Fix added to aircraft: {aircraftId} {fix}', {
+					aircraftId: event.aircraft.id,
+					fix: event.fix
+				});
 				// Update the aircraft marker immediately when a new fix is added
 				if (map && event.fix) {
 					updateAircraftMarkerFromDevice(event.aircraft, event.fix);
@@ -484,11 +496,9 @@
 		if (!map || initialMarkersRendered) return;
 
 		// When map first becomes available, render markers for all active aircraft
-		console.log(
-			'[EFFECT] Map available, initializing markers for',
-			activeDevices.length,
-			'aircraft'
-		);
+		logger.debug('[EFFECT] Map available, initializing markers for {count} aircraft', {
+			count: activeDevices.length
+		});
 		activeDevices.forEach((aircraft) => {
 			updateAircraftMarkerFromAircraft(aircraft);
 		});
@@ -545,13 +555,15 @@
 	}
 
 	function initializeMap(): void {
-		console.log('[MAP] Initializing Google Maps:', {
-			hasContainer: !!mapContainer,
-			hasGoogle: !!window.google
+		logger.debug('[MAP] Initializing Google Maps: {state}', {
+			state: {
+				hasContainer: !!mapContainer,
+				hasGoogle: !!window.google
+			}
 		});
 
 		if (!mapContainer || !window.google) {
-			console.error('[MAP] Missing requirements for map initialization');
+			logger.error('[MAP] Missing requirements for map initialization');
 			return;
 		}
 
@@ -648,7 +660,7 @@
 		// Initial area tracker availability check
 		setTimeout(updateAreaTrackerAvailability, 1000);
 
-		console.log('[MAP] Google Maps initialized for operations view. Map ready for markers.');
+		logger.debug('[MAP] Google Maps initialized for operations view. Map ready for markers.');
 	}
 
 	async function locateUser(): Promise<void> {
@@ -666,7 +678,10 @@
 				lng: position.coords.longitude
 			};
 
-			console.log(`User location found: ${userLocation.lat}, ${userLocation.lng}`);
+			logger.debug('User location found: {lat}, {lng}', {
+				lat: userLocation.lat,
+				lng: userLocation.lng
+			});
 
 			// Step 1: First place the marker at user location
 			// Create a custom content element for the marker
@@ -721,9 +736,12 @@
 				}, 1000); // Wait for pan animation to complete
 			}
 
-			console.log(`User located and animated to: ${userLocation.lat}, ${userLocation.lng}`);
+			logger.debug('User located and animated to: {lat}, {lng}', {
+				lat: userLocation.lat,
+				lng: userLocation.lng
+			});
 		} catch (error) {
-			console.error('Error getting user location:', error);
+			logger.error('Error getting user location: {error}', { error });
 			alert('Unable to get your location. Please make sure location services are enabled.');
 		} finally {
 			isLocating = false;
@@ -762,11 +780,11 @@
 			try {
 				const permission = await DeviceOrientationEvent.requestPermission();
 				if (permission !== 'granted') {
-					console.log('Device orientation permission denied');
+					logger.debug('Device orientation permission denied');
 					return;
 				}
 			} catch (error) {
-				console.log('Error requesting device orientation permission:', error);
+				logger.debug('Error requesting device orientation permission: {error}', { error });
 				return;
 			}
 		}
@@ -780,10 +798,10 @@
 				};
 				if (orientation && typeof orientation.lock === 'function') {
 					await orientation.lock('portrait-primary');
-					console.log('Screen orientation locked to portrait');
+					logger.debug('Screen orientation locked to portrait');
 				}
 			} catch (error) {
-				console.log('Could not lock screen orientation:', error);
+				logger.debug('Could not lock screen orientation: {error}', { error });
 			}
 		}
 
@@ -810,7 +828,9 @@
 
 		// Convert square meters to square miles (1 square mile = 2,589,988 square meters)
 		const areaSquareMiles = areaSquareMeters / 2589988;
-		console.log(`Viewport area: ${areaSquareMiles.toFixed(2)} square miles`);
+		logger.debug('Viewport area: {area} square miles', {
+			area: areaSquareMiles.toFixed(2)
+		});
 		return areaSquareMiles;
 	}
 
@@ -831,7 +851,7 @@
 
 		// Ensure northwest latitude is greater than southeast latitude
 		if (nwLat <= seLat) {
-			console.warn(
+			logger.warn(
 				'Invalid bounding box: northwest latitude must be greater than southeast latitude'
 			);
 			return;
@@ -839,13 +859,13 @@
 
 		// Validate latitude bounds
 		if (nwLat > 90 || nwLat < -90 || seLat > 90 || seLat < -90) {
-			console.warn('Invalid latitude values in bounding box');
+			logger.warn('Invalid latitude values in bounding box');
 			return;
 		}
 
 		// Validate longitude bounds (allow wrapping around international date line)
 		if (nwLng < -180 || nwLng > 180 || seLng < -180 || seLng > 180) {
-			console.warn('Invalid longitude values in bounding box');
+			logger.warn('Invalid longitude values in bounding box');
 			return;
 		}
 
@@ -863,7 +883,7 @@
 
 			displayAirportsOnMap();
 		} catch (error) {
-			console.error('Error fetching airports:', error);
+			logger.error('Error fetching airports: {error}', { error });
 		}
 	}
 
@@ -880,7 +900,11 @@
 
 			// Validate coordinates are valid numbers and within expected ranges
 			if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-				console.warn(`Invalid coordinates for airport ${airport.ident}: ${lat}, ${lng}`);
+				logger.warn('Invalid coordinates for airport {ident}: {lat}, {lng}', {
+					ident: airport.ident,
+					lat,
+					lng
+				});
 				return;
 			}
 
@@ -946,7 +970,7 @@
 
 		// Ensure northwest latitude is greater than southeast latitude
 		if (nwLat <= seLat) {
-			console.warn(
+			logger.warn(
 				'Invalid bounding box: northwest latitude must be greater than southeast latitude'
 			);
 			return;
@@ -954,13 +978,13 @@
 
 		// Validate latitude bounds
 		if (nwLat > 90 || nwLat < -90 || seLat > 90 || seLat < -90) {
-			console.warn('Invalid latitude values in bounding box');
+			logger.warn('Invalid latitude values in bounding box');
 			return;
 		}
 
 		// Validate longitude bounds
 		if (nwLng < -180 || nwLng > 180 || seLng < -180 || seLng > 180) {
-			console.warn('Invalid longitude values in bounding box');
+			logger.warn('Invalid longitude values in bounding box');
 			return;
 		}
 
@@ -977,7 +1001,7 @@
 
 			displayReceiversOnMap();
 		} catch (error) {
-			console.error('Error fetching receivers:', error);
+			logger.error('Error fetching receivers: {error}', { error });
 		}
 	}
 
@@ -997,9 +1021,11 @@
 				receiver.longitude < -180 ||
 				receiver.longitude > 180
 			) {
-				console.warn(
-					`Invalid coordinates for receiver ${receiver.callsign}: ${receiver.latitude}, ${receiver.longitude}`
-				);
+				logger.warn('Invalid coordinates for receiver {callsign}: {lat}, {lng}', {
+					callsign: receiver.callsign,
+					lat: receiver.latitude,
+					lng: receiver.longitude
+				});
 				return;
 			}
 
@@ -1152,7 +1178,7 @@
 				displayAirspacesOnMap(data.features);
 			}
 		} catch (error) {
-			console.error('Error fetching airspaces:', error);
+			logger.error('Error fetching airspaces: {error}', { error });
 		}
 	}
 
@@ -1207,9 +1233,10 @@
 			});
 		});
 
-		console.log(
-			`[AIRSPACES] Displayed ${airspaces.length} airspaces (${airspacePolygons.length} polygons)`
-		);
+		logger.debug('[AIRSPACES] Displayed {airspaces} airspaces ({polygons} polygons)', {
+			airspaces: airspaces.length,
+			polygons: airspacePolygons.length
+		});
 	}
 
 	function clearAirspacePolygons(): void {
@@ -1319,8 +1346,13 @@
 			}
 		});
 
-		console.log(
-			`[RUNWAYS] Displayed ${runways.length} runways (${runwayPolygons.length} polygons, ${runwayEndpointMarkers.length} endpoint markers)`
+		logger.debug(
+			'[RUNWAYS] Displayed {runways} runways ({polygons} polygons, {markers} endpoint markers)',
+			{
+				runways: runways.length,
+				polygons: runwayPolygons.length,
+				markers: runwayEndpointMarkers.length
+			}
 		);
 	}
 
@@ -1455,50 +1487,58 @@
 			if (latestFix) {
 				updateAircraftMarkerFromDevice(aircraft, latestFix);
 			} else {
-				console.log('[MARKER] No position data available for aircraft:', aircraft.id);
+				logger.debug('[MARKER] No position data available for aircraft: {id}', {
+					id: aircraft.id
+				});
 			}
 		}
 	}
 
 	function updateAircraftMarkerFromDevice(aircraft: Aircraft, latestFix: Fix): void {
-		console.log('[MARKER] updateAircraftMarkerFromDevice called:', {
-			deviceId: aircraft.id,
-			registration: aircraft.registration,
-			latestFix: {
-				lat: latestFix.latitude,
-				lng: latestFix.longitude,
-				alt: latestFix.altitudeMslFeet,
-				timestamp: latestFix.timestamp
-			},
-			mapExists: !!map
+		logger.debug('[MARKER] updateAircraftMarkerFromDevice called: {params}', {
+			params: {
+				deviceId: aircraft.id,
+				registration: aircraft.registration,
+				latestFix: {
+					lat: latestFix.latitude,
+					lng: latestFix.longitude,
+					alt: latestFix.altitudeMslFeet,
+					timestamp: latestFix.timestamp
+				},
+				mapExists: !!map
+			}
 		});
 
 		if (!map) {
-			console.warn('[MARKER] No map available for marker update');
+			logger.warn('[MARKER] No map available for marker update');
 			return;
 		}
 
 		const aircraftKey = aircraft.id;
 		if (!aircraftKey) {
-			console.warn('[MARKER] No device ID available');
+			logger.warn('[MARKER] No device ID available');
 			return;
 		}
 
 		// Update latest fix for this device
 		latestFixes.set(aircraftKey, latestFix);
-		console.log('[MARKER] Updated latest fix for aircraft:', aircraftKey);
+		logger.debug('[MARKER] Updated latest fix for aircraft: {key}', { key: aircraftKey });
 
 		// Get or create marker for this aircraft
 		let marker = aircraftMarkers.get(aircraftKey);
 
 		if (!marker) {
-			console.log('[MARKER] Creating new marker for aircraft:', aircraftKey);
+			logger.debug('[MARKER] Creating new marker for aircraft: {key}', { key: aircraftKey });
 			// Create new aircraft marker with device info
 			marker = createAircraftMarkerFromDevice(aircraft, latestFix);
 			aircraftMarkers.set(aircraftKey, marker);
-			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
+			logger.debug('[MARKER] New marker created and stored. Total markers: {count}', {
+				count: aircraftMarkers.size
+			});
 		} else {
-			console.log('[MARKER] Updating existing marker for aircraft:', aircraftKey);
+			logger.debug('[MARKER] Updating existing marker for aircraft: {key}', {
+				key: aircraftKey
+			});
 			// Update existing marker position and info
 			updateAircraftMarkerPositionFromDevice(marker, aircraft, latestFix);
 		}
@@ -1511,12 +1551,14 @@
 		aircraft: Aircraft,
 		fix: Fix
 	): google.maps.marker.AdvancedMarkerElement {
-		console.log('[MARKER] Creating marker for aircraft:', {
-			deviceId: aircraft.id,
-			registration: aircraft.registration,
-			address: aircraft.address,
-			position: { lat: fix.latitude, lng: fix.longitude },
-			track: fix.trackDegrees
+		logger.debug('[MARKER] Creating marker for aircraft: {params}', {
+			params: {
+				deviceId: aircraft.id,
+				registration: aircraft.registration,
+				address: aircraft.address,
+				position: { lat: fix.latitude, lng: fix.longitude },
+				track: fix.trackDegrees
+			}
 		});
 
 		// Create aircraft icon with rotation based on track
@@ -1541,7 +1583,7 @@
 		// Rotate icon based on track degrees (default to 0 if not available)
 		const track = fix.trackDegrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
-		console.log('[MARKER] Set icon rotation to:', track, 'degrees');
+		logger.debug('[MARKER] Set icon rotation to: {track} degrees', { track });
 
 		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
@@ -1555,11 +1597,13 @@
 		// Use aircraftModel string from device, or detailed model name if available
 		const aircraftModel = aircraft.aircraftModel || null;
 
-		console.log('[MARKER] Aircraft info:', {
-			tailNumber,
-			altitude: altitudeText,
-			model: aircraftModel,
-			isOld
+		logger.debug('[MARKER] Aircraft info: {info}', {
+			info: {
+				tailNumber,
+				altitude: altitudeText,
+				model: aircraftModel,
+				isOld
+			}
 		});
 
 		// Create label with tail number + model (if available) on top, altitude on bottom
@@ -1591,10 +1635,12 @@
 			? `${tailNumber} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
-		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
-			position: { lat: fix.latitude, lng: fix.longitude },
-			title,
-			hasContent: !!markerContent
+		logger.debug('[MARKER] Creating AdvancedMarkerElement with: {params}', {
+			params: {
+				position: { lat: fix.latitude, lng: fix.longitude },
+				title,
+				hasContent: !!markerContent
+			}
 		});
 
 		const marker = new google.maps.marker.AdvancedMarkerElement({
@@ -1622,7 +1668,7 @@
 		// Apply initial zoom-based scaling
 		updateMarkerScale(markerContent, map.getZoom() || 4);
 
-		console.log('[MARKER] AdvancedMarkerElement created successfully');
+		logger.debug('[MARKER] AdvancedMarkerElement created successfully');
 		return marker;
 	}
 
@@ -1631,10 +1677,12 @@
 		aircraft: Aircraft,
 		fix: Fix
 	): void {
-		console.log('[MARKER] Updating existing marker position:', {
-			deviceId: aircraft.id,
-			oldPosition: marker.position,
-			newPosition: { lat: fix.latitude, lng: fix.longitude }
+		logger.debug('[MARKER] Updating existing marker position: {params}', {
+			params: {
+				deviceId: aircraft.id,
+				oldPosition: marker.position,
+				newPosition: { lat: fix.latitude, lng: fix.longitude }
+			}
 		});
 
 		// Update position
@@ -1655,7 +1703,7 @@
 				const track = fix.trackDegrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
 				aircraftIcon.style.background = markerColor;
-				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
+				logger.debug('[MARKER] Updated icon rotation to: {track} degrees', { track });
 			}
 
 			if (infoLabel) {
@@ -1686,15 +1734,17 @@
 					altDiv.style.opacity = '1';
 				}
 
-				console.log('[MARKER] Updated label info:', {
-					tailNumber,
-					altitudeText,
-					aircraftModel,
-					isOld
+				logger.debug('[MARKER] Updated label info: {info}', {
+					info: {
+						tailNumber,
+						altitudeText,
+						aircraftModel,
+						isOld
+					}
 				});
 			}
 		} else {
-			console.warn('[MARKER] No marker content found for position update');
+			logger.warn('[MARKER] No marker content found for position update');
 		}
 
 		// Update scaling for the current zoom level
@@ -1709,38 +1759,44 @@
 			: `${aircraft.registration || aircraft.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		marker.title = title;
-		console.log('[MARKER] Updated marker title:', title);
+		logger.debug('[MARKER] Updated marker title: {title}', { title });
 	}
 
 	function clearAircraftMarkers(): void {
-		console.log('[MARKER] Clearing all aircraft markers. Count:', aircraftMarkers.size);
+		logger.debug('[MARKER] Clearing all aircraft markers. Count: {count}', {
+			count: aircraftMarkers.size
+		});
 		aircraftMarkers.forEach((marker) => {
 			marker.map = null;
 		});
 		aircraftMarkers.clear();
 		latestFixes.clear();
 		clearAllTrails();
-		console.log('[MARKER] All aircraft markers and trails cleared');
+		logger.debug('[MARKER] All aircraft markers and trails cleared');
 	}
 
 	// Cluster marker functions
 	function createClusterMarker(cluster: AircraftCluster): google.maps.marker.AdvancedMarkerElement {
-		console.log('[CLUSTER] Creating cluster marker:', {
-			id: cluster.id,
-			position: { lat: cluster.latitude, lng: cluster.longitude },
-			count: cluster.count
+		logger.debug('[CLUSTER] Creating cluster marker: {params}', {
+			params: {
+				id: cluster.id,
+				position: { lat: cluster.latitude, lng: cluster.longitude },
+				count: cluster.count
+			}
 		});
 
 		// Create polygon outline for the cluster bounds
 		// DEBUG: Using bright red outline to visualize grid cells
-		console.log('[CLUSTER DEBUG] Bounds:', {
-			id: cluster.id,
-			north: cluster.bounds.north,
-			south: cluster.bounds.south,
-			east: cluster.bounds.east,
-			west: cluster.bounds.west,
-			width: cluster.bounds.east - cluster.bounds.west,
-			height: cluster.bounds.north - cluster.bounds.south
+		logger.debug('[CLUSTER DEBUG] Bounds: {bounds}', {
+			bounds: {
+				id: cluster.id,
+				north: cluster.bounds.north,
+				south: cluster.bounds.south,
+				east: cluster.bounds.east,
+				west: cluster.bounds.west,
+				width: cluster.bounds.east - cluster.bounds.west,
+				height: cluster.bounds.north - cluster.bounds.south
+			}
 		});
 
 		const polygon = new google.maps.Polygon({
@@ -1826,7 +1882,7 @@
 	}
 
 	function handleClusterClick(cluster: AircraftCluster): void {
-		console.log('[CLUSTER] Clicked on cluster:', cluster.id);
+		logger.debug('[CLUSTER] Clicked on cluster: {id}', { id: cluster.id });
 
 		if (!map) return;
 
@@ -1843,19 +1899,23 @@
 	}
 
 	function clearClusterMarkers(): void {
-		console.log('[CLUSTER] Clearing all cluster markers. Count:', clusterMarkers.size);
+		logger.debug('[CLUSTER] Clearing all cluster markers. Count: {count}', {
+			count: clusterMarkers.size
+		});
 		clusterMarkers.forEach((marker) => {
 			marker.map = null;
 		});
 		clusterMarkers.clear();
 
 		// Also clear cluster polygons
-		console.log('[CLUSTER] Clearing all cluster polygons. Count:', clusterPolygons.size);
+		logger.debug('[CLUSTER] Clearing all cluster polygons. Count: {count}', {
+			count: clusterPolygons.size
+		});
 		clusterPolygons.forEach((polygon) => {
 			polygon.setMap(null);
 		});
 		clusterPolygons.clear();
-		console.log('[CLUSTER] All cluster markers and polygons cleared');
+		logger.debug('[CLUSTER] All cluster markers and polygons cleared');
 	}
 
 	// Aircraft trail functions
@@ -1965,7 +2025,9 @@
 		}
 
 		areaTrackerActive = !areaTrackerActive;
-		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
+		logger.debug('[AREA TRACKER] Area tracker toggled: {active}', {
+			active: areaTrackerActive
+		});
 		saveAreaTrackerState();
 
 		if (areaTrackerActive) {
@@ -1990,9 +2052,10 @@
 		const wasAvailable = areaTrackerAvailable;
 		areaTrackerAvailable = area <= 4000000; // 4,000,000 square miles limit (fits continental US)
 
-		console.log(
-			`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`
-		);
+		logger.debug('[AREA TRACKER] Map area: {area} sq miles, Available: {available}', {
+			area: area.toFixed(2),
+			available: areaTrackerAvailable
+		});
 
 		// If area tracker becomes unavailable while active, deactivate it
 		if (!areaTrackerAvailable && areaTrackerActive) {
@@ -2002,9 +2065,10 @@
 
 		// If availability changed, log it
 		if (wasAvailable !== areaTrackerAvailable) {
-			console.log(
-				`[AREA TRACKER] Availability changed: ${wasAvailable} -> ${areaTrackerAvailable}`
-			);
+			logger.debug('[AREA TRACKER] Availability changed: {from} -> {to}', {
+				from: wasAvailable,
+				to: areaTrackerAvailable
+			});
 		}
 	}
 
@@ -2032,8 +2096,15 @@
 			}
 		}
 
-		console.log(
-			`[AREA TRACKER] Visible squares: lat ${latMin}-${latMax + 1}, lon ${lonMin}-${lonMax + 1} (${squares.length} total)`
+		logger.debug(
+			'[AREA TRACKER] Visible squares: lat {latMin}-{latMax}, lon {lonMin}-{lonMax} ({total} total)',
+			{
+				latMin,
+				latMax: latMax + 1,
+				lonMin,
+				lonMax: lonMax + 1,
+				total: squares.length
+			}
 		);
 		return squares;
 	}
@@ -2044,7 +2115,7 @@
 		// Don't subscribe to area updates when in clustered mode
 		// Clustered mode uses periodic REST API refreshes instead of real-time WebSocket updates
 		if (isClusteredMode) {
-			console.log('[AREA TRACKER] Skipping subscription - in clustered mode');
+			logger.debug('[AREA TRACKER] Skipping subscription - in clustered mode');
 			return;
 		}
 
@@ -2067,12 +2138,14 @@
 			bounds: geoBounds
 		};
 
-		console.log('[AREA TRACKER] Bulk subscribe:', message);
+		logger.debug('[AREA TRACKER] Bulk subscribe: {message}', { message });
 		fixFeed.sendWebSocketMessage(message);
 
 		// For debugging: calculate what squares this represents
 		const visibleSquares = getVisibleLatLonSquares();
-		console.log(`[AREA TRACKER] Bulk subscription covers ${visibleSquares.length} squares`);
+		logger.debug('[AREA TRACKER] Bulk subscription covers {count} squares', {
+			count: visibleSquares.length
+		});
 
 		// Update current subscriptions for debugging display
 		const newSubscriptions = new SvelteSet<string>();
@@ -2103,7 +2176,7 @@
 			}
 		};
 
-		console.log('[AREA TRACKER] Bulk unsubscribe');
+		logger.debug('[AREA TRACKER] Bulk unsubscribe');
 		fixFeed.sendWebSocketMessage(message);
 
 		currentAreaSubscriptions.clear();
@@ -2125,7 +2198,7 @@
 		const sw = bounds.getSouthWest();
 
 		try {
-			console.log('[REST] Fetching aircraft in viewport...');
+			logger.debug('[REST] Fetching aircraft in viewport...');
 
 			const response = await fixFeed.fetchAircraftInBoundingBox(
 				sw.lat(), // south
@@ -2138,12 +2211,14 @@
 
 			const { items, total, clustered } = response;
 
-			console.log(
-				`[REST] Received ${items.length} items (total: ${total}, clustered: ${clustered})`
-			);
+			logger.debug('[REST] Received {count} items (total: {total}, clustered: {clustered})', {
+				count: items.length,
+				total,
+				clustered
+			});
 
 			if (clustered) {
-				console.log('[REST] Response is clustered, rendering cluster markers');
+				logger.debug('[REST] Response is clustered, rendering cluster markers');
 
 				// Enter clustered mode
 				isClusteredMode = true;
@@ -2165,9 +2240,11 @@
 					}
 				}
 
-				console.log(`[AIRCRAFT COUNT] ${clusterMarkers.size} cluster markers on map`);
+				logger.debug('[AIRCRAFT COUNT] {count} cluster markers on map', {
+					count: clusterMarkers.size
+				});
 			} else {
-				console.log('[REST] Response has individual aircraft, rendering aircraft markers');
+				logger.debug('[REST] Response has individual aircraft, rendering aircraft markers');
 
 				// Exit clustered mode
 				isClusteredMode = false;
@@ -2190,10 +2267,12 @@
 				}
 
 				// Log the count of aircraft now on the map
-				console.log(`[AIRCRAFT COUNT] ${aircraftMarkers.size} aircraft markers on map`);
+				logger.debug('[AIRCRAFT COUNT] {count} aircraft markers on map', {
+					count: aircraftMarkers.size
+				});
 			}
 		} catch (error) {
-			console.error('[REST] Failed to fetch aircraft in viewport:', error);
+			logger.error('[REST] Failed to fetch aircraft in viewport: {error}', { error });
 		}
 	}
 
@@ -2202,15 +2281,15 @@
 		// Clear any existing timer
 		stopClusterRefreshTimer();
 
-		console.log('[CLUSTER REFRESH] Starting 60-second refresh timer');
+		logger.debug('[CLUSTER REFRESH] Starting 60-second refresh timer');
 
 		clusterRefreshTimer = setInterval(async () => {
 			// Only refresh if the page is visible (user has the tab active)
 			if (browser && document.visibilityState === 'visible') {
-				console.log('[CLUSTER REFRESH] Tab is visible, refreshing clusters...');
+				logger.debug('[CLUSTER REFRESH] Tab is visible, refreshing clusters...');
 				await fetchAndDisplayDevicesInViewport();
 			} else {
-				console.log('[CLUSTER REFRESH] Tab is hidden, skipping refresh');
+				logger.debug('[CLUSTER REFRESH] Tab is hidden, skipping refresh');
 			}
 		}, 60000); // 60 seconds
 	}
@@ -2218,7 +2297,7 @@
 	// Stop the cluster refresh timer
 	function stopClusterRefreshTimer(): void {
 		if (clusterRefreshTimer) {
-			console.log('[CLUSTER REFRESH] Stopping refresh timer');
+			logger.debug('[CLUSTER REFRESH] Stopping refresh timer');
 			clearInterval(clusterRefreshTimer);
 			clusterRefreshTimer = null;
 		}

@@ -9,6 +9,10 @@
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import { getAddressTypeLabel } from '$lib/formatters';
 	import type { Aircraft, DataListResponse, DataResponse, Club } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'WatchlistModal']);
+
 	let { showModal = $bindable() } = $props();
 
 	// State
@@ -65,7 +69,10 @@
 					errorMessage = `Aircraft with registration "${registration}" not found`;
 				}
 			} catch (error) {
-				console.warn(`Failed to fetch aircraft for registration ${registration}:`, error);
+				logger.warn('Failed to fetch aircraft for registration {registration}: {error}', {
+					registration,
+					error
+				});
 				errorMessage = 'Failed to search for aircraft. Please try again.';
 			} finally {
 				searchInProgress = false;
@@ -87,7 +94,11 @@
 					errorMessage = `Aircraft with address "${address}" (${addressType}) not found`;
 				}
 			} catch (error) {
-				console.warn(`Failed to fetch aircraft for address ${address} (${addressType}):`, error);
+				logger.warn('Failed to fetch aircraft for address {address} ({addressType}): {error}', {
+					address,
+					addressType,
+					error
+				});
 				errorMessage = 'Failed to search for aircraft. Please try again.';
 			} finally {
 				searchInProgress = false;
@@ -143,7 +154,7 @@
 				clubAircraft = response.data || [];
 			}
 		} catch (error) {
-			console.warn(`Failed to fetch aircraft for club:`, error);
+			logger.warn('Failed to fetch aircraft for club: {error}', { error });
 			// Only show error if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
 				clubErrorMessage = 'Failed to load club aircraft. Please try again.';
@@ -250,7 +261,7 @@
 			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
 			clubNames.set(clubId, response.data.name);
 		} catch (error) {
-			console.warn(`Failed to fetch club name for ${clubId}:`, error);
+			logger.warn('Failed to fetch club name for {clubId}: {error}', { clubId, error });
 			clubNames.set(clubId, 'Unknown Club');
 		}
 	}

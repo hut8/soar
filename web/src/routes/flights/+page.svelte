@@ -4,6 +4,9 @@
 	import { onMount } from 'svelte';
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import type { Flight, PaginatedDataResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'Flights']);
 
 	let flights = $state<Flight[]>([]);
 	let totalCount = $state(0);
@@ -50,7 +53,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load flights: ${errorMessage}`;
-			console.error('Error loading flights:', err);
+			logger.error('Error loading flights: {error}', { error: err });
 			flights = [];
 			totalCount = 0;
 		} finally {

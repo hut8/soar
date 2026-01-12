@@ -12,10 +12,13 @@
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import AircraftTile from '$lib/components/AircraftTile.svelte';
 	import { onMount } from 'svelte';
 	import type { Aircraft, DataListResponse } from '$lib/types';
+
+	const logger = getLogger(['soar', 'AircraftPage']);
 
 	let aircraft = $state<Aircraft[]>([]);
 	let loading = $state(false);
@@ -79,7 +82,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load recent aircraft: ${errorMessage}`;
-			console.error('Error loading recent aircraft:', err);
+			logger.error('Error loading recent aircraft: {error}', { error: err });
 			aircraft = [];
 		} finally {
 			loading = false;
@@ -112,7 +115,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search aircraft: ${errorMessage}`;
-			console.error('Error searching aircraft:', err);
+			logger.error('Error searching aircraft: {error}', { error: err });
 			aircraft = [];
 		} finally {
 			loading = false;
@@ -148,7 +151,7 @@
 				aircraft = clubAircraft;
 			}
 		} catch (err) {
-			console.warn(`Failed to fetch aircraft for club:`, err);
+			logger.warn('Failed to fetch aircraft for club: {error}', { error: err });
 			// Only show error if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
 				clubErrorMessage = 'Failed to load club aircraft. Please try again.';

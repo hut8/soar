@@ -3,6 +3,9 @@ import type { Aircraft, FixWithExtras, AircraftSearchResponse } from '$lib/types
 import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
+import { getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'FixFeed']);
 
 // Event types for subscribers
 export type FixFeedEvent =
@@ -77,7 +80,7 @@ export class FixFeed {
 			try {
 				subscriber(event);
 			} catch (error) {
-				console.error('Error in FixFeed subscriber:', error);
+				logger.error('Error in FixFeed subscriber: {error}', { error });
 			}
 		});
 	}
@@ -112,7 +115,7 @@ export class FixFeed {
 			this.websocket?.readyState === WebSocket.OPEN ||
 			this.websocket?.readyState === WebSocket.CONNECTING
 		) {
-			console.log('WebSocket already connected or connecting, skipping connection attempt');
+			logger.debug('WebSocket already connected or connecting, skipping connection attempt');
 			return;
 		}
 
@@ -120,7 +123,7 @@ export class FixFeed {
 			this.websocket = new WebSocket(this.websocketUrl);
 
 			this.websocket.onopen = () => {
-				console.log('WebSocket connected to live fixes feed');
+				logger.info('WebSocket connected to live fixes feed');
 				this.reconnectAttempts = 0;
 
 				this.notifySubscribers({ type: 'connection_opened' });
@@ -138,7 +141,7 @@ export class FixFeed {
 			this.websocket.onmessage = (event) => {
 				try {
 					const rawMessage = JSON.parse(event.data);
-					console.log('Received WebSocket message:', rawMessage);
+					logger.debug('Received WebSocket message: {message}', { message: rawMessage });
 
 					// Handle different message types based on the "type" field
 					if (rawMessage.type === 'fix') {
@@ -178,7 +181,7 @@ export class FixFeed {
 						// For fixes from WebSocket, assume aircraft data is provided via aircraft messages
 						// so don't attempt API fallback to avoid N+1 calls
 						this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
-							console.warn('Failed to add fix to aircraft registry:', error);
+							logger.warn('Failed to add fix to aircraft registry: {error}', { error });
 						});
 
 						// Notify subscribers
@@ -196,21 +199,20 @@ export class FixFeed {
 							for (const fix of aircraftFixes) {
 								// Ensure fix has aircraftId set (should come from backend, but validate)
 								if (!fix.aircraftId && aircraft.id) {
-									console.warn(
-										'[FIXFEED] Fix missing aircraftId, setting from parent aircraft:',
-										aircraft.id
-									);
+									logger.warn('Fix missing aircraftId, setting from parent aircraft: {id}', {
+										id: aircraft.id
+									});
 									fix.aircraftId = aircraft.id;
 								}
 								this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
-									console.warn('Failed to add aircraft fix to registry:', error);
+									logger.warn('Failed to add aircraft fix to registry: {error}', { error });
 								});
 							}
 						}
 
 						// Update aircraft registry with complete aircraft info
 						this.aircraftRegistry.updateAircraftFromAircraftData(aircraft).catch((error) => {
-							console.warn('Failed to update aircraft info in registry:', error);
+							logger.warn('Failed to update aircraft info in registry: {error}', { error });
 						});
 
 						// Notify subscribers
@@ -219,15 +221,18 @@ export class FixFeed {
 							aircraft: aircraft
 						});
 					} else {
-						console.warn('Unknown WebSocket message type:', rawMessage.type);
+						logger.warn('Unknown WebSocket message type: {type}', { type: rawMessage.type });
 					}
 				} catch (e) {
-					console.warn('Failed to parse WebSocket message:', e);
+					logger.warn('Failed to parse WebSocket message: {error}', { error: e });
 				}
 			};
 
 			this.websocket.onclose = (event) => {
-				console.log('WebSocket disconnected', event.code, event.reason);
+				logger.info('WebSocket disconnected: {code} {reason}', {
+					code: event.code,
+					reason: event.reason
+				});
 				this.websocket = null;
 
 				this.notifySubscribers({
@@ -243,14 +248,14 @@ export class FixFeed {
 			};
 
 			this.websocket.onerror = (error) => {
-				console.error('WebSocket error:', error);
+				logger.error('WebSocket error: {error}', { error });
 				this.notifySubscribers({
 					type: 'connection_error',
 					error
 				});
 			};
 		} catch (e) {
-			console.error('Failed to create WebSocket connection:', e);
+			logger.error('Failed to create WebSocket connection: {error}', { error: e });
 		}
 	}
 
@@ -270,9 +275,10 @@ export class FixFeed {
 	private attemptReconnect(): void {
 		this.reconnectAttempts++;
 
-		console.log(
-			`Attempting to reconnect in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts})`
-		);
+		logger.info('Attempting to reconnect in {delay}ms (attempt {attempt})', {
+			delay: this.reconnectDelay,
+			attempt: this.reconnectAttempts
+		});
 
 		this.notifySubscribers({
 			type: 'reconnecting',
@@ -333,7 +339,9 @@ export class FixFeed {
 			await this.aircraftRegistry.updateAircraftFromAPI(aircraftId);
 			await this.aircraftRegistry.loadRecentFixesFromAPI(aircraftId);
 		} else {
-			console.error(`Failed to subscribe to aircraft ${aircraftId}: WebSocket not connected`);
+			logger.error('Failed to subscribe to aircraft {aircraftId}: WebSocket not connected', {
+				aircraftId
+			});
 		}
 	}
 
@@ -383,7 +391,7 @@ export class FixFeed {
 	public startLiveFixesFeed(): void {
 		if (!browser) return;
 
-		console.log('Starting live fixes feed for operations page');
+		logger.info('Starting live fixes feed for operations page');
 		this.operationsPageActive = true;
 		this.connect();
 	}
@@ -392,7 +400,7 @@ export class FixFeed {
 	public stopLiveFixesFeed(): void {
 		if (!browser) return;
 
-		console.log('Stopping live fixes feed for operations page');
+		logger.info('Stopping live fixes feed for operations page');
 		this.operationsPageActive = false;
 
 		// Only disconnect if there are no active aircraft subscriptions
@@ -462,7 +470,7 @@ export class FixFeed {
 			});
 			return response;
 		} catch (error) {
-			console.error('Failed to fetch aircraft in bounding box:', error);
+			logger.error('Failed to fetch aircraft in bounding box: {error}', { error });
 			return { items: [], total: 0n, clustered: false };
 		}
 	}

@@ -5,8 +5,11 @@
 	import { DollarSign, Plus, ArrowLeft, Trash2, Edit2, AlertCircle } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import { getLogger } from '$lib/logging';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 	import type { TowFeeView } from '$lib/types/generated/TowFeeView';
+
+	const logger = getLogger(['soar', 'ClubTowFeesPage']);
 
 	let club = $state<ClubView | null>(null);
 	let towFees = $state<TowFeeView[]>([]);
@@ -48,7 +51,7 @@
 			const response = await serverCall<{ data: ClubView }>(`/clubs/${clubId}`);
 			club = response.data;
 		} catch (err) {
-			console.error('Error loading club:', err);
+			logger.error('Error loading club: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load club';
 		} finally {
 			loadingClub = false;
@@ -62,7 +65,7 @@
 			const response = await serverCall<{ data: TowFeeView[] }>(`/clubs/${clubId}/tow-fees`);
 			towFees = response.data || [];
 		} catch (err) {
-			console.error('Error loading tow fees:', err);
+			logger.error('Error loading tow fees: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load tow fees';
 		} finally {
 			loadingFees = false;
@@ -136,7 +139,7 @@
 			await loadTowFees();
 			closeAddModal();
 		} catch (err) {
-			console.error('Error adding tow fee:', err);
+			logger.error('Error adding tow fee: {error}', { error: err });
 			formError = err instanceof Error ? err.message : 'Failed to add tow fee';
 		} finally {
 			submitting = false;
@@ -177,7 +180,7 @@
 			await loadTowFees();
 			closeEditModal();
 		} catch (err) {
-			console.error('Error updating tow fee:', err);
+			logger.error('Error updating tow fee: {error}', { error: err });
 			formError = err instanceof Error ? err.message : 'Failed to update tow fee';
 		} finally {
 			submitting = false;
@@ -197,7 +200,7 @@
 			await loadTowFees();
 			closeDeleteModal();
 		} catch (err) {
-			console.error('Error deleting tow fee:', err);
+			logger.error('Error deleting tow fee: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to delete tow fee';
 		} finally {
 			submitting = false;

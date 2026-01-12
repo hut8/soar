@@ -21,12 +21,15 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 	import { auth } from '$lib/stores/auth';
+	import { getLogger } from '$lib/logging';
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
+
+	const logger = getLogger(['soar', 'ClubOperationsPage']);
 
 	interface Club {
 		id: string;
@@ -107,7 +110,7 @@
 					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
 				}));
 			} catch (err) {
-				console.error('Failed to fetch aircraft data:', err);
+				logger.error('Failed to fetch aircraft data: {error}', { error: err });
 				// On error, create FlightDetails with null aircraft
 				flightsInProgressDetails = flightsInProgress.map((flight) => ({ flight, aircraft: null }));
 				completedFlightsDetails = completedFlights.map((flight) => ({ flight, aircraft: null }));
@@ -142,7 +145,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load club: ${errorMessage}`;
-			console.error('Error loading club:', err);
+			logger.error('Error loading club: {error}', { error: err });
 		} finally {
 			loadingClub = false;
 		}
@@ -175,7 +178,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
-			console.error('Error loading flights:', err);
+			logger.error('Error loading flights: {error}', { error: err });
 		} finally {
 			loadingFlights = false;
 		}
