@@ -12,13 +12,12 @@ static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 /// Initialize the metrics recorder with global labels but don't start the server.
 /// This must be called before any metrics initialization functions to ensure
 /// the recorder is installed and global labels are applied.
-/// Returns true if the recorder was initialized, false if already initialized.
+/// Returns true once the recorder is (or was already) initialized.
 pub fn init_metrics_recorder(component: Option<&str>) -> bool {
-    if METRICS_HANDLE.get().is_some() {
-        return false;
-    }
-    let handle = init_metrics(component);
-    METRICS_HANDLE.set(handle).is_ok()
+    // Use atomic initialization to avoid a check-then-set race where multiple
+    // threads could each create a PrometheusHandle and only one would be stored.
+    METRICS_HANDLE.get_or_init(|| init_metrics(component));
+    true
 }
 
 /// Global health state for APRS ingestion service
@@ -838,12 +837,9 @@ async fn readiness_check_handler() -> impl IntoResponse {
 /// If init_metrics_recorder() was already called, this will use the existing handle.
 /// Otherwise, it will initialize a new one with the provided component label.
 pub async fn start_metrics_server(port: u16, component: Option<&str>) {
-    // Use existing handle if already initialized, otherwise create new one
-    if METRICS_HANDLE.get().is_none() {
-        let handle = init_metrics(component);
-        // Ignore error if another thread initialized it between our check and set
-        let _ = METRICS_HANDLE.set(handle);
-    }
+    // Use atomic initialization to ensure init_metrics() is called exactly once,
+    // even if multiple threads call start_metrics_server concurrently.
+    METRICS_HANDLE.get_or_init(|| init_metrics(component));
 
     // Initialize build info metric with version labels
     initialize_build_info();
