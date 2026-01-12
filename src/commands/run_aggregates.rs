@@ -100,7 +100,7 @@ async fn aggregate_coverage_hexes(
 
     // Log each needed dimension
     for (date, resolution) in &needed_dimensions {
-        info!("Needed dimension: date={} resolution={}", date, resolution);
+        info!("Finding dimension: date={} resolution={}", date, resolution);
     }
 
     // Calculate summary statistics
