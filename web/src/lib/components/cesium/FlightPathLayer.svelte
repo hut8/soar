@@ -8,6 +8,9 @@
 		createLandingMarker
 	} from '$lib/cesium/entities';
 	import type { Flight, Fix, DataListResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'cesium', 'FlightPathLayer']);
 
 	// Props
 	let {
@@ -48,9 +51,12 @@
 			// Render flight path
 			renderFlightPath(flightId, flight, fixes);
 
-			console.log(`Loaded flight path for ${flightId}: ${fixes.length} fixes`);
+			logger.debug('Loaded flight path for {flightId}: {count} fixes', {
+				flightId,
+				count: fixes.length
+			});
 		} catch (error) {
-			console.error(`Error loading flight path ${flightId}:`, error);
+			logger.error('Error loading flight path {flightId}: {error}', { flightId, error });
 		}
 	}
 
@@ -65,7 +71,7 @@
 		}
 
 		if (fixes.length === 0) {
-			console.warn(`No fixes to render for flight ${flightId}`);
+			logger.warn('No fixes to render for flight {flightId}', { flightId });
 			return;
 		}
 
@@ -77,7 +83,7 @@
 			viewer.entities.add(pathEntity);
 			entities.push(pathEntity);
 		} catch (error) {
-			console.error('Error creating flight path entity:', error);
+			logger.error('Error creating flight path entity: {error}', { error });
 		}
 
 		// Create takeoff marker (first fix)
@@ -134,7 +140,7 @@
 	 */
 	export function addFlight(flightId: string): void {
 		if (flightEntities.has(flightId)) {
-			console.log(`Flight ${flightId} already displayed`);
+			logger.debug('Flight {flightId} already displayed', { flightId });
 			return;
 		}
 

@@ -5,6 +5,9 @@
 	import { serverCall } from '$lib/api/server';
 	import { createAirportEntity } from '$lib/cesium/entities';
 	import type { Airport, DataListResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'cesium', 'AirportLayer']);
 
 	// Props
 	let { viewer, enabled = $bindable(true) }: { viewer: Viewer; enabled?: boolean } = $props();
@@ -46,7 +49,7 @@
 				lonMax: CesiumMath.toDegrees(rectangle.east)
 			};
 		} catch (error) {
-			console.error('Error computing viewport bounds:', error);
+			logger.error('Error computing viewport bounds: {error}', { error });
 			return null;
 		}
 	}
@@ -94,7 +97,10 @@
 					airportEntities.set(airport.id, entity);
 					newAirportIds.add(airport.id);
 				} catch (error) {
-					console.error(`Error creating airport entity for ${airport.ident}:`, error);
+					logger.error('Error creating airport entity for {ident}: {error}', {
+						ident: airport.ident,
+						error
+					});
 				}
 			}
 
@@ -106,9 +112,9 @@
 				}
 			}
 
-			console.log(`Loaded ${airports.length} airports in viewport`);
+			logger.debug('Loaded {count} airports in viewport', { count: airports.length });
 		} catch (error) {
-			console.error('Error loading airports:', error);
+			logger.error('Error loading airports: {error}', { error });
 		}
 	}
 

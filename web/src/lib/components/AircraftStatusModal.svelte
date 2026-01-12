@@ -26,6 +26,9 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
 	import { watchlist } from '$lib/stores/watchlist';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'AircraftStatusModal']);
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -112,7 +115,7 @@
 			aircraftModel = modelResponse?.data || null;
 			currentFlight = selectedAircraft.currentFix?.flight || flightResponse?.data || null;
 		} catch (error) {
-			console.warn('Failed to load aircraft data:', error);
+			logger.warn('Failed to load aircraft data: {error}', { error });
 			aircraftRegistration = null;
 			aircraftModel = null;
 			currentFlight = null;
@@ -142,7 +145,7 @@
 				isInWatchlist = true;
 			}
 		} catch (error) {
-			console.error('Failed to toggle watchlist:', error);
+			logger.error('Failed to toggle watchlist: {error}', { error });
 		} finally {
 			addingToWatchlist = false;
 		}
@@ -262,7 +265,7 @@
 
 			updateDirectionToAircraft();
 		} catch (error) {
-			console.warn('Failed to get user location:', error);
+			logger.warn('Failed to get user location: {error}', { error });
 			locationPermissionDenied = true;
 		}
 	}
@@ -286,7 +289,7 @@
 					}
 				})
 				.catch((error: unknown) => {
-					console.warn('Device orientation permission denied:', error);
+					logger.warn('Device orientation permission denied: {error}', { error });
 				});
 		} else {
 			// Add listener for other browsers

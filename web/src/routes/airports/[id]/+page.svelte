@@ -16,7 +16,10 @@
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
 	import type { Airport, Flight, Club, DataResponse, DataListResponse } from '$lib/types';
+
+	const logger = getLogger(['soar', 'AirportDetailsPage']);
 
 	let airport: Airport | null = null;
 	let flights: Flight[] = [];
@@ -63,7 +66,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load airport: ${errorMessage}`;
-			console.error('Error loading airport:', err);
+			logger.error('Error loading airport: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -79,7 +82,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
-			console.error('Error loading flights:', err);
+			logger.error('Error loading flights: {error}', { error: err });
 		} finally {
 			flightsLoading = false;
 		}
@@ -95,7 +98,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			clubsError = `Failed to load clubs: ${errorMessage}`;
-			console.error('Error loading clubs:', err);
+			logger.error('Error loading clubs: {error}', { error: err });
 		} finally {
 			clubsLoading = false;
 		}

@@ -11,6 +11,9 @@
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import { serverCall } from '$lib/api/server';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'FlightsList']);
 
 	dayjs.extend(relativeTime);
 
@@ -29,7 +32,7 @@
 	$effect(() => {
 		async function fetchAircraftData() {
 			// Debug: Log flight IDs and aircraft IDs
-			console.log('[FlightsList] Flights received:', {
+			logger.debug('Flights received: {count} firstFlight: {firstFlight}', {
 				count: flights.length,
 				firstFlight: flights[0]
 					? {
@@ -64,7 +67,7 @@
 					aircraft: flight.aircraftId ? aircraftMap[flight.aircraftId] || null : null
 				}));
 			} catch (err) {
-				console.error('Failed to fetch aircraft data:', err);
+				logger.error('Failed to fetch aircraft data: {error}', { error: err });
 				// On error, create FlightDetails with null aircraft
 				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
 			}

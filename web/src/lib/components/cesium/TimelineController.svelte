@@ -12,6 +12,9 @@
 	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
 	import type { Flight, Fix, DataListResponse, AircraftType } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'cesium', 'TimelineController']);
 
 	// Props
 	let {
@@ -71,7 +74,7 @@
 			fixes = fixesResponse.data || [];
 
 			if (fixes.length === 0) {
-				console.warn('No fixes found for flight');
+				logger.warn('No fixes found for flight');
 				return;
 			}
 
@@ -82,7 +85,7 @@
 			// Initialize timeline
 			initializeTimeline();
 		} catch (error) {
-			console.error('Error loading flight data:', error);
+			logger.error('Error loading flight data: {error}', { error });
 		} finally {
 			isLoading = false;
 		}

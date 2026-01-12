@@ -20,6 +20,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { watchlist } from '$lib/stores/watchlist';
+	import { getLogger } from '$lib/logging';
 	import type {
 		Aircraft,
 		AircraftRegistration,
@@ -31,6 +32,8 @@
 		DataListResponse,
 		PaginatedDataResponse
 	} from '$lib/types';
+
+	const logger = getLogger(['soar', 'AircraftDetailsPage']);
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
 	import {
@@ -156,7 +159,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load aircraft: ${errorMessage}`;
-			console.error('Error loading aircraft:', err);
+			logger.error('Error loading aircraft: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -181,7 +184,7 @@
 			fixesPage = response.metadata.page;
 			fixesTotalPages = response.metadata.totalPages;
 		} catch (err) {
-			console.error('Failed to load fixes:', err);
+			logger.error('Failed to load fixes: {error}', { error: err });
 		} finally {
 			loadingFixes = false;
 		}
@@ -213,7 +216,7 @@
 			flightsPage = response.metadata.page || 1;
 			flightsTotalPages = response.metadata.totalPages || 1;
 		} catch (err) {
-			console.error('Failed to load flights:', err);
+			logger.error('Failed to load flights: {error}', { error: err });
 			flights = [];
 		} finally {
 			loadingFlights = false;
@@ -228,7 +231,7 @@
 			);
 			aircraftImages = response.data.images || [];
 		} catch (err) {
-			console.error('Failed to load aircraft images:', err);
+			logger.error('Failed to load aircraft images: {error}', { error: err });
 			aircraftImages = [];
 		} finally {
 			loadingImages = false;
@@ -244,7 +247,7 @@
 			const response = await serverCall<DataListResponse<Club>>('/clubs');
 			clubs = response.data || [];
 		} catch (err) {
-			console.error('Failed to load clubs:', err);
+			logger.error('Failed to load clubs: {error}', { error: err });
 		}
 	}
 
@@ -271,7 +274,7 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			toaster.error({ title: `Failed to update club assignment: ${errorMessage}` });
-			console.error('Error updating aircraft club:', err);
+			logger.error('Error updating aircraft club: {error}', { error: err });
 		} finally {
 			savingClub = false;
 		}

@@ -4,6 +4,9 @@
 	import { watchlist } from '$lib/stores/watchlist';
 	import { Bell, BellOff, Trash2, Plus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'Watchlist']);
 
 	let showAddModal = false;
 	let loading = true;
@@ -17,7 +20,7 @@
 		try {
 			await watchlist.updateEmailPreference(aircraftId, !currentValue);
 		} catch (err) {
-			console.error('Failed to toggle email notification:', err);
+			logger.error('Failed to toggle email notification: {error}', { error: err });
 		}
 	}
 
@@ -26,7 +29,7 @@
 			try {
 				await watchlist.remove(aircraftId);
 			} catch (err) {
-				console.error('Failed to remove aircraft:', err);
+				logger.error('Failed to remove aircraft: {error}', { error: err });
 			}
 		}
 	}
@@ -36,7 +39,7 @@
 			try {
 				await watchlist.clear();
 			} catch (err) {
-				console.error('Failed to clear watchlist:', err);
+				logger.error('Failed to clear watchlist: {error}', { error: err });
 			}
 		}
 	}

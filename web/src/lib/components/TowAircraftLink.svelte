@@ -5,6 +5,9 @@
 	import { serverCall } from '$lib/api/server';
 	import type { Aircraft } from '$lib/types';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'TowAircraftLink']);
 
 	export let aircraftId: string;
 	export let size: 'sm' | 'md' | 'lg' = 'md';
@@ -40,7 +43,7 @@
 			aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
 			loading = false;
 		} catch (error) {
-			console.error(`Failed to load aircraft ${aircraftId}:`, error);
+			logger.error('Failed to load aircraft {aircraftId}: {error}', { aircraftId, error });
 			loading = false;
 		}
 	});

@@ -2,6 +2,9 @@
 	import { User as UserIcon, X } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { User, DataListResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'PilotSelectionModal']);
 
 	let {
 		isOpen = $bindable(false),
@@ -41,7 +44,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load pilots: ${errorMessage}`;
-			console.error('Error loading pilots:', err);
+			logger.error('Error loading pilots: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -75,7 +78,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to add pilot: ${errorMessage}`;
-			console.error('Error adding pilot to flight:', err);
+			logger.error('Error adding pilot to flight: {error}', { error: err });
 		} finally {
 			submitting = false;
 		}

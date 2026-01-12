@@ -5,6 +5,9 @@
 	import { serverCall } from '$lib/api/server';
 	import { createReceiverEntity } from '$lib/cesium/entities';
 	import type { Receiver, PaginatedDataResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'cesium', 'ReceiverLayer']);
 
 	// Props
 	let { viewer, enabled = $bindable(true) }: { viewer: Viewer; enabled?: boolean } = $props();
@@ -46,7 +49,7 @@
 				lonMax: CesiumMath.toDegrees(rectangle.east)
 			};
 		} catch (error) {
-			console.error('Error computing viewport bounds:', error);
+			logger.error('Error computing viewport bounds: {error}', { error });
 			return null;
 		}
 	}
@@ -92,7 +95,10 @@
 					receiverEntities.set(receiver.id, entity);
 					newReceiverIds.add(receiver.id);
 				} catch (error) {
-					console.error(`Error creating receiver entity for ${receiver.callsign}:`, error);
+					logger.error('Error creating receiver entity for {callsign}: {error}', {
+						callsign: receiver.callsign,
+						error
+					});
 				}
 			}
 
@@ -104,9 +110,9 @@
 				}
 			}
 
-			console.log(`Loaded ${response.data.length} receivers in viewport`);
+			logger.debug('Loaded {count} receivers in viewport', { count: response.data.length });
 		} catch (error) {
-			console.error('Error loading receivers:', error);
+			logger.error('Error loading receivers: {error}', { error });
 		}
 	}
 

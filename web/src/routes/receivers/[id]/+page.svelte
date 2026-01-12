@@ -3,6 +3,9 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ReceiverDetails']);
 	import {
 		ArrowLeft,
 		Radio,
@@ -165,7 +168,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load receiver: ${errorMessage}`;
-			console.error('Error loading receiver:', err);
+			logger.error('Error loading receiver: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
@@ -187,7 +190,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			fixesError = `Failed to load fixes: ${errorMessage}`;
-			console.error('Error loading fixes:', err);
+			logger.error('Error loading fixes: {error}', { error: err });
 			fixes = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingFixes = false;
@@ -217,7 +220,7 @@
 				Object.assign(aircraftMap, response.aircraft);
 			}
 		} catch (err) {
-			console.error('Failed to load aircraft information:', err);
+			logger.error('Failed to load aircraft information: {error}', { error: err });
 			// Don't fail the whole operation if aircraft fetching fails
 		}
 	}
@@ -235,7 +238,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			statusesError = `Failed to load statuses: ${errorMessage}`;
-			console.error('Error loading statuses:', err);
+			logger.error('Error loading statuses: {error}', { error: err });
 		} finally {
 			loadingStatuses = false;
 		}
@@ -251,7 +254,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			statisticsError = `Failed to load statistics: ${errorMessage}`;
-			console.error('Error loading statistics:', err);
+			logger.error('Error loading statistics: {error}', { error: err });
 		} finally {
 			loadingStatistics = false;
 		}
@@ -275,7 +278,10 @@
 							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraftId}`);
 							aircraftCount.aircraft = aircraft;
 						} catch (err) {
-							console.warn(`Failed to load aircraft details for ${aircraftCount.aircraftId}:`, err);
+							logger.warn('Failed to load aircraft details for {aircraftId}: {error}', {
+								aircraftId: aircraftCount.aircraftId,
+								error: err
+							});
 							aircraftCount.aircraft = null;
 						}
 					})
@@ -284,7 +290,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aggregateStatsError = `Failed to load aggregate statistics: ${errorMessage}`;
-			console.error('Error loading aggregate statistics:', err);
+			logger.error('Error loading aggregate statistics: {error}', { error: err });
 			aggregateStats = {
 				fixCountsByAprsType: [],
 				fixCountsByAircraft: []
@@ -307,7 +313,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			rawMessagesError = `Failed to load raw messages: ${errorMessage}`;
-			console.error('Error loading raw messages:', err);
+			logger.error('Error loading raw messages: {error}', { error: err });
 			rawMessages = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingRawMessages = false;

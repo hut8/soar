@@ -9,6 +9,7 @@
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { calculateBoundingBox, fixToARPosition } from '$lib/ar/calculations';
 	import { projectToScreen, throttle } from '$lib/ar/projection';
+	import { getLogger } from '$lib/logging';
 	import type {
 		ARSettings,
 		ARUserPosition,
@@ -21,6 +22,8 @@
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import ARControls from '$lib/components/ar/ARControls.svelte';
 	import DebugPanel from '$lib/components/ar/DebugPanel.svelte';
+
+	const logger = getLogger(['soar', 'ARPage']);
 
 	// State
 	let videoElement: HTMLVideoElement | undefined = $state();
@@ -178,10 +181,10 @@
 	// Handle aircraft marker click
 	function handleAircraftClick(aircraftId: string) {
 		// For now, just log - we'd show a modal here
-		console.log('Aircraft clicked:', aircraftId);
+		logger.debug('Aircraft clicked: {aircraftId}', { aircraftId });
 		const aircraft = aircraftRegistry.getAircraft(aircraftId);
 		if (aircraft) {
-			console.log('Aircraft details:', aircraft);
+			logger.debug('Aircraft details: {aircraft}', { aircraft });
 		}
 	}
 

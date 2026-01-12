@@ -2,6 +2,9 @@
 
 import { browser } from '$app/environment';
 import type { ARDeviceOrientation, ARUserPosition } from '$lib/ar/types';
+import { getLogger } from '$lib/logging';
+
+const logger = getLogger(['soar', 'ARTracker']);
 
 export type ARTrackerEvent =
 	| { type: 'position_updated'; position: ARUserPosition }
@@ -44,7 +47,7 @@ export class ARTracker {
 			try {
 				sub(event);
 			} catch (error) {
-				console.error('ARTracker subscriber error:', error);
+				logger.error('ARTracker subscriber error: {error}', { error });
 			}
 		});
 	}
@@ -128,7 +131,7 @@ export class ARTracker {
 					return;
 				}
 			} catch (error) {
-				console.error('Orientation permission error:', error);
+				logger.error('Orientation permission error: {error}', { error });
 				return;
 			}
 		}

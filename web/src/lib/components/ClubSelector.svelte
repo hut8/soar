@@ -3,6 +3,9 @@
 	import { onMount } from 'svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { ClubWithSoaring, ComboboxData, DataListResponse } from '$lib/types';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ClubSelector']);
 
 	// Props
 	export let value: string[] = [];
@@ -43,7 +46,7 @@
 			clubs = response.data;
 			comboboxData = transformClubsToComboboxData(clubs);
 		} catch (err) {
-			console.error('Failed to load clubs:', err);
+			logger.error('Failed to load clubs: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load clubs';
 			clubs = [];
 			comboboxData = [];

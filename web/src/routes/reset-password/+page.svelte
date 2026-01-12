@@ -4,6 +4,9 @@
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'ResetPassword']);
 
 	let token = '';
 	let newPassword = '';
@@ -58,7 +61,7 @@
 				goto(resolve('/login'));
 			}, 3000);
 		} catch (err) {
-			console.error('Password reset error:', err);
+			logger.error('Password reset error: {error}', { error: err });
 			if (err instanceof AuthApiError) {
 				if (err.status === 400) {
 					error = 'Reset link has expired or is invalid. Please request a new one.';
