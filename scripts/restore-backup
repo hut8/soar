@@ -407,8 +407,7 @@ def confirm_restore(backup: BackupInfo) -> bool:
     print("  1. Stop PostgreSQL")
     print("  2. DESTROY the current database")
     print("  3. Restore from backup")
-    print("  4. Replay WAL logs to the latest available point")
-    print("\nEstimated downtime: 2-4 hours")
+    print("  4. Start PostgreSQL")
     print("\n" + "=" * 70)
     
     response = input("\nType 'yes' to proceed (anything else to cancel): ").strip()
