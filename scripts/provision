@@ -318,6 +318,11 @@ sudo apt-get install -y tempo
 
 echo -e "${GREEN}Grafana Tempo installed successfully${NC}"
 
+# Install protobuf compiler (protoc)
+echo -e "${BLUE}Installing protobuf compiler (protoc)...${NC}"
+sudo apt-get install -y protobuf-compiler
+echo -e "${GREEN}protoc installed successfully${NC}"
+
 # Install Caddy
 echo -e "${BLUE}Installing Caddy web server...${NC}"
 
