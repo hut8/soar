@@ -740,7 +740,12 @@ impl FixesRepository {
                 ),
                 grid_clusters AS (
                     SELECT
-                        ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), (SELECT grid_size FROM params)) AS grid_point,
+                        -- Use floor-based cell assignment to get the southwest corner of each grid cell
+                        -- ST_SnapToGrid rounds to nearest, but we need floor semantics for proper cell alignment
+                        ST_SetSRID(ST_MakePoint(
+                            FLOOR(longitude / (SELECT grid_size FROM params)) * (SELECT grid_size FROM params),
+                            FLOOR(latitude / (SELECT grid_size FROM params)) * (SELECT grid_size FROM params)
+                        ), 4326) AS grid_point,
                         COUNT(*) AS aircraft_count,
                         AVG(latitude) AS centroid_lat,
                         AVG(longitude) AS centroid_lng,
