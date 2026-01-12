@@ -124,10 +124,19 @@ if [[ ! -f "$RCLONE_CONFIG" ]]; then
     exit 1
 fi
 
-# Directories
+# Directories - use fallbacks for non-root users
 TEMP_DIR="${BACKUP_TEMP_DIR:-/storage/soar/backups/base}"
 LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
-mkdir -p "$TEMP_DIR" "$LOG_DIR"
+
+# If we can't write to the configured directories, use user-local fallbacks
+if ! mkdir -p "$TEMP_DIR" 2>/dev/null; then
+    TEMP_DIR="${HOME}/.local/share/soar/backup-temp"
+    mkdir -p "$TEMP_DIR"
+fi
+if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+    LOG_DIR="${HOME}/.local/share/soar/logs"
+    mkdir -p "$LOG_DIR"
+fi
 
 # PostgreSQL configuration
 PGHOST="${PGHOST:-localhost}"
