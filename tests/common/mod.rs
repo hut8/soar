@@ -77,6 +77,8 @@ fn ensure_template_migrated() {
                 if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
                     let _ = diesel::sql_query("CREATE EXTENSION IF NOT EXISTS postgis")
                         .execute(&mut template_conn);
+                    // Explicitly close connection
+                    drop(template_conn);
                 }
             }
 
@@ -86,6 +88,9 @@ fn ensure_template_migrated() {
                  WHERE datname = 'soar_test_template'",
             )
             .execute(&mut admin_conn);
+
+            // Explicitly close admin connection
+            drop(admin_conn);
         }
 
         // Run pending migrations on template
@@ -100,7 +105,15 @@ fn ensure_template_migrated() {
                     eprintln!("Warning: Failed to run migrations on template: {}", e);
                 }
             }
+
+            // Explicitly drop the connection to ensure it's closed before re-marking the template
+            drop(template_conn);
         }
+
+        // Small delay to ensure the connection is fully cleaned up by PostgreSQL
+        // This prevents "source database is being accessed by other users" errors
+        // when tests run in parallel
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Re-mark as template
         if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
@@ -109,7 +122,13 @@ fn ensure_template_migrated() {
                  WHERE datname = 'soar_test_template'",
             )
             .execute(&mut admin_conn);
+
+            // Explicitly close admin connection
+            drop(admin_conn);
         }
+
+        // Final delay to ensure template marking is fully processed
+        std::thread::sleep(std::time::Duration::from_millis(50));
     });
 }
 
