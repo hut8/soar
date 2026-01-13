@@ -278,7 +278,7 @@ restore_database() {
     if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c \
         "CREATE EXTENSION IF NOT EXISTS timescaledb; SELECT timescaledb_pre_restore();" \
         2>&1 | tee -a "$LOG_DIR/restore.log"; then
-        log WARN "TimescaleDB pre-restore returned non-zero (may be normal if extension not yet loaded)"
+        log WARN "TimescaleDB pre-restore returned non-zero (this may occur if the database schema has issues)"
     fi
 
     # Restore from dump using pg_restore
