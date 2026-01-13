@@ -111,7 +111,7 @@ Common address types:
 - 3: OGN
 - 5-63: Extended types (NAVITER format only)
 
-In the example message, address type 33 may indicate a specific FANET device manufacturer or variant.
+In the example message, the detail field encodes address type 33; its specific semantic meaning is not defined in the referenced public protocol documentation.
 
 ## Conclusion
 
