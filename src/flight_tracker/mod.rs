@@ -206,9 +206,10 @@ impl FlightTracker {
             }
 
             // Create aircraft state with the oldest fix first
+            // Use new_for_restore to preserve fix timestamps for timeout detection
             let first_fix = &fixes[fixes.len() - 1];
             let is_active = state_transitions::should_be_active(first_fix);
-            let mut state = aircraft_state::AircraftState::new(first_fix, is_active);
+            let mut state = aircraft_state::AircraftState::new_for_restore(first_fix, is_active);
 
             // Determine if this is an active or timed-out flight
             if flight.timed_out_at.is_some() {
@@ -223,9 +224,10 @@ impl FlightTracker {
             }
 
             // Add remaining fixes in chronological order (oldest to newest)
+            // Use add_fix_for_restore to preserve fix timestamps for timeout detection
             for fix in fixes.iter().rev().skip(1) {
                 let is_active = state_transitions::should_be_active(fix);
-                state.add_fix(fix, is_active);
+                state.add_fix_for_restore(fix, is_active);
             }
 
             // Insert into map

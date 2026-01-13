@@ -86,9 +86,43 @@ impl AircraftState {
         }
     }
 
+    /// Create a new AircraftState for restoration from database
+    /// Uses the fix's timestamp instead of wall clock time for proper timeout detection
+    pub fn new_for_restore(fix: &Fix, is_active: bool) -> Self {
+        let mut recent_fixes = VecDeque::with_capacity(10);
+        recent_fixes.push_back(CompactFix::from_fix(fix, is_active));
+
+        Self {
+            recent_fixes,
+            current_flight_id: None,
+            current_callsign: None,
+            last_timed_out_flight_id: None,
+            last_timed_out_callsign: None,
+            last_timed_out_at: None,
+            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
+            towing_info: None,
+            takeoff_runway_inferred: None,
+        }
+    }
+
     /// Add a new fix to the recent history
     pub fn add_fix(&mut self, fix: &Fix, is_active: bool) {
         self.last_update_time = Utc::now();
+
+        // Keep only last 10 fixes
+        if self.recent_fixes.len() >= 10 {
+            self.recent_fixes.pop_front();
+        }
+        self.recent_fixes
+            .push_back(CompactFix::from_fix(fix, is_active));
+    }
+
+    /// Add a fix during state restoration (uses fix timestamp instead of wall clock)
+    /// This is critical for timeout detection to work correctly after restart
+    pub fn add_fix_for_restore(&mut self, fix: &Fix, is_active: bool) {
+        // Use the fix's timestamp, not wall clock time
+        // This ensures timeout detection works correctly after restart
+        self.last_update_time = fix.timestamp;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {
