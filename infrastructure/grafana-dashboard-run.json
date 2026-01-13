@@ -5068,8 +5068,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_coalesce_rejected_hard_limit_18h_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
-          "legendFormat": "Rejected: 18h Hard Limit",
+          "expr": "rate(flight_tracker_coalesce_rejected_hard_limit_total{component=\"run\",environment=\"$environment\"}[$__rate_interval])",
+          "legendFormat": "Rejected: Hard Limit",
           "range": true,
           "refId": "F"
         },

@@ -385,7 +385,7 @@ pub(crate) async fn process_state_transition(
 
                 let should_coalesce = callsign_matches && position_reasonable;
 
-                if should_coalesce && gap_hours < 18.0 {
+                if should_coalesce && gap_hours < 8.0 {
                     // Resume the flight
                     info!(
                         "Resuming timed-out flight {} after {:.1}h gap",
@@ -415,9 +415,9 @@ pub(crate) async fn process_state_transition(
                             .record(dist_km);
                     }
                     return Ok(fix);
-                } else if gap_hours >= 18.0 {
+                } else if gap_hours >= 8.0 {
                     // Too long - create new flight
-                    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_18h_total")
+                    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_total")
                         .increment(1);
                     metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
                         .record(gap_hours);
