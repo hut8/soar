@@ -223,10 +223,10 @@ download_backup() {
         exit 1
     fi
 
-    # Verify download - check for pg_dump format
-    if [[ ! -f "$DOWNLOAD_DIR/database.dump" ]]; then
-        log ERROR "Backup is incomplete (missing database.dump)"
-        log ERROR "This restore script requires pg_dump format backups."
+    # Verify download - check for pg_dump directory format
+    if [[ ! -d "$DOWNLOAD_DIR/database" ]]; then
+        log ERROR "Backup is incomplete (missing database directory)"
+        log ERROR "This restore script requires pg_dump directory format backups."
         log ERROR "Found files: $(ls -la "$DOWNLOAD_DIR/")"
         exit 1
     fi
@@ -244,7 +244,7 @@ download_backup() {
 
 # Function to restore database
 restore_database() {
-    local dump_file="$DOWNLOAD_DIR/database.dump"
+    local dump_dir="$DOWNLOAD_DIR/database"
 
     log INFO "Dropping existing database: $PGDATABASE"
 
@@ -282,7 +282,7 @@ restore_database() {
         -d "$PGDATABASE" \
         -j "$PARALLEL_JOBS" \
         -v \
-        "$dump_file" \
+        "$dump_dir" \
         2>&1 | tee -a "$LOG_DIR/restore.log"; then
         # pg_restore returns non-zero on warnings too, check if database is accessible
         if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1; then
