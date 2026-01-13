@@ -77,7 +77,7 @@ mod fanet_id_tests {
             );
 
             // Address type from first byte detail field
-            assert_eq!(id.address_type, 2, "Address type should be 2 (Flarm)");
+            assert_eq!(id.address_type, 2, "Address type should be 2 (FLARM)");
 
             // Standard format doesn't have reserved field
             assert_eq!(id.reserved, None, "Reserved should be None for standard format");
