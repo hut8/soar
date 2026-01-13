@@ -37,8 +37,8 @@ For `id18501142BB`:
 ## What The Metadata Contains
 
 The `1850` bytes encode:
-- Address type: 33 (extended type for FANET/NAVITER devices)
-- Aircraft type: 1
+- Address type: 5 (extended type in NAVITER format)
+- Aircraft type: 6
 - Stealth flag: false
 - No-track flag: false
 - Reserved bits: 0

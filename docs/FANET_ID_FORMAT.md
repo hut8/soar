@@ -61,8 +61,8 @@ Bits 3-0: rrrr (reserved, 4 bits)
 - Detail: `0x1850` = `0001 1000 0101 0000` binary
   - Stealth: 0 (false)
   - No-track: 0 (false)
-  - Aircraft type: 0001 (1)
-  - Address type: 100001 (33)
+  - Aircraft type: 0110 (6)
+  - Address type: 000101 (5)
   - Reserved: 0000 (0)
 - Address: `0x1142BB` = 1,131,195 decimal
 
@@ -111,7 +111,7 @@ Common address types:
 - 3: OGN
 - 5-63: Extended types (NAVITER format only)
 
-In the example message, the detail field encodes address type 33; its specific semantic meaning is not defined in the referenced public protocol documentation.
+In the example message, address type 5 is used, which is an extended address type supported by the NAVITER format.
 
 ## Conclusion
 
