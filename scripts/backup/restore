@@ -353,12 +353,12 @@ verify_restore() {
     log INFO "  Compressed chunks: $compressed_count"
 
     # Verify fixes table has data (critical hypertable)
-    local fixes_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
-        "SELECT COUNT(*) FROM fixes LIMIT 1" 2>/dev/null | tr -d ' ' || echo "0")
-    if [[ "$fixes_count" == "0" ]]; then
-        log WARN "Fixes table appears empty - verify hypertable restoration"
-    else
+    local fixes_has_data=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT EXISTS(SELECT 1 FROM fixes LIMIT 1)" 2>/dev/null | tr -d ' ' || echo "f")
+    if [[ "$fixes_has_data" == "t" ]]; then
         log INFO "  Fixes table: has data"
+    else
+        log WARN "Fixes table appears empty - verify hypertable restoration"
     fi
 
     log INFO "Database verification passed"
