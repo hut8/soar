@@ -271,6 +271,16 @@ restore_database() {
         exit 1
     fi
 
+    # TimescaleDB Pre-Restore: Prepare the database for restoration
+    # This is REQUIRED for restoring TimescaleDB hypertables (especially compressed ones)
+    # See: https://docs.timescale.com/self-hosted/latest/backup-and-restore/logical-backup/
+    log INFO "Running TimescaleDB pre-restore preparation..."
+    if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c \
+        "CREATE EXTENSION IF NOT EXISTS timescaledb; SELECT timescaledb_pre_restore();" \
+        2>&1 | tee -a "$LOG_DIR/restore.log"; then
+        log WARN "TimescaleDB pre-restore returned non-zero (may be normal if extension not yet loaded)"
+    fi
+
     # Restore from dump using pg_restore
     log INFO "Restoring from backup using pg_restore (parallel jobs: $PARALLEL_JOBS)..."
     log INFO "This may take a while for large databases..."
@@ -290,6 +300,15 @@ restore_database() {
             exit 1
         fi
         log WARN "pg_restore completed with warnings (this is often normal)"
+    fi
+
+    # TimescaleDB Post-Restore: Finalize the restoration
+    # This restores TimescaleDB internal state and re-enables background workers
+    log INFO "Running TimescaleDB post-restore finalization..."
+    if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c \
+        "SELECT timescaledb_post_restore();" \
+        2>&1 | tee -a "$LOG_DIR/restore.log"; then
+        log WARN "TimescaleDB post-restore returned non-zero (check logs for details)"
     fi
 
     log INFO "Database restored successfully"
@@ -318,6 +337,28 @@ verify_restore() {
     log INFO "  Tables: $table_count"
     if [[ "$device_count" != "N/A" ]]; then
         log INFO "  Devices: $device_count"
+    fi
+
+    # Verify TimescaleDB hypertables
+    log INFO "Verifying TimescaleDB hypertables..."
+    local hypertable_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT COUNT(*) FROM timescaledb_information.hypertables" 2>/dev/null | tr -d ' ' || echo "0")
+    local chunk_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT COUNT(*) FROM timescaledb_information.chunks" 2>/dev/null | tr -d ' ' || echo "0")
+    local compressed_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT COUNT(*) FROM timescaledb_information.chunks WHERE is_compressed = true" 2>/dev/null | tr -d ' ' || echo "0")
+
+    log INFO "  Hypertables: $hypertable_count"
+    log INFO "  Chunks: $chunk_count"
+    log INFO "  Compressed chunks: $compressed_count"
+
+    # Verify fixes table has data (critical hypertable)
+    local fixes_count=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT COUNT(*) FROM fixes LIMIT 1" 2>/dev/null | tr -d ' ' || echo "0")
+    if [[ "$fixes_count" == "0" ]]; then
+        log WARN "Fixes table appears empty - verify hypertable restoration"
+    else
+        log INFO "  Fixes table: has data"
     fi
 
     log INFO "Database verification passed"
