@@ -1,0 +1,133 @@
+name: Build ARM64 Release (Manual)
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifact:
+        description: 'Upload the ARM64 binary as an artifact'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-web:
+    name: Build SvelteKit Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SvelteKit project
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-build
+          path: web/build/
+          retention-days: 1
+
+  build-release-arm64:
+    name: Build Release Binary (ARM64 Static musl)
+    runs-on: ubuntu-22.04
+    needs: build-web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
+
+      - name: Download web build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: web-build
+          path: web/build/
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-unknown-linux-musl
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "release-build-arm64-musl"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
+
+      - name: Cache cross
+        id: cache-cross
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-0.2.5
+
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Build static release binary (ARM64)
+        env:
+          CROSS_CONTAINER_ENGINE: docker
+          SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
+          # CRITICAL: tokio_unstable is required for tokio-console support
+          # Without this flag, --enable-tokio-console will cause exit code 101 with no output
+          RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static"
+        run: cross build --release --target aarch64-unknown-linux-musl --features bundled-postgres
+
+      - name: Verify static linking
+        run: |
+          echo "Checking if binary is statically linked..."
+          file target/aarch64-unknown-linux-musl/release/soar
+
+      - name: Create binary archive
+        run: |
+          rm -rf release
+          mkdir -p release
+          cp target/aarch64-unknown-linux-musl/release/soar release/
+          cp README.md release/ || echo "No README.md found"
+          tar -czf soar-linux-arm64.tar.gz -C release .
+
+      - name: Upload release binary
+        if: ${{ inputs.upload_artifact }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: soar-linux-arm64
+          path: soar-linux-arm64.tar.gz
+          retention-days: 30
+
+      - name: Show binary info
+        run: |
+          echo "Binary size:"
+          ls -lh target/aarch64-unknown-linux-musl/release/soar
+          echo ""
+          echo "Binary info:"
+          file target/aarch64-unknown-linux-musl/release/soar
