@@ -223,6 +223,17 @@
 					<li>
 						<strong
 							><a
+								href="https://www.kaggle.com/datasets/colmog/aircraft-and-aircraft-manufacturers"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">Aircraft and Manufacturers</a
+							>:</strong
+						>
+						ICAO/IATA aircraft type codes with manufacturer and aircraft classification data
+					</li>
+					<li>
+						<strong
+							><a
 								href="https://registry.opendata.aws/terrain-tiles/"
 								target="_blank"
 								rel="noopener noreferrer"

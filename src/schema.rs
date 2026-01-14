@@ -42,6 +42,10 @@ pub mod sql_types {
     pub struct EngineType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "icao_aircraft_category"))]
+    pub struct IcaoAircraftCategory;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "light_sport_type"))]
     pub struct LightSportType;
 
@@ -60,6 +64,10 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "timeout_phase"))]
     pub struct TimeoutPhase;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "wing_type"))]
+    pub struct WingType;
 }
 
 diesel::table! {
@@ -238,13 +246,18 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
+    use super::sql_types::WingType;
+    use super::sql_types::IcaoAircraftCategory;
 
-    aircraft_types (icao_code) {
+    aircraft_types (icao_code, iata_code) {
         icao_code -> Text,
-        iata_code -> Nullable<Text>,
+        iata_code -> Text,
         description -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        manufacturer -> Nullable<Text>,
+        wing_type -> Nullable<WingType>,
+        aircraft_category -> Nullable<IcaoAircraftCategory>,
     }
 }
 

@@ -525,7 +525,11 @@ This project is licensed under the MIT License.
 
 ## Data Source Notes
 
-FANET
+### Aircraft and Manufacturers
+
+ICAO/IATA aircraft type codes with manufacturer and aircraft classification data from the [Aircraft and Aircraft Manufacturers](https://www.kaggle.com/datasets/colmog/aircraft-and-aircraft-manufacturers) dataset on Kaggle.
+
+### FANET
 
 - FNT11: [Seems to mean Manufacturer is FANET+](https://github.com/glidernet/ogn-aprs-protocol/blob/af7a1688d28f9c41fddf60c1105d92dc53adb4c1/FANET.protocol.txt#L248)
 - sF1: syncword: 0xF1

@@ -1,0 +1,334 @@
+IATACode,ICAOCode,Model,Aircraft_Manufacturer,WingType,Type,Manufacturer
+32N,A20N,Airbus A320neo,Airbus,Fixed Wing,Airplane,Airbus
+A4F,A124,Antonov AN-124 Ruslan,Antonov,Fixed Wing,Airplane,Antonov
+351,A35K,Airbus A350-1000,Airbus,Fixed Wing,Airplane,Airbus
+339,A339,Airbus A330-900neo,Airbus,Fixed Wing,Airplane,Airbus
+BH2,B212,Bell 212,Bell,Rotary Wing,Helicopter,Bell
+333,A333,Airbus A330-300,Airbus,Fixed Wing,Airplane,Airbus
+AT7,AT72,Aerospatiale/Alenia ATR 72,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+N/A,BL8,"8KCAB Decathlon, 8GCBC Scout",Aeroprakt,Fixed Wing,Airplane,Aeroprakt
+312,A310,Airbus A310-200,Airbus,Fixed Wing,Airplane,Airbus
+736,B736,Boeing 737-600,Boeing,Fixed Wing,Airplane,Boeing
+734,B734,Boeing 737-400,Boeing,Fixed Wing,Airplane,Boeing
+143,B463,BAe 146-300,(undefined),Fixed Wing,Airplane,British Aerospace
+AR7,RJ70,Avro RJ70,Avro International Aerospace,Fixed Wing,Airplane,Avro International Aerospace
+(undefined),A337,"Airbus A330-700 ""Beluga XL""",Airbus,Fixed Wing,Airplane,Airbus
+AT5,AT45,Aerospatiale/Alenia ATR 42-500,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+N/A,A210,Aquila A 210,Aquila,Fixed Wing,Airplane,Aquila
+A32,AN32,Antonov AN-32,Antonov,Fixed Wing,Airplane,Antonov
+CRV,S210,Aerospatiale (Sud Aviation) Se.210 Caravelle,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+32C,A318,Airbus A318 (sharklets),Airbus,Fixed Wing,Airplane,Airbus
+223,BCS3,Airbus A220-300,Airbus,Fixed Wing,Airplane,Airbus
+ATR,AT73,Aerospatiale/Alenia ATR 72-200 series,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+321,A321,Airbus A321,Airbus,Fixed Wing,Airplane,Airbus
+346,A346,Airbus A340-600,Airbus,Fixed Wing,Airplane,Airbus
+ATR,AT76,Aerospatiale/Alenia ATR 72-600,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+A58,A158,Antonov An-158,Antonov,Fixed Wing,Airplane,Antonov
+ABB,A3ST,"Airbus A300-600ST ""Super Transporter"" / ""Beluga""",Airbus,Fixed Wing,Airplane,Airbus
+313,A310,Airbus A310-300,Airbus,Fixed Wing,Airplane,Airbus
+32A,A320,Airbus A320 (sharklets),Airbus,Fixed Wing,Airplane,Airbus
+32D,A319,Airbus A319 (sharklets),Airbus,Fixed Wing,Airplane,Airbus
+(undefined),EA33,Airbus A330 (deprecated 1997: code replaced),Airbus,Fixed Wing,Airplane,Airbus
+N/A,BER2,Beriev Be-200 Altair,Beriev Aircraft Company,Fixed Wing,Airplane,Beriev Aircraft Company
+338,A338,Airbus A330-800neo,Airbus,Fixed Wing,Airplane,Airbus
+721,B721,Boeing 727-100,Boeing,Fixed Wing,Airplane,Boeing
+343,A343,Airbus A340-300,Airbus,Fixed Wing,Airplane,Airbus
+388,A388,Airbus A380-800,Airbus,Fixed Wing,Airplane,Airbus
+A81,A148,Antonov An-148,Antonov,Fixed Wing,Airplane,Antonov
+74D,B743,Boeing 747-300M,Boeing,Fixed Wing,Airplane,Boeing
+A26,AN26,Antonov AN-26,Antonov,Fixed Wing,Airplane,Antonov
+AN7,AN72,Antonov AN-72 / AN-74,Antonov,Fixed Wing,Airplane,Antonov
+B72,B720,Boeing 720B,Boeing,Fixed Wing,Airplane,Boeing
+BH2,B429,Bell 429,Bell,Rotary Wing,Helicopter,Bell
+(undefined),EA31,Airbus A310 (deprecated 1997: code replaced),Airbus,Fixed Wing,Airplane,Airbus
+142,B462,BAe 146-200,(undefined),Fixed Wing,Airplane,British Aerospace
+AR8,RJ85,Avro RJ85,Avro International Aerospace,Fixed Wing,Airplane,Avro International Aerospace
+BH2,B412,Bell 412,Bell,Rotary Wing,Helicopter,Bell
+74X,B742,Boeing 747-200F,Boeing,Fixed Wing,Airplane,Boeing
+342,A342,Airbus A340-200,Airbus,Fixed Wing,Airplane,Airbus
+N/A,CH7A,"7AC Champ, 7ECA Citabria",Champion Aircraft Corporation,Fixed Wing,Airplane,Champion Aircraft Corporation
+345,A345,Airbus A340-500,Airbus,Fixed Wing,Airplane,Airbus
+N/A,AP22,Aeroprakt A-22 Foxbat / A-22 Valor / A-22 Vision,Aeroprakt,Fixed Wing,Airplane,Aeroprakt
+NDC,S601,Aerospatiale SN.601 Corvette,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+N/A,BE58,Beechcraft Baron / 58 Baron,Beechcraft,Fixed Wing,Airplane,Beechcraft
+359,A359,Airbus A350-900,Airbus,Fixed Wing,Airplane,Airbus
+141,B461,BAe 146-100,(undefined),Fixed Wing,Airplane,British Aerospace
+722,B722,Boeing 727-200,Boeing,Fixed Wing,Airplane,Boeing
+74B,BLCF,Boeing 747 LCF Dreamlifter,Boeing,Fixed Wing,Airplane,Boeing
+AB4,A30B,"Airbus A300B2, A300B4, and A300C4",Airbus,Fixed Wing,Airplane,Airbus
+744,B744,Boeing 747-400,Boeing,Fixed Wing,Airplane,Boeing
+7M9,B39M,Boeing 737 MAX 9,Boeing,Fixed Wing,Airplane,Boeing
+A30,AN30,Antonov AN-30,Antonov,Fixed Wing,Airplane,Antonov
+32B,A321,Airbus A321 (sharklets),Airbus,Fixed Wing,Airplane,Airbus
+7M8,B38M,Boeing 737 MAX 8,Boeing,Fixed Wing,Airplane,Boeing
+74T,B741,Boeing 747-100 Freighter,Boeing,Fixed Wing,Airplane,Boeing
+318,A318,Airbus A318,Airbus,Fixed Wing,Airplane,Airbus
+717,B712,Boeing 717,Boeing,Fixed Wing,Airplane,Boeing
+31N,A19N,Airbus A319neo,Airbus,Fixed Wing,Airplane,Airbus
+733,B733,Boeing 737-300,Boeing,Fixed Wing,Airplane,Boeing
+221,BCS1,Airbus A220-100,Airbus,Fixed Wing,Airplane,Airbus
+732,B732,Boeing 737-200,Boeing,Fixed Wing,Airplane,Boeing
+N/A,BE55,Beechcraft Baron / 55 Baron,Beechcraft,Fixed Wing,Airplane,Beechcraft
+741,B741,Boeing 747-100,Boeing,Fixed Wing,Airplane,Boeing
+73G,B737,Boeing 737-700,Boeing,Fixed Wing,Airplane,Boeing
+A40,A140,Antonov AN-140,Antonov,Fixed Wing,Airplane,Antonov
+ANF,AN12,Antonov AN-12,Antonov,Fixed Wing,Airplane,Antonov
+A28,AN28,Antonov AN-28,Antonov,Fixed Wing,Airplane,Antonov
+ATR,AT75,Aerospatiale/Alenia ATR 72-500,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+(undefined),EA32,Airbus A320 (deprecated 1997: code replaced),Airbus,Fixed Wing,Airplane,Airbus
+74C,B742,Boeing 747-200M,Boeing,Fixed Wing,Airplane,Boeing
+7M7,B37M,Boeing 737 MAX 7,Boeing,Fixed Wing,Airplane,Boeing
+32Q,A21N,Airbus A321neo,Airbus,Fixed Wing,Airplane,Airbus
+ND2,N262,Aerospatiale (Nord) 262,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+738,B738,Boeing 737-800,Boeing,Fixed Wing,Airplane,Boeing
+AT4,AT43,Aerospatiale/Alenia ATR 42-300 / 320,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+332,A332,Airbus A330-200,Airbus,Fixed Wing,Airplane,Airbus
+320,A320,Airbus A320,Airbus,Fixed Wing,Airplane,Airbus
+BEH,B190,Beechcraft 1900,Beechcraft,Fixed Wing,Airplane,Beechcraft
+AR1,RJ1H,Avro RJ100,Avro International Aerospace,Fixed Wing,Airplane,Avro International Aerospace
+739,B739,Boeing 737-900,Boeing,Fixed Wing,Airplane,Boeing
+743,B743,Boeing 747-300,Boeing,Fixed Wing,Airplane,Boeing
+(undefined),EA30,Airbus A300 (deprecated 1997: code replaced),Airbus,Fixed Wing,Airplane,Airbus
+703,B703,Boeing 707,Boeing,Fixed Wing,Airplane,Boeing
+319,A319,Airbus A319,Airbus,Fixed Wing,Airplane,Airbus
+AB6,A306,Airbus A300-600,Airbus,Fixed Wing,Airplane,Airbus
+7MJ,B3XM,Boeing 737 MAX 10,Boeing,Fixed Wing,Airplane,Boeing
+N/A,CH7B,"7GCAA, 7GCBC, 7KCAB Citabria",Champion Aircraft Corporation,Fixed Wing,Airplane,Champion Aircraft Corporation
+(undefined),EA34,Airbus A340 (deprecated 1997: code replaced),Airbus,Fixed Wing,Airplane,Airbus
+A5F,A225,Antonov An-225 Mriya,Antonov,Fixed Wing,Airplane,Antonov
+742,B742,Boeing 747-200,Boeing,Fixed Wing,Airplane,Boeing
+735,B735,Boeing 737-500,Boeing,Fixed Wing,Airplane,Boeing
+AN4,AN24,Antonov AN-24,Antonov,Fixed Wing,Airplane,Antonov
+ATR,AT46,Aerospatiale/Alenia ATR 42-600,Aerospatiale,Fixed Wing,Airplane,Aerospatiale
+74J,B74D,Boeing 747-400D (deprecated 2018: no longer flying),Boeing,Fixed Wing,Airplane,Boeing
+74N,B748,Boeing 747-8F,Boeing,Fixed Wing,Airplane,Boeing
+74H,B748,Boeing 747-8I,Boeing,Fixed Wing,Airplane,Boeing
+74V,B74R,Boeing 747SR Freighter,Boeing,Fixed Wing,Airplane,Boeing
+74E,B744,Boeing 747-400M,Boeing,Fixed Wing,Airplane,Boeing
+74Y,B744,Boeing 747-400F,Boeing,Fixed Wing,Airplane,Boeing
+763,B763,Boeing 767-300,Boeing,Fixed Wing,Airplane,Boeing
+773,B773,Boeing 777-300,Boeing,Fixed Wing,Airplane,Boeing
+788,B788,Boeing 787-8,Boeing,Fixed Wing,Airplane,Boeing
+74R,B74R,Boeing 747SR,Boeing,Fixed Wing,Airplane,Boeing
+74L,B74S,Boeing 747SP,Boeing,Fixed Wing,Airplane,Boeing
+753,B753,Boeing 757-300,Boeing,Fixed Wing,Airplane,Boeing
+772,B772,Boeing 777-200 / Boeing 777-200ER,Boeing,Fixed Wing,Airplane,Boeing
+752,B752,Boeing 757-200,Boeing,Fixed Wing,Airplane,Boeing
+CCX,GLEX,Bombardier Global Express / Raytheon Sentinel,Bombardier,Fixed Wing,Airplane,Bombardier
+778,B778,Boeing 777-8,Boeing,Fixed Wing,Airplane,Boeing
+N/A,CL2T,Bombardier 415,Bombardier,Fixed Wing,Airplane,Bombardier
+762,B762,Boeing 767-200,Boeing,Fixed Wing,Airplane,Boeing
+75F,B752,Boeing 757F,Boeing,Fixed Wing,Airplane,Boeing
+H25,H25B,British Aerospace 125 series / Hawker/Raytheon 700/800/800XP/850/900,Hawker Beechcraft Corporation,Fixed Wing,Airplane,Hawker Beechcraft Corporation
+77L,B77L,Boeing 777-200LR,Boeing,Fixed Wing,Airplane,Boeing
+77X,B77L,Boeing 777-200 Freighter,Boeing,Fixed Wing,Airplane,Boeing
+764,B764,Boeing 767-400ER,Boeing,Fixed Wing,Airplane,Boeing
+J41,JS41,British Aerospace Jetstream 41,(undefined),Fixed Wing,Airplane,British Aerospace
+779,B779,Boeing 777-9,Boeing,Fixed Wing,Airplane,Boeing
+781,B78X,Boeing 787-10,Boeing,Fixed Wing,Airplane,Boeing
+CR7,CRJ7,Canadair Regional Jet 700 | Regional Jet 550,Bombardier,Fixed Wing,Airplane,Bombardier
+N/A,CL30,Bombardier BD-100 Challenger 300,Bombardier,Fixed Wing,Airplane,Bombardier
+CCX,GL5T,Bombardier BD-700 Global 5000,Bombardier,Fixed Wing,Airplane,Bombardier
+CN1,C162,Cessna 162,Cessna,Fixed Wing,Airplane,Cessna
+J31,JS31,British Aerospace Jetstream 31,(undefined),Fixed Wing,Airplane,British Aerospace
+H25,H25C,British Aerospace 125-1000 series / Hawker/Raytheon 1000,Hawker Beechcraft Corporation,Fixed Wing,Airplane,Hawker Beechcraft Corporation
+ATP,ATP,British Aerospace ATP,(undefined),Fixed Wing,Airplane,British Aerospace
+CN1,C206,Cessna 206 Stationair,Cessna,Fixed Wing,Airplane,Cessna
+CCJ,CL60,Canadair Challenger,Bombardier,Fixed Wing,Airplane,Bombardier
+CRK,CRJX,Canadair Regional Jet 1000,Bombardier,Fixed Wing,Airplane,Bombardier
+CR9,CRJ9,Canadair Regional Jet 900,Bombardier,Fixed Wing,Airplane,Bombardier
+CS5,CN35,CASA/IPTN CN-235,Indonesian Aerospace,Fixed Wing,Airplane,Indonesian Aerospace
+77W,B77W,Boeing 777-300ER,Boeing,Fixed Wing,Airplane,Boeing
+CR1,CRJ1,Canadair Regional Jet 100,Bombardier,Fixed Wing,Airplane,Bombardier
+CNJ,C25B,Cessna Citation CJ3,Cessna,Fixed Wing,Airplane,Cessna
+CN1,C77R,Cessna 177 Cardinal RG,Cessna,Fixed Wing,Airplane,Cessna
+CN1,C172,Cessna 172,Cessna,Fixed Wing,Airplane,Cessna
+CNJ,C650,"Cessna Citation III, VI, VII",Cessna,Fixed Wing,Airplane,Cessna
+CN1,C208,Cessna 208 Caravan,Cessna,Fixed Wing,Airplane,Cessna
+N/A,C310,Cessna 310,Cessna,Fixed Wing,Airplane,Cessna
+CNJ,C525,Cessna CitationJet,Cessna,Fixed Wing,Airplane,Cessna
+789,B789,Boeing 787-9,Boeing,Fixed Wing,Airplane,Boeing
+CV5,CVLT,"Convair CV-580, Convair CV-600, Convair CV-640",Convair,Fixed Wing,Airplane,Convair
+CNJ,C25C,Cessna Citation CJ4,Cessna,Fixed Wing,Airplane,Cessna
+B11,BA11,British Aerospace (BAC) One Eleven,British Aircraft Corporation,Fixed Wing,Airplane,British Aircraft Corporation
+DF9,F900,Dassault Falcon 900,Dassault Falcon,Fixed Wing,Airplane,Dassault Falcon
+CS2,C212,CASA / IPTN 212 Aviocar,Indonesian Aerospace,Fixed Wing,Airplane,Indonesian Aerospace
+CNJ,C510,Cessna Citation Mustang,Cessna,Fixed Wing,Airplane,Cessna
+J32,JS32,British Aerospace Jetstream 32,(undefined),Fixed Wing,Airplane,British Aerospace
+CNJ,C500,Cessna Citation I,Cessna,Fixed Wing,Airplane,Cessna
+(undefined),SF50,Cirrus SF50 Vision Jet,Cirrus,Fixed Wing,Airplane,Cirrus
+DHC,DHC5,De Havilland Canada DHC-5 Buffalo,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+CR2,CRJ2,Canadair Regional Jet 200,Bombardier,Fixed Wing,Airplane,Bombardier
+CWC,C46,Curtiss C-46 Commando,Curtiss-Wright,Fixed Wing,Airplane,Curtiss-Wright
+DH3,DH8C,De Havilland Canada DHC-8-300 Dash 8 / 8Q,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+N/A,C152,Cessna 152,Cessna,Fixed Wing,Airplane,Cessna
+DHP,DHC2,De Havilland Canada DHC-2 Beaver,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+DHH,HERN,De Havilland DH.114 Heron,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+CN1,C182,Cessna 182 Skylane,Cessna,Fixed Wing,Airplane,Cessna
+DHT,DHC6,De Havilland Canada DHC-6 Twin Otter,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+D1Y,DC10,Douglas DC-10-30 / -40 Freighter,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+CN1,C72R,Cessna 172 Cutlass RG,Cessna,Fixed Wing,Airplane,Cessna
+CNJ,C25A,Cessna Citation CJ2,Cessna,Fixed Wing,Airplane,Cessna
+D8T,DC85,Douglas DC-8-50,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+DH4,DH8D,De Havilland Canada DHC-8-400 Dash 8Q,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+CNJ,C550,Cessna Citation II,Cessna,Fixed Wing,Airplane,Cessna
+N/A,DA42,Diamond DA42,Diamond Aircraft Industries,Fixed Wing,Airplane,Diamond Aircraft Industries
+CNJ,C750,Cessna Citation X,Cessna,Fixed Wing,Airplane,Cessna
+CNJ,C560,Cessna Citation V,Cessna,Fixed Wing,Airplane,Cessna
+D1C,DC10,Douglas DC-10-30 / -40 Passenger,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+CN1,C210,Cessna 210 Centurion,Cessna,Fixed Wing,Airplane,Cessna
+CV4,CVLP,Convair CV-240 & -440,Convair,Fixed Wing,Airplane,Convair
+DF7,FA7X,Dassault Falcon 7X,Dassault Falcon,Fixed Wing,Airplane,Dassault Falcon
+DHC,DHC4,De Havilland Canada DHC-4 Caribou,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+SSC,CONC,Concorde,Airbus,Fixed Wing,Airplane,"Airbus, A?rospatiale, BAE Systems, Sud Aviation, British Aerospace, British Aircraft Corporation"
+DH2,DH8B,De Havilland Canada DHC-8-200 Dash 8 / 8Q,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+CNJ,C56X,Cessna Citation Excel,Cessna,Fixed Wing,Airplane,Cessna
+DHD,DOVE,De Havilland DH.104 Dove,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+D1X,DC10,Douglas DC-10-10 Freighter,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D6F,DC6,Douglas DC-6,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+DF3,FA50,Dassault Falcon 50,Dassault Falcon,Fixed Wing,Airplane,Dassault Falcon
+CNJ,C680,Cessna Citation Sovereign,Cessna,Fixed Wing,Airplane,Cessna
+N/A,C919,COMAC C919,China Commercial Aircraft,Fixed Wing,Airplane,China Commercial Aircraft
+DHL,DHC3,De Havilland Canada DHC-3 Otter,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+DH1,DH8A,De Havilland Canada DHC-8-100 Dash 8 / 8Q,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+D20,F2TH,Dassault Falcon 2000,Dassault Falcon,Fixed Wing,Airplane,Dassault Falcon
+DHR,DH2T,De Havilland Canada DHC-2 Turbo-Beaver,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+(undefined),DH64,De Havilland Comet 4 (deprecated code),De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+D11,DC10,Douglas DC-10-10 / -15 Passenger,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+DH7,DHC7,De Havilland Canada DHC-7 Dash 7,De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+D3F,DC3,Douglas DC-3,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+(undefined),DH62,De Havilland Comet 2 (deprecated code),De Havilland Aircraft of Canada,Fixed Wing,Airplane,De Havilland Aircraft of Canada
+N/A,DA62,Diamond DA62,Diamond Aircraft Industries,Fixed Wing,Airplane,Diamond Aircraft Industries
+D1M,DC10,Douglas DC-10-30 Combi,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D91,DC91,Douglas DC-9-10,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D8Q,DC87,Douglas DC-8-72,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D93,DC93,Douglas DC-9-30,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D95,DC95,Douglas DC-9-50,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D92,DC92,Douglas DC-9-20,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+E7W,E75L,Embraer 175 (long wing),Embraer,Fixed Wing,Airplane,Embraer
+E75,E75S/L,Embraer 175,Embraer,Fixed Wing,Airplane,Embraer
+E90,E190,Embraer 190,Embraer,Fixed Wing,Airplane,Embraer
+295,E295,Embraer E195-E2,Embraer,Fixed Wing,Airplane,Embraer
+290,E290,Embraer E190-E2,Embraer,Fixed Wing,Airplane,Embraer
+EM2,E120,Embraer EMB 120 Brasilia,Embraer,Fixed Wing,Airplane,Embraer
+ER3,E35L,Embraer Legacy 600 / Legacy 650,Embraer,Fixed Wing,Airplane,Embraer
+N/A,E550,Embraer Legacy 500 / Praetor 600,Embraer,Fixed Wing,Airplane,Embraer
+D8L,DC86,Douglas DC-8-62,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+EP1,E50P,Embraer Phenom 100,Embraer,Fixed Wing,Airplane,Embraer
+ER3,E135,Embraer RJ135,Embraer,Fixed Wing,Airplane,Embraer
+ERD,E135,Embraer RJ140,Embraer,Fixed Wing,Airplane,Embraer
+NDH,S65C,Eurocopter (Aerospatiale) SA365C / SA365N Dauphin 2,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+APH,AS32,Eurocopter AS332 Super Puma,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+NDE,AS50,Eurocopter AS350 ??cureuil / AS355 Ecureuil 2 / AS550 Fennec,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+N/A,EC35,Eurocopter EC135 / EC635,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+N/A,EC25,Eurocopter EC225 Super Puma,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+D94,DC94,Douglas DC-9-40,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+N/A,EV97,EV-97 EuroStar / EV-97 Harmony,Evektor-Aerotechnik,Fixed Wing,Airplane,Evektor-Aerotechnik
+FRJ,J328,Fairchild Dornier 328JET,Dornier Luftfahrt,Fixed Wing,Airplane,Dornier Luftfahrt
+D38,D328,Fairchild Dornier Do.328,Dornier Luftfahrt,Fixed Wing,Airplane,Dornier Luftfahrt
+100,F100,Fokker 100,Fokker,Fixed Wing,Airplane,Fokker
+F70,F70,Fokker 70,Fokker,Fixed Wing,Airplane,Fokker
+F21,F28,Fokker F28 Fellowship,Fokker,Fixed Wing,Airplane,Fokker
+E70,E170,Embraer 170,Embraer,Fixed Wing,Airplane,Embraer
+N/A,GA8,GippsAero GA8 Airvan,GippsAero,Fixed Wing,Airplane,GippsAero
+GRG,G21,Grumman G-21 Goose,Grumman,Fixed Wing,Airplane,Grumman
+GRS,G159,Gulfstream Aerospace G-159 Gulfstream I,Gulfstream,Fixed Wing,Airplane,Gulfstream
+GR3,G280,Gulfstream G280,Gulfstream,Fixed Wing,Airplane,Gulfstream
+GJ4,GLF4,Gulfstream IV,Gulfstream,Fixed Wing,Airplane,Gulfstream
+ACP,AC68,Gulfstream/Rockwell (Aero) Commander,Gulfstream,Fixed Wing,Airplane,Gulfstream
+E7W,E75S,Embraer 175 (short wing),Embraer,Fixed Wing,Airplane,Embraer
+ACT,AC90,Gulfstream/Rockwell (Aero) Turbo Commander,Gulfstream,Fixed Wing,Airplane,Gulfstream
+HS7,A748,Hawker Siddeley HS 748,Avro International Aerospace,Fixed Wing,Airplane,Avro International Aerospace
+E95,E195,Embraer 195,Embraer,Fixed Wing,Airplane,Embraer
+I14,I114,Ilyushin IL114,Russian Aircraft Corporation MiG,Fixed Wing,Airplane,Russian Aircraft Corporation MiG
+IL6,IL62,Ilyushin IL62,Ilyushin,Fixed Wing,Airplane,Ilyushin
+N/A,E545,Embraer Legacy 450 / Praetor 500,Embraer,Fixed Wing,Airplane,Embraer
+N/A,A5,ICON A5,ICON,Fixed Wing,Airplane,ICON
+JU5,JU52,Junkers Ju 52/3M,Junkers,Fixed Wing,Airplane,Junkers
+EP3,E55P,Embraer Phenom 300,Embraer,Fixed Wing,Airplane,Embraer
+I93,IL96,Ilyushin IL96,Ilyushin,Fixed Wing,Airplane,Ilyushin
+EMB,E110,Embraer EMB 110 Bandeirante,Embraer,Fixed Wing,Airplane,Embraer
+MBH,B105,Eurocopter (MBB) Bo.105,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+L4T,L410,LET 410,Let Kunovice,Fixed Wing,Airplane,Let Kunovice
+E90,E190,Embraer Lineage 1000,Embraer,Fixed Wing,Airplane,Embraer
+N/A,EC45,Eurocopter EC145,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+L49,CONI,Lockheed L-1049 Super Constellation,Lockheed Corporation,Fixed Wing,Airplane,Lockheed Corporation
+M11,MD11,McDonnell Douglas MD-11,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+ER4,E145,Embraer RJ145,Embraer,Fixed Wing,Airplane,Embraer
+M83,MD83,McDonnell Douglas MD-83,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+D28,D228,Fairchild Dornier Do.228,Dornier Luftfahrt,Fixed Wing,Airplane,Dornier Luftfahrt
+N/A,EC20,Eurocopter EC120 Colibri / Harbin HC120,Eurocopter,Rotary Wing,Helicopter,Eurocopter
+F27,F27,Fokker F27 Friendship,Fokker,Fixed Wing,Airplane,Fokker
+ILW,IL86,Ilyushin IL86,Ilyushin,Fixed Wing,Airplane,Ilyushin
+N/A,EVSS,Evektor SportStar,Evektor-Aerotechnik,Fixed Wing,Airplane,Evektor-Aerotechnik
+GRM,G73T,Grumman G-73 Turbo Mallard,Grumman,Fixed Wing,Airplane,Grumman
+F50,F50,Fokker 50,Fokker,Fixed Wing,Airplane,Fokker
+GJ5,GLF5,Gulfstream V,Gulfstream,Fixed Wing,Airplane,Gulfstream
+M1F,MD11,McDonnell Douglas MD-11F,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+CD2,NOMA,Government Aircraft Factories N22B / N24A Nomad,Government Aircraft Factories,Fixed Wing,Airplane,Government Aircraft Factories
+N/A,HDJT,Honda HA-420,Honda,Fixed Wing,Airplane,Honda
+GJ6,GLF6,Gulfstream G650,Gulfstream,Fixed Wing,Airplane,Gulfstream
+IL7,IL76,Ilyushin IL76,Ilyushin,Fixed Wing,Airplane,Ilyushin
+N/A,MI24,Mil Mi-24 / Mi-25 / Mi-35,Mil Moscow Helicopter Plant,Rotary Wing,Helicopter,Mil Moscow Helicopter Plant
+YN2,Y12,Harbin Yunshuji Y12,Harbin Aircraft Industry Group,Fixed Wing,Airplane,Harbin Aircraft Industry Group
+LRJ,LJ35,Learjet 35 / 36 / C-21A,Learjet,Fixed Wing,Airplane,Learjet
+N/A,P180,Piaggio P.180 Avanti,Piaggio Aero,Fixed Wing,Airplane,Piaggio Aero
+IL8,IL18,Ilyushin IL18,Ilyushin,Fixed Wing,Airplane,Ilyushin
+N/A,P28B,Piper PA-28 (above 200??hp),Piper Aircraft,Fixed Wing,Airplane,Piper Aircraft
+M88,MD88,McDonnell Douglas MD-88,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+WWP,WW24,Israel Aircraft Industries 1124 Westwind,Israel Aircraft Industries,Fixed Wing,Airplane,Israel Aircraft Industries
+LOH,C130,Lockheed L-182 / 282 / 382 (L-100) Hercules,Lockheed Corporation,Fixed Wing,Airplane,Lockheed Corporation
+LRJ,LJ60,Learjet 60,Learjet,Fixed Wing,Airplane,Learjet
+MU2,MU2,Mitsubishi Mu-2,Mitsubishi,Fixed Wing,Airplane,Mitsubishi
+N/A,PISI,Pipistrel Sinus,Pipistrel,Fixed Wing,Airplane,Pipistrel
+L10,L101,Lockheed L-1011 Tristar,Lockheed Corporation,Fixed Wing,Airplane,Lockheed Corporation
+BNI,BN2P,Pilatus Britten-Norman BN-2A/B Islander,Britten-Norman,Fixed Wing,Airplane,Britten-Norman
+M1M,MD11,McDonnell Douglas MD-11C,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+LOE,L188,Lockheed L-188 Electra,Lockheed Corporation,Fixed Wing,Airplane,Lockheed Corporation
+PA2,PA31,Piper PA-31 Navajo,Piper Aircraft,Fixed Wing,Airplane,Piper Aircraft
+M81,MD81,McDonnell Douglas MD-81,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+M87,MD87,McDonnell Douglas MD-87,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+MIH,MI8,MIL Mi-8 / Mi-17 / Mi-171 / Mil-172,Mil Moscow Helicopter Plant,Rotary Wing,Helicopter,Mil Moscow Helicopter Plant
+BNT,TRIS,Pilatus Britten-Norman BN-2A Mk III Trislander,Britten-Norman,Fixed Wing,Airplane,Britten-Norman
+M90,MD90,McDonnell Douglas MD-90,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+M82,MD82,McDonnell Douglas MD-82,McDonnell Douglas,Fixed Wing,Airplane,McDonnell Douglas
+N/A,P28A,Piper PA-28 (up to 180??hp),Piper Aircraft,Fixed Wing,Airplane,Piper Aircraft
+YS1,YS11,NAMC YS-11,Nihon Aircraft Manufacturing Corporation,Fixed Wing,Airplane,Nihon Aircraft Manufacturing Corporation
+PL2,PC12,Pilatus PC-12,Pilatus Aircraft,Fixed Wing,Airplane,Pilatus Aircraft
+N/A,PA44,Piper PA-44 Seminole,Piper Aircraft,Fixed Wing,Airplane,Piper Aircraft
+MD9,EXPL,MD Helicopters MD900 Explorer,MD Helicopters,Rotary Wing,Helicopter,MD Helicopters
+PN6,P68,Partenavia P.68,Vulcanair,Fixed Wing,Airplane,Vulcanair
+PL6,PC6T,Pilatus PC-6 Turbo Porter,Pilatus Aircraft,Fixed Wing,Airplane,Pilatus Aircraft
+PAG,PA46,Piper PA-46,Piper Aircraft,Fixed Wing,Airplane,Piper Aircraft
+ATL,ATL,Robin ATL,Avions Robin,Fixed Wing,Airplane,Avions Robin
+CNT,F406,Reims-Cessna F406 Caravan II,Cessna,Fixed Wing,Airplane,Cessna
+N/A,PIVI,Pipistrel Virus,Pipistrel,Fixed Wing,Airplane,Pipistrel
+N/A,PITA,Pipistrel Taurus,Pipistrel,Fixed Wing,Airplane,Pipistrel
+N/A,R200,"Robin HR200/R2000 series, Alpha160A",Avions Robin,Fixed Wing,Airplane,Avions Robin
+SF3,SF34,Saab SF340A/B,Saab,Fixed Wing,Airplane,Saab
+SHB,BELF,Shorts SC-5 Belfast,Short Brothers,Fixed Wing,Airplane,Short Brothers
+SHS,SC7,Shorts SC-7 Skyvan,Short Brothers,Fixed Wing,Airplane,Short Brothers
+S58,S58T,Sikorsky S-58T,Sikorsky,Rotary Wing,Helicopter,Sikorsky
+S61,S61,Sikorsky S-61,Sikorsky,Rotary Wing,Helicopter,Sikorsky
+S76,S76,Sikorsky S-76,Sikorsky,Rotary Wing,Helicopter,Sikorsky
+SU9,SU95,Sukhoi Superjet 100-95,Sukhoi,Fixed Wing,Airplane,Sukhoi
+N/A,TRF1,Team Rocket F1,Team Rocket,Fixed Wing,Airplane,Team Rocket
+N/A,SIRA,Tecnam P2002 Sierra,Tecnam,Fixed Wing,Airplane,Tecnam
+N/A,TWEN,Tecnam P2010,Tecnam,Fixed Wing,Airplane,Tecnam
+TU3,T134,Tupolev Tu-134,Tupolev,Fixed Wing,Airplane,Tupolev
+N/A,ECHO,Tecnam P92 Echo / P92 Eaglet / P92 SeaSky,Tecnam,Fixed Wing,Airplane,Tecnam
+T12,P212,Tecnam P2012 Traveller,Tecnam,Fixed Wing,Airplane,Tecnam
+YK2,YK42,Yakovlev Yak-42,Yakovlev,Fixed Wing,Airplane,Yakovlev
+S20,SB20,Saab 2000,Saab,Fixed Wing,Airplane,Saab
+SH3,SH33,Shorts SD.330,Short Brothers,Fixed Wing,Airplane,Short Brothers
+TU5,T154,Tupolev Tu-154,Tupolev,Fixed Wing,Airplane,Tupolev
+N/A,T144,Tupolev Tu-144,Tupolev,Fixed Wing,Airplane,Tupolev
+S92,S92,Sikorsky S-92,Sikorsky,Rotary Wing,Helicopter,Sikorsky
+SH6,SH36,Shorts SD.360,Short Brothers,Fixed Wing,Airplane,Short Brothers
+N/A,P06T,Tecnam P2006T,Tecnam,Fixed Wing,Airplane,Tecnam
+N/A,TB20,Socata TB-20 Trinidad,Socata,Fixed Wing,Airplane,Socata
+N/A,GOLF,Tecnam P96,Tecnam,Fixed Wing,Airplane,Tecnam
+N/A,P208,Tecnam P2008,Tecnam,Fixed Wing,Airplane,Tecnam
+T20,T204,Tupolev Tu-204 / Tu-214,Tupolev,Fixed Wing,Airplane,Tupolev
+N/A,TL20,TL Ultralight TL-96 Star / TL-2000 Sting,TL Ultralight,Fixed Wing,Airplane,TL Ultralight
+YK4,YK40,Yakovlev Yak-40,Yakovlev,Fixed Wing,Airplane,Yakovlev
