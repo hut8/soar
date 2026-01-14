@@ -468,13 +468,7 @@ pre-commit run --all-files
 
 ### Running Tests
 
-Integration tests use isolated per-test databases for fast, parallel execution.
-
-**First time setup:**
-```bash
-# Create the test template database (one-time setup)
-./scripts/setup-test-template.sh
-```
+Integration tests use isolated per-test databases for fast, parallel execution. No setup required!
 
 **Running tests:**
 ```bash
@@ -486,12 +480,6 @@ cargo nextest run --test flight_detection_test
 
 # Run with output
 cargo nextest run --nocapture
-```
-
-**After adding migrations:**
-```bash
-# Recreate template with latest schema
-./scripts/setup-test-template.sh
 ```
 
 For detailed information about the test infrastructure and writing new tests, see [`tests/README.md`](tests/README.md).

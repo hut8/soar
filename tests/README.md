@@ -4,17 +4,9 @@ This directory contains integration tests for the SOAR project. Tests use **isol
 
 ## Quick Start
 
-### First Time Setup
-
-Create the test template database (one-time setup):
-
-```bash
-./scripts/setup-test-template.sh
-```
-
-This creates a `soar_test_template` database with all migrations applied. Each test will create its own database from this template.
-
 ### Running Tests
+
+No setup required! Each test automatically creates its own database with migrations.
 
 ```bash
 # Run all integration tests in parallel
@@ -35,18 +27,17 @@ Tests run in parallel by default, significantly faster than the old serial execu
 
 Each integration test gets its own isolated PostgreSQL database:
 
-1. **Template Database**: `soar_test_template` contains all migrations
-2. **Test Execution**: Each test creates `soar_test_<random_id>` from template
-3. **Automatic Cleanup**: Database is dropped when test completes (even on panic)
+1. **Test Execution**: Each test creates `soar_test_<random_id>` and runs migrations
+2. **Migration Execution**: All migrations run automatically on the new database
+3. **PostGIS Setup**: PostGIS extension is created for spatial queries
+4. **Automatic Cleanup**: Database is dropped when test completes (even on panic)
 
 ### Architecture
 
 ```
-soar_test_template (created once)
-    ↓ (template copy, ~100ms)
-soar_test_abc123 → Test 1 runs
-soar_test_def456 → Test 2 runs (parallel)
-soar_test_xyz789 → Test 3 runs (parallel)
+Test 1 → CREATE DATABASE soar_test_abc123 → RUN MIGRATIONS → Test runs
+Test 2 → CREATE DATABASE soar_test_def456 → RUN MIGRATIONS → Test runs (parallel)
+Test 3 → CREATE DATABASE soar_test_xyz789 → RUN MIGRATIONS → Test runs (parallel)
     ↓ (automatic cleanup via Drop trait)
 All test databases dropped
 ```
@@ -82,31 +73,14 @@ async fn test_my_feature() {
 
 - **No manual cleanup needed**: Database is automatically dropped
 - **No `#[serial]` needed**: Tests run in parallel by default
-- **Fast database creation**: Template copy is ~100ms (vs. seconds for migrations)
+- **Automatic migrations**: All migrations run on each test database
 - **Complete isolation**: No test can interfere with another
 
 ## Troubleshooting
 
-### Error: Template database not found
-
-```
-Error: Failed to create test database from template.
-
-The template database 'soar_test_template' may not exist.
-Run: ./scripts/setup-test-template.sh
-```
-
-**Solution**: Run `./scripts/setup-test-template.sh` to create the template database.
-
 ### After Adding Migrations
 
-When you add new database migrations, recreate the template:
-
-```bash
-./scripts/setup-test-template.sh
-```
-
-This updates the template with the latest schema changes.
+No action required! Migrations automatically run when tests create their databases.
 
 ### Leaked Databases
 
@@ -121,7 +95,7 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-    FOR r IN SELECT datname FROM pg_database WHERE datname LIKE 'soar_test_%' AND datname != 'soar_test_template'
+    FOR r IN SELECT datname FROM pg_database WHERE datname LIKE 'soar_test_%'
     LOOP
         EXECUTE 'DROP DATABASE IF EXISTS ' || quote_ident(r.datname) || ' WITH (FORCE)';
     END LOOP;
@@ -173,10 +147,10 @@ Total time: 60-90 seconds
 
 ```
 Full parallelism enabled
-Total time: 15-30 seconds (3-4x faster)
+Total time: 20-35 seconds (2-3x faster)
 ```
 
-The speedup scales with the number of CPU cores available.
+The speedup scales with the number of CPU cores available. Note that tests are slightly slower than with template approach since migrations run for each test, but this is offset by improved reliability.
 
 ## Implementation Details
 
@@ -196,9 +170,7 @@ Key features:
 The CI pipeline (`.github/workflows/ci.yml`) runs:
 
 1. PostgreSQL service container starts
-2. Migrations run on `soar_test` database
-3. **Template setup**: `./scripts/setup-test-template.sh` creates template
-4. Tests run in parallel using template
+2. Tests run in parallel, each creating its own database with migrations
 
 ## Environment Variables
 
@@ -211,17 +183,7 @@ The test infrastructure automatically modifies the database URL to create isolat
 
 ### Regular Maintenance
 
-No regular maintenance needed! The test infrastructure is self-cleaning.
-
-### When to Recreate Template
-
-Recreate the template database when:
-
-- ✅ You add new migrations
-- ✅ You modify existing migrations (dev only)
-- ✅ Schema changes are made
-
-Just run: `./scripts/setup-test-template.sh`
+No regular maintenance needed! The test infrastructure is self-cleaning and automatically runs migrations.
 
 ### Monitoring for Leaks
 
@@ -233,16 +195,14 @@ psql -U postgres -d postgres -c "SELECT datname FROM pg_database WHERE datname L
 
 Expected output:
 ```
-       datname
-----------------------
- soar_test_template
-(1 row)
+ datname
+---------
+(0 rows)
 ```
 
-If you see more than one row, you have leaked databases that can be cleaned up.
+If you see any rows, you have leaked databases that can be cleaned up using the SQL cleanup script above.
 
 ## References
 
-- **PostgreSQL Template Databases**: https://www.postgresql.org/docs/current/manage-ag-templatedbs.html
 - **Diesel ORM**: https://diesel.rs/
 - **Nextest**: https://nexte.st/
