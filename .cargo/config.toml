@@ -4,7 +4,8 @@
 # Incremental compilation (enabled by default for dev, but explicit here)
 incremental = true
 # Enable tokio_unstable for tokio-console support
-rustflags = ["--cfg", "tokio_unstable"]
+# Enable frame pointers for profiling (pprof stack unwinding)
+rustflags = ["--cfg", "tokio_unstable", "-C", "force-frame-pointers=yes"]
 
 [target.x86_64-unknown-linux-gnu]
 # Using default linker (ld)
@@ -14,6 +15,7 @@ rustflags = ["--cfg", "tokio_unstable"]
 # Static linking configuration for musl
 rustflags = [
     "--cfg", "tokio_unstable",
+    "-C", "force-frame-pointers=yes",
     "-C", "target-feature=+crt-static",
     "-C", "link-arg=-static",
 ]
@@ -22,6 +24,7 @@ rustflags = [
 # Static linking configuration for musl (ARM64)
 rustflags = [
     "--cfg", "tokio_unstable",
+    "-C", "force-frame-pointers=yes",
     "-C", "target-feature=+crt-static",
     "-C", "link-arg=-static",
 ]
