@@ -24,8 +24,28 @@ otelcol.receiver.otlp "ingest" {
 // Batch for efficiency
 otelcol.processor.batch "pipeline" {
   output {
-    logs   = [otelcol.processor.attributes.loki_labels.input]
+    logs   = [otelcol.processor.filter.log_level.input]
     traces = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+// Filter logs based on environment and severity:
+// - Production (deployment.environment = "production"): INFO and higher only
+// - Staging/Development: DEBUG and higher (all logs)
+// This reduces noise and cost for production while keeping detailed logs for debugging in staging
+otelcol.processor.filter "log_level" {
+  error_mode = "ignore"
+
+  logs {
+    // Drop DEBUG logs from production services
+    // OTTL severity_number: TRACE=1-4, DEBUG=5-8, INFO=9-12, WARN=13-16, ERROR=17-20, FATAL=21-24
+    log_record = [
+      "severity_number < 9 and resource.attributes[\"deployment.environment\"] == \"production\"",
+    ]
+  }
+
+  output {
+    logs = [otelcol.processor.attributes.loki_labels.input]
   }
 }
 
@@ -94,11 +114,12 @@ otelcol.exporter.otlphttp "tempo" {
 // - soar-web:    No pprof endpoints (metrics only at /data/metrics on main port)
 
 // Scrape production soar-run service (port 9091)
+// Note: service_name is required for Pyroscope to identify the service
 discovery.relabel "soar_run" {
   targets = [{
     __address__ = "localhost:9091",
-    service     = "soar-run",
-    environment = "production",
+    service_name = "soar-run",
+    environment  = "production",
   }]
 
   rule {
@@ -111,8 +132,8 @@ discovery.relabel "soar_run" {
 discovery.relabel "soar_ingest" {
   targets = [{
     __address__ = "localhost:9095",
-    service     = "soar-ingest",
-    environment = "production",
+    service_name = "soar-ingest",
+    environment  = "production",
   }]
 
   rule {
@@ -125,8 +146,8 @@ discovery.relabel "soar_ingest" {
 discovery.relabel "soar_run_staging" {
   targets = [{
     __address__ = "localhost:9192",
-    service     = "soar-run-staging",
-    environment = "staging",
+    service_name = "soar-run-staging",
+    environment  = "staging",
   }]
 
   rule {
@@ -139,8 +160,8 @@ discovery.relabel "soar_run_staging" {
 discovery.relabel "soar_ingest_staging" {
   targets = [{
     __address__ = "localhost:9197",
-    service     = "soar-ingest-staging",
-    environment = "staging",
+    service_name = "soar-ingest-staging",
+    environment  = "staging",
   }]
 
   rule {
@@ -152,6 +173,10 @@ discovery.relabel "soar_ingest_staging" {
 // CPU profiling scraper - scrapes /debug/pprof/profile
 // SOAR services return pprof protobuf format with configurable duration via ?seconds=N
 // Default: 10 seconds profiling, so we need scrape timeout > 10s
+//
+// Note: SOAR is a Rust application using the `pprof` crate, which only supports
+// CPU profiling. Go-specific profile types (memory, goroutine, mutex, block)
+// are explicitly disabled to prevent 404 errors.
 pyroscope.scrape "soar_cpu" {
   targets = concat(
     discovery.relabel.soar_run.output,
@@ -167,10 +192,25 @@ pyroscope.scrape "soar_cpu" {
   scrape_timeout  = "15s"
 
   profiling_config {
+    // CPU profiling - the only profile type supported by Rust pprof crate
     profile.process_cpu {
       enabled = true
       path    = "/debug/pprof/profile"
       delta   = false
+    }
+
+    // Disable Go-specific profile types that SOAR doesn't support
+    profile.memory {
+      enabled = false
+    }
+    profile.block {
+      enabled = false
+    }
+    profile.goroutine {
+      enabled = false
+    }
+    profile.mutex {
+      enabled = false
     }
   }
 }
