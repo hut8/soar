@@ -100,7 +100,9 @@ jobs:
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
           # CRITICAL: tokio_unstable is required for tokio-console support
           # Without this flag, --enable-tokio-console will cause exit code 101 with no output
-          RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static"
+          # CRITICAL: force-frame-pointers=yes is required for Pyroscope profiling
+          # Without frame pointers, flame graphs show unhelpful "[unknown]" frames
+          RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static -C force-frame-pointers=yes"
         run: cross build --release --target aarch64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
