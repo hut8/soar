@@ -1,15 +1,15 @@
 //! Common test utilities for database-backed integration tests
 //!
 //! This module provides helpers for creating isolated test databases
-//! using PostgreSQL templates for fast, parallel test execution.
+//! for parallel test execution.
 //!
 //! # Overview
 //!
-//! The `TestDatabase` struct creates a unique PostgreSQL database for each test
-//! from the `soar_test_template` template database. This provides complete isolation
-//! between tests, allowing them to run in parallel without interference.
+//! The `TestDatabase` struct creates a unique PostgreSQL database for each test.
+//! This provides complete isolation between tests, allowing them to run in parallel
+//! without interference.
 //!
-//! Migrations are automatically run on the template database before the first test,
+//! Each test database is created fresh and migrations are run automatically,
 //! ensuring the schema is always up-to-date.
 //!
 //! # Usage
@@ -33,137 +33,25 @@ use anyhow::{Context, Result};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use std::sync::Once;
-use std::thread;
-use std::time::Duration;
 
 // Embed migrations at compile time
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
-// Ensure migrations only run once per test session
-static MIGRATIONS_RUN: Once = Once::new();
-
-// Delay to ensure PostgreSQL fully processes connection cleanup before template operations
-const CONNECTION_CLEANUP_DELAY_MS: u64 = 50;
-
-// Delay to ensure template database metadata update is fully processed
-const TEMPLATE_MARKING_DELAY_MS: u64 = 20;
-
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-/// Ensures the template database exists and has the latest migrations applied.
-/// This is called automatically by `TestDatabase::new()` and only runs once per test session.
-fn ensure_template_migrated() {
-    MIGRATIONS_RUN.call_once(|| {
-        dotenvy::dotenv().ok();
-
-        let base_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
-
-        // Connect to postgres database for admin operations
-        let admin_url = base_url
-            .replace("/soar_test", "/postgres")
-            .replace("/soar_test_template", "/postgres");
-
-        let template_url = base_url.replace("/soar_test", "/soar_test_template");
-
-        // Create template database if it doesn't exist
-        if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
-            // Check if template exists
-            let exists: Result<bool, _> = diesel::sql_query(
-                "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'soar_test_template')",
-            )
-            .get_result::<TemplateExists>(&mut admin_conn)
-            .map(|r| r.exists);
-
-            if exists != Ok(true) {
-                // Create template database
-                let _ = diesel::sql_query("CREATE DATABASE soar_test_template")
-                    .execute(&mut admin_conn);
-
-                // Create PostGIS extension
-                if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
-                    let _ = diesel::sql_query("CREATE EXTENSION IF NOT EXISTS postgis")
-                        .execute(&mut template_conn);
-                    drop(template_conn);
-                }
-            }
-
-            // Unmark as template temporarily to allow connections for migrations
-            let _ = diesel::sql_query(
-                "UPDATE pg_database SET datistemplate = FALSE, datallowconn = TRUE \
-                 WHERE datname = 'soar_test_template'",
-            )
-            .execute(&mut admin_conn);
-
-            drop(admin_conn);
-        }
-
-        // Run pending migrations on template
-        if let Ok(mut template_conn) = PgConnection::establish(&template_url) {
-            match template_conn.run_pending_migrations(MIGRATIONS) {
-                Ok(applied) => {
-                    if !applied.is_empty() {
-                        eprintln!("Applied {} migration(s) to test template", applied.len());
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: Failed to run migrations on template: {}", e);
-                }
-            }
-
-            drop(template_conn);
-        }
-
-        // Small delay to ensure connections are fully cleaned up by PostgreSQL
-        // This prevents "source database is being accessed by other users" errors
-        thread::sleep(Duration::from_millis(CONNECTION_CLEANUP_DELAY_MS));
-
-        // Re-mark as template
-        // Note: We only set datistemplate=TRUE (not datallowconn=FALSE) because PostgreSQL
-        // needs to connect to the template database when creating new databases from it.
-        // Setting datistemplate=TRUE is sufficient to prevent accidental user connections.
-        if let Ok(mut admin_conn) = PgConnection::establish(&admin_url) {
-            let _ = diesel::sql_query(
-                "UPDATE pg_database SET datistemplate = TRUE \
-                 WHERE datname = 'soar_test_template'",
-            )
-            .execute(&mut admin_conn);
-
-            drop(admin_conn);
-        }
-
-        // Final delay to ensure template marking is fully processed
-        thread::sleep(Duration::from_millis(TEMPLATE_MARKING_DELAY_MS));
-    });
-}
-
-#[derive(QueryableByName)]
-struct TemplateExists {
-    #[diesel(sql_type = diesel::sql_types::Bool)]
-    exists: bool,
-}
-
-/// Manages an isolated test database created from a template.
+/// Manages an isolated test database.
 ///
-/// Each `TestDatabase` instance creates a unique database from the
-/// `soar_test_template` template database. The database is automatically
-/// dropped when this struct is dropped, ensuring cleanup even on test panic.
-///
-/// # Template Database
-///
-/// The template database must exist and be initialized with migrations before
-/// running tests. Create it by running:
-///
-/// ```bash
-/// ./scripts/setup-test-template.sh
-/// ```
+/// Each `TestDatabase` instance creates a unique database and runs all migrations.
+/// The database is automatically dropped when this struct is dropped, ensuring
+/// cleanup even on test panic.
 ///
 /// # Database Lifecycle
 ///
-/// 1. `new()` creates database: `CREATE DATABASE soar_test_<random> TEMPLATE soar_test_template`
-/// 2. Test runs with isolated database
-/// 3. `Drop` executes: `DROP DATABASE soar_test_<random> WITH (FORCE)`
+/// 1. `new()` creates database: `CREATE DATABASE soar_test_<random>`
+/// 2. Creates PostGIS extension
+/// 3. Runs all migrations
+/// 4. Test runs with isolated database
+/// 5. `Drop` executes: `DROP DATABASE soar_test_<random> WITH (FORCE)`
 ///
 /// # PostgreSQL Version
 ///
@@ -178,13 +66,14 @@ pub struct TestDatabase {
 }
 
 impl TestDatabase {
-    /// Creates a new isolated test database from the template.
+    /// Creates a new isolated test database.
     ///
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Template database `soar_test_template` doesn't exist
     /// - Database creation fails (permissions, disk space, etc.)
+    /// - PostGIS extension creation fails
+    /// - Migrations fail to run
     /// - Connection to new database fails
     ///
     /// # Example
@@ -194,9 +83,6 @@ impl TestDatabase {
     /// let pool = test_db.pool();
     /// ```
     pub async fn new() -> Result<Self> {
-        // Ensure template database has latest migrations (runs once per test session)
-        ensure_template_migrated();
-
         // Load environment variables
         dotenvy::dotenv().ok();
 
@@ -207,13 +93,23 @@ impl TestDatabase {
         // Parse the URL to extract components
         let (admin_url, db_name) = Self::generate_database_info(&base_url)?;
 
-        // Create the database from template (blocking operation)
+        // Create the database (blocking operation)
         Self::create_database(&admin_url, &db_name)
             .await
-            .context("Failed to create test database from template")?;
+            .context("Failed to create test database")?;
 
         // Build connection URL for the new database
         let test_db_url = Self::build_database_url(&base_url, &db_name);
+
+        // Create PostGIS extension
+        Self::create_postgis_extension(&test_db_url)
+            .await
+            .context("Failed to create PostGIS extension")?;
+
+        // Run migrations on the new database
+        Self::run_migrations(&test_db_url)
+            .await
+            .context("Failed to run migrations")?;
 
         // Create connection pool for the test database
         let manager = ConnectionManager::<PgConnection>::new(&test_db_url);
@@ -270,82 +166,71 @@ impl TestDatabase {
             .replace("/soar_test_template", &format!("/{}", db_name))
     }
 
-    /// Creates a new database from the template.
-    ///
-    /// Uses a file-based lock to ensure only one database is created at a time.
-    /// This prevents "source database is being accessed by other users" errors
-    /// when multiple tests try to clone from the template simultaneously.
+    /// Creates a new database.
     async fn create_database(admin_url: &str, db_name: &str) -> Result<()> {
         use diesel::Connection;
-        use fs2::FileExt;
-        use std::fs::OpenOptions;
 
         let admin_url = admin_url.to_string();
         let db_name = db_name.to_string();
 
         // Run blocking database creation in a blocking task
         tokio::task::spawn_blocking(move || {
-            // Acquire file-based lock to serialize template cloning
-            let lock_path = std::env::temp_dir().join("soar_test_template.lock");
-            let lock_file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(false)
-                .open(&lock_path)
-                .context("Failed to create lock file for template database cloning")?;
-
-            // Acquire exclusive lock (blocks until available)
-            lock_file
-                .lock_exclusive()
-                .context("Failed to acquire lock for template database cloning")?;
-
             // Connect to postgres database for admin operations
             let mut conn = PgConnection::establish(&admin_url).context(
                 "Failed to connect to PostgreSQL for database creation. Is PostgreSQL running?",
             )?;
 
-            // Terminate all connections to the template database before cloning
-            // This prevents "source database is being accessed by other users" errors
-            let terminate_sql = "
-                SELECT pg_terminate_backend(pg_stat_activity.pid)
-                FROM pg_stat_activity
-                WHERE pg_stat_activity.datname = 'soar_test_template'
-                  AND pid <> pg_backend_pid()
-            ";
-
-            diesel::sql_query(terminate_sql)
-                .execute(&mut conn)
-                .context("Failed to terminate connections to template database")?;
-
-            // Create database from template
+            // Create database
             // Note: db_name is randomly generated alphanumeric, safe from SQL injection
-            let create_sql = format!(
-                "CREATE DATABASE \"{}\" TEMPLATE soar_test_template",
-                db_name
-            );
+            let create_sql = format!("CREATE DATABASE \"{}\"", db_name);
 
-            let result = diesel::sql_query(&create_sql)
+            diesel::sql_query(&create_sql)
                 .execute(&mut conn)
-                .with_context(|| {
-                    format!(
-                        "Failed to create database '{}' from template.\n\
-                         \n\
-                         The template database 'soar_test_template' may not exist.\n\
-                         Run: ./scripts/setup-test-template.sh\n\
-                         \n\
-                         This creates the template database with all migrations applied.",
-                        db_name
-                    )
-                });
+                .with_context(|| format!("Failed to create database '{}'", db_name))?;
 
-            // Lock is automatically released when lock_file is dropped
-            drop(lock_file);
-
-            result?;
             Ok::<(), anyhow::Error>(())
         })
         .await
         .context("Database creation task panicked")?
+    }
+
+    /// Creates the PostGIS extension in the test database.
+    async fn create_postgis_extension(db_url: &str) -> Result<()> {
+        use diesel::Connection;
+
+        let db_url = db_url.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = PgConnection::establish(&db_url)
+                .context("Failed to connect to test database for PostGIS setup")?;
+
+            diesel::sql_query("CREATE EXTENSION IF NOT EXISTS postgis")
+                .execute(&mut conn)
+                .context("Failed to create PostGIS extension")?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        .context("PostGIS extension creation task panicked")?
+    }
+
+    /// Runs all pending migrations on the test database.
+    async fn run_migrations(db_url: &str) -> Result<()> {
+        use diesel::Connection;
+
+        let db_url = db_url.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = PgConnection::establish(&db_url)
+                .context("Failed to connect to test database for migrations")?;
+
+            conn.run_pending_migrations(MIGRATIONS)
+                .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        .context("Migration task panicked")?
     }
 
     /// Drops the test database.
