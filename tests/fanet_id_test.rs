@@ -62,8 +62,7 @@ mod fanet_id_tests {
     #[test]
     fn test_standard_id_format() {
         // Standard 8-character format (idXXYYYYYY) for comparison
-        let test_message =
-            "FLRDDA5BA>APRS,qAS,LFNM:/074548h4415.61N/00531.90E'342/049/A=001486 !W12! id06DDA5BA -019fpm +0.0rot";
+        let test_message = "FLRDDA5BA>APRS,qAS,LFNM:/074548h4415.61N/00531.90E'342/049/A=001486 !W12! id06DDA5BA -019fpm +0.0rot";
 
         let packet = ogn_parser::parse(test_message).expect("Failed to parse standard OGN message");
 
@@ -80,7 +79,10 @@ mod fanet_id_tests {
             assert_eq!(id.address_type, 2, "Address type should be 2 (FLARM)");
 
             // Standard format doesn't have reserved field
-            assert_eq!(id.reserved, None, "Reserved should be None for standard format");
+            assert_eq!(
+                id.reserved, None,
+                "Reserved should be None for standard format"
+            );
         } else {
             panic!("Expected Position data in APRS packet");
         }
@@ -90,10 +92,10 @@ mod fanet_id_tests {
     fn test_address_fits_in_database() {
         // Verify that typical FANET addresses fit in the database integer column (i32)
         let addresses = vec![
-            0x1142BB,   // From FANET example: 1,131,195
-            0xDDA5BA,   // From FLARM example: 14,525,882
-            0xFFFFFF,   // Max 24-bit address: 16,777,215
-            0x500000,   // Mid-range address: 5,242,880
+            0x1142BB, // From FANET example: 1,131,195
+            0xDDA5BA, // From FLARM example: 14,525,882
+            0xFFFFFF, // Max 24-bit address: 16,777,215
+            0x500000, // Mid-range address: 5,242,880
         ];
 
         for addr in addresses {
