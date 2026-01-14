@@ -151,13 +151,22 @@ impl AircraftState {
         self.recent_fixes.iter().rev().take(5).all(|f| !f.is_active)
     }
 
-    /// Check if last N fixes are all inactive (for takeoff detection)
+    /// Check if the N fixes BEFORE the current one are all inactive (for takeoff detection)
+    /// This skips the most recent fix (which is the active fix that triggered flight creation)
+    /// and checks if the n fixes before it were all inactive (indicating aircraft was on ground)
     pub fn last_n_inactive(&self, n: usize) -> bool {
-        if self.recent_fixes.len() < n {
+        // Need n+1 fixes: the current one (to skip) plus n previous ones to check
+        if self.recent_fixes.len() < n + 1 {
             return false;
         }
 
-        self.recent_fixes.iter().rev().take(n).all(|f| !f.is_active)
+        // Skip the most recent fix and check the n fixes before it
+        self.recent_fixes
+            .iter()
+            .rev()
+            .skip(1)
+            .take(n)
+            .all(|f| !f.is_active)
     }
 
     /// Calculate climb rate from recent fixes
@@ -259,5 +268,165 @@ impl AircraftState {
     /// Get the last known position (lat, lng)
     pub fn last_position(&self) -> Option<(f64, f64)> {
         self.recent_fixes.back().map(|f| (f.lat, f.lng))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn create_compact_fix(is_active: bool, seconds_offset: i64) -> CompactFix {
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        CompactFix {
+            timestamp: base_time + chrono::Duration::seconds(seconds_offset),
+            lat: 42.0,
+            lng: -71.0,
+            altitude_msl_ft: Some(1000),
+            altitude_agl_ft: Some(500),
+            ground_speed_knots: if is_active { Some(50.0) } else { Some(5.0) },
+            is_active,
+        }
+    }
+
+    fn create_state_with_fixes(fixes: Vec<bool>) -> AircraftState {
+        let mut recent_fixes = VecDeque::with_capacity(10);
+        for (i, is_active) in fixes.into_iter().enumerate() {
+            recent_fixes.push_back(create_compact_fix(is_active, i as i64 * 30));
+        }
+        AircraftState {
+            recent_fixes,
+            current_flight_id: None,
+            current_callsign: None,
+            last_timed_out_flight_id: None,
+            last_timed_out_callsign: None,
+            last_timed_out_at: None,
+            last_update_time: Utc::now(),
+            towing_info: None,
+            takeoff_runway_inferred: None,
+        }
+    }
+
+    #[test]
+    fn test_last_n_inactive_skips_most_recent_fix() {
+        // Scenario: Aircraft was on ground (3 inactive fixes), then takes off (1 active fix)
+        // The current active fix should be skipped, and we should detect takeoff from the 3 prior fixes
+        let state = create_state_with_fixes(vec![false, false, false, true]);
+        //                                        ^--- these 3 should be checked (all inactive)
+        //                                                                   ^--- this should be skipped
+
+        // Should detect as takeoff because the 3 fixes BEFORE the current one are all inactive
+        assert!(
+            state.last_n_inactive(3),
+            "Should detect takeoff: 3 prior inactive fixes before current active fix"
+        );
+    }
+
+    #[test]
+    fn test_last_n_inactive_requires_n_plus_one_fixes() {
+        // Need n+1 fixes: n to check + 1 to skip
+        // With only 3 fixes (and n=3), we need 4 fixes total
+        let state = create_state_with_fixes(vec![false, false, false]);
+
+        // Should return false because we need 4 fixes (3 to check + 1 to skip)
+        assert!(
+            !state.last_n_inactive(3),
+            "Should return false: only 3 fixes, need 4 (3 to check + 1 to skip)"
+        );
+    }
+
+    #[test]
+    fn test_last_n_inactive_not_takeoff_if_prior_fixes_active() {
+        // Aircraft was already flying, one of the prior fixes is active
+        let state = create_state_with_fixes(vec![false, true, false, true]);
+        //                                        ^--- inactive
+        //                                              ^--- ACTIVE (not on ground)
+        //                                                    ^--- inactive
+        //                                                          ^--- current (skipped)
+
+        // Should NOT detect as takeoff because the prior fixes include an active one
+        assert!(
+            !state.last_n_inactive(3),
+            "Should not detect takeoff: one of prior 3 fixes was active"
+        );
+    }
+
+    #[test]
+    fn test_last_n_inactive_with_long_ground_time() {
+        // Aircraft was on ground for many fixes, then takes off
+        let state =
+            create_state_with_fixes(vec![false, false, false, false, false, false, false, true]);
+
+        // Should detect as takeoff
+        assert!(
+            state.last_n_inactive(3),
+            "Should detect takeoff after long ground time"
+        );
+    }
+
+    #[test]
+    fn test_last_n_inactive_empty_state() {
+        let state = create_state_with_fixes(vec![]);
+
+        assert!(
+            !state.last_n_inactive(3),
+            "Should return false for empty state"
+        );
+    }
+
+    #[test]
+    fn test_last_n_inactive_single_fix() {
+        let state = create_state_with_fixes(vec![true]);
+
+        assert!(
+            !state.last_n_inactive(3),
+            "Should return false with only 1 fix"
+        );
+    }
+
+    #[test]
+    fn test_has_five_consecutive_inactive_includes_current() {
+        // Landing detection: 5 consecutive inactive fixes INCLUDING the current one
+        let state = create_state_with_fixes(vec![false, false, false, false, false]);
+
+        // Should detect landing (all 5 are inactive, including current)
+        assert!(
+            state.has_five_consecutive_inactive(),
+            "Should detect 5 consecutive inactive fixes for landing"
+        );
+    }
+
+    #[test]
+    fn test_has_five_consecutive_inactive_fails_with_active() {
+        // 4 inactive + 1 active at the end should not trigger landing
+        let state = create_state_with_fixes(vec![false, false, false, false, true]);
+
+        // Should NOT detect landing because current fix is active
+        assert!(
+            !state.has_five_consecutive_inactive(),
+            "Should not detect landing: current fix is active"
+        );
+    }
+
+    #[test]
+    fn test_takeoff_vs_landing_detection_difference() {
+        // Key test: same 5 fixes should behave differently for takeoff vs landing
+        // [inactive, inactive, inactive, inactive, active]
+
+        let state = create_state_with_fixes(vec![false, false, false, false, true]);
+
+        // Takeoff detection (last_n_inactive): skips current active fix, checks prior 3
+        // Prior 3 are [inactive, inactive, inactive] -> TRUE (takeoff detected)
+        assert!(
+            state.last_n_inactive(3),
+            "Takeoff: should skip current active and see 3 prior inactive"
+        );
+
+        // Landing detection (has_five_consecutive_inactive): includes current fix
+        // All 5 are [inactive, inactive, inactive, inactive, active] -> FALSE (not landed)
+        assert!(
+            !state.has_five_consecutive_inactive(),
+            "Landing: should include current active and fail"
+        );
     }
 }
