@@ -172,6 +172,11 @@ impl FixProcessor {
                 let mut aircraft_type = None;
 
                 // Extract device info from OGN parameters
+                // Note: The ID field supports two formats:
+                // 1. Standard: idXXYYYYYY (8 hex after "id") - XX=metadata, YYYYYY=6-digit address
+                // 2. NAVITER: idXXXXYYYYYY (10 hex after "id") - XXXX=metadata, YYYYYY=6-digit address
+                // The address is always the last 6 hex digits (24-bit), which fits in i32.
+                // See docs/FANET_ID_FORMAT.md for details.
                 if let Some(ref id) = pos_packet.comment.id {
                     device_address = id.address.as_();
                     address_type = match id.address_type {
