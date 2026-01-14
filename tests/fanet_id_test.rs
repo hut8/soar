@@ -17,7 +17,6 @@
 /// - "1142BB" = actual device address (6 hex digits = 24-bit address)
 ///
 /// The address 0x1142BB = 1,131,195 in decimal, which fits comfortably in a 32-bit signed integer.
-
 #[cfg(test)]
 mod fanet_id_tests {
     #[test]
@@ -52,8 +51,8 @@ mod fanet_id_tests {
             assert_eq!(id.reserved, Some(0), "Reserved bits should be 0");
             assert_eq!(id.address_type, 5, "Address type should be 5");
             assert_eq!(id.aircraft_type, 6, "Aircraft type should be 6");
-            assert_eq!(id.is_notrack, false, "No-track flag should be false");
-            assert_eq!(id.is_stealth, false, "Stealth flag should be false");
+            assert!(!id.is_notrack, "No-track flag should be false");
+            assert!(!id.is_stealth, "Stealth flag should be false");
         } else {
             panic!("Expected Position data in APRS packet");
         }
