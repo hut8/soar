@@ -24,8 +24,28 @@ otelcol.receiver.otlp "ingest" {
 // Batch for efficiency
 otelcol.processor.batch "pipeline" {
   output {
-    logs   = [otelcol.processor.attributes.loki_labels.input]
+    logs   = [otelcol.processor.filter.log_level.input]
     traces = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+// Filter logs based on environment and severity:
+// - Production (deployment.environment = "production"): INFO and higher only
+// - Staging/Development: DEBUG and higher (all logs)
+// This reduces noise and cost for production while keeping detailed logs for debugging in staging
+otelcol.processor.filter "log_level" {
+  error_mode = "ignore"
+
+  logs {
+    // Drop DEBUG logs from production services
+    // OTTL severity_number: TRACE=1-4, DEBUG=5-8, INFO=9-12, WARN=13-16, ERROR=17-20, FATAL=21-24
+    log_record = [
+      "severity_number < 9 and resource.attributes[\"deployment.environment\"] == \"production\"",
+    ]
+  }
+
+  output {
+    logs = [otelcol.processor.attributes.loki_labels.input]
   }
 }
 

@@ -820,8 +820,8 @@ async fn main() -> Result<()> {
     let otel_filter = EnvFilter::new("info,tokio=off,runtime=off");
 
     // Helper to create logs layer - bridges tracing events to OpenTelemetry logs for Loki export
-    // Note: We don't apply an additional filter here since the global subscriber filter already
-    // controls what events reach this layer
+    // Note: Log level filtering is handled in Alloy's otelcol.processor.filter component
+    // to allow configuration changes without code deployment
     let create_logs_layer = || {
         logger_provider
             .as_ref()

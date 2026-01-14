@@ -151,6 +151,14 @@ if compgen -G "infrastructure/grafana-dashboard-*.json" >/dev/null; then
     log_info "Grafana dashboards included: $DASHBOARD_COUNT"
 fi
 
+# Copy observability stack configuration files
+for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy; do
+    if [ -f "infrastructure/$config_file" ]; then
+        cp "infrastructure/$config_file" "$DEPLOY_PKG/"
+        log_info "Observability config included: $config_file"
+    fi
+done
+
 # Copy backup scripts directory
 if [ -d "scripts/backup" ]; then
     mkdir -p "$DEPLOY_PKG/scripts"
