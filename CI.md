@@ -7,7 +7,25 @@ This document describes the Continuous Integration and Continuous Deployment set
 The SOAR project uses GitHub Actions for CI/CD with the following workflows:
 
 1. **CI Workflow** (`.github/workflows/ci.yml`) - Runs on pushes and pull requests
-2. **Release Workflow** (`.github/workflows/release.yml`) - Runs on git tags
+2. **Build ARM64 (Manual)** (`.github/workflows/build-arm64.yml`) - Manually triggered for ARM64 builds
+3. **Release Workflow** (`.github/workflows/release.yml`) - Runs on git tags
+
+## Manual ARM64 Build
+
+The ARM64 static musl build has been moved to a separate workflow to save CI resources. To trigger an ARM64 build:
+
+1. Go to the **Actions** tab in GitHub
+2. Select **Build ARM64 Release (Manual)** from the workflows list
+3. Click **Run workflow**
+4. Choose the branch (default: main)
+5. Optionally toggle artifact upload (default: enabled)
+6. Click **Run workflow** to start the build
+
+The workflow will:
+- Build the SvelteKit frontend
+- Build the ARM64 static musl binary
+- Upload the binary as an artifact (if enabled)
+- Display binary information
 
 ## CI Workflow
 
@@ -70,8 +88,8 @@ The release workflow is triggered when a git tag starting with 'v' is pushed (e.
 
 Builds release binaries for multiple platforms:
 
-- **Linux x64** (GNU libc)
-- **Linux x64** (musl libc)
+- **Linux x64** (musl libc) - built automatically in CI
+- **Linux ARM64** (musl libc) - manual workflow (`.github/workflows/build-arm64.yml`)
 - **macOS x64** (Intel)
 - **macOS ARM64** (Apple Silicon)
 - **Windows x64**
@@ -80,6 +98,8 @@ Each platform:
 - Builds both web and Rust components
 - Creates platform-specific archives (.tar.gz or .zip)
 - Uploads as release assets
+
+**Note**: The ARM64 static musl build is available via manual workflow dispatch to save CI resources.
 
 ### 3. Build Docker Image (`build-docker`)
 
