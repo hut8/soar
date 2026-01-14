@@ -561,7 +561,7 @@ Use the simplified release script:
 
 **What happens automatically:**
 1. ✅ Script creates GitHub Release with tag `v0.1.5`
-2. ✅ CI builds x64 and ARM64 static binaries (version derived from tag)
+2. ✅ CI builds x64 static binary (version derived from tag) - ARM64 available via manual workflow
 3. ✅ CI runs all tests and security audits
 4. ✅ CI deploys to production automatically (via `ci.yml` `deploy-production` job)
 

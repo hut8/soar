@@ -58,10 +58,14 @@ rustflags = [
 
 #### ci.yml
 - Changed `build-release` job to use `x86_64-unknown-linux-musl`
-- Changed `build-release-arm64` to use `aarch64-unknown-linux-musl`
 - Removed GDAL/mold installation steps (handled by cross)
 - Added `cross` installation and caching
 - Added static linking verification
+
+#### build-arm64.yml
+- ARM64 static musl build moved to separate manually-triggered workflow
+- Uses `aarch64-unknown-linux-musl` target
+- Can be triggered via GitHub Actions UI when ARM64 builds are needed
 
 #### release.yml (TODO)
 - Same changes as ci.yml for release builds

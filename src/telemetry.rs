@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use opentelemetry::{KeyValue, global, trace::TracerProvider};
-use opentelemetry_otlp::SpanExporter;
+use opentelemetry_otlp::{LogExporter, SpanExporter};
 use opentelemetry_sdk::{
     Resource,
+    logs::SdkLoggerProvider,
     trace::{Sampler, SdkTracerProvider, SpanLimits},
 };
 use tracing::info;
@@ -115,17 +116,48 @@ pub fn init_meter_provider(_env: &str, _component: &str, _version: &str) -> Resu
     Ok(None)
 }
 
-/// Initialize the OpenTelemetry logger provider for log export
-/// NOTE: Direct OTLP log export is not yet stable in OpenTelemetry Rust SDK v0.31
-/// However, logs are already exported to Tempo via the tracing-opentelemetry layer:
-/// - All error!(), warn!(), info!(), debug!(), trace!() calls create span events
-/// - These events are attached to the current span and exported to Tempo
-/// - They can be queried in Grafana Tempo and correlated with traces
-pub fn init_logger_provider(_env: &str, _component: &str, _version: &str) -> Result<()> {
-    info!("Log export via tracing-opentelemetry layer (logs appear as span events in Tempo)");
-    // Logs are automatically exported via the tracing-opentelemetry layer
-    // integrated in main.rs - no additional setup needed
-    Ok(())
+/// Initialize the OpenTelemetry logger provider for log export to Loki via Alloy
+/// Exports logs via OTLP/HTTP to the Alloy collector, which forwards them to Loki.
+/// The returned LoggerProvider should be used with opentelemetry-appender-tracing
+/// to bridge tracing events to OpenTelemetry logs.
+pub fn init_logger_provider(
+    env: &str,
+    component: &str,
+    version: &str,
+) -> Result<SdkLoggerProvider> {
+    info!(
+        "Initializing OpenTelemetry logger provider for component={}, env={}, version={}",
+        component, env, version
+    );
+
+    // Build the Resource with service information (same as tracer)
+    let resource = Resource::builder()
+        .with_service_name(component.to_string())
+        .with_attributes([
+            KeyValue::new("deployment.environment", env.to_string()),
+            KeyValue::new("service.version", version.to_string()),
+        ])
+        .build();
+
+    // Create the OTLP log exporter with HTTP
+    // Endpoint configured via OTEL_EXPORTER_OTLP_ENDPOINT environment variable
+    // Default: http://localhost:4318 (same endpoint as traces)
+    let exporter = LogExporter::builder()
+        .with_http()
+        .build()
+        .context("Failed to create OTLP log exporter")?;
+
+    // Build the logger provider with batch export
+    let logger_provider = SdkLoggerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_resource(resource)
+        .build();
+
+    info!(
+        "OpenTelemetry logger provider initialized - exporting logs to OTLP collector (Loki via Alloy)"
+    );
+
+    Ok(logger_provider)
 }
 
 /// Gracefully shutdown OpenTelemetry providers with timeout

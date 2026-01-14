@@ -237,7 +237,9 @@ main() {
 
     log INFO "Using $PARALLEL_JOBS parallel jobs"
 
-    if ! pg_dump \
+    # Set client_min_messages=WARNING to suppress TimescaleDB NOTICE messages about hypertables
+    # These notices are informational only - pg_dump correctly dumps each chunk individually
+    if ! PGOPTIONS='-c client_min_messages=WARNING' pg_dump \
         -h "$PGHOST" \
         -p "$PGPORT" \
         -U "$PGUSER" \
