@@ -780,10 +780,18 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Initialize OpenTelemetry logger provider for log export to Loki
-    if let Err(e) = telemetry::init_logger_provider(&soar_env, component_name, version) {
-        warn!("Failed to initialize OpenTelemetry logger provider: {}", e);
-    }
+    // Initialize OpenTelemetry logger provider for log export to Loki via Alloy
+    let logger_provider = match telemetry::init_logger_provider(&soar_env, component_name, version)
+    {
+        Ok(provider) => {
+            info!("OpenTelemetry logger provider initialized - logs will export to Loki via Alloy");
+            Some(provider)
+        }
+        Err(e) => {
+            warn!("Failed to initialize OpenTelemetry logger provider: {}", e);
+            None
+        }
+    };
 
     // Initialize tracing/tokio-console based on subcommand
     use tracing_subscriber::{EnvFilter, filter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -810,6 +818,15 @@ async fn main() -> Result<()> {
     // Create filter for OpenTelemetry layer - exclude tokio runtime internals to prevent
     // trace bloat from waker.clone/waker.drop events being attached to every span
     let otel_filter = EnvFilter::new("info,tokio=off,runtime=off");
+
+    // Helper to create logs layer - bridges tracing events to OpenTelemetry logs for Loki export
+    // Note: We don't apply an additional filter here since the global subscriber filter already
+    // controls what events reach this layer
+    let create_logs_layer = || {
+        logger_provider
+            .as_ref()
+            .map(opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new)
+    };
 
     let registry = tracing_subscriber::registry();
 
@@ -842,8 +859,9 @@ async fn main() -> Result<()> {
                         .with(fmt_layer)
                         .with(console_layer)
                         .with(otel_layer)
+                        .with(create_logs_layer())
                         .init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).with(console_layer).init();
                 }
@@ -859,8 +877,12 @@ async fn main() -> Result<()> {
                             .with_tracer(opentelemetry::global::tracer(component_name)),
                         otel_filter.clone(),
                     );
-                    registry.with(fmt_layer).with(otel_layer).init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    registry
+                        .with(fmt_layer)
+                        .with(otel_layer)
+                        .with(create_logs_layer())
+                        .init();
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).init();
                 }
@@ -888,8 +910,9 @@ async fn main() -> Result<()> {
                         .with(fmt_layer)
                         .with(console_layer)
                         .with(otel_layer)
+                        .with(create_logs_layer())
                         .init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).with(console_layer).init();
                 }
@@ -905,8 +928,12 @@ async fn main() -> Result<()> {
                             .with_tracer(opentelemetry::global::tracer(component_name)),
                         otel_filter.clone(),
                     );
-                    registry.with(fmt_layer).with(otel_layer).init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    registry
+                        .with(fmt_layer)
+                        .with(otel_layer)
+                        .with(create_logs_layer())
+                        .init();
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).init();
                 }
@@ -927,8 +954,12 @@ async fn main() -> Result<()> {
                             .with_tracer(opentelemetry::global::tracer(component_name)),
                         otel_filter.clone(),
                     );
-                    registry.with(fmt_layer).with(otel_layer).init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    registry
+                        .with(fmt_layer)
+                        .with(otel_layer)
+                        .with(create_logs_layer())
+                        .init();
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).init();
                 }
@@ -952,8 +983,9 @@ async fn main() -> Result<()> {
                         .with(fmt_layer)
                         .with(console_layer)
                         .with(otel_layer)
+                        .with(create_logs_layer())
                         .init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).with(console_layer).init();
                 }
@@ -969,8 +1001,12 @@ async fn main() -> Result<()> {
                             .with_tracer(opentelemetry::global::tracer(component_name)),
                         otel_filter.clone(),
                     );
-                    registry.with(fmt_layer).with(otel_layer).init();
-                    info!("OpenTelemetry layer integrated with tracing subscriber");
+                    registry
+                        .with(fmt_layer)
+                        .with(otel_layer)
+                        .with(create_logs_layer())
+                        .init();
+                    info!("OpenTelemetry tracing and logging layers integrated with subscriber");
                 } else {
                     registry.with(fmt_layer).init();
                 }
@@ -984,8 +1020,12 @@ async fn main() -> Result<()> {
                         .with_tracer(opentelemetry::global::tracer(component_name)),
                     otel_filter.clone(),
                 );
-                registry.with(fmt_layer).with(otel_layer).init();
-                info!("OpenTelemetry layer integrated with tracing subscriber");
+                registry
+                    .with(fmt_layer)
+                    .with(otel_layer)
+                    .with(create_logs_layer())
+                    .init();
+                info!("OpenTelemetry tracing and logging layers integrated with subscriber");
             } else {
                 registry.with(fmt_layer).init();
             }
