@@ -88,7 +88,7 @@ PGUSER="${PGUSER:-postgres}"
 
 # Backup configuration
 COMPRESSION="${BACKUP_COMPRESSION:-gzip}"
-PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-4}"
+PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-$(nproc)}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 
 # Backup identifier (date)
@@ -182,12 +182,15 @@ EOF
     fi
 }
 
+# Track current phase for better error messages
+CURRENT_PHASE="initialization"
+
 # Function to cleanup on exit
 cleanup() {
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
-        log ERROR "Backup failed with exit code $exit_code"
-        notify "FAILED" "Base backup failed on $(hostname) at $(date). Check logs with: journalctl -u soar-backup-base"
+        log ERROR "Backup failed with exit code $exit_code during phase: $CURRENT_PHASE"
+        notify "FAILED" "Base backup failed on $(hostname) at $(date) during phase: $CURRENT_PHASE. Check logs with: journalctl -u soar-backup-base"
     fi
 
     # Remove temporary files
@@ -202,6 +205,7 @@ trap cleanup EXIT
 # Main backup function
 main() {
     local start_time=$(date +%s)
+    CURRENT_PHASE="starting"
 
     log INFO "=========================================="
     log INFO "Starting database backup: $BACKUP_NAME"
@@ -212,6 +216,7 @@ main() {
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
     # Check database connectivity
+    CURRENT_PHASE="database_connectivity_check"
     log INFO "Checking database connectivity..."
     if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1; then
         log ERROR "Cannot connect to database"
@@ -228,6 +233,7 @@ main() {
     log INFO "Current database size: $(numfmt --to=iec-i --suffix=B "$db_size")"
 
     # Create database backup using pg_dump
+    CURRENT_PHASE="pg_dump"
     log INFO "Creating database backup with pg_dump..."
     mkdir -p "$BACKUP_LOCAL_DIR"
 
@@ -260,6 +266,7 @@ main() {
     log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
 
     # Upload to Wasabi S3 using rclone
+    CURRENT_PHASE="upload_to_s3"
     log INFO "Uploading backup to Wasabi S3..."
 
     # Use rclone copy with multiple transfers (no progress to keep logs clean)
@@ -276,6 +283,7 @@ main() {
     log INFO "Upload completed successfully"
 
     # Verify uploaded files
+    CURRENT_PHASE="verify_upload"
     log INFO "Verifying uploaded files..."
     local uploaded_count=$(rclone ls "${BACKUP_REMOTE_PATH}/" 2>/dev/null | wc -l)
 
@@ -287,6 +295,7 @@ main() {
     log INFO "Verification passed: found $uploaded_count files in Wasabi S3"
 
     # Create metadata file
+    CURRENT_PHASE="create_metadata"
     log INFO "Creating backup metadata..."
     cat > "$TEMP_DIR/backup-metadata.json" <<EOF
 {
@@ -312,6 +321,7 @@ EOF
 
     # Cleanup old backups if enabled
     if [[ "$CLEANUP" == "true" ]]; then
+        CURRENT_PHASE="cleanup_old_backups"
         # Number of most recent backups to keep (default: 5)
         local keep_count=${BASE_BACKUP_KEEP_COUNT:-5}
         log INFO "Cleaning up old backups (keeping most recent: $keep_count)..."
@@ -349,14 +359,16 @@ EOF
                 for backup_date in $all_backups; do
                     if [[ $skip_count -lt $keep_count ]]; then
                         # Keep this backup
-                        ((skip_count++))
+                        # Use || true to prevent set -e from triggering when skip_count is 0
+                        # (bash arithmetic returns exit code 1 when expression evaluates to 0)
+                        ((skip_count++)) || true
                         log INFO "Keeping backup: $backup_date ($skip_count of $keep_count)"
                     else
                         # Delete this backup
                         log INFO "Deleting old backup: $backup_date"
 
                         if rclone purge "${base_path}/${backup_date}"; then
-                            ((deleted_count++))
+                            ((deleted_count++)) || true
                             log INFO "Successfully deleted backup: $backup_date"
                         else
                             log ERROR "Failed to delete backup: $backup_date"
@@ -370,6 +382,7 @@ EOF
     fi
 
     # Calculate duration
+    CURRENT_PHASE="completed"
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     local duration_formatted=$(printf '%02d:%02d:%02d' $((duration/3600)) $((duration%3600/60)) $((duration%60)))
