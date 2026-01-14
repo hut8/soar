@@ -88,7 +88,7 @@ PGUSER="${PGUSER:-postgres}"
 
 # Backup configuration
 COMPRESSION="${BACKUP_COMPRESSION:-gzip}"
-PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-4}"
+PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-$(nproc)}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 
 # Backup identifier (date)
