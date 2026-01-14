@@ -729,7 +729,8 @@ impl FixesRepository {
                         d.id,
                         d.latitude,
                         d.longitude,
-                        d.location_geom
+                        d.location_geom,
+                        parts.grid_size
                     FROM aircraft d, parts
                     WHERE d.last_fix_at >= parts.cutoff_time
                       AND d.location_geom IS NOT NULL
@@ -740,7 +741,12 @@ impl FixesRepository {
                 ),
                 grid_clusters AS (
                     SELECT
-                        ST_SnapToGrid(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), (SELECT grid_size FROM params)) AS grid_point,
+                        -- Use floor-based cell assignment to get the southwest corner of each grid cell
+                        -- ST_SnapToGrid rounds to nearest, but we need floor semantics for proper cell alignment
+                        ST_SetSRID(ST_MakePoint(
+                            FLOOR(longitude / grid_size) * grid_size,
+                            FLOOR(latitude / grid_size) * grid_size
+                        ), 4326) AS grid_point,
                         COUNT(*) AS aircraft_count,
                         AVG(latitude) AS centroid_lat,
                         AVG(longitude) AS centroid_lng,

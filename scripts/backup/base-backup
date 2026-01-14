@@ -208,7 +208,7 @@ main() {
     log INFO "=========================================="
     log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
     log INFO "Destination: ${BACKUP_REMOTE_PATH}"
-    log INFO "Method: pg_dump (custom format with zstd compression)"
+    log INFO "Method: pg_dump (directory format with zstd compression)"
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
     # Check database connectivity
@@ -231,9 +231,9 @@ main() {
     log INFO "Creating database backup with pg_dump..."
     mkdir -p "$BACKUP_LOCAL_DIR"
 
-    # Use custom format (-Fc) which is compressed and supports parallel restore
-    # Use parallel jobs for faster dump of large databases
-    local dump_file="$BACKUP_LOCAL_DIR/database.dump"
+    # Use directory format (-Fd) which supports parallel dump and restore
+    # Each table gets its own file in the directory
+    local dump_dir="$BACKUP_LOCAL_DIR/database"
 
     log INFO "Using $PARALLEL_JOBS parallel jobs"
 
@@ -242,10 +242,10 @@ main() {
         -p "$PGPORT" \
         -U "$PGUSER" \
         -d "$PGDATABASE" \
-        -Fc \
+        -Fd \
         -Z zstd:3 \
         -j "$PARALLEL_JOBS" \
-        -f "$dump_file" \
+        -f "$dump_dir" \
         -v; then
         log ERROR "pg_dump failed"
         exit 1
@@ -254,7 +254,7 @@ main() {
     log INFO "Database backup completed successfully"
 
     # Get backup size
-    local backup_size=$(du -sb "$dump_file" | cut -f1)
+    local backup_size=$(du -sb "$dump_dir" | cut -f1)
     log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
 
     # Upload to Wasabi S3 using rclone
@@ -292,7 +292,7 @@ main() {
   "backup_date": "$BACKUP_DATE",
   "backup_timestamp": "$BACKUP_TIMESTAMP",
   "backup_type": "pg_dump",
-  "backup_format": "custom",
+  "backup_format": "directory",
   "database": "$PGDATABASE",
   "database_size_bytes": $db_size,
   "backup_size_bytes": $backup_size,
