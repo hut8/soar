@@ -68,6 +68,7 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 - `/etc/prometheus/prometheus.yml` → `infrastructure/prometheus.yml`
 - `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy`
 - `/etc/pyroscope/config.yml` → `infrastructure/pyroscope-config.yml`
+- `/etc/netdata/netdata.conf` → `infrastructure/netdata-config.conf`
 
 **Process for config changes:**
 1. Edit the config file in `infrastructure/` first
