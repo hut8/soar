@@ -129,6 +129,36 @@ This ensures config changes are tracked in version control and can be reproduced
 
 ### Frontend Development Standards
 
+#### Initial Setup (REQUIRED)
+Before working with the frontend code, you MUST have Node.js 24+ installed and dependencies installed:
+
+1. **Install Node.js 24+**:
+   ```bash
+   # Using 'n' (recommended)
+   sudo n 24
+   
+   # Verify version
+   node --version  # Should be v24.x.x
+   npm --version   # Should be v11.x.x
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   cd web
+   npm install
+   ```
+
+3. **Verify Setup**:
+   ```bash
+   # Check formatting and linting pass
+   npm run lint
+   
+   # Check TypeScript compilation
+   npm run check
+   ```
+
+**CRITICAL**: The `web/` directory requires `node_modules` to be installed before you can run any npm commands like `npm run lint`, `npm run format`, or `npm run check`. If you get "command not found" errors for prettier or eslint, you need to run `npm install` first.
+
 #### Static Site Generation (CRITICAL)
 - **NO Server-Side Rendering (SSR) ANYWHERE** - The frontend MUST be compiled statically
 - Use `export const ssr = false;` in `+page.ts` files to disable SSR for specific pages
@@ -339,10 +369,13 @@ All changes must pass these checks locally:
    - `cargo audit` (security audit)
 
 2. **Frontend Quality**:
-   - `npm run lint` (ESLint + Prettier)
+   - `npm run format` (Prettier - auto-fix formatting)
+   - `npm run lint` (ESLint + Prettier check)
    - `npm run check` (TypeScript validation)
    - `npm test` (Playwright E2E tests)
    - `npm run build` (build verification)
+   
+   **Note**: If formatting issues are found by `npm run lint`, run `npm run format` to auto-fix them.
 
 3. **File Quality**:
    - No trailing whitespace

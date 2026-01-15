@@ -2502,11 +2502,9 @@
 					/>
 				</svg>
 			</div>
-			<div
-				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
-			>
+			<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
 				<div class="text-[24px] font-bold text-gray-700">{displayHeading}°</div>
-				<div class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Magnetic</div>
+				<div class="text-[10px] font-semibold tracking-wide text-gray-500 uppercase">Magnetic</div>
 			</div>
 		</div>
 	{/if}
