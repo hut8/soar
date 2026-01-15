@@ -257,9 +257,11 @@ pub(crate) async fn create_start_end_location(
 
                     // Track location creation by type
                     let metric_type = match context {
-                        "start (takeoff)" => "start_takeoff",
+                        "start (no airport location)" => "start_no_airport_location",
+                        "start (no airport)" => "start_no_airport",
                         "start (airborne)" => "start_airborne",
-                        "end (landing)" => "end_landing",
+                        "end (no airport location)" => "end_no_airport_location",
+                        "end (no airport)" => "end_no_airport",
                         "end (timeout)" => "end_timeout",
                         _ => "unknown",
                     };
