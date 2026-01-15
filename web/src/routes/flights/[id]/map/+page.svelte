@@ -4,13 +4,14 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
-	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
+	import { ArrowLeft, ChevronDown, ChevronUp, Palette, Settings } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import type { Receiver, Airport, Runway, DataListResponse } from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
+	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { getLogger } from '$lib/logging';
 	import { browser } from '$app/environment';
 
@@ -42,11 +43,20 @@
 	let isLoadingReceivers = $state(false);
 
 	// Runway data
-	let showRunways = $state(false);
 	let airports = $state<Airport[]>([]);
 	let runwayPolygons = $state<google.maps.Polygon[]>([]);
 	let runwayEndpointMarkers = $state<google.maps.Circle[]>([]);
-	let isLoadingRunways = $state(false);
+
+	// Settings modal state
+	let showSettingsModal = $state(false);
+	let currentSettings = $state({
+		showCompassRose: false, // Not applicable to flight map
+		showAirportMarkers: false, // Not applicable to flight map
+		showReceiverMarkers: false, // Not applicable to flight map
+		showAirspaceMarkers: false, // Not applicable to flight map
+		showRunwayOverlays: false,
+		positionFixWindow: 8
+	});
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitudeAglFeet !== null));
@@ -503,18 +513,23 @@
 	onMount(async () => {
 		if (data.fixes.length === 0 || !mapContainer) return;
 
-		// Load runway preference from localStorage
+		// Load settings from localStorage
 		if (browser) {
 			try {
-				const saved = localStorage.getItem('flightMapSettings');
+				const saved = localStorage.getItem('operationsSettings');
 				if (saved) {
 					const settings = JSON.parse(saved);
-					showRunways = settings.showRunways ?? false;
+					currentSettings = {
+						showCompassRose: settings.showCompassRose ?? false,
+						showAirportMarkers: settings.showAirportMarkers ?? false,
+						showReceiverMarkers: settings.showReceiverMarkers ?? false,
+						showAirspaceMarkers: settings.showAirspaceMarkers ?? false,
+						showRunwayOverlays: settings.showRunwayOverlays ?? false,
+						positionFixWindow: settings.positionFixWindow ?? 8
+					};
 				}
 			} catch (e) {
-				logger.warn('Failed to load flight map settings from localStorage: {error}', {
-					error: e
-				});
+				logger.warn('Failed to load settings from localStorage: {error}', { error: e });
 			}
 		}
 
@@ -604,9 +619,9 @@
 				// Add directional arrow markers at selected intervals
 				addFixMarkers(fixesInOrder);
 
-				// Load runways if preference is enabled
-				if (showRunways) {
-					fetchAirports();
+				// Load and display runways if setting is enabled
+				if (currentSettings.showRunwayOverlays) {
+					fetchAirportsAndDisplayRunways();
 				}
 			});
 		} catch (error) {
@@ -707,6 +722,154 @@
 
 	function togglePanel() {
 		isPanelCollapsed = !isPanelCollapsed;
+	}
+
+	// Handle settings changes from SettingsModal
+	function handleSettingsChange(newSettings: {
+		showCompassRose: boolean;
+		showAirportMarkers: boolean;
+		showReceiverMarkers: boolean;
+		showAirspaceMarkers: boolean;
+		showRunwayOverlays: boolean;
+		positionFixWindow: number;
+	}) {
+		// Update settings
+		currentSettings = { ...newSettings };
+
+		// Handle runway overlay changes
+		if (newSettings.showRunwayOverlays && map) {
+			fetchAirportsAndDisplayRunways();
+		} else {
+			clearRunwayOverlays();
+		}
+	}
+
+	// Fetch airports (with runways) and display runways
+	async function fetchAirportsAndDisplayRunways() {
+		if (!map) return;
+
+		try {
+			const bounds = map.getBounds();
+			if (!bounds) return;
+
+			const ne = bounds.getNorthEast();
+			const sw = bounds.getSouthWest();
+
+			const params = new URLSearchParams({
+				north: ne.lat().toString(),
+				south: sw.lat().toString(),
+				east: ne.lng().toString(),
+				west: sw.lng().toString()
+			});
+
+			const response = await serverCall<DataListResponse<Airport>>(`/airports?${params}`);
+			airports = response.data || [];
+
+			// Display runways on map
+			displayRunwaysFromAirports();
+
+			logger.debug('Fetched {count} airports with runways', { count: airports.length });
+		} catch (err) {
+			logger.error('Failed to fetch airports: {error}', { error: err });
+		}
+	}
+
+	// Display runways extracted from airport data
+	function displayRunwaysFromAirports(): void {
+		// Extract all runways from the loaded airports
+		const allRunways: Runway[] = airports.flatMap((airport) => airport.runways || []);
+		displayRunwaysOnMap(allRunways);
+	}
+
+	// Display runway polygons and endpoint markers on map
+	function displayRunwaysOnMap(runways: Runway[]): void {
+		if (!map) return;
+
+		// Clear existing runway overlays
+		clearRunwayOverlays();
+
+		runways.forEach((runway) => {
+			// Only display if we have a valid polyline (4 corner points)
+			if (runway.polyline && runway.polyline.length === 4) {
+				// Convert [lat, lon] array to Google Maps LatLngLiteral
+				const path = runway.polyline.map((coord) => ({
+					lat: coord[0],
+					lng: coord[1]
+				}));
+
+				// Create runway rectangle polygon with semi-transparent blue fill and thin orange outline
+				const polygon = new google.maps.Polygon({
+					paths: path,
+					strokeColor: '#fb923c', // Orange (Tailwind orange-400)
+					strokeOpacity: 1.0,
+					strokeWeight: 2,
+					fillColor: '#3b82f6', // Blue (Tailwind blue-500)
+					fillOpacity: 0.4, // Semi-transparent
+					map: map,
+					zIndex: 40 // Below receivers (150)
+				});
+
+				runwayPolygons.push(polygon);
+			}
+
+			// Add endpoint markers (small dots at each end of runway) - these already work
+			const endpointColor = '#F59E0B'; // Amber
+			const endpointRadius = 18; // meters
+
+			// Low end marker
+			if (runway.low.latitudeDeg !== null && runway.low.longitudeDeg !== null) {
+				const lowMarker = new google.maps.Circle({
+					center: { lat: runway.low.latitudeDeg, lng: runway.low.longitudeDeg },
+					radius: endpointRadius,
+					strokeColor: endpointColor,
+					strokeOpacity: 1,
+					strokeWeight: 2,
+					fillColor: endpointColor,
+					fillOpacity: 0.8,
+					map: map,
+					zIndex: 45
+				});
+				runwayEndpointMarkers.push(lowMarker);
+			}
+
+			// High end marker
+			if (runway.high.latitudeDeg !== null && runway.high.longitudeDeg !== null) {
+				const highMarker = new google.maps.Circle({
+					center: { lat: runway.high.latitudeDeg, lng: runway.high.longitudeDeg },
+					radius: endpointRadius,
+					strokeColor: endpointColor,
+					strokeOpacity: 1,
+					strokeWeight: 2,
+					fillColor: endpointColor,
+					fillOpacity: 0.8,
+					map: map,
+					zIndex: 45
+				});
+				runwayEndpointMarkers.push(highMarker);
+			}
+		});
+
+		logger.debug(
+			'[RUNWAYS] Displayed {runways} runways ({polygons} polygons, {markers} endpoint markers)',
+			{
+				runways: runways.length,
+				polygons: runwayPolygons.length,
+				markers: runwayEndpointMarkers.length
+			}
+		);
+	}
+
+	// Clear runway overlays from map
+	function clearRunwayOverlays(): void {
+		runwayPolygons.forEach((polygon) => {
+			polygon.setMap(null);
+		});
+		runwayPolygons = [];
+
+		runwayEndpointMarkers.forEach((marker) => {
+			marker.setMap(null);
+		});
+		runwayEndpointMarkers = [];
 	}
 
 	// Handle receivers toggle
@@ -815,159 +978,6 @@
 			isLoadingReceivers = false;
 		}
 	}
-
-	// Fetch airports (with runways) in viewport
-	async function fetchAirports() {
-		if (!map) return;
-
-		isLoadingRunways = true;
-		try {
-			const bounds = map.getBounds();
-			if (!bounds) return;
-
-			const ne = bounds.getNorthEast();
-			const sw = bounds.getSouthWest();
-
-			const params = new URLSearchParams({
-				north: ne.lat().toString(),
-				south: sw.lat().toString(),
-				east: ne.lng().toString(),
-				west: sw.lng().toString()
-			});
-
-			const response = await serverCall<DataListResponse<Airport>>(`/airports?${params}`);
-			airports = response.data || [];
-
-			// Display runways on map if toggle is enabled
-			if (showRunways && map) {
-				displayRunwaysFromAirports();
-			}
-
-			logger.debug('Fetched {count} airports in viewport', { count: airports.length });
-		} catch (err) {
-			logger.error('Failed to fetch airports: {error}', { error: err });
-		} finally {
-			isLoadingRunways = false;
-		}
-	}
-
-	// Display runways extracted from airport data
-	function displayRunwaysFromAirports(): void {
-		// Extract all runways from the loaded airports
-		const allRunways: Runway[] = airports.flatMap((airport) => airport.runways || []);
-		displayRunwaysOnMap(allRunways);
-	}
-
-	// Display runway polygons and endpoint markers on map
-	function displayRunwaysOnMap(runways: Runway[]): void {
-		if (!map) return;
-
-		// Clear existing runway overlays
-		clearRunwayOverlays();
-
-		runways.forEach((runway) => {
-			// Only display if we have a valid polyline (4 corner points)
-			if (runway.polyline && runway.polyline.length === 4) {
-				// Convert [lat, lon] array to Google Maps LatLngLiteral
-				const path = runway.polyline.map((coord) => ({
-					lat: coord[0],
-					lng: coord[1]
-				}));
-
-				// Create runway rectangle polygon
-				const polygon = new google.maps.Polygon({
-					paths: path,
-					strokeColor: '#4A5568', // Gray-600
-					strokeOpacity: 0.9,
-					strokeWeight: 1,
-					fillColor: '#2D3748', // Gray-700
-					fillOpacity: 0.7,
-					map: map,
-					zIndex: 40 // Below receivers (150)
-				});
-
-				runwayPolygons.push(polygon);
-			}
-
-			// Add endpoint markers (small dots at each end of runway)
-			const endpointColor = '#F59E0B'; // Amber
-			const endpointRadius = 18; // meters
-
-			// Low end marker
-			if (runway.low.latitudeDeg !== null && runway.low.longitudeDeg !== null) {
-				const lowMarker = new google.maps.Circle({
-					center: { lat: runway.low.latitudeDeg, lng: runway.low.longitudeDeg },
-					radius: endpointRadius,
-					strokeColor: endpointColor,
-					strokeOpacity: 1,
-					strokeWeight: 2,
-					fillColor: endpointColor,
-					fillOpacity: 0.8,
-					map: map,
-					zIndex: 45
-				});
-				runwayEndpointMarkers.push(lowMarker);
-			}
-
-			// High end marker
-			if (runway.high.latitudeDeg !== null && runway.high.longitudeDeg !== null) {
-				const highMarker = new google.maps.Circle({
-					center: { lat: runway.high.latitudeDeg, lng: runway.high.longitudeDeg },
-					radius: endpointRadius,
-					strokeColor: endpointColor,
-					strokeOpacity: 1,
-					strokeWeight: 2,
-					fillColor: endpointColor,
-					fillOpacity: 0.8,
-					map: map,
-					zIndex: 45
-				});
-				runwayEndpointMarkers.push(highMarker);
-			}
-		});
-
-		logger.debug(
-			'[RUNWAYS] Displayed {runways} runways ({polygons} polygons, {markers} endpoint markers)',
-			{
-				runways: runways.length,
-				polygons: runwayPolygons.length,
-				markers: runwayEndpointMarkers.length
-			}
-		);
-	}
-
-	// Clear runway overlays from map
-	function clearRunwayOverlays(): void {
-		runwayPolygons.forEach((polygon) => {
-			polygon.setMap(null);
-		});
-		runwayPolygons = [];
-
-		runwayEndpointMarkers.forEach((marker) => {
-			marker.setMap(null);
-		});
-		runwayEndpointMarkers = [];
-	}
-
-	// Handle runway toggle
-	function handleRunwaysToggle() {
-		// Save preference to localStorage
-		if (browser) {
-			try {
-				const settings = { showRunways };
-				localStorage.setItem('flightMapSettings', JSON.stringify(settings));
-			} catch (e) {
-				logger.warn('Failed to save flight map settings to localStorage: {error}', { error: e });
-			}
-		}
-
-		if (showRunways) {
-			fetchAirports();
-		} else {
-			// Clear runways from map
-			clearRunwayOverlays();
-		}
-	}
 </script>
 
 <!-- Container that fills viewport - using fixed positioning to break out of main container -->
@@ -983,6 +993,15 @@
 	<!-- Back button (top-left) -->
 	<button onclick={goBack} class="location-btn absolute top-4 left-4 z-[80]" title="Back to Flight">
 		<ArrowLeft size={20} />
+	</button>
+
+	<!-- Settings button (top-right) -->
+	<button
+		onclick={() => (showSettingsModal = true)}
+		class="location-btn absolute top-4 right-4 z-[80]"
+		title="Settings"
+	>
+		<Settings size={20} />
 	</button>
 
 	<!-- Bottom panel with altitude chart -->
@@ -1012,18 +1031,6 @@
 					/>
 					<span class="text-sm">Show Receivers</span>
 					{#if isLoadingReceivers}
-						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
-					{/if}
-				</label>
-				<label class="flex cursor-pointer items-center gap-2">
-					<input
-						type="checkbox"
-						class="checkbox"
-						bind:checked={showRunways}
-						onchange={handleRunwaysToggle}
-					/>
-					<span class="text-sm">Show Runways</span>
-					{#if isLoadingRunways}
 						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
 					{/if}
 				</label>
@@ -1074,6 +1081,9 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Settings Modal -->
+<SettingsModal bind:showModal={showSettingsModal} {onSettingsChange: handleSettingsChange} />
 
 <style>
 	/* Button styling to match operations page buttons */
