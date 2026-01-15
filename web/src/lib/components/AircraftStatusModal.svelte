@@ -16,6 +16,7 @@
 		getAircraftTypeColor,
 		formatTransponderCode
 	} from '$lib/formatters';
+	import { getEngineTypeLabel } from '$lib/constants/faaEngineTypes';
 	import {
 		calculateDistance,
 		calculateBearing,
