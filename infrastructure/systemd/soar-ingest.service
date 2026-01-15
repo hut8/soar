@@ -19,7 +19,7 @@ SyslogIdentifier=soar-ingest
 # - Add --ogn-server, --ogn-port, --ogn-callsign, --ogn-filter for OGN/APRS ingestion
 # - Add --beast <server:port> for Beast format ADS-B (can specify multiple times)
 # - Add --sbs <server:port> for SBS (BaseStation) format (can specify multiple times)
-ExecStart=/usr/local/bin/soar ingest --ogn-server aprs.glidernet.org --beast radar:41365
+ExecStart=/usr/local/bin/soar ingest --ogn-server aprs.glidernet.org
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
