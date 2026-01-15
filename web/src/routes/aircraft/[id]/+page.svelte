@@ -50,6 +50,7 @@
 		getEmitterCategoryLabel,
 		getEmitterCategoryDescription
 	} from '$lib/constants/adsbEmitterCategories';
+	import { getEngineTypeLabel } from '$lib/constants/faaEngineTypes';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import utc from 'dayjs/plugin/utc';
@@ -772,12 +773,13 @@
 							{/if}
 
 							<!-- Engine Type -->
-							{#if aircraftRegistration.engineType}
+							<!-- Note: Explicit null/undefined check needed because 0 is a valid engine type (None) -->
+							{#if aircraftRegistration.engineType !== null && aircraftRegistration.engineType !== undefined}
 								<div class="flex items-start gap-3">
 									<Info class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
 										<p class="text-surface-600-300-token mb-1 text-sm">Engine Type</p>
-										<p>{aircraftRegistration.engineType}</p>
+										<p>{getEngineTypeLabel(aircraftRegistration.engineType)}</p>
 									</div>
 								</div>
 							{/if}
