@@ -51,7 +51,7 @@
 
 	// Direction arrow variables
 	let userLocation: { lat: number; lng: number } | null = $state(null);
-	let aircraftHeading: number = $state(0);
+	let deviceHeading: number = $state(0); // Magnetic heading of the device/phone
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
 	let previousDirectionToAircraft: number = $state(0);
@@ -205,9 +205,9 @@
 		// Calculate the arrow rotation to point at the aircraft
 		// The arrow should point in the direction of the aircraft relative to where the phone is pointing
 		// bearing = absolute direction to aircraft (from north)
-		// aircraftHeading = direction phone is pointing (magnetic heading)
-		// arrow rotation = bearing - aircraftHeading (relative bearing)
-		let newDirection = bearing - aircraftHeading;
+		// deviceHeading = direction phone is pointing (magnetic heading)
+		// arrow rotation = bearing - deviceHeading (relative bearing)
+		let newDirection = bearing - deviceHeading;
 
 		// Normalize to 0-360 range
 		newDirection = ((newDirection % 360) + 360) % 360;
@@ -239,14 +239,18 @@
 
 			if (webkitHeading !== undefined && webkitHeading !== null) {
 				// iOS: Use webkitCompassHeading directly (already magnetic heading)
-				aircraftHeading = webkitHeading;
+				deviceHeading = webkitHeading;
 			} else if (event.absolute && event.alpha !== null) {
 				// Android with absolute orientation: Convert alpha to magnetic heading
 				// alpha is counter-clockwise from north, compass is clockwise from north
-				aircraftHeading = (360 - event.alpha) % 360;
+				deviceHeading = (360 - event.alpha) % 360;
 			} else {
 				// Fallback: Use alpha as-is (may not be accurate, default to 0 if somehow null)
-				aircraftHeading = event.alpha ?? 0;
+				logger.warn(
+					'Using raw alpha for heading (absolute={absolute}), compass may be inaccurate',
+					{ absolute: event.absolute }
+				);
+				deviceHeading = event.alpha ?? 0;
 			}
 
 			updateDirectionToAircraft();

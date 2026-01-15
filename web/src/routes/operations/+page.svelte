@@ -1416,6 +1416,10 @@
 				magneticHeading = (360 - event.alpha) % 360;
 			} else {
 				// Fallback: Use alpha as-is (may not be accurate, default to 0 if somehow null)
+				logger.warn(
+					'Using raw alpha for heading (absolute={absolute}), compass may be inaccurate',
+					{ absolute: event.absolute }
+				);
 				magneticHeading = event.alpha ?? 0;
 			}
 
