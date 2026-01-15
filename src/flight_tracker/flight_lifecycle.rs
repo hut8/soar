@@ -347,6 +347,7 @@ pub(crate) fn spawn_complete_flight(
     let locations_repo = ctx.locations_repo.clone();
     let runways_repo = ctx.runways_repo.clone();
     let elevation_db = ctx.elevation_db.clone();
+    let magnetic_service = ctx.magnetic_service.clone();
     let pool = ctx.pool.clone();
 
     let device_clone = device.clone();
@@ -365,6 +366,7 @@ pub(crate) fn spawn_complete_flight(
                 &locations_repo,
                 &runways_repo,
                 &elevation_db,
+                &magnetic_service,
                 pool,
                 &device_clone,
                 flight_id,

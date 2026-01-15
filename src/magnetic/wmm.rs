@@ -5,7 +5,9 @@
 /// The WMM is a geomagnetic field model that describes the Earth's magnetic field.
 /// It is updated every 5 years and is used by navigation systems worldwide.
 
+use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Utc};
+use tracing::warn;
 use world_magnetic_model::{time::Date as WmmDate, uom::si::angle::degree, uom::si::f32::*, uom::si::length::meter, GeomagneticField};
 
 /// Calculate magnetic declination (variance) at a given location and time
@@ -18,17 +20,26 @@ use world_magnetic_model::{time::Date as WmmDate, uom::si::angle::degree, uom::s
 ///
 /// # Returns
 /// Magnetic declination in degrees (positive = east, negative = west)
+///
+/// # Errors
+/// Returns an error if the geomagnetic field calculation fails (e.g., invalid coordinates or near poles)
 pub fn calculate_declination(
     latitude: f64,
     longitude: f64,
     altitude_meters: f64,
     timestamp: DateTime<Utc>,
-) -> f64 {
+) -> Result<f64> {
     // Convert to WMM date
     let year = timestamp.year();
     let day_of_year = timestamp.ordinal();
     let wmm_date = WmmDate::from_ordinal_date(year, day_of_year as u16)
-        .unwrap_or_else(|_| WmmDate::from_ordinal_date(2025, 1).unwrap());
+        .unwrap_or_else(|e| {
+            warn!(
+                "Failed to convert date {} (day {}) to WMM date: {:?}, using fallback date 2025-01-01",
+                year, day_of_year, e
+            );
+            WmmDate::from_ordinal_date(2025, 1).unwrap()
+        });
 
     // Create geomagnetic field calculation
     let field = GeomagneticField::new(
@@ -36,16 +47,14 @@ pub fn calculate_declination(
         Angle::new::<degree>(latitude as f32),
         Angle::new::<degree>(longitude as f32),
         wmm_date,
-    );
+    )
+    .with_context(|| format!(
+        "Failed to calculate geomagnetic field at lat={}, lon={}, alt={}m",
+        latitude, longitude, altitude_meters
+    ))?;
 
     // Return declination in degrees
-    match field {
-        Ok(f) => f.declination().get::<degree>() as f64,
-        Err(_) => {
-            // If calculation fails (e.g., near poles), return 0
-            0.0
-        }
-    }
+    Ok(field.declination().get::<degree>() as f64)
 }
 
 #[cfg(test)]
@@ -60,7 +69,7 @@ mod tests {
         let timestamp = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
 
         // San Francisco, CA (known for eastward declination ~13°E)
-        let dec = calculate_declination(37.77, -122.42, 0.0, timestamp);
+        let dec = calculate_declination(37.77, -122.42, 0.0, timestamp).unwrap();
         assert!(
             dec > 10.0 && dec < 16.0,
             "SF declination should be ~13°E, got {}",
@@ -68,7 +77,7 @@ mod tests {
         );
 
         // New York, NY (known for westward declination ~12°W)
-        let dec = calculate_declination(40.71, -74.01, 0.0, timestamp);
+        let dec = calculate_declination(40.71, -74.01, 0.0, timestamp).unwrap();
         assert!(
             dec < -10.0 && dec > -15.0,
             "NYC declination should be ~12°W, got {}",
@@ -76,7 +85,7 @@ mod tests {
         );
 
         // London, UK (near-zero declination)
-        let dec = calculate_declination(51.51, -0.13, 0.0, timestamp);
+        let dec = calculate_declination(51.51, -0.13, 0.0, timestamp).unwrap();
         assert!(
             dec.abs() < 5.0,
             "London declination should be near 0°, got {}",
@@ -89,10 +98,10 @@ mod tests {
         // Test that function works at coordinate extremes
         let timestamp = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
 
-        let dec = calculate_declination(89.0, 0.0, 0.0, timestamp);
+        let dec = calculate_declination(89.0, 0.0, 0.0, timestamp).unwrap();
         assert!(dec.is_finite());
 
-        let dec = calculate_declination(-89.0, 179.0, 0.0, timestamp);
+        let dec = calculate_declination(-89.0, 179.0, 0.0, timestamp).unwrap();
         assert!(dec.is_finite());
     }
 
@@ -102,8 +111,8 @@ mod tests {
         // should not change dramatically
         let timestamp = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
 
-        let dec_sea = calculate_declination(40.0, -100.0, 0.0, timestamp);
-        let dec_high = calculate_declination(40.0, -100.0, 10000.0, timestamp);
+        let dec_sea = calculate_declination(40.0, -100.0, 0.0, timestamp).unwrap();
+        let dec_high = calculate_declination(40.0, -100.0, 10000.0, timestamp).unwrap();
 
         // Difference should be small (less than 1 degree)
         assert!((dec_sea - dec_high).abs() < 1.0);

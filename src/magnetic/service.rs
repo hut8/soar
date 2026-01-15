@@ -118,7 +118,7 @@ impl MagneticService {
 
         // Calculate magnetic declination using WMM
         let calculation_start = Instant::now();
-        let declination = wmm::calculate_declination(latitude, longitude, altitude_meters, time);
+        let declination = wmm::calculate_declination(latitude, longitude, altitude_meters, time)?;
 
         // Record calculation time
         histogram!("magnetic_calculation_duration_seconds")
