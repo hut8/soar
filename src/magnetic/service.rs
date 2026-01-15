@@ -7,9 +7,10 @@ use tracing::debug;
 
 use super::wmm;
 
-/// Round coordinates to ~10km grid (0.1 degrees ≈ 11km)
-/// This creates a cache key that groups nearby lookups together
-/// Magnetic declination changes slowly over distance, so this is appropriate
+/// Round coordinates to ~10km grid using tenths of a degree (0.1° ≈ 11km at the equator).
+/// This creates a cache key that groups nearby lookups together.
+/// The `* 10.0` factor is intentional: we quantize to 0.1° resolution to balance cache hit rate
+/// against spatial accuracy, and magnetic declination changes slowly enough that this is appropriate.
 fn round_coord_for_cache(coord: f64) -> i32 {
     (coord * 10.0).round() as i32
 }
