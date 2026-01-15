@@ -39,7 +39,7 @@ pub struct PacketRouter {
 }
 
 /// Internal queue capacity for the PacketRouter worker pool
-pub const INTERNAL_QUEUE_CAPACITY: usize = 5_000;
+pub const INTERNAL_QUEUE_CAPACITY: usize = 10_000;
 
 impl PacketRouter {
     /// Create a new PacketRouter with a generic processor

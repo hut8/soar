@@ -24,7 +24,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 // Queue size constants
-const NATS_INTAKE_QUEUE_SIZE: usize = 1000;
+const NATS_INTAKE_QUEUE_SIZE: usize = 5000;
 const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
 const SBS_INTAKE_QUEUE_SIZE: usize = 1000;
 const AIRCRAFT_QUEUE_SIZE: usize = 1000;
@@ -974,7 +974,7 @@ pub async fn handle_run(
     info!("Spawned envelope router task");
 
     // Create PacketRouter with per-processor queues and internal worker pool
-    const PACKET_ROUTER_WORKERS: usize = 10;
+    const PACKET_ROUTER_WORKERS: usize = 50;
     let packet_router = PacketRouter::new(generic_processor)
         .with_aircraft_position_queue(aircraft_tx)
         .with_receiver_status_queue(receiver_status_tx)
