@@ -69,6 +69,8 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 - `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy`
 - `/etc/pyroscope/config.yml` → `infrastructure/pyroscope-config.yml`
 - `/etc/netdata/netdata.conf` → `infrastructure/netdata-config.conf`
+- `/etc/pgbouncer/pgbouncer.ini` → `infrastructure/pgbouncer.ini`
+- `/etc/pgbouncer/userlist.txt` → `infrastructure/pgbouncer-userlist.txt`
 
 **Process for config changes:**
 1. Edit the config file in `infrastructure/` first
