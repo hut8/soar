@@ -29,6 +29,15 @@ export const FAA_ENGINE_TYPE_LABELS: Record<FaaEngineTypeCode, string> = {
 };
 
 /**
+ * Check if a code is a valid FAA engine type
+ * @param code - Code to validate
+ * @returns True if the code is a valid engine type
+ */
+export function isValidEngineTypeCode(code: number): code is FaaEngineTypeCode {
+	return code >= 0 && code <= 11;
+}
+
+/**
  * Get the label for an FAA engine type code
  * @param code - Numeric engine type code (0-11)
  * @returns Human-readable label of the engine type, or 'Unknown' if invalid
@@ -38,18 +47,9 @@ export function getEngineTypeLabel(code: number | null | undefined): string {
 		return 'Unknown';
 	}
 
-	if (code in FAA_ENGINE_TYPE_LABELS) {
-		return FAA_ENGINE_TYPE_LABELS[code as FaaEngineTypeCode];
+	if (isValidEngineTypeCode(code)) {
+		return FAA_ENGINE_TYPE_LABELS[code];
 	}
 
 	return 'Unknown';
-}
-
-/**
- * Check if a code is a valid FAA engine type
- * @param code - Code to validate
- * @returns True if the code is a valid engine type
- */
-export function isValidEngineTypeCode(code: number): code is FaaEngineTypeCode {
-	return code >= 0 && code <= 11;
 }
