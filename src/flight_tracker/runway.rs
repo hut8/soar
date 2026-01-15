@@ -1,16 +1,19 @@
 use crate::aircraft::Aircraft;
 use crate::fixes_repo::FixesRepository;
+use crate::magnetic::MagneticService;
 use crate::runways_repo::RunwaysRepository;
 use chrono::{DateTime, Utc};
 use tracing::{debug, warn};
 
 use super::geometry::angular_difference;
 
-/// Convert heading in degrees to runway identifier
+/// Convert magnetic heading in degrees to runway identifier
 /// e.g., 230° -> "23", 47° -> "05", 354° -> "35"
-pub(crate) fn heading_to_runway_identifier(heading: f64) -> String {
+/// 
+/// Note: Runway identifiers are based on MAGNETIC heading, not true heading
+pub(crate) fn magnetic_heading_to_runway_identifier(magnetic_heading: f64) -> String {
     // Round to nearest 10 degrees and divide by 10
-    let runway_number = ((heading / 10.0).round() as i32) % 36;
+    let runway_number = ((magnetic_heading / 10.0).round() as i32) % 36;
     // Handle 360° -> 36 -> 0
     let runway_number = if runway_number == 0 {
         36
@@ -58,6 +61,7 @@ pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftTyp
 pub(crate) async fn determine_runway_identifier(
     fixes_repo: &FixesRepository,
     runways_repo: &RunwaysRepository,
+    magnetic_service: &MagneticService,
     device: &Aircraft,
     event_time: DateTime<Utc>,
     latitude: f64,
@@ -251,10 +255,25 @@ pub(crate) async fn determine_runway_identifier(
     }
 
     // Fallback: Infer runway from heading
-    let inferred_runway = heading_to_runway_identifier(avg_course);
+    // Convert true heading (from GPS) to magnetic heading for runway identifier
+    let magnetic_heading = match magnetic_service
+        .true_to_magnetic(avg_course, latitude, longitude, 0.0, Some(event_time))
+        .await
+    {
+        Ok(mag_h) => mag_h,
+        Err(e) => {
+            warn!(
+                "Failed to calculate magnetic heading for device {}: {}, using true heading as fallback",
+                device_id, e
+            );
+            avg_course // Fallback to true heading if magnetic calculation fails
+        }
+    };
+
+    let inferred_runway = magnetic_heading_to_runway_identifier(magnetic_heading);
     debug!(
-        "Inferred runway {} from heading {:.1}° for device {}",
-        inferred_runway, avg_course, device_id
+        "Inferred runway {} from true heading {:.1}° (magnetic {:.1}°) for device {}",
+        inferred_runway, avg_course, magnetic_heading, device_id
     );
     Some((inferred_runway, true)) // true = inferred from heading
 }
