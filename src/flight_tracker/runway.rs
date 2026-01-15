@@ -9,7 +9,7 @@ use super::geometry::angular_difference;
 
 /// Convert magnetic heading in degrees to runway identifier
 /// e.g., 230° -> "23", 47° -> "05", 354° -> "35"
-/// 
+///
 /// Note: Runway identifiers are based on MAGNETIC heading, not true heading
 pub(crate) fn magnetic_heading_to_runway_identifier(magnetic_heading: f64) -> String {
     // Round to nearest 10 degrees and divide by 10
@@ -58,6 +58,7 @@ pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftTyp
 /// - was_inferred: true if inferred from heading, false if looked up in database
 ///
 /// If airport_ref is provided, only searches for runways at that specific airport
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn determine_runway_identifier(
     fixes_repo: &FixesRepository,
     runways_repo: &RunwaysRepository,

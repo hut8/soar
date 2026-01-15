@@ -4,10 +4,12 @@
 ///
 /// The WMM is a geomagnetic field model that describes the Earth's magnetic field.
 /// It is updated every 5 years and is used by navigation systems worldwide.
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Utc};
-use world_magnetic_model::{time::Date as WmmDate, uom::si::angle::degree, uom::si::f32::*, uom::si::length::meter, GeomagneticField};
+use world_magnetic_model::{
+    GeomagneticField, time::Date as WmmDate, uom::si::angle::degree, uom::si::f32::*,
+    uom::si::length::meter,
+};
 
 /// Calculate magnetic declination (variance) at a given location and time
 ///
@@ -31,11 +33,12 @@ pub fn calculate_declination(
     // Convert to WMM date
     let year = timestamp.year();
     let day_of_year = timestamp.ordinal();
-    let wmm_date = WmmDate::from_ordinal_date(year, day_of_year as u16)
-        .with_context(|| format!(
+    let wmm_date = WmmDate::from_ordinal_date(year, day_of_year as u16).with_context(|| {
+        format!(
             "Failed to convert date to WMM format: year={}, day={}",
             year, day_of_year
-        ))?;
+        )
+    })?;
 
     // Create geomagnetic field calculation
     let field = GeomagneticField::new(
@@ -44,10 +47,12 @@ pub fn calculate_declination(
         Angle::new::<degree>(longitude as f32),
         wmm_date,
     )
-    .with_context(|| format!(
-        "Failed to calculate geomagnetic field at lat={}, lon={}, alt={}m",
-        latitude, longitude, altitude_meters
-    ))?;
+    .with_context(|| {
+        format!(
+            "Failed to calculate geomagnetic field at lat={}, lon={}, alt={}m",
+            latitude, longitude, altitude_meters
+        )
+    })?;
 
     // Return declination in degrees
     Ok(field.declination().get::<degree>() as f64)

@@ -130,9 +130,7 @@ impl MagneticService {
         );
 
         // Store in cache for future lookups
-        self.declination_cache
-            .insert(cache_key, declination)
-            .await;
+        self.declination_cache.insert(cache_key, declination).await;
         gauge!("magnetic_cache_entries").set(self.declination_cache.entry_count() as f64);
 
         // Record total lookup duration
@@ -247,7 +245,10 @@ mod tests {
         let service = MagneticService::new();
 
         // Test San Francisco (should have eastward declination ~13°E)
-        let dec = service.declination(37.77, -122.42, 0.0, None).await.unwrap();
+        let dec = service
+            .declination(37.77, -122.42, 0.0, None)
+            .await
+            .unwrap();
         assert!(
             dec > 10.0 && dec < 16.0,
             "SF declination should be ~13°E, got {}",
@@ -269,7 +270,10 @@ mod tests {
 
         // In SF with ~13°E declination:
         // True heading 90° (east) -> Magnetic heading ~77° (90 - 13)
-        let mag_heading = service.true_to_magnetic(90.0, 37.77, -122.42, 0.0, None).await.unwrap();
+        let mag_heading = service
+            .true_to_magnetic(90.0, 37.77, -122.42, 0.0, None)
+            .await
+            .unwrap();
         assert!(
             mag_heading > 70.0 && mag_heading < 85.0,
             "Expected ~77°, got {}",
@@ -283,7 +287,10 @@ mod tests {
 
         // In SF with ~13°E declination:
         // Magnetic heading 77° -> True heading ~90° (77 + 13)
-        let true_heading = service.magnetic_to_true(77.0, 37.77, -122.42, 0.0, None).await.unwrap();
+        let true_heading = service
+            .magnetic_to_true(77.0, 37.77, -122.42, 0.0, None)
+            .await
+            .unwrap();
         assert!(
             true_heading > 85.0 && true_heading < 95.0,
             "Expected ~90°, got {}",
@@ -299,7 +306,10 @@ mod tests {
         let dec1 = service.declination(40.0, -100.0, 0.0, None).await.unwrap();
 
         // Second call with similar coordinates (within rounding threshold) - should hit cache
-        let dec2 = service.declination(40.05, -100.05, 0.0, None).await.unwrap();
+        let dec2 = service
+            .declination(40.05, -100.05, 0.0, None)
+            .await
+            .unwrap();
 
         // Results should be close (same cached value)
         assert!(
@@ -316,7 +326,10 @@ mod tests {
 
         // Test wraparound at 360°
         // If true heading is 5° and declination is +10°E, magnetic heading should be 355° (5 - 10 + 360)
-        let mag_heading = service.true_to_magnetic(5.0, 37.77, -122.42, 0.0, None).await.unwrap();
+        let mag_heading = service
+            .true_to_magnetic(5.0, 37.77, -122.42, 0.0, None)
+            .await
+            .unwrap();
         assert!(
             mag_heading >= 0.0 && mag_heading < 360.0,
             "Heading should be normalized to 0-360"
