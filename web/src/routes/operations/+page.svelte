@@ -1294,14 +1294,14 @@
 					lng: coord[1]
 				}));
 
-				// Create runway rectangle polygon
+				// Create runway rectangle polygon with semi-transparent blue fill and thin orange outline
 				const polygon = new google.maps.Polygon({
 					paths: path,
-					strokeColor: '#4A5568', // Gray-600
-					strokeOpacity: 0.9,
-					strokeWeight: 1,
-					fillColor: '#2D3748', // Gray-700
-					fillOpacity: 0.7,
+					strokeColor: '#fb923c', // Orange (Tailwind orange-400)
+					strokeOpacity: 1.0,
+					strokeWeight: 2,
+					fillColor: '#3b82f6', // Blue (Tailwind blue-500)
+					fillOpacity: 0.4, // Semi-transparent
 					map: map,
 					zIndex: 40 // Below airspaces (50), airports (100), and receivers (150)
 				});
