@@ -1410,13 +1410,13 @@
 			if (webkitHeading !== undefined && webkitHeading !== null) {
 				// iOS: Use webkitCompassHeading directly (already magnetic heading)
 				magneticHeading = webkitHeading;
-			} else if (event.absolute) {
+			} else if (event.absolute && event.alpha !== null) {
 				// Android with absolute orientation: Convert alpha to magnetic heading
 				// alpha is counter-clockwise from north, compass is clockwise from north
 				magneticHeading = (360 - event.alpha) % 360;
 			} else {
-				// Fallback: Use alpha as-is (may not be accurate)
-				magneticHeading = event.alpha;
+				// Fallback: Use alpha as-is (may not be accurate, default to 0 if somehow null)
+				magneticHeading = event.alpha ?? 0;
 			}
 
 			// Display the magnetic heading (what direction the device is pointing)
