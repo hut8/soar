@@ -7,7 +7,6 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Utc};
-use tracing::warn;
 use world_magnetic_model::{time::Date as WmmDate, uom::si::angle::degree, uom::si::f32::*, uom::si::length::meter, GeomagneticField};
 
 /// Calculate magnetic declination (variance) at a given location and time
@@ -22,7 +21,7 @@ use world_magnetic_model::{time::Date as WmmDate, uom::si::angle::degree, uom::s
 /// Magnetic declination in degrees (positive = east, negative = west)
 ///
 /// # Errors
-/// Returns an error if the geomagnetic field calculation fails (e.g., invalid coordinates or near poles)
+/// Returns an error if the date conversion fails or geomagnetic field calculation fails
 pub fn calculate_declination(
     latitude: f64,
     longitude: f64,
@@ -33,13 +32,10 @@ pub fn calculate_declination(
     let year = timestamp.year();
     let day_of_year = timestamp.ordinal();
     let wmm_date = WmmDate::from_ordinal_date(year, day_of_year as u16)
-        .unwrap_or_else(|e| {
-            warn!(
-                "Failed to convert date {} (day {}) to WMM date: {:?}, using fallback date 2025-01-01",
-                year, day_of_year, e
-            );
-            WmmDate::from_ordinal_date(2025, 1).unwrap()
-        });
+        .with_context(|| format!(
+            "Failed to convert date to WMM format: year={}, day={}",
+            year, day_of_year
+        ))?;
 
     // Create geomagnetic field calculation
     let field = GeomagneticField::new(
