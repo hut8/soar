@@ -100,7 +100,7 @@ sitemap-rs = "0.4.0"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 flarmnet = { git = "https://github.com/hut8/flarmnet-rs", default-features = false, features = ["xcsoar"] }
-pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec"] }
+pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec", "frame-pointer"] }
 lru = "0.16"
 moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
