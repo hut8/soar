@@ -34,7 +34,7 @@ export const FAA_ENGINE_TYPE_LABELS: Record<FaaEngineTypeCode, string> = {
  * @returns True if the code is a valid engine type
  */
 export function isValidEngineTypeCode(code: number): code is FaaEngineTypeCode {
-	return code >= 0 && code <= 11;
+	return code in FAA_ENGINE_TYPE_LABELS;
 }
 
 /**

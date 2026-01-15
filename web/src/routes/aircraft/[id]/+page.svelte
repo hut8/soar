@@ -773,6 +773,7 @@
 							{/if}
 
 							<!-- Engine Type -->
+							<!-- Note: Explicit null/undefined check needed because 0 is a valid engine type (None) -->
 							{#if aircraftRegistration.engineType !== null && aircraftRegistration.engineType !== undefined}
 								<div class="flex items-start gap-3">
 									<Info class="mt-1 h-4 w-4 text-surface-500" />
