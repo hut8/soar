@@ -36,6 +36,7 @@ pub mod coverage_repo;
 pub mod elevation;
 pub mod email;
 pub mod email_reporter;
+pub mod magnetic;
 pub mod faa;
 pub mod fetch_receivers;
 pub mod fix_processor;

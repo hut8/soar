@@ -586,6 +586,13 @@ pub fn initialize_run_metrics() {
     metrics::counter!("elevation_tile_cache_misses_total").absolute(0);
     metrics::gauge!("elevation_tile_cache_entries").set(0.0);
 
+    // Magnetic declination cache metrics
+    metrics::counter!("magnetic_cache_hits_total").absolute(0);
+    metrics::counter!("magnetic_cache_misses_total").absolute(0);
+    metrics::gauge!("magnetic_cache_entries").set(0.0);
+    metrics::histogram!("magnetic_lookup_duration_seconds").record(0.0);
+    metrics::histogram!("magnetic_calculation_duration_seconds").record(0.0);
+
     // Receiver cache metrics
     metrics::counter!("generic_processor.receiver_cache.hit_total").absolute(0);
     metrics::counter!("generic_processor.receiver_cache.miss_total").absolute(0);
