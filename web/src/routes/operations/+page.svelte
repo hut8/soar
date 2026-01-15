@@ -1400,35 +1400,48 @@
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
 		if (event.alpha !== null) {
 			isCompassActive = true;
-			// Invert alpha: when device rotates clockwise (alpha increases),
-			// compass rose must rotate counter-clockwise to keep north pointing north
-			// This matches the NOAA compass implementation: (360 - event.alpha)
-			const invertedAlpha = 360 - event.alpha;
-			displayHeading = Math.round(event.alpha); // Display shows device heading, not compass rotation
+
+			// Get the magnetic heading from the device
+			// iOS provides webkitCompassHeading which is the true magnetic heading
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const webkitHeading = (event as any).webkitCompassHeading;
+			let magneticHeading: number;
+
+			if (webkitHeading !== undefined && webkitHeading !== null) {
+				// iOS: Use webkitCompassHeading directly (already magnetic heading)
+				magneticHeading = webkitHeading;
+			} else if (event.absolute) {
+				// Android with absolute orientation: Convert alpha to magnetic heading
+				// alpha is counter-clockwise from north, compass is clockwise from north
+				magneticHeading = (360 - event.alpha) % 360;
+			} else {
+				// Fallback: Use alpha as-is (may not be accurate)
+				magneticHeading = event.alpha;
+			}
+
+			// Display the magnetic heading (what direction the device is pointing)
+			displayHeading = Math.round(magneticHeading);
+
+			// For the compass rose, we need to rotate it opposite to the device heading
+			// so that north always points north on the compass
+			let newCompassRotation = (360 - magneticHeading) % 360;
 
 			// Normalize to 0-360 range
-			let newHeading = ((invertedAlpha % 360) + 360) % 360;
+			newCompassRotation = ((newCompassRotation % 360) + 360) % 360;
 
 			// Calculate the shortest rotation path to avoid spinning around unnecessarily
-			// If the difference is greater than 180°, we should wrap around
-			let delta = newHeading - previousCompassHeading;
+			let delta = newCompassRotation - previousCompassHeading;
 
 			// Adjust for boundary crossing to take the shortest path
 			if (delta > 180) {
-				// Crossed from high to low (e.g., 350° to 10°)
-				// Add a full rotation to previousCompassHeading conceptually
-				compassHeading = newHeading - 360;
+				compassHeading = newCompassRotation - 360;
 			} else if (delta < -180) {
-				// Crossed from low to high (e.g., 10° to 350°)
-				// Add a full rotation to newHeading
-				compassHeading = newHeading + 360;
+				compassHeading = newCompassRotation + 360;
 			} else {
-				// Normal case, no boundary crossing
-				compassHeading = newHeading;
+				compassHeading = newCompassRotation;
 			}
 
-			// Update previous heading to track actual compassHeading (not normalized)
-			// This maintains continuity across boundary crossings
+			// Update previous heading
 			previousCompassHeading = compassHeading;
 		}
 	}
@@ -2486,9 +2499,10 @@
 				</svg>
 			</div>
 			<div
-				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
+				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center"
 			>
-				{displayHeading}°
+				<div class="text-[24px] font-bold text-gray-700">{displayHeading}°</div>
+				<div class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Magnetic</div>
 			</div>
 		</div>
 	{/if}
