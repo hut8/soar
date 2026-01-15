@@ -1105,7 +1105,10 @@ if [ -f "$DEPLOY_DIR/pgbouncer.ini" ]; then
         # Reload PgBouncer if running to pick up new config (graceful, no connection drop)
         if systemctl is-active --quiet pgbouncer; then
             log_info "Reloading PgBouncer to apply new configuration..."
-            systemctl reload pgbouncer || log_warn "Failed to reload PgBouncer"
+            if ! systemctl reload pgbouncer; then
+                log_warn "Failed to reload PgBouncer, attempting restart..."
+                systemctl restart pgbouncer || log_warn "Failed to restart PgBouncer"
+            fi
         fi
     else
         log_info "PgBouncer configuration unchanged, skipping"
