@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { auth } from '$lib/stores/auth';
 import { serverCall } from '$lib/api/server';
 import { calculateDistance } from '$lib/geography';
+import type { DeviceOrientationEventWithCompass } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'locationTracker']);
@@ -190,14 +191,13 @@ function handlePositionError(error: GeolocationPositionError): void {
 /**
  * Handle device orientation updates
  */
-function handleDeviceOrientation(event: DeviceOrientationEvent): void {
+function handleDeviceOrientation(event: DeviceOrientationEventWithCompass): void {
 	currentOrientation = {
 		alpha: event.alpha,
 		beta: event.beta,
 		gamma: event.gamma,
 		absolute: event.absolute,
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		webkitCompassHeading: (event as any).webkitCompassHeading
+		webkitCompassHeading: event.webkitCompassHeading
 	};
 }
 

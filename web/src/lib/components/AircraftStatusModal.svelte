@@ -6,7 +6,8 @@
 		AircraftRegistration,
 		AircraftModel,
 		Flight,
-		DataResponse
+		DataResponse,
+		DeviceOrientationEventWithCompass
 	} from '$lib/types';
 	import {
 		formatTitleCase,
@@ -228,14 +229,13 @@
 	}
 
 	// Handle aircraft orientation changes
-	function handleOrientationChange(event: DeviceOrientationEvent) {
+	function handleOrientationChange(event: DeviceOrientationEventWithCompass) {
 		if (event.alpha !== null) {
 			isCompassActive = true;
 
 			// Get the magnetic heading from the device
 			// iOS provides webkitCompassHeading which is the true magnetic heading
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const webkitHeading = (event as any).webkitCompassHeading;
+			const webkitHeading = event.webkitCompassHeading;
 
 			if (webkitHeading !== undefined && webkitHeading !== null) {
 				// iOS: Use webkitCompassHeading directly (already magnetic heading)

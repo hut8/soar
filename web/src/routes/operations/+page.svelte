@@ -23,7 +23,8 @@
 		Airport,
 		DataListResponse,
 		DataResponse,
-		AircraftCluster
+		AircraftCluster,
+		DeviceOrientationEventWithCompass
 	} from '$lib/types';
 	import { isAircraftItem, isClusterItem } from '$lib/types';
 	import { toaster } from '$lib/toaster';
@@ -1397,14 +1398,13 @@
 		}, 500);
 	}
 
-	function handleOrientationChange(event: DeviceOrientationEvent): void {
+	function handleOrientationChange(event: DeviceOrientationEventWithCompass): void {
 		if (event.alpha !== null) {
 			isCompassActive = true;
 
 			// Get the magnetic heading from the device
 			// iOS provides webkitCompassHeading which is the true magnetic heading
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const webkitHeading = (event as any).webkitCompassHeading;
+			const webkitHeading = event.webkitCompassHeading;
 			let magneticHeading: number;
 
 			if (webkitHeading !== undefined && webkitHeading !== null) {

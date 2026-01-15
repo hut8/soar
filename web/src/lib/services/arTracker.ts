@@ -2,6 +2,7 @@
 
 import { browser } from '$app/environment';
 import type { ARDeviceOrientation, ARUserPosition } from '$lib/ar/types';
+import type { DeviceOrientationEventWithCompass } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'ARTracker']);
@@ -139,14 +140,12 @@ export class ARTracker {
 		window.addEventListener('deviceorientation', this.handleOrientationEvent);
 	}
 
-	private handleOrientationEvent = (event: DeviceOrientationEvent): void => {
+	private handleOrientationEvent = (event: DeviceOrientationEventWithCompass): void => {
 		let heading = event.alpha ?? 0;
 
 		// iOS provides webkitCompassHeading (true compass heading)
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		if ((event as any).webkitCompassHeading !== undefined) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			heading = (event as any).webkitCompassHeading;
+		if (event.webkitCompassHeading !== undefined) {
+			heading = event.webkitCompassHeading;
 		} else if (event.absolute) {
 			// Android: convert alpha to compass heading
 			heading = 360 - heading;

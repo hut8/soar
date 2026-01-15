@@ -404,3 +404,9 @@ export interface FixesInHexResponse {
 	h3Index: string;
 	resolution: number;
 }
+
+// Browser API Extensions
+// DeviceOrientationEvent with iOS-specific webkitCompassHeading property
+export interface DeviceOrientationEventWithCompass extends DeviceOrientationEvent {
+	webkitCompassHeading?: number; // iOS-specific: true magnetic heading (0-360 degrees)
+}
