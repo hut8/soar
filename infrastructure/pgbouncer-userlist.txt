@@ -1,0 +1,7 @@
+; PgBouncer userlist
+; Format: "username" "password"
+; Since we use auth_type = trust, passwords are not checked
+; but the file must exist and list allowed users
+
+"soar" ""
+"postgres" ""

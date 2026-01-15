@@ -891,6 +891,50 @@ sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
 echo -e "${GREEN}PostGIS enabled on '$DB_NAME' database${NC}"
 
+# ============================================================================
+# PgBouncer Installation and Configuration
+# ============================================================================
+
+echo -e "${BLUE}Installing PgBouncer...${NC}"
+sudo apt-get install -y pgbouncer
+
+echo -e "${GREEN}PgBouncer installed successfully${NC}"
+
+# Configure PgBouncer
+echo -e "${BLUE}Configuring PgBouncer...${NC}"
+
+# Create pgbouncer directories
+sudo mkdir -p /etc/pgbouncer
+sudo mkdir -p /var/log/pgbouncer
+sudo mkdir -p /var/run/pgbouncer
+
+# Copy configuration files
+sudo cp infrastructure/pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
+sudo cp infrastructure/pgbouncer-userlist.txt /etc/pgbouncer/userlist.txt
+
+# Set ownership and permissions
+sudo chown -R postgres:postgres /etc/pgbouncer
+sudo chown -R postgres:postgres /var/log/pgbouncer
+sudo chown -R postgres:postgres /var/run/pgbouncer
+sudo chmod 640 /etc/pgbouncer/pgbouncer.ini
+sudo chmod 640 /etc/pgbouncer/userlist.txt
+
+# Enable and start PgBouncer
+sudo systemctl enable pgbouncer
+if ! systemctl is-active --quiet pgbouncer; then
+    echo -e "${BLUE}Starting PgBouncer...${NC}"
+    sudo systemctl start pgbouncer
+    if systemctl is-active --quiet pgbouncer; then
+        echo -e "${GREEN}PgBouncer started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start PgBouncer. Check logs with: journalctl -u pgbouncer -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}PgBouncer is already running${NC}"
+fi
+
+echo -e "${GREEN}PgBouncer configured${NC}"
+
 # Enable pg_partman extension on database
 echo -e "${BLUE}Enabling pg_partman extension on '$DB_NAME' database...${NC}"
 sudo -u postgres psql -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS partman;"
@@ -986,6 +1030,31 @@ echo -e "${YELLOW}PostgreSQL Authentication:${NC}"
 echo "  Local connections (Unix socket and TCP 127.0.0.1) use 'trust' authentication"
 echo "  No password required for the 'soar' user on local connections"
 echo "  pg_hba.conf backup saved to: $PG_HBA_CONF.backup.*"
+echo
+echo -e "${YELLOW}PgBouncer Connection Pooler:${NC}"
+echo "  Listen address: 127.0.0.1:6432"
+echo "  Unix socket: /var/run/postgresql/.s.PGSQL.6432"
+echo "  Configuration: /etc/pgbouncer/pgbouncer.ini"
+echo "  User list: /etc/pgbouncer/userlist.txt"
+echo "  Pool mode: transaction (release connection after each transaction)"
+echo "  Max client connections: 1000"
+echo "  Default pool size: 20 per database/user pair"
+echo "  Logs: /var/log/pgbouncer/pgbouncer.log"
+echo ""
+echo "  Available databases through PgBouncer:"
+echo "    - soar (production)"
+echo "    - soar_staging (staging)"
+echo "    - soar_dev (development)"
+echo ""
+echo "  Service control:"
+echo "    sudo systemctl status pgbouncer"
+echo "    sudo systemctl restart pgbouncer"
+echo ""
+echo "  Connect via PgBouncer:"
+echo "    psql -h 127.0.0.1 -p 6432 -U soar -d $DB_NAME"
+echo ""
+echo "  IMPORTANT: To use PgBouncer, update DATABASE_URL in $ENV_FILE:"
+echo "    DATABASE_URL=postgresql://soar@127.0.0.1:6432/$DB_NAME"
 echo
 echo -e "${YELLOW}NATS JetStream:${NC}"
 echo "  NATS server installed with JetStream enabled"
