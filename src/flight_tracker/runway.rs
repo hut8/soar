@@ -263,10 +263,10 @@ pub(crate) async fn determine_runway_identifier(
         Ok(mag_h) => mag_h,
         Err(e) => {
             warn!(
-                "Failed to calculate magnetic heading for device {}: {}, using true heading as fallback",
+                "Failed to calculate magnetic heading for device {}: {}, cannot reliably infer runway from heading",
                 device_id, e
             );
-            avg_course // Fallback to true heading if magnetic calculation fails
+            return None;
         }
     };
 
