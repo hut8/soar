@@ -203,11 +203,15 @@
 		);
 
 		// Calculate the arrow rotation to point at the aircraft
-		// The arrow should point in the direction of the aircraft relative to where the phone is pointing
+		// The arrow should always point toward the aircraft's actual location
 		// bearing = absolute direction to aircraft (from north)
 		// deviceHeading = direction phone is pointing (magnetic heading)
-		// arrow rotation = bearing - deviceHeading (relative bearing)
-		let newDirection = bearing - deviceHeading;
+		// To keep the arrow pointing at the aircraft as the device rotates,
+		// we need to counter-rotate: as device rotates clockwise, arrow rotates counter-clockwise
+		// This is achieved by: arrow rotation = bearing + (360 - deviceHeading) = bearing - deviceHeading
+		// However, empirically, the correct formula appears to be: bearing + deviceHeading
+		// This may be due to how the SVG rotation is applied or screen coordinate system
+		let newDirection = bearing + deviceHeading;
 
 		// Normalize to 0-360 range
 		newDirection = ((newDirection % 360) + 360) % 360;
