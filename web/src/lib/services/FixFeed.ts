@@ -178,8 +178,8 @@ export class FixFeed {
 						};
 
 						// Add fix to aircraft registry
-						// For fixes from WebSocket, assume aircraft data is provided via aircraft messages
-						// so don't attempt API fallback to avoid N+1 calls
+						// For fixes from WebSocket, AircraftRegistry will fetch or update aircraft details via the API
+						// as part of its normal workflow; aircraft messages are a complementary optimization.
 						this.aircraftRegistry.addFixToAircraft(fix).catch((error) => {
 							logger.warn('Failed to add fix to aircraft registry: {error}', { error });
 						});
