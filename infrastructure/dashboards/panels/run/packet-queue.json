@@ -1,0 +1,241 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisBorderShow": false,
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "barWidthFactor": 0.6,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "legend": false,
+          "tooltip": false,
+          "viz": false
+        },
+        "insertNulls": false,
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "showValues": false,
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": 0
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byRegexp",
+          "options": ".*Dropped.*"
+        },
+        "properties": [
+          {
+            "id": "custom.axisPlacement",
+            "value": "right"
+          },
+          {
+            "id": "custom.axisLabel",
+            "value": "Dropped/sec"
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "palette-classic"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byRegexp",
+          "options": ".*Enqueued.*"
+        },
+        "properties": [
+          {
+            "id": "custom.axisPlacement",
+            "value": "left"
+          },
+          {
+            "id": "custom.axisLabel",
+            "value": "Enqueued/sec"
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "mean",
+        "lastNotNull",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "hideZeros": false,
+      "mode": "multi",
+      "sort": "desc"
+    }
+  },
+  "pluginVersion": "12.2.1",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_aircraft_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Aircraft Enqueued",
+      "range": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_receiver_status_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Receiver Status Enqueued",
+      "range": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_receiver_position_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Receiver Position Enqueued",
+      "range": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_server_status_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Server Status Enqueued",
+      "range": true,
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_router_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Router Processed",
+      "range": true,
+      "refId": "K"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_raw_message_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_aircraft_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_position_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_server_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Total Dropped",
+      "range": true,
+      "refId": "E"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_aircraft_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Aircraft Dropped",
+      "range": true,
+      "refId": "F"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_receiver_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Receiver Status Dropped",
+      "range": true,
+      "refId": "G"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_receiver_position_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Receiver Position Dropped",
+      "range": true,
+      "refId": "H"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_server_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Server Status Dropped",
+      "range": true,
+      "refId": "I"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_raw_message_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Raw Message Queue Dropped",
+      "range": true,
+      "refId": "J"
+    }
+  ],
+  "title": "Packet Queue",
+  "type": "timeseries"
+}

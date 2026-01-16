@@ -1,0 +1,131 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "description": "Average number of hexagons and fixes returned per API request",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "tooltip": false,
+          "viz": false,
+          "legend": false
+        },
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "mean",
+        "lastNotNull",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "single",
+      "sort": "none"
+    }
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.50, rate(coverage_api_hexes_count_bucket[5m]))",
+      "refId": "A",
+      "legendFormat": "Hexes p50"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.95, rate(coverage_api_hexes_count_bucket[5m]))",
+      "refId": "B",
+      "legendFormat": "Hexes p95"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.99, rate(coverage_api_hexes_count_bucket[5m]))",
+      "refId": "C",
+      "legendFormat": "Hexes p99"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.50, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+      "refId": "D",
+      "legendFormat": "Fixes p50"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.95, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+      "refId": "E",
+      "legendFormat": "Fixes p95"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "expr": "histogram_quantile(0.99, rate(coverage_api_hex_fixes_count_bucket[5m]))",
+      "refId": "F",
+      "legendFormat": "Fixes p99"
+    }
+  ],
+  "title": "Results Returned Per Request",
+  "type": "timeseries"
+}

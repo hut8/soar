@@ -1,0 +1,19 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "description": "Topics published by SOAR components showing the complete message flow from ingestion to client delivery",
+  "options": {
+    "code": {
+      "language": "plaintext",
+      "showLineNumbers": false,
+      "showMiniMap": false
+    },
+    "content": "# NATS Topics Published by SOAR\n\n## Raw Ingestion Topics (Stage 1)\n- `ogn.raw` - Raw OGN/APRS messages from APRS-IS (**ingest-ogn** \u2192 NATS)\n- `adsb.raw` - Raw ADS-B/Beast frames from receivers (**ingest-adsb** \u2192 NATS)\n\n## Processed Aircraft Topics (Stage 2)\n### Production Environment\n- `aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (**soar run** \u2192 NATS)\n- `aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area, 1\u00b0 grid (**soar run** \u2192 NATS)\n\n### Staging Environment\n- `staging.aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (**soar run** \u2192 NATS)\n- `staging.aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (**soar run** \u2192 NATS)\n\n## Message Flow\n1. **soar ingest-ogn** - Receives OGN/APRS from APRS-IS \u2192 publishes to `ogn.raw`\n2. **soar ingest-adsb** - Receives ADS-B/Beast from receivers \u2192 publishes to `adsb.raw`\n3. **soar run** - Consumes `ogn.raw` and `adsb.raw` \u2192 processes \u2192 publishes to `aircraft.*` topics\n4. **Web clients** - Subscribe to `aircraft.fix.{id}` or `aircraft.area.{lat}.{lon}` for live updates",
+    "mode": "markdown"
+  },
+  "pluginVersion": "12.2.1",
+  "title": "NATS Topic Information",
+  "type": "text"
+}

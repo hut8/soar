@@ -1,0 +1,64 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "blue",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": []
+  },
+  "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "reduceOptions": {
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": "/^version$/",
+      "values": false
+    },
+    "textMode": "value"
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "build_info{component=\"run\",environment=\"$environment\"}",
+      "format": "table",
+      "instant": true,
+      "legendFormat": "__auto",
+      "refId": "A"
+    }
+  ],
+  "title": "Version",
+  "transformations": [
+    {
+      "id": "labelsToFields",
+      "options": {
+        "mode": "columns"
+      }
+    }
+  ],
+  "type": "stat",
+  "_height": 4
+}

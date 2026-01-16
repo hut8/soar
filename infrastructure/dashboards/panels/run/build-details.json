@@ -1,0 +1,130 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "custom": {
+        "align": "auto",
+        "cellOptions": {
+          "type": "auto"
+        },
+        "inspect": false
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "commit"
+        },
+        "properties": [
+          {
+            "id": "custom.width",
+            "value": 100
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Value"
+        },
+        "properties": [
+          {
+            "id": "custom.hidden",
+            "value": true
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Time"
+        },
+        "properties": [
+          {
+            "id": "custom.hidden",
+            "value": true
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "cellHeight": "sm",
+    "footer": {
+      "countRows": false,
+      "fields": "",
+      "reducer": [
+        "sum"
+      ],
+      "show": false
+    },
+    "showHeader": true
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "build_info{component=\"run\",environment=\"$environment\"}",
+      "format": "table",
+      "instant": true,
+      "legendFormat": "__auto",
+      "refId": "A"
+    }
+  ],
+  "title": "Build Details",
+  "transformations": [
+    {
+      "id": "labelsToFields",
+      "options": {
+        "mode": "columns"
+      }
+    },
+    {
+      "id": "organize",
+      "options": {
+        "excludeByName": {
+          "__name__": true,
+          "component": true,
+          "environment": true,
+          "instance": true,
+          "job": true
+        },
+        "indexByName": {
+          "version": 0,
+          "commit": 1,
+          "build_timestamp": 2,
+          "binary_modified": 3,
+          "target": 4
+        },
+        "renameByName": {
+          "build_timestamp": "Built At",
+          "binary_modified": "Binary Modified",
+          "target": "Target"
+        }
+      }
+    }
+  ],
+  "type": "table",
+  "_height": 4
+}

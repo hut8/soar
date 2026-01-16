@@ -1,0 +1,194 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisBorderShow": false,
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "line",
+        "fillOpacity": 30,
+        "gradientMode": "none",
+        "hideFrom": {
+          "tooltip": false,
+          "viz": false,
+          "legend": false
+        },
+        "insertNulls": false,
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "normal"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "ms"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [],
+      "displayMode": "list",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "none"
+    }
+  },
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_total_processing_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Total Processing",
+      "range": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_upsert_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Upsert",
+      "range": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_aircraft_lookup_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Aircraft Lookup",
+      "range": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_fix_creation_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Fix Creation",
+      "range": true,
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_process_fix_internal_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Process Fix Internal",
+      "range": true,
+      "refId": "E"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_flight_insert_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Flight Insert",
+      "range": true,
+      "refId": "F"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_state_transition_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "State Transition",
+      "range": true,
+      "refId": "G"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_callsign_update_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Callsign Update",
+      "range": true,
+      "refId": "H"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_nats_publish_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "NATS Publish",
+      "range": true,
+      "refId": "I"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_fix_db_insert_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Fix DB Insert",
+      "range": true,
+      "refId": "J"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_aircraft_flight_update_last_fix_ms{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Flight Update Last Fix",
+      "range": true,
+      "refId": "K"
+    }
+  ],
+  "title": "Aircraft Processing Latency Breakdown (P50)",
+  "type": "timeseries"
+}

@@ -1,0 +1,62 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "blue",
+            "value": 0
+          },
+          {
+            "color": "green",
+            "value": 1
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": "",
+      "values": false
+    },
+    "showPercentChange": false,
+    "textMode": "auto",
+    "wideLayout": true
+  },
+  "pluginVersion": "12.2.1",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "flight_tracker_startup_aircraft_states_restored_total{component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Restored on Startup",
+      "range": true,
+      "refId": "A"
+    }
+  ],
+  "title": "Aircraft States Restored (Last Startup)",
+  "type": "stat"
+}

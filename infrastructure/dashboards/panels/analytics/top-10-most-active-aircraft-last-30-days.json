@@ -1,0 +1,107 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Top 10 most active aircraft by flight count in the last 30 days",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "custom": {
+        "align": "auto",
+        "cellOptions": {
+          "type": "auto"
+        },
+        "inspect": false
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Flights (30d)"
+        },
+        "properties": [
+          {
+            "id": "custom.width",
+            "value": 120
+          },
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "continuous-GrYlRd"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Total Distance (km)"
+        },
+        "properties": [
+          {
+            "id": "unit",
+            "value": "lengthkm"
+          },
+          {
+            "id": "decimals",
+            "value": 1
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "cellHeight": "sm",
+    "footer": {
+      "countRows": false,
+      "fields": "",
+      "reducer": [
+        "sum"
+      ],
+      "show": false
+    },
+    "showHeader": true,
+    "sortBy": []
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  aa.registration || ' (' || d.address || ')' as \"Aircraft\",\n  aa.aircraft_model as \"Model\",\n  aa.flight_count_30d as \"Flights (30d)\",\n  ROUND(aa.total_distance_meters / 1000.0) as \"Total Distance (km)\",\n  ROUND(aa.avg_flight_duration_seconds / 60.0) as \"Avg Duration (min)\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE aa.flight_count_30d > 0\nORDER BY aa.flight_count_30d DESC\nLIMIT 10",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Top 10 Most Active Aircraft (Last 30 Days)",
+  "type": "table"
+}

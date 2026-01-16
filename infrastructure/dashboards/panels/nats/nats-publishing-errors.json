@@ -1,0 +1,116 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisBorderShow": false,
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "Errors/sec",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "barWidthFactor": 0.6,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "legend": false,
+          "tooltip": false,
+          "viz": false
+        },
+        "insertNulls": false,
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": 0
+          },
+          {
+            "color": "red",
+            "value": 1
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "mean",
+        "lastNotNull",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "desc"
+    }
+  },
+  "pluginVersion": "12.2.1",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
+      "legendFormat": "OGN Publish Errors (ingest-ogn)",
+      "range": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(beast_nats_publish_error_total{component=\"ingest-adsb\",environment=\"$environment\"}[1m])",
+      "legendFormat": "ADS-B Publish Errors (ingest-adsb)",
+      "range": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(nats_fix_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Fix Publish Errors (soar run)",
+      "range": true,
+      "refId": "C"
+    }
+  ],
+  "title": "NATS Publishing Errors",
+  "type": "timeseries"
+}

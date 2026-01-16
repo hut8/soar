@@ -1,0 +1,64 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          },
+          {
+            "color": "yellow",
+            "value": 50
+          },
+          {
+            "color": "red",
+            "value": 100
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "websocket_connections{component=\"web\",environment=\"$environment\"}",
+      "legendFormat": "__auto",
+      "range": true,
+      "refId": "A"
+    }
+  ],
+  "title": "WebSocket Connections",
+  "type": "stat",
+  "_height": 4
+}

@@ -1,0 +1,93 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Daily flight counts over the last 30 days",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "Flights",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "bars",
+        "fillOpacity": 80,
+        "gradientMode": "none",
+        "hideFrom": {
+          "tooltip": false,
+          "viz": false,
+          "legend": false
+        },
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "normal"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "sum",
+        "mean",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "none"
+    }
+  },
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "time_series",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  date as time,\n  flight_count - tow_flight_count as \"Glider Flights\",\n  tow_flight_count as \"Tow Flights\"\nFROM flight_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nORDER BY date ASC",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Daily Flights (Gliding)",
+  "type": "timeseries",
+  "_height": 9
+}

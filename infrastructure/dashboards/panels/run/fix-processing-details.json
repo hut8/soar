@@ -1,0 +1,161 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "description": "Tracks fixes inserted into the database, duplicates detected on redelivery, and fixes suppressed due to high frequency",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisBorderShow": false,
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "barWidthFactor": 0.6,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "legend": false,
+          "tooltip": false,
+          "viz": false
+        },
+        "insertNulls": false,
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "showValues": false,
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": 0
+          }
+        ]
+      },
+      "unit": "ops"
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byRegexp",
+          "options": ".*Inserted.*"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byRegexp",
+          "options": ".*Duplicates.*"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "yellow",
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byRegexp",
+          "options": ".*Suppressed.*"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "mean",
+        "lastNotNull",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "hideZeros": false,
+      "mode": "multi",
+      "sort": "desc"
+    }
+  },
+  "pluginVersion": "12.2.1",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_fixes_inserted_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Fixes Inserted/sec",
+      "range": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_fixes_duplicate_on_redelivery_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Duplicates Detected/sec",
+      "range": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(aprs_fixes_suppressed_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Fixes Suppressed/sec",
+      "range": true,
+      "refId": "C"
+    }
+  ],
+  "title": "Fix Processing Details",
+  "type": "timeseries"
+}

@@ -98,23 +98,20 @@ This ensures config changes are tracked in version control and can be reproduced
 **CRITICAL - Grafana Dashboard Synchronization:**
 - **ALWAYS update Grafana dashboards when changing metrics** - Any metric rename, addition, or removal MUST be reflected in the corresponding dashboard files in `infrastructure/`
 - **Verify dashboard queries after changes** - After updating code, search all dashboard files for the old metric name and update them
-- **Dashboard locations:**
-  - **Run command (`soar run`)** - Split into focused sub-dashboards:
-    - `infrastructure/grafana-dashboard-run-core.json` - Core system (process, database, NATS publisher, latency)
-    - `infrastructure/grafana-dashboard-run-ingestion.json` - Data ingestion (OGN, Beast/ADS-B)
-    - `infrastructure/grafana-dashboard-run-routing.json` - Packet processing and routing
-    - `infrastructure/grafana-dashboard-run-flights.json` - Aircraft and flight tracking
-    - `infrastructure/grafana-dashboard-run-geocoding.json` - Pelias geocoding service
-    - `infrastructure/grafana-dashboard-run-elevation.json` - Elevation processing and AGL
-  - `infrastructure/grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
-  - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
-  - `infrastructure/grafana-dashboard-nats.json` - NATS/JetStream metrics
-  - `infrastructure/grafana-dashboard-analytics.json` - Analytics API and cache performance
+- **Dashboard locations** (generated from `infrastructure/dashboards/`):
+  - `grafana-dashboard-run.json` - Main run command metrics (core, routing, flights)
+  - `grafana-dashboard-run-geocoding.json` - Pelias geocoding service
+  - `grafana-dashboard-run-elevation.json` - Elevation processing and AGL
+  - `grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
+  - `grafana-dashboard-web.json` - Web server (`web` command)
+  - `grafana-dashboard-nats.json` - NATS/JetStream metrics
+  - `grafana-dashboard-analytics.json` - Analytics API and cache performance
+  - `grafana-dashboard-coverage.json` - Coverage API metrics
 
 **Metric Standards:**
 - **Naming convention** - Use dot notation (e.g., `aprs.aircraft.device_upsert_ms`)
 - **Document metric changes** - Note metric name changes in PR description for ops team awareness
-- **Remove obsolete dashboard queries** - If a metric is removed from code, remove it from dashboards too
+- **Remove obsolete dashboard queries** - If a metric is removed from code, remove it from panel files in `dashboards/panels/` and rebuild
 
 **Recent Metric Changes:**
 - `aprs.aircraft.aircraft_lookup_ms` → `aprs.aircraft.aircraft_upsert_ms` (2025-01-07, PR #312)
@@ -129,6 +126,35 @@ This ensures config changes are tracked in version control and can be reproduced
 - **Deployment** - `soar-deploy` script automatically processes templates and installs configs
 - **Documentation** - See `infrastructure/GRAFANA-ALERTING.md` for complete guide
 - **NEVER commit credentials** - Template files use placeholders, actual values extracted during deployment
+
+**Dashboard Builder:**
+
+Dashboards are built from modular panel files using `infrastructure/dashboards/build.py`:
+
+```bash
+# Build all dashboards
+python3 infrastructure/dashboards/build.py
+
+# Build specific dashboard
+python3 infrastructure/dashboards/build.py run-geocoding
+
+# Extract panels from existing dashboards (one-time setup)
+python3 infrastructure/dashboards/build.py --extract
+
+# Verify all dashboards build correctly
+python3 infrastructure/dashboards/build.py --verify
+```
+
+**Structure:**
+- `dashboards/panels/{dashboard}/` - Individual panel JSON files
+- `dashboards/definitions/{dashboard}.json` - Dashboard definitions (panel order, rows, metadata)
+- `dashboards/common/` - Shared configs (annotations, templating variables)
+
+**Editing dashboards:**
+1. Edit individual panel files in `dashboards/panels/{dashboard}/`
+2. Edit panel order/layout in `dashboards/definitions/{dashboard}.json`
+3. Run `python3 infrastructure/dashboards/build.py` to regenerate
+4. Commit both the panel/definition changes AND the generated `grafana-dashboard-*.json` files
 
 ### Frontend Development Standards
 
