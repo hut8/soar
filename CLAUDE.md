@@ -66,7 +66,7 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 - `/etc/tempo/config.yml` → `infrastructure/tempo-config.yml`
 - `/etc/loki/config.yml` → `infrastructure/loki-config.yml`
 - `/etc/prometheus/prometheus.yml` → `infrastructure/prometheus.yml`
-- `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy`
+- `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy.template` (template - processed by soar-deploy with git commit for profiling source links)
 - `/etc/pyroscope/config.yml` → `infrastructure/pyroscope-config.yml`
 - `/etc/netdata/netdata.conf` → `infrastructure/netdata-config.conf`
 - `/etc/pgbouncer/pgbouncer.ini` → `infrastructure/pgbouncer.ini`

@@ -605,7 +605,7 @@ jobs:
           fi
 
           # Copy observability stack configuration files
-          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy pgbouncer.ini; do
+          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy.template pgbouncer.ini; do
             if [ -f "infrastructure/$config_file" ]; then
               cp "infrastructure/$config_file" deploy-pkg/
               echo "Observability config included: $config_file"
@@ -789,7 +789,7 @@ jobs:
           fi
 
           # Copy observability stack configuration files
-          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy pgbouncer.ini; do
+          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy.template pgbouncer.ini; do
             if [ -f "infrastructure/$config_file" ]; then
               cp "infrastructure/$config_file" deploy-pkg/
               echo "Observability config included: $config_file"
