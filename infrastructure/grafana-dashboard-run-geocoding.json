@@ -22,17 +22,17 @@
   "links": [],
   "panels": [
     {
+      "type": "row",
       "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 1
-      },
-      "id": 1,
-      "panels": [],
       "title": "SOAR Run - Geocoding (Takeoff/Landing Detection)",
-      "type": "row"
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
     },
     {
       "datasource": {
@@ -68,13 +68,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1,
-        "w": 24,
-        "h": 8
-      },
-      "id": 2,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -107,7 +100,14 @@
         }
       ],
       "title": "Geocoding Success Rate (5m)",
-      "type": "stat"
+      "type": "stat",
+      "id": 2,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      }
     },
     {
       "datasource": {
@@ -197,21 +197,11 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 17,
-        "w": 24,
-        "h": 8
-      },
-      "id": 4,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right",
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -256,7 +246,14 @@
         }
       ],
       "title": "Geocoding Request Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 3,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
     },
     {
       "datasource": {
@@ -315,21 +312,11 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 25,
-        "w": 24,
-        "h": 8
-      },
-      "id": 5,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right",
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -374,7 +361,14 @@
         }
       ],
       "title": "Geocoding Latency",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
     },
     {
       "datasource": {
@@ -433,20 +427,11 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 33,
-        "w": 24,
-        "h": 8
-      },
-      "id": 6,
       "options": {
         "legend": {
-          "calcs": [
-            "sum"
-          ],
-          "displayMode": "table",
-          "placement": "right",
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -524,11 +509,17 @@
         }
       ],
       "title": "Locations Created by Type",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      }
     }
   ],
   "preload": false,
-  "refresh": "10s",
   "schemaVersion": 42,
   "tags": [
     "soar",
@@ -540,11 +531,10 @@
     "list": [
       {
         "current": {
-          "selected": true,
-          "text": "Production",
-          "value": "production"
+          "selected": false,
+          "text": "staging",
+          "value": "staging"
         },
-        "description": "Select environment (production or staging)",
         "hide": 0,
         "includeAll": false,
         "label": "Environment",
@@ -552,13 +542,13 @@
         "name": "environment",
         "options": [
           {
-            "selected": true,
-            "text": "Production",
+            "selected": false,
+            "text": "production",
             "value": "production"
           },
           {
-            "selected": false,
-            "text": "Staging",
+            "selected": true,
+            "text": "staging",
             "value": "staging"
           }
         ],
@@ -577,6 +567,6 @@
   "timezone": "",
   "title": "SOAR Run - Geocoding",
   "uid": "soar-run-geocoding",
-  "version": 19,
+  "refresh": "10s",
   "description": "Pelias geocoding service metrics"
 }
