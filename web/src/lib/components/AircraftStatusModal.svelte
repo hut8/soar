@@ -6,7 +6,8 @@
 		AircraftRegistration,
 		AircraftModel,
 		Flight,
-		DataResponse
+		DataResponse,
+		DeviceOrientationEventWithCompass
 	} from '$lib/types';
 	import {
 		formatTitleCase,
@@ -50,7 +51,7 @@
 
 	// Direction arrow variables
 	let userLocation: { lat: number; lng: number } | null = $state(null);
-	let aircraftHeading: number = $state(0);
+	let deviceHeading: number = $state(0); // Magnetic heading of the device/phone
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
 	let previousDirectionToAircraft: number = $state(0);
@@ -201,42 +202,63 @@
 			latestFix.longitude
 		);
 
-		// The arrow should point toward the aircraft and stay pointing there as phone rotates
-		// Add aircraft heading to rotate arrow opposite to phone rotation
-		// When phone points north (aircraftHeading = 0), arrow shows absolute bearing
-		// When phone rotates clockwise, arrow rotates counter-clockwise to keep pointing at aircraft
-		let newDirection = (bearing + aircraftHeading) % 360;
+		// Calculate the arrow rotation to point at the aircraft
+		// The arrow should always point toward the aircraft's actual location
+		// bearing = absolute direction to aircraft (from north)
+		// deviceHeading = direction phone is pointing (magnetic heading)
+		//
+		// Example: If aircraft is east (90°) and device points west (270°):
+		//   - On screen: top=west, right=south, bottom=east, left=north
+		//   - To point east (at aircraft), arrow must point down (180°)
+		//   - Formula: 90° - 270° = -180° = 180° ✓
+		//
+		// The formula is: arrow rotation = bearing - deviceHeading
+		let newDirection = bearing - deviceHeading;
 
 		// Normalize to 0-360 range
 		newDirection = ((newDirection % 360) + 360) % 360;
 
 		// Calculate the shortest rotation path to avoid spinning around unnecessarily
-		// If the difference is greater than 180°, we should wrap around
 		let delta = newDirection - previousDirectionToAircraft;
 
 		// Adjust for boundary crossing to take the shortest path
 		if (delta > 180) {
-			// Crossed from high to low (e.g., 350° to 10°)
-			// Add a full rotation to previousDirectionToAircraft conceptually
 			directionToAircraft = newDirection - 360;
 		} else if (delta < -180) {
-			// Crossed from low to high (e.g., 10° to 350°)
-			// Subtract a full rotation from newDirection conceptually
 			directionToAircraft = newDirection + 360;
 		} else {
-			// No boundary crossing, use the new direction directly
 			directionToAircraft = newDirection;
 		}
 
-		// Save the normalized direction for the next comparison
+		// Save for the next comparison (use the normalized value)
 		previousDirectionToAircraft = newDirection;
 	}
 
 	// Handle aircraft orientation changes
-	function handleOrientationChange(event: DeviceOrientationEvent) {
+	function handleOrientationChange(event: DeviceOrientationEventWithCompass) {
 		if (event.alpha !== null) {
 			isCompassActive = true;
-			aircraftHeading = event.alpha;
+
+			// Get the magnetic heading from the device
+			// iOS provides webkitCompassHeading which is the true magnetic heading
+			const webkitHeading = event.webkitCompassHeading;
+
+			if (webkitHeading !== undefined && webkitHeading !== null) {
+				// iOS: Use webkitCompassHeading directly (already magnetic heading)
+				deviceHeading = webkitHeading;
+			} else if (event.absolute && event.alpha !== null) {
+				// Android with absolute orientation: Convert alpha to magnetic heading
+				// alpha is counter-clockwise from north, compass is clockwise from north
+				deviceHeading = (360 - event.alpha) % 360;
+			} else {
+				// Fallback: Use alpha as-is (may not be accurate, default to 0 if somehow null)
+				logger.warn(
+					'Using raw alpha for heading (absolute={absolute}), compass may be inaccurate',
+					{ absolute: event.absolute }
+				);
+				deviceHeading = event.alpha ?? 0;
+			}
+
 			updateDirectionToAircraft();
 		}
 	}
