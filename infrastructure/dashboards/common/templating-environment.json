@@ -1,0 +1,28 @@
+{
+  "current": {
+    "selected": false,
+    "text": "staging",
+    "value": "staging"
+  },
+  "hide": 0,
+  "includeAll": false,
+  "label": "Environment",
+  "multi": false,
+  "name": "environment",
+  "options": [
+    {
+      "selected": false,
+      "text": "production",
+      "value": "production"
+    },
+    {
+      "selected": true,
+      "text": "staging",
+      "value": "staging"
+    }
+  ],
+  "query": "production,staging",
+  "queryValue": "",
+  "skipUrlSync": false,
+  "type": "custom"
+}

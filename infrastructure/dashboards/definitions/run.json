@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "title": "SOAR Run",
+    "uid": "soar-run-combined",
+    "tags": [
+      "soar",
+      "run",
+      "aprs",
+      "monitoring"
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "graphTooltip": 1,
+    "description": "System-level metrics, database, and message publishing"
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "Core System & Infrastructure"
+    },
+    "version",
+    "build-details",
+    "message-routing-rates",
+    "process-uptime",
+    "process-status",
+    "process-memory-usage",
+    "packet-queue",
+    "nats-fix-publishing-rate",
+    "nats-publish-latency-per-message",
+    "aircraft-processing-latency-breakdown-p50",
+    "aircraft-processing-latency-breakdown-p95",
+    "database-connection-pool-stats",
+    "receiver-latest-packet-at-cache",
+    {
+      "row": "Packet Processing & Routing"
+    },
+    "parse-successfailure-rate",
+    "fix-processing-details",
+    "router-processing-details",
+    "queue-depths",
+    "worker-activity",
+    "queue-send-blocked-rate",
+    "aircraft-pipeline-latency-p99",
+    "aircraft-pipeline-stages",
+    "packet-type-distribution",
+    "router-processing",
+    "ogn-messages-processed-from-socket",
+    "ogn-socket-processing-errors",
+    "aprs-messages-processed-by-type",
+    "fixes-skipped-by-aircraft-type",
+    "router-processing-call-details",
+    "socket-router-throughput",
+    "receiver-status-updates",
+    {
+      "row": "Data Ingestion Pipelines"
+    },
+    "aprs-type-distribution-before-filtering",
+    "receiver-cache-hit-rate",
+    "receiver-cache-hitmiss",
+    "beast-decode-successfailure-rate",
+    "beast-fixes-processed",
+    "beast-processing-latency-percentiles",
+    {
+      "row": "Aircraft & Flight Tracking"
+    },
+    "active-aircraft-all-flights",
+    "aircraft-states-restored-last-startup",
+    "flight-ends-5m",
+    "flight-coalesce-events",
+    "coalesce-distance-p50",
+    "rejected-coalesce-gap-duration",
+    "flight-timeouts-by-phase",
+    "flight-phase-definitions",
+    "flight-creation-5m"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "title": "SOAR Coverage Map Metrics",
+    "uid": "soar-coverage",
+    "tags": [
+      "soar",
+      "coverage",
+      "h3"
+    ],
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "graphTooltip": 0
+  },
+  "templating": [
+    "templating-environment.json",
+    "templating-postgres-datasource.json"
+  ],
+  "panels": [
+    "coverage-api-request-rate",
+    "coverage-cache-performance",
+    "coverage-query-latency-percentiles",
+    "results-returned-per-request",
+    "cache-hit-rate",
+    "api-error-rate",
+    "coverage-database-statistics"
+  ]
+}

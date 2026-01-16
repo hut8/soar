@@ -1,0 +1,61 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Total coverage records and unique hexagons stored in database",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  (SELECT COUNT(*) FROM receiver_coverage_h3) as \"Total Coverage Records\",\n  (SELECT COUNT(DISTINCT h3_index) FROM receiver_coverage_h3) as \"Unique Hexagons\",\n  (SELECT COUNT(DISTINCT date) FROM receiver_coverage_h3) as \"Days of Coverage\",\n  (SELECT MAX(date) FROM receiver_coverage_h3) as \"Latest Coverage Date\"",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Coverage Database Statistics",
+  "type": "stat"
+}

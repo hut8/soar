@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "title": "SOAR Ingest",
+    "uid": "soar-ingest",
+    "tags": [
+      "soar",
+      "ingest",
+      "aprs",
+      "adsb",
+      "monitoring"
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "graphTooltip": 1
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "Process Metrics"
+    },
+    "version",
+    "build-details",
+    "process-uptime",
+    "process-status",
+    "process-memory-usage",
+    {
+      "row": "OGN/APRS Connection"
+    },
+    "aprs-connection-status",
+    "connection-events",
+    "keepalive-messages-per-minute",
+    "connection-ingestion-errors",
+    {
+      "row": "OGN/APRS Message Processing"
+    },
+    "messages-received-per-second",
+    "messages-queued-per-second",
+    {
+      "row": "OGN/APRS Socket Publishing"
+    },
+    "messages-sent-to-socket-per-minute",
+    "socket-send-errors",
+    "socket-send-duration",
+    "slow-socket-sends-per-minute",
+    {
+      "row": "ADS-B Connection & Data"
+    },
+    "ads-b-connection-status",
+    "connection-events-2",
+    "data-rate",
+    "message-rate",
+    "ads-b-frames-published-vs-dropped",
+    {
+      "row": "Queue Depths"
+    },
+    "memory-queue-depth-by-source",
+    "disk-queue-size-by-source",
+    {
+      "row": "Queue Segments"
+    },
+    "queue-segments-created-per-minute",
+    "queue-segments-deleted-per-minute",
+    {
+      "row": "Backpressure Events"
+    },
+    "queue-capacity-pauses-backpressure-events"
+  ]
+}

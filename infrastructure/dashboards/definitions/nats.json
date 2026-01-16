@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "title": "SOAR - NATS Infrastructure",
+    "uid": "soar-nats",
+    "tags": [
+      "nats",
+      "messaging"
+    ],
+    "refresh": "",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "graphTooltip": 1
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "NATS Publishing Overview"
+    },
+    "nats-publishing-rate",
+    "nats-publishing-errors",
+    "nats-publisher-queue-depth",
+    "nats-publish-latency",
+    {
+      "row": "NATS Topics & Throughput"
+    },
+    "raw-messages-published-last-hour",
+    "processed-fixes-published-last-hour",
+    "total-publishing-errors-last-hour",
+    "nats-topic-information"
+  ]
+}

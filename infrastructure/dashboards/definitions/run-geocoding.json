@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "title": "SOAR Run - Geocoding",
+    "uid": "soar-run-geocoding",
+    "tags": [
+      "soar",
+      "run",
+      "aprs",
+      "monitoring"
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "graphTooltip": 1,
+    "description": "Pelias geocoding service metrics"
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "SOAR Run - Geocoding (Takeoff/Landing Detection)"
+    },
+    "geocoding-success-rate-5m",
+    "geocoding-request-rate",
+    "geocoding-latency",
+    "locations-created-by-type"
+  ]
+}

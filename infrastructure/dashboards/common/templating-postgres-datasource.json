@@ -1,0 +1,18 @@
+{
+  "current": {
+    "selected": false,
+    "text": "soar-postgres-staging",
+    "value": "soar-postgres-staging"
+  },
+  "hide": 2,
+  "includeAll": false,
+  "label": "Postgres",
+  "multi": false,
+  "name": "postgres_datasource",
+  "options": [],
+  "query": "postgres",
+  "refresh": 1,
+  "regex": "/soar-postgres-${environment}/",
+  "skipUrlSync": false,
+  "type": "datasource"
+}

@@ -1,0 +1,20 @@
+{
+  "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+  },
+  "description": "Explanation of flight phase detection logic",
+  "options": {
+    "code": {
+      "language": "markdown",
+      "showLineNumbers": false,
+      "showMiniMap": false
+    },
+    "content": "# Flight Phase Definitions\n\nFlight phases are determined by vertical speed and altitude changes:\n\n## Climbing\n- Vertical speed > 0.5 m/s\n- Aircraft gaining altitude\n- Typical: thermal circling, ridge lift, wave lift\n\n## Cruising\n- Vertical speed between -0.5 and +0.5 m/s\n- Relatively stable altitude\n- Typical: straight glides between thermals\n\n## Descending\n- Vertical speed < -0.5 m/s\n- Aircraft losing altitude\n- Typical: approach to landing, poor lift conditions\n\n## Unknown\n- Insufficient data to determine phase\n- First few fixes of flight\n- GPS quality issues\n\n**Timeout Detection:**\nWhen a flight times out (no position updates for 30+ minutes), the phase at timeout\nhelps identify flight conditions and potential issues.",
+    "mode": "markdown"
+  },
+  "pluginVersion": "12.2.1",
+  "title": "Flight Phase Definitions",
+  "type": "text",
+  "_height": 10
+}
