@@ -118,11 +118,14 @@ otelcol.exporter.otlphttp "tempo" {
 
 // Scrape production soar-run service (port 9091)
 // Note: service_name is required for Pyroscope to identify the service
+// service_repository and service_git_ref enable source code linking in Grafana Profiles
 discovery.relabel "soar_run" {
   targets = [{
-    __address__ = "localhost:9091",
-    service_name = "soar-run",
-    environment  = "production",
+    __address__        = "localhost:9091",
+    service_name       = "soar-run",
+    environment        = "production",
+    service_repository = "https://github.com/hut8/soar",
+    service_git_ref    = "{{GIT_COMMIT}}",
   }]
 
   rule {
@@ -134,9 +137,11 @@ discovery.relabel "soar_run" {
 // Scrape production ingest service (unified OGN + ADS-B, port 9095)
 discovery.relabel "soar_ingest" {
   targets = [{
-    __address__ = "localhost:9095",
-    service_name = "soar-ingest",
-    environment  = "production",
+    __address__        = "localhost:9095",
+    service_name       = "soar-ingest",
+    environment        = "production",
+    service_repository = "https://github.com/hut8/soar",
+    service_git_ref    = "{{GIT_COMMIT}}",
   }]
 
   rule {
@@ -148,9 +153,11 @@ discovery.relabel "soar_ingest" {
 // Scrape staging soar-run service (port 9192)
 discovery.relabel "soar_run_staging" {
   targets = [{
-    __address__ = "localhost:9192",
-    service_name = "soar-run-staging",
-    environment  = "staging",
+    __address__        = "localhost:9192",
+    service_name       = "soar-run-staging",
+    environment        = "staging",
+    service_repository = "https://github.com/hut8/soar",
+    service_git_ref    = "{{GIT_COMMIT}}",
   }]
 
   rule {
@@ -162,9 +169,11 @@ discovery.relabel "soar_run_staging" {
 // Scrape staging ingest service (port 9197)
 discovery.relabel "soar_ingest_staging" {
   targets = [{
-    __address__ = "localhost:9197",
-    service_name = "soar-ingest-staging",
-    environment  = "staging",
+    __address__        = "localhost:9197",
+    service_name       = "soar-ingest-staging",
+    environment        = "staging",
+    service_repository = "https://github.com/hut8/soar",
+    service_git_ref    = "{{GIT_COMMIT}}",
   }]
 
   rule {
