@@ -128,44 +128,34 @@ impl FromStr for EngineType {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let trimmed = s.trim();
-
-        // First try human-readable labels (for database round-tripping)
-        match trimmed {
-            "None" => return Ok(EngineType::None),
-            "Reciprocating" => return Ok(EngineType::Reciprocating),
-            "Turbo-Prop" => return Ok(EngineType::TurboProp),
-            "Turbo-Shaft" => return Ok(EngineType::TurboShaft),
-            "Turbo-Jet" => return Ok(EngineType::TurboJet),
-            "Turbo-Fan" => return Ok(EngineType::TurboFan),
-            "Ramjet" => return Ok(EngineType::Ramjet),
-            "2-Cycle" => return Ok(EngineType::TwoCycle),
-            "4-Cycle" => return Ok(EngineType::FourCycle),
-            "Unknown" => return Ok(EngineType::Unknown),
-            "Electric" => return Ok(EngineType::Electric),
-            "Rotary" => return Ok(EngineType::Rotary),
-            _ => {}
-        }
-
-        // Fall back to FAA numeric codes
-        let code = trimmed
-            .parse::<u8>()
-            .with_context(|| format!("Failed to parse engine type code as number: {}", trimmed))?;
-
-        match code {
-            0 => Ok(EngineType::None),
-            1 => Ok(EngineType::Reciprocating),
-            2 => Ok(EngineType::TurboProp),
-            3 => Ok(EngineType::TurboShaft),
-            4 => Ok(EngineType::TurboJet),
-            5 => Ok(EngineType::TurboFan),
-            6 => Ok(EngineType::Ramjet),
-            7 => Ok(EngineType::TwoCycle),
-            8 => Ok(EngineType::FourCycle),
-            9 => Ok(EngineType::Unknown),
-            10 => Ok(EngineType::Electric),
-            11 => Ok(EngineType::Rotary),
-            _ => Err(anyhow!("Invalid engine type code: {}", code)),
+        match s.trim() {
+            // FAA numeric codes
+            "0" | "00" => Ok(EngineType::None),
+            "1" | "01" => Ok(EngineType::Reciprocating),
+            "2" | "02" => Ok(EngineType::TurboProp),
+            "3" | "03" => Ok(EngineType::TurboShaft),
+            "4" | "04" => Ok(EngineType::TurboJet),
+            "5" | "05" => Ok(EngineType::TurboFan),
+            "6" | "06" => Ok(EngineType::Ramjet),
+            "7" | "07" => Ok(EngineType::TwoCycle),
+            "8" | "08" => Ok(EngineType::FourCycle),
+            "9" | "09" => Ok(EngineType::Unknown),
+            "10" => Ok(EngineType::Electric),
+            "11" => Ok(EngineType::Rotary),
+            // Human-readable labels (for database round-tripping)
+            "None" => Ok(EngineType::None),
+            "Reciprocating" => Ok(EngineType::Reciprocating),
+            "Turbo-Prop" => Ok(EngineType::TurboProp),
+            "Turbo-Shaft" => Ok(EngineType::TurboShaft),
+            "Turbo-Jet" => Ok(EngineType::TurboJet),
+            "Turbo-Fan" => Ok(EngineType::TurboFan),
+            "Ramjet" => Ok(EngineType::Ramjet),
+            "2-Cycle" => Ok(EngineType::TwoCycle),
+            "4-Cycle" => Ok(EngineType::FourCycle),
+            "Unknown" => Ok(EngineType::Unknown),
+            "Electric" => Ok(EngineType::Electric),
+            "Rotary" => Ok(EngineType::Rotary),
+            _ => Err(anyhow!("Invalid engine type code: {}", s)),
         }
     }
 }
