@@ -22,10 +22,9 @@
 		ClusterMarkerManager
 	} from '$lib/services/markers';
 	import type { Aircraft, Airport, Airspace, DeviceOrientationEventWithCompass } from '$lib/types';
-	import { isAircraftItem, isClusterItem } from '$lib/types';
+	import { ViewportAircraftController } from '$lib/services/ViewportAircraftController';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
-	import { browser } from '$app/environment';
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { getLogger } from '$lib/logging';
@@ -240,9 +239,24 @@
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
 
-	// Clustering state
-	let isClusteredMode = $state(false); // Whether we're currently displaying clusters instead of individual aircraft
-	let clusterRefreshTimer: ReturnType<typeof setInterval> | null = null;
+	// Clustering state (managed by ViewportAircraftController, but reactive for UI)
+	let isClusteredMode = $state(false);
+
+	// Viewport aircraft controller - manages fetching and displaying aircraft/clusters
+	// Note: Callbacks reference functions defined later, which works because they're called after initialization
+	const viewportController = new ViewportAircraftController({
+		fixFeed,
+		aircraftRegistry,
+		aircraftMarkerManager,
+		clusterMarkerManager,
+		maxAircraftDisplay: MAX_AIRCRAFT_DISPLAY,
+		onClusteredModeChanged: (isClustered) => {
+			isClusteredMode = isClustered;
+		},
+		getAreaTrackerActive: () => areaTrackerActive,
+		updateAreaSubscriptions: () => updateAreaSubscriptions(),
+		clearAreaSubscriptions: () => clearAreaSubscriptions()
+	});
 
 	// Map type state
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
@@ -319,7 +333,7 @@
 							// Activate area tracker with saved state
 							// Fetch initial aircraft with latest positions only
 							(async () => {
-								await fetchAndDisplayDevicesInViewport();
+								await viewportController.fetchAndDisplay();
 								updateAreaSubscriptions();
 							})();
 						}
@@ -333,7 +347,7 @@
 			fixFeed.stopLiveFixesFeed();
 			aircraftMarkerManager.clear();
 			clusterMarkerManager.clear();
-			stopClusterRefreshTimer();
+			viewportController.stopRefreshTimer();
 		};
 	});
 
@@ -385,13 +399,14 @@
 			gestureHandling: 'greedy' // Allow one-finger gestures on mobile
 		});
 
-		// Set map on marker managers
+		// Set map on marker managers and controllers
 		airportMarkerManager.setMap(map);
 		receiverMarkerManager.setMap(map);
 		airspaceOverlayManager.setMap(map);
 		runwayOverlayManager.setMap(map);
 		aircraftMarkerManager.setMap(map);
 		clusterMarkerManager.setMap(map);
+		viewportController.setMap(map);
 
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {
@@ -416,7 +431,7 @@
 			zoomDebounceTimer = setTimeout(async () => {
 				// Always fetch aircraft in viewport to check for clustering
 				// This ensures clustering activates even when area tracker is off
-				await fetchAndDisplayDevicesInViewport();
+				await viewportController.fetchAndDisplay();
 
 				// Update WebSocket subscriptions only if area tracker is active
 				if (areaTrackerActive) {
@@ -433,7 +448,7 @@
 		// Initial aircraft fetch after map is ready (even if area tracker is off)
 		// This ensures clustering works on page load
 		setTimeout(async () => {
-			await fetchAndDisplayDevicesInViewport();
+			await viewportController.fetchAndDisplay();
 			if (areaTrackerActive) {
 				updateAreaSubscriptions();
 			}
@@ -447,7 +462,7 @@
 			runwayOverlayManager.checkAndUpdate(area, currentSettings.showRunwayOverlays);
 
 			// Always fetch aircraft in viewport after panning
-			await fetchAndDisplayDevicesInViewport();
+			await viewportController.fetchAndDisplay();
 
 			// Update WebSocket subscriptions only if area tracker is active
 			if (areaTrackerActive) {
@@ -713,7 +728,7 @@
 
 		if (areaTrackerActive) {
 			// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
-			await fetchAndDisplayDevicesInViewport();
+			await viewportController.fetchAndDisplay();
 			updateAreaSubscriptions();
 		} else {
 			clearAreaSubscriptions();
@@ -867,120 +882,6 @@
 			...current,
 			activeAreaSubscriptions: 0
 		}));
-	}
-
-	async function fetchAndDisplayDevicesInViewport(): Promise<void> {
-		if (!map) return;
-
-		const bounds = map.getBounds();
-		if (!bounds) return;
-
-		const ne = bounds.getNorthEast();
-		const sw = bounds.getSouthWest();
-
-		try {
-			logger.debug('[REST] Fetching aircraft in viewport...');
-
-			const response = await fixFeed.fetchAircraftInBoundingBox(
-				sw.lat(), // south
-				ne.lat(), // north
-				sw.lng(), // west
-				ne.lng(), // east
-				undefined,
-				MAX_AIRCRAFT_DISPLAY
-			);
-
-			const { items, total, clustered } = response;
-
-			logger.debug('[REST] Received {count} items (total: {total}, clustered: {clustered})', {
-				count: items.length,
-				total,
-				clustered
-			});
-
-			if (clustered) {
-				logger.debug('[REST] Response is clustered, rendering cluster markers');
-
-				// Enter clustered mode
-				isClusteredMode = true;
-				startClusterRefreshTimer();
-
-				// Clear WebSocket area subscriptions - clustered mode uses REST API polling instead
-				clearAreaSubscriptions();
-
-				// Clear aircraft registry - we're forgetting all aircraft outside viewport
-				aircraftRegistry.clear();
-
-				aircraftMarkerManager.clear();
-				clusterMarkerManager.clear();
-
-				for (const item of items) {
-					if (isClusterItem(item)) {
-						clusterMarkerManager.createMarker(item.data);
-					}
-				}
-
-				logger.debug('[AIRCRAFT COUNT] {count} cluster markers on map', {
-					count: clusterMarkerManager.getMarkers().size
-				});
-			} else {
-				logger.debug('[REST] Response has individual aircraft, rendering aircraft markers');
-
-				// Exit clustered mode
-				isClusteredMode = false;
-				stopClusterRefreshTimer();
-
-				// Restore WebSocket area subscriptions for real-time updates
-				if (areaTrackerActive) {
-					updateAreaSubscriptions();
-				}
-
-				// Clear aircraft registry - we're forgetting all aircraft outside viewport
-				aircraftRegistry.clear();
-
-				clusterMarkerManager.clear();
-
-				for (const item of items) {
-					if (isAircraftItem(item)) {
-						await aircraftRegistry.updateAircraftFromAircraftData(item.data);
-					}
-				}
-
-				// Log the count of aircraft now on the map
-				logger.debug('[AIRCRAFT COUNT] {count} aircraft markers on map', {
-					count: aircraftMarkerManager.getMarkers().size
-				});
-			}
-		} catch (error) {
-			logger.error('[REST] Failed to fetch aircraft in viewport: {error}', { error });
-		}
-	}
-
-	// Start the cluster refresh timer (refreshes every 60 seconds when tab is visible)
-	function startClusterRefreshTimer(): void {
-		// Clear any existing timer
-		stopClusterRefreshTimer();
-
-		logger.debug('[CLUSTER REFRESH] Starting 60-second refresh timer');
-
-		clusterRefreshTimer = setInterval(async () => {
-			// Only refresh if the page is visible (user has the tab active)
-			if (browser && document.visibilityState === 'visible') {
-				logger.debug('[CLUSTER REFRESH] Tab is visible, refreshing clusters...');
-				await fetchAndDisplayDevicesInViewport();
-			} else {
-				logger.debug('[CLUSTER REFRESH] Tab is hidden, skipping refresh');
-			}
-		}, 60000); // 60 seconds
-	}
-
-	// Stop the cluster refresh timer
-	function stopClusterRefreshTimer(): void {
-		if (clusterRefreshTimer) {
-			logger.debug('[CLUSTER REFRESH] Stopping refresh timer');
-			clearInterval(clusterRefreshTimer);
-			clusterRefreshTimer = null;
-		}
 	}
 </script>
 
