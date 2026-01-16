@@ -286,6 +286,9 @@ export class AircraftRegistry {
 			});
 
 			// Fetch aircraft from API - the backend is the source of truth
+			logger.debug('Fetching aircraft from API for: {aircraftId}', {
+				aircraftId
+			});
 			try {
 				aircraft = await this.updateAircraftFromAPI(aircraftId);
 			} catch (error) {
