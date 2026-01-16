@@ -178,9 +178,9 @@ export class FixFeed {
 						};
 
 						// Add fix to aircraft registry
-						// For fixes from WebSocket, assume aircraft data is provided via aircraft messages
-						// so don't attempt API fallback to avoid N+1 calls
-						this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
+						// For fixes from WebSocket, AircraftRegistry will fetch or update aircraft details via the API
+						// as part of its normal workflow; aircraft messages are a complementary optimization.
+						this.aircraftRegistry.addFixToAircraft(fix).catch((error) => {
 							logger.warn('Failed to add fix to aircraft registry: {error}', { error });
 						});
 
@@ -193,7 +193,13 @@ export class FixFeed {
 						// Handle Aircraft message
 						const aircraft: Aircraft = rawMessage;
 
-						// Add all recent fixes to aircraft registry
+						// IMPORTANT: Register aircraft FIRST, then add fixes
+						// This ensures the aircraft exists in cache before we try to add fixes to it
+						this.aircraftRegistry.updateAircraftFromAircraftData(aircraft).catch((error) => {
+							logger.warn('Failed to update aircraft info in registry: {error}', { error });
+						});
+
+						// Add all recent fixes to aircraft registry (aircraft is now in cache)
 						const aircraftFixes = aircraft.fixes || [];
 						if (aircraftFixes.length > 0) {
 							for (const fix of aircraftFixes) {
@@ -204,16 +210,11 @@ export class FixFeed {
 									});
 									fix.aircraftId = aircraft.id;
 								}
-								this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
+								this.aircraftRegistry.addFixToAircraft(fix).catch((error) => {
 									logger.warn('Failed to add aircraft fix to registry: {error}', { error });
 								});
 							}
 						}
-
-						// Update aircraft registry with complete aircraft info
-						this.aircraftRegistry.updateAircraftFromAircraftData(aircraft).catch((error) => {
-							logger.warn('Failed to update aircraft info in registry: {error}', { error });
-						});
 
 						// Notify subscribers
 						this.notifySubscribers({
@@ -314,6 +315,14 @@ export class FixFeed {
 
 	// Subscribe to a specific aircraft
 	public async subscribeToAircraft(aircraftId: string): Promise<void> {
+		// Validate aircraftId is a non-empty string
+		if (!aircraftId || typeof aircraftId !== 'string') {
+			logger.warn('Invalid aircraftId provided to subscribeToAircraft: {aircraftId}', {
+				aircraftId
+			});
+			return;
+		}
+
 		if (this.subscribedAircraft.has(aircraftId)) {
 			return; // Already subscribed
 		}

@@ -193,7 +193,8 @@ export const watchlist = {
  * Notify FixFeed about watchlist changes for WebSocket subscriptions
  */
 function notifyWatchlistChange(entries: WatchlistEntryWithAircraft[]) {
-	const aircraftIds = entries.map((e) => e.aircraftId);
+	// Filter out entries with missing or invalid aircraftId values
+	const aircraftIds = entries.map((e) => e.aircraftId).filter((id) => id && typeof id === 'string');
 	const fixFeedInstance = FixFeed.getInstance();
 	fixFeedInstance.subscribeToWatchlist(aircraftIds);
 }
