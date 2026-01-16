@@ -414,8 +414,6 @@ impl Flight {
             let start_time = self.takeoff_time.unwrap_or(self.created_at);
             let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
-            // get_fixes_for_aircraft_with_time_range returns Vec<FixWithRawPacket>
-            // Extract just the Fix objects
             fixes_repo
                 .get_fixes_for_aircraft_with_time_range(
                     &self.aircraft_id.unwrap_or(Uuid::nil()),
@@ -424,9 +422,6 @@ impl Flight {
                     None,
                 )
                 .await?
-                .into_iter()
-                .map(|fix_with_packet| fix_with_packet.fix)
-                .collect()
         };
 
         if fixes.len() < 2 {
@@ -531,8 +526,6 @@ impl Flight {
             let start_time = self.takeoff_time.unwrap_or(self.created_at);
             let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
-            // get_fixes_for_aircraft_with_time_range returns Vec<FixWithRawPacket>
-            // Extract just the Fix objects
             fixes_repo
                 .get_fixes_for_aircraft_with_time_range(
                     &self.aircraft_id.unwrap_or(Uuid::nil()),
@@ -541,9 +534,6 @@ impl Flight {
                     None,
                 )
                 .await?
-                .into_iter()
-                .map(|fix_with_packet| fix_with_packet.fix)
-                .collect()
         };
 
         if fixes.is_empty() {

@@ -11,6 +11,7 @@ pub mod coverage;
 pub mod fixes;
 pub mod flights;
 pub mod pilots;
+pub mod raw_messages;
 pub mod receivers;
 pub mod status;
 pub mod user_fixes;

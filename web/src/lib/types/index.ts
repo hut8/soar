@@ -195,10 +195,18 @@ export interface FixWithExtras extends Fix {
 	deviceAddressHex?: string; // Legacy field, prefer aircraftId with proper join
 	registration?: string; // Aircraft registration (joined, not in Rust Fix)
 	model?: string; // Aircraft model (joined, not in Rust Fix)
-	rawPacket?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 	aprsType?: string; // APRS message type (from sourceMetadata, used in WebSocket)
 	via?: string[]; // APRS via path (from sourceMetadata, used in WebSocket)
+}
+
+// Raw message response from /data/raw-messages/{id} endpoint
+export interface RawMessageResponse {
+	id: string;
+	rawMessage: string; // UTF-8 for APRS, hex-encoded for ADS-B
+	source: 'aprs' | 'adsb';
+	receivedAt: string;
+	receiverId: string | null;
 }
 
 // User authentication and profile (now includes pilot fields)

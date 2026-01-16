@@ -1,12 +1,76 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::debug;
 use uuid::Uuid;
 
 use crate::web::PgPool;
+
+/// Message source enum - distinguishes between APRS and ADS-B (Beast) messages
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[serde(rename_all = "lowercase")]
+#[db_enum(existing_type_path = "crate::schema::sql_types::MessageSource")]
+pub enum MessageSourceType {
+    /// APRS message (text-based, UTF-8)
+    Aprs,
+    /// ADS-B/Beast message (binary)
+    Adsb,
+}
+
+/// Raw message with source type - used for API responses
+/// This struct properly handles both APRS (text) and ADS-B (binary) messages
+#[derive(Queryable, Selectable, Debug, Clone)]
+#[diesel(table_name = crate::schema::raw_messages)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct RawMessageWithSource {
+    pub id: Uuid,
+    #[diesel(deserialize_as = Vec<u8>)]
+    pub raw_message: Vec<u8>,
+    pub received_at: DateTime<Utc>,
+    pub receiver_id: Option<Uuid>,
+    pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
+    pub source: MessageSourceType,
+}
+
+/// API response for a raw message
+/// For APRS: raw_message is UTF-8 text
+/// For ADS-B/Beast: raw_message is hex-encoded binary
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawMessageResponse {
+    pub id: Uuid,
+    pub raw_message: String,
+    pub source: MessageSourceType,
+    pub received_at: DateTime<Utc>,
+    pub receiver_id: Option<Uuid>,
+}
+
+impl From<RawMessageWithSource> for RawMessageResponse {
+    fn from(msg: RawMessageWithSource) -> Self {
+        let raw_message = match msg.source {
+            MessageSourceType::Aprs => {
+                // APRS is text - decode as UTF-8 (lossy for safety)
+                String::from_utf8_lossy(&msg.raw_message).to_string()
+            }
+            MessageSourceType::Adsb => {
+                // ADS-B/Beast is binary - encode as hex
+                hex::encode(&msg.raw_message)
+            }
+        };
+
+        RawMessageResponse {
+            id: msg.id,
+            raw_message,
+            source: msg.source,
+            received_at: msg.received_at,
+            receiver_id: msg.receiver_id,
+        }
+    }
+}
 
 // Diesel model for inserting new Beast messages (using raw SQL for enum)
 #[derive(Clone)]
@@ -407,6 +471,30 @@ impl RawMessagesRepository {
                 .load(&mut conn)?;
 
             Ok::<Vec<AprsMessage>, anyhow::Error>(messages)
+        })
+        .await?
+    }
+
+    /// Get a raw message by ID with proper encoding based on source type
+    /// Returns APRS messages as UTF-8 text, ADS-B messages as hex-encoded binary
+    pub async fn get_message_response_by_id(
+        &self,
+        message_id: Uuid,
+    ) -> Result<Option<RawMessageResponse>> {
+        use crate::schema::raw_messages::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let message = raw_messages
+                .filter(id.eq(message_id))
+                .select(RawMessageWithSource::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<RawMessageResponse>, anyhow::Error>(message.map(RawMessageResponse::from))
         })
         .await?
     }

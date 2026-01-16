@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { Activity } from '@lucide/svelte';
+	import { Activity, Loader2 } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Fix, FixWithExtras } from '$lib/types';
+	import { SvelteMap } from 'svelte/reactivity';
+	import type { Fix, FixWithExtras, RawMessageResponse } from '$lib/types';
+	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
 
@@ -36,9 +38,67 @@
 		fixesInChronologicalOrder = true
 	}: Props = $props();
 
-	let showRawData = $derived(showRawValue);
+	let showRawData = $state(showRawValue);
 	let useRelativeTime = $derived(useRelativeTimes);
 	let showTimeIntervals = $state(false);
+
+	// Cache for raw messages: rawMessageId -> { data, loading, error }
+	let rawMessagesCache = new SvelteMap<
+		string,
+		{
+			data?: RawMessageResponse;
+			loading: boolean;
+			error?: string;
+		}
+	>();
+
+	// Fetch raw message for a fix
+	async function fetchRawMessage(rawMessageId: string) {
+		if (rawMessagesCache.get(rawMessageId)?.data || rawMessagesCache.get(rawMessageId)?.loading) {
+			return; // Already fetched or loading
+		}
+
+		rawMessagesCache.set(rawMessageId, { loading: true });
+
+		try {
+			const response = await serverCall<{ data: RawMessageResponse }>(
+				`/raw-messages/${rawMessageId}`
+			);
+			rawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';
+			rawMessagesCache.set(rawMessageId, { loading: false, error: errorMessage });
+		}
+	}
+
+	// Fetch all raw messages when show raw is toggled on
+	$effect(() => {
+		if (showRawData && fixes.length > 0) {
+			// Fetch raw messages for all visible fixes
+			for (const fix of fixes) {
+				fetchRawMessage(fix.rawMessageId);
+			}
+		}
+	});
+
+	// Get raw message display for a fix
+	function getRawMessageDisplay(rawMessageId: string): {
+		content?: string;
+		loading: boolean;
+		error?: string;
+		source?: 'aprs' | 'adsb';
+	} {
+		const cached = rawMessagesCache.get(rawMessageId);
+		if (!cached) {
+			return { loading: false };
+		}
+		return {
+			content: cached.data?.rawMessage,
+			loading: cached.loading,
+			error: cached.error,
+			source: cached.data?.source
+		};
+	}
 
 	function handleHideInactiveChange(event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -258,7 +318,8 @@
 							<td class="px-3 py-2 font-mono text-sm">{fix.squawk || 'N/A'}</td>
 							<td class="px-3 py-2 font-mono text-sm">{fix.flightNumber || 'N/A'}</td>
 						</tr>
-						{#if showRawData && fix.rawPacket}
+						{#if showRawData}
+							{@const rawDisplay = getRawMessageDisplay(fix.rawMessageId)}
 							<tr
 								class="border-surface-200-700-token border-b {index % 2 === 0
 									? 'bg-surface-100-800-token'
@@ -268,7 +329,21 @@
 									colspan={showClimb ? (showTimeIntervals ? 10 : 9) : showTimeIntervals ? 9 : 8}
 									class="px-3 py-2 font-mono text-sm"
 								>
-									{fix.rawPacket}
+									{#if rawDisplay.loading}
+										<span class="inline-flex items-center gap-1 text-surface-500">
+											<Loader2 class="h-3 w-3 animate-spin" />
+											Loading...
+										</span>
+									{:else if rawDisplay.error}
+										<span class="text-error-500">Error: {rawDisplay.error}</span>
+									{:else if rawDisplay.content}
+										<span class="text-surface-400" title="Source: {rawDisplay.source}">
+											[{rawDisplay.source?.toUpperCase()}]
+										</span>
+										{rawDisplay.content}
+									{:else}
+										<span class="text-surface-400">No raw message available</span>
+									{/if}
 								</td>
 							</tr>
 						{/if}
@@ -341,10 +416,27 @@
 						</div>
 					</dl>
 
-					{#if showRawData && fix.rawPacket}
+					{#if showRawData}
+						{@const rawDisplay = getRawMessageDisplay(fix.rawMessageId)}
 						<div class="border-t border-surface-300 pt-3 dark:border-surface-600">
-							<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
-							<div class="overflow-x-auto font-mono text-xs">{fix.rawPacket}</div>
+							<div class="text-surface-600-300-token mb-1 text-xs">
+								Raw Packet
+								{#if rawDisplay.source}
+									<span class="text-surface-400">({rawDisplay.source.toUpperCase()})</span>
+								{/if}
+							</div>
+							{#if rawDisplay.loading}
+								<div class="inline-flex items-center gap-1 text-surface-500">
+									<Loader2 class="h-3 w-3 animate-spin" />
+									<span>Loading...</span>
+								</div>
+							{:else if rawDisplay.error}
+								<div class="text-xs text-error-500">Error: {rawDisplay.error}</div>
+							{:else if rawDisplay.content}
+								<div class="overflow-x-auto font-mono text-xs">{rawDisplay.content}</div>
+							{:else}
+								<div class="text-xs text-surface-400">No raw message available</div>
+							{/if}
 						</div>
 					{/if}
 				</div>
