@@ -12,7 +12,7 @@ use crate::actions::{
 };
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
-use crate::fixes::FixWithRawPacket;
+use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::{Flight, haversine_distance};
 use crate::flights_repo::FlightsRepository;
@@ -714,7 +714,7 @@ pub async fn get_nearby_flights(
 }
 
 /// Calculate average climb rate from a slice of fixes
-fn calculate_avg_climb_rate(fixes: &[FixWithRawPacket]) -> Option<i32> {
+fn calculate_avg_climb_rate(fixes: &[Fix]) -> Option<i32> {
     if fixes.len() < 2 {
         return None;
     }
