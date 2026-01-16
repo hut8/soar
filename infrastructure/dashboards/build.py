@@ -191,14 +191,18 @@ def extract_dashboard(dashboard_path: Path, output_subdir: str) -> dict:
 
     # Extract templating
     templating_list = dashboard.get("templating", {}).get("list", [])
-    if templating_list:
-        # Save templating to common if it's the standard environment var
-        for tpl in templating_list:
-            if tpl.get("name") == "environment":
-                definition["templating"].append("templating-environment.json")
-            else:
-                # For other templating, we'd need to handle specially
-                definition["templating"].append("templating-environment.json")
+    for tpl in templating_list:
+        name = tpl.get("name", "")
+        if name == "environment":
+            definition["templating"].append("templating-environment.json")
+        elif name == "postgres_datasource":
+            definition["templating"].append("templating-postgres-datasource.json")
+        else:
+            # Save unknown templating to a new file
+            tpl_filename = f"templating-{slugify(name)}.json"
+            save_json(COMMON_DIR / tpl_filename, tpl)
+            definition["templating"].append(tpl_filename)
+            print(f"  Created common/{tpl_filename}")
 
     # Track seen slugs to avoid duplicates
     seen_slugs = {}

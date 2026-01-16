@@ -16,7 +16,7 @@
   },
   "templating": [
     "templating-environment.json",
-    "templating-environment.json"
+    "templating-postgres-datasource.json"
   ],
   "panels": [
     "flight-analytics-summary",
