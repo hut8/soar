@@ -331,7 +331,7 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            mag_heading >= 0.0 && mag_heading < 360.0,
+            (0.0..360.0).contains(&mag_heading),
             "Heading should be normalized to 0-360"
         );
     }
