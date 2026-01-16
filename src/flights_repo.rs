@@ -110,6 +110,34 @@ impl FlightsRepository {
         Ok(())
     }
 
+    /// Update flight with start location only (for airborne flight enrichment)
+    /// Used by background enrichment task for flights that started mid-air
+    pub async fn update_flight_start_location(
+        &self,
+        flight_id: Uuid,
+        start_location_id_param: Option<Uuid>,
+    ) -> Result<()> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    start_location_id.eq(&start_location_id_param),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
     /// Update flight with landing information
     #[allow(clippy::too_many_arguments)]
     pub async fn update_flight_landing(

@@ -206,9 +206,12 @@
       "id": 4,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
           "showLegend": true
         },
         "tooltip": {
@@ -459,10 +462,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_takeoff\"}[$__rate_interval])",
-          "legendFormat": "Start (Takeoff)",
+          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_no_airport_location\"}[$__rate_interval])",
+          "legendFormat": "Start (No Airport Location)",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_no_airport\"}[$__rate_interval])",
+          "legendFormat": "Start (No Airport)",
+          "range": true,
+          "refId": "B"
         },
         {
           "datasource": {
@@ -473,7 +487,7 @@
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"start_airborne\"}[$__rate_interval])",
           "legendFormat": "Start (Airborne)",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         },
         {
           "datasource": {
@@ -481,10 +495,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_landing\"}[$__rate_interval])",
-          "legendFormat": "End (Landing)",
+          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_no_airport_location\"}[$__rate_interval])",
+          "legendFormat": "End (No Airport Location)",
           "range": true,
-          "refId": "C"
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_no_airport\"}[$__rate_interval])",
+          "legendFormat": "End (No Airport)",
+          "range": true,
+          "refId": "E"
         },
         {
           "datasource": {
@@ -495,7 +520,7 @@
           "expr": "rate(flight_tracker_location_created_total{component=\"run\",environment=\"$environment\",type=\"end_timeout\"}[$__rate_interval])",
           "legendFormat": "End (Timeout)",
           "range": true,
-          "refId": "D"
+          "refId": "F"
         }
       ],
       "title": "Locations Created by Type",
