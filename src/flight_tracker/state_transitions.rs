@@ -446,8 +446,18 @@ pub(crate) async fn process_state_transition(
 
             // Create new flight - check if takeoff or mid-flight
             let is_takeoff = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
-                // Check last 3 fixes - if all inactive, it's a takeoff
-                state.last_n_inactive(3)
+                // Need 4+ fixes to use history-based detection (3 to check + 1 current to skip)
+                if state.recent_fixes.len() >= 4 {
+                    // Enough history - check if last 3 fixes before current were inactive
+                    state.last_n_inactive(3)
+                } else {
+                    // Not enough history - fall back to AGL check
+                    // If AGL < 100 ft, aircraft is on/near ground = takeoff
+                    calculate_altitude_agl(ctx.elevation_db, &fix)
+                        .await
+                        .map(|agl| agl < 100)
+                        .unwrap_or(false)
+                }
             } else {
                 // No recent fixes - check AGL
                 calculate_altitude_agl(ctx.elevation_db, &fix)
