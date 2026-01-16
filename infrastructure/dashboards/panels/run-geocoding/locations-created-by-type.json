@@ -57,11 +57,9 @@
   },
   "options": {
     "legend": {
-      "calcs": [
-        "sum"
-      ],
-      "displayMode": "table",
-      "placement": "right",
+      "calcs": [],
+      "displayMode": "list",
+      "placement": "bottom",
       "showLegend": true
     },
     "tooltip": {

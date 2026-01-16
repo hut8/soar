@@ -4,6 +4,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import externalGlobals from 'rollup-plugin-external-globals';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 
 export default defineConfig({
 	plugins: [
@@ -33,6 +34,19 @@ export default defineConfig({
 					dest: 'cesium'
 				}
 			]
+		}),
+		// Upload source maps to Sentry (only when SENTRY_AUTH_TOKEN is set)
+		// Source maps are also served publicly for browser DevTools debugging
+		sentryVitePlugin({
+			org: process.env.SENTRY_ORG,
+			project: process.env.SENTRY_PROJECT,
+			authToken: process.env.SENTRY_AUTH_TOKEN,
+			// Don't delete source maps after upload - we want them publicly accessible
+			sourcemaps: {
+				filesToDeleteAfterUpload: []
+			},
+			// Only upload if auth token is available (typically in CI)
+			disable: !process.env.SENTRY_AUTH_TOKEN
 		})
 	],
 	// Define CESIUM_BASE_URL for the application
@@ -41,6 +55,8 @@ export default defineConfig({
 	},
 	// Configure build to externalize cesium and use the global Cesium object
 	build: {
+		// Enable source maps for staging/production debugging
+		sourcemap: true,
 		rollupOptions: {
 			external: ['cesium'],
 			plugins: [
