@@ -59,6 +59,7 @@ impl FromStr for AircraftType {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.trim() {
+            // FAA numeric codes
             "1" => Ok(AircraftType::Glider),
             "2" => Ok(AircraftType::Balloon),
             "3" => Ok(AircraftType::BlimpDirigible),
@@ -70,6 +71,18 @@ impl FromStr for AircraftType {
             "9" => Ok(AircraftType::Gyroplane),
             "H" => Ok(AircraftType::HybridLift),
             "O" => Ok(AircraftType::Other),
+            // Human-readable labels (for database round-tripping)
+            "Glider" => Ok(AircraftType::Glider),
+            "Balloon" => Ok(AircraftType::Balloon),
+            "Blimp/Dirigible" => Ok(AircraftType::BlimpDirigible),
+            "Fixed-Wing Single-Engine" => Ok(AircraftType::FixedWingSingleEngine),
+            "Fixed-Wing Multi-Engine" => Ok(AircraftType::FixedWingMultiEngine),
+            "Rotorcraft" => Ok(AircraftType::Rotorcraft),
+            "Weight-Shift-Control" => Ok(AircraftType::WeightShiftControl),
+            "Powered Parachute" => Ok(AircraftType::PoweredParachute),
+            "Gyroplane" => Ok(AircraftType::Gyroplane),
+            "Hybrid Lift" => Ok(AircraftType::HybridLift),
+            "Other" => Ok(AircraftType::Other),
             _ => Err(anyhow!("Invalid aircraft type code: {}", s)),
         }
     }
@@ -77,20 +90,20 @@ impl FromStr for AircraftType {
 
 impl fmt::Display for AircraftType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            AircraftType::Glider => "1",
-            AircraftType::Balloon => "2",
-            AircraftType::BlimpDirigible => "3",
-            AircraftType::FixedWingSingleEngine => "4",
-            AircraftType::FixedWingMultiEngine => "5",
-            AircraftType::Rotorcraft => "6",
-            AircraftType::WeightShiftControl => "7",
-            AircraftType::PoweredParachute => "8",
-            AircraftType::Gyroplane => "9",
-            AircraftType::HybridLift => "H",
-            AircraftType::Other => "O",
+        let label = match self {
+            AircraftType::Glider => "Glider",
+            AircraftType::Balloon => "Balloon",
+            AircraftType::BlimpDirigible => "Blimp/Dirigible",
+            AircraftType::FixedWingSingleEngine => "Fixed-Wing Single-Engine",
+            AircraftType::FixedWingMultiEngine => "Fixed-Wing Multi-Engine",
+            AircraftType::Rotorcraft => "Rotorcraft",
+            AircraftType::WeightShiftControl => "Weight-Shift-Control",
+            AircraftType::PoweredParachute => "Powered Parachute",
+            AircraftType::Gyroplane => "Gyroplane",
+            AircraftType::HybridLift => "Hybrid Lift",
+            AircraftType::Other => "Other",
         };
-        write!(f, "{}", code)
+        write!(f, "{}", label)
     }
 }
 
@@ -116,6 +129,25 @@ impl FromStr for EngineType {
 
     fn from_str(s: &str) -> Result<Self> {
         let trimmed = s.trim();
+
+        // First try human-readable labels (for database round-tripping)
+        match trimmed {
+            "None" => return Ok(EngineType::None),
+            "Reciprocating" => return Ok(EngineType::Reciprocating),
+            "Turbo-Prop" => return Ok(EngineType::TurboProp),
+            "Turbo-Shaft" => return Ok(EngineType::TurboShaft),
+            "Turbo-Jet" => return Ok(EngineType::TurboJet),
+            "Turbo-Fan" => return Ok(EngineType::TurboFan),
+            "Ramjet" => return Ok(EngineType::Ramjet),
+            "2-Cycle" => return Ok(EngineType::TwoCycle),
+            "4-Cycle" => return Ok(EngineType::FourCycle),
+            "Unknown" => return Ok(EngineType::Unknown),
+            "Electric" => return Ok(EngineType::Electric),
+            "Rotary" => return Ok(EngineType::Rotary),
+            _ => {}
+        }
+
+        // Fall back to FAA numeric codes
         let code = trimmed
             .parse::<u8>()
             .with_context(|| format!("Failed to parse engine type code as number: {}", trimmed))?;
@@ -140,21 +172,21 @@ impl FromStr for EngineType {
 
 impl fmt::Display for EngineType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            EngineType::None => "0",
-            EngineType::Reciprocating => "1",
-            EngineType::TurboProp => "2",
-            EngineType::TurboShaft => "3",
-            EngineType::TurboJet => "4",
-            EngineType::TurboFan => "5",
-            EngineType::Ramjet => "6",
-            EngineType::TwoCycle => "7",
-            EngineType::FourCycle => "8",
-            EngineType::Unknown => "9",
-            EngineType::Electric => "10",
-            EngineType::Rotary => "11",
+        let label = match self {
+            EngineType::None => "None",
+            EngineType::Reciprocating => "Reciprocating",
+            EngineType::TurboProp => "Turbo-Prop",
+            EngineType::TurboShaft => "Turbo-Shaft",
+            EngineType::TurboJet => "Turbo-Jet",
+            EngineType::TurboFan => "Turbo-Fan",
+            EngineType::Ramjet => "Ramjet",
+            EngineType::TwoCycle => "2-Cycle",
+            EngineType::FourCycle => "4-Cycle",
+            EngineType::Unknown => "Unknown",
+            EngineType::Electric => "Electric",
+            EngineType::Rotary => "Rotary",
         };
-        write!(f, "{}", code)
+        write!(f, "{}", label)
     }
 }
 
@@ -171,9 +203,14 @@ impl FromStr for AircraftCategory {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.trim() {
+            // FAA numeric codes
             "1" => Ok(AircraftCategory::Land),
             "2" => Ok(AircraftCategory::Sea),
             "3" => Ok(AircraftCategory::Amphibian),
+            // Human-readable labels (for database round-tripping)
+            "Land" => Ok(AircraftCategory::Land),
+            "Sea" => Ok(AircraftCategory::Sea),
+            "Amphibian" => Ok(AircraftCategory::Amphibian),
             _ => Err(anyhow!("Invalid aircraft category code: {}", s)),
         }
     }
@@ -181,12 +218,12 @@ impl FromStr for AircraftCategory {
 
 impl fmt::Display for AircraftCategory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            AircraftCategory::Land => "1",
-            AircraftCategory::Sea => "2",
-            AircraftCategory::Amphibian => "3",
+        let label = match self {
+            AircraftCategory::Land => "Land",
+            AircraftCategory::Sea => "Sea",
+            AircraftCategory::Amphibian => "Amphibian",
         };
-        write!(f, "{}", code)
+        write!(f, "{}", label)
     }
 }
 
@@ -203,9 +240,14 @@ impl FromStr for BuilderCertification {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.trim() {
+            // FAA numeric codes
             "0" => Ok(BuilderCertification::TypeCertificated),
             "1" => Ok(BuilderCertification::NotTypeCertificated),
             "2" => Ok(BuilderCertification::LightSport),
+            // Human-readable labels (for database round-tripping)
+            "Type Certificated" => Ok(BuilderCertification::TypeCertificated),
+            "Not Type Certificated" => Ok(BuilderCertification::NotTypeCertificated),
+            "Light Sport" => Ok(BuilderCertification::LightSport),
             _ => Err(anyhow!("Invalid builder certification code: {}", s)),
         }
     }
@@ -213,12 +255,12 @@ impl FromStr for BuilderCertification {
 
 impl fmt::Display for BuilderCertification {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            BuilderCertification::TypeCertificated => "0",
-            BuilderCertification::NotTypeCertificated => "1",
-            BuilderCertification::LightSport => "2",
+        let label = match self {
+            BuilderCertification::TypeCertificated => "Type Certificated",
+            BuilderCertification::NotTypeCertificated => "Not Type Certificated",
+            BuilderCertification::LightSport => "Light Sport",
         };
-        write!(f, "{}", code)
+        write!(f, "{}", label)
     }
 }
 
@@ -236,6 +278,17 @@ impl FromStr for WeightClass {
 
     fn from_str(s: &str) -> Result<Self> {
         let trimmed = s.trim();
+
+        // First try human-readable labels (for database round-tripping)
+        match trimmed {
+            "Up to 12,499 lbs" => return Ok(WeightClass::UpTo12499),
+            "12,500 to 19,999 lbs" => return Ok(WeightClass::From12500To19999),
+            "20,000 lbs and over" => return Ok(WeightClass::From20000AndOver),
+            "UAV up to 55 lbs" => return Ok(WeightClass::UavUpTo55),
+            _ => {}
+        }
+
+        // Fall back to FAA codes (with or without "CLASS " prefix)
         let code = trimmed.strip_prefix("CLASS ").unwrap_or(trimmed);
 
         match code {
@@ -250,13 +303,13 @@ impl FromStr for WeightClass {
 
 impl fmt::Display for WeightClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let code = match self {
-            WeightClass::UpTo12499 => "CLASS 1",
-            WeightClass::From12500To19999 => "CLASS 2",
-            WeightClass::From20000AndOver => "CLASS 3",
-            WeightClass::UavUpTo55 => "CLASS 4",
+        let label = match self {
+            WeightClass::UpTo12499 => "Up to 12,499 lbs",
+            WeightClass::From12500To19999 => "12,500 to 19,999 lbs",
+            WeightClass::From20000AndOver => "20,000 lbs and over",
+            WeightClass::UavUpTo55 => "UAV up to 55 lbs",
         };
-        write!(f, "{}", code)
+        write!(f, "{}", label)
     }
 }
 
@@ -375,6 +428,7 @@ mod tests {
 
     #[test]
     fn test_aircraft_type_enum() {
+        // Test parsing FAA numeric codes
         assert_eq!(AircraftType::from_str("1").unwrap(), AircraftType::Glider);
         assert_eq!(
             AircraftType::from_str("4").unwrap(),
@@ -386,15 +440,35 @@ mod tests {
         );
         assert_eq!(AircraftType::from_str("O").unwrap(), AircraftType::Other);
 
-        assert_eq!(AircraftType::Glider.to_string(), "1");
-        assert_eq!(AircraftType::HybridLift.to_string(), "H");
-        assert_eq!(AircraftType::Other.to_string(), "O");
+        // Test parsing human-readable labels (for database round-tripping)
+        assert_eq!(
+            AircraftType::from_str("Glider").unwrap(),
+            AircraftType::Glider
+        );
+        assert_eq!(
+            AircraftType::from_str("Fixed-Wing Single-Engine").unwrap(),
+            AircraftType::FixedWingSingleEngine
+        );
+        assert_eq!(
+            AircraftType::from_str("Hybrid Lift").unwrap(),
+            AircraftType::HybridLift
+        );
+
+        // Test Display outputs human-readable labels
+        assert_eq!(AircraftType::Glider.to_string(), "Glider");
+        assert_eq!(AircraftType::HybridLift.to_string(), "Hybrid Lift");
+        assert_eq!(AircraftType::Other.to_string(), "Other");
+        assert_eq!(
+            AircraftType::FixedWingMultiEngine.to_string(),
+            "Fixed-Wing Multi-Engine"
+        );
 
         assert!(AircraftType::from_str("X").is_err());
     }
 
     #[test]
     fn test_engine_type_enum() {
+        // Test parsing FAA numeric codes
         assert_eq!(EngineType::from_str("0").unwrap(), EngineType::None);
         assert_eq!(
             EngineType::from_str("1").unwrap(),
@@ -411,15 +485,29 @@ mod tests {
         assert_eq!(EngineType::from_str("02").unwrap(), EngineType::TurboProp);
         assert_eq!(EngineType::from_str("00").unwrap(), EngineType::None);
 
-        assert_eq!(EngineType::None.to_string(), "0");
-        assert_eq!(EngineType::Electric.to_string(), "10");
-        assert_eq!(EngineType::Rotary.to_string(), "11");
+        // Test parsing human-readable labels (for database round-tripping)
+        assert_eq!(EngineType::from_str("None").unwrap(), EngineType::None);
+        assert_eq!(
+            EngineType::from_str("Turbo-Fan").unwrap(),
+            EngineType::TurboFan
+        );
+        assert_eq!(
+            EngineType::from_str("Electric").unwrap(),
+            EngineType::Electric
+        );
+
+        // Test Display outputs human-readable labels
+        assert_eq!(EngineType::None.to_string(), "None");
+        assert_eq!(EngineType::Electric.to_string(), "Electric");
+        assert_eq!(EngineType::Rotary.to_string(), "Rotary");
+        assert_eq!(EngineType::TurboFan.to_string(), "Turbo-Fan");
 
         assert!(EngineType::from_str("12").is_err());
     }
 
     #[test]
     fn test_aircraft_category_enum() {
+        // Test parsing FAA numeric codes
         assert_eq!(
             AircraftCategory::from_str("1").unwrap(),
             AircraftCategory::Land
@@ -433,15 +521,31 @@ mod tests {
             AircraftCategory::Amphibian
         );
 
-        assert_eq!(AircraftCategory::Land.to_string(), "1");
-        assert_eq!(AircraftCategory::Sea.to_string(), "2");
-        assert_eq!(AircraftCategory::Amphibian.to_string(), "3");
+        // Test parsing human-readable labels (for database round-tripping)
+        assert_eq!(
+            AircraftCategory::from_str("Land").unwrap(),
+            AircraftCategory::Land
+        );
+        assert_eq!(
+            AircraftCategory::from_str("Sea").unwrap(),
+            AircraftCategory::Sea
+        );
+        assert_eq!(
+            AircraftCategory::from_str("Amphibian").unwrap(),
+            AircraftCategory::Amphibian
+        );
+
+        // Test Display outputs human-readable labels
+        assert_eq!(AircraftCategory::Land.to_string(), "Land");
+        assert_eq!(AircraftCategory::Sea.to_string(), "Sea");
+        assert_eq!(AircraftCategory::Amphibian.to_string(), "Amphibian");
 
         assert!(AircraftCategory::from_str("4").is_err());
     }
 
     #[test]
     fn test_builder_certification_enum() {
+        // Test parsing FAA numeric codes
         assert_eq!(
             BuilderCertification::from_str("0").unwrap(),
             BuilderCertification::TypeCertificated
@@ -455,16 +559,37 @@ mod tests {
             BuilderCertification::LightSport
         );
 
-        assert_eq!(BuilderCertification::TypeCertificated.to_string(), "0");
-        assert_eq!(BuilderCertification::NotTypeCertificated.to_string(), "1");
-        assert_eq!(BuilderCertification::LightSport.to_string(), "2");
+        // Test parsing human-readable labels (for database round-tripping)
+        assert_eq!(
+            BuilderCertification::from_str("Type Certificated").unwrap(),
+            BuilderCertification::TypeCertificated
+        );
+        assert_eq!(
+            BuilderCertification::from_str("Not Type Certificated").unwrap(),
+            BuilderCertification::NotTypeCertificated
+        );
+        assert_eq!(
+            BuilderCertification::from_str("Light Sport").unwrap(),
+            BuilderCertification::LightSport
+        );
+
+        // Test Display outputs human-readable labels
+        assert_eq!(
+            BuilderCertification::TypeCertificated.to_string(),
+            "Type Certificated"
+        );
+        assert_eq!(
+            BuilderCertification::NotTypeCertificated.to_string(),
+            "Not Type Certificated"
+        );
+        assert_eq!(BuilderCertification::LightSport.to_string(), "Light Sport");
 
         assert!(BuilderCertification::from_str("3").is_err());
     }
 
     #[test]
     fn test_weight_class_enum() {
-        // Test parsing without "CLASS " prefix
+        // Test parsing FAA codes without "CLASS " prefix
         assert_eq!(WeightClass::from_str("1").unwrap(), WeightClass::UpTo12499);
         assert_eq!(
             WeightClass::from_str("2").unwrap(),
@@ -476,7 +601,7 @@ mod tests {
         );
         assert_eq!(WeightClass::from_str("4").unwrap(), WeightClass::UavUpTo55);
 
-        // Test parsing with "CLASS " prefix
+        // Test parsing FAA codes with "CLASS " prefix
         assert_eq!(
             WeightClass::from_str("CLASS 1").unwrap(),
             WeightClass::UpTo12499
@@ -494,11 +619,35 @@ mod tests {
             WeightClass::UavUpTo55
         );
 
-        // Test Display format (should include "CLASS " prefix)
-        assert_eq!(WeightClass::UpTo12499.to_string(), "CLASS 1");
-        assert_eq!(WeightClass::From12500To19999.to_string(), "CLASS 2");
-        assert_eq!(WeightClass::From20000AndOver.to_string(), "CLASS 3");
-        assert_eq!(WeightClass::UavUpTo55.to_string(), "CLASS 4");
+        // Test parsing human-readable labels (for database round-tripping)
+        assert_eq!(
+            WeightClass::from_str("Up to 12,499 lbs").unwrap(),
+            WeightClass::UpTo12499
+        );
+        assert_eq!(
+            WeightClass::from_str("12,500 to 19,999 lbs").unwrap(),
+            WeightClass::From12500To19999
+        );
+        assert_eq!(
+            WeightClass::from_str("20,000 lbs and over").unwrap(),
+            WeightClass::From20000AndOver
+        );
+        assert_eq!(
+            WeightClass::from_str("UAV up to 55 lbs").unwrap(),
+            WeightClass::UavUpTo55
+        );
+
+        // Test Display outputs human-readable labels
+        assert_eq!(WeightClass::UpTo12499.to_string(), "Up to 12,499 lbs");
+        assert_eq!(
+            WeightClass::From12500To19999.to_string(),
+            "12,500 to 19,999 lbs"
+        );
+        assert_eq!(
+            WeightClass::From20000AndOver.to_string(),
+            "20,000 lbs and over"
+        );
+        assert_eq!(WeightClass::UavUpTo55.to_string(), "UAV up to 55 lbs");
 
         // Test invalid codes
         assert!(WeightClass::from_str("5").is_err());

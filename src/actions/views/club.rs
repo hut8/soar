@@ -9,6 +9,9 @@ use crate::{
     clubs::Club,
     clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity},
     faa::aircraft_model_repo::AircraftModelRecord,
+    faa::aircraft_models::{
+        AircraftCategory, AircraftType, BuilderCertification, EngineType, WeightClass,
+    },
     locations::{Location, Point},
 };
 
@@ -75,19 +78,46 @@ pub struct AircraftModelView {
 
 impl From<AircraftModelRecord> for AircraftModelView {
     fn from(model: AircraftModelRecord) -> Self {
+        // Convert string values through their enum types to ensure human-readable labels
+        // This handles both numeric codes (e.g., "5") and existing labels (e.g., "Turbo-Fan")
+        let aircraft_type = model
+            .aircraft_type
+            .and_then(|s| s.parse::<AircraftType>().ok())
+            .map(|t| t.to_string());
+
+        let engine_type = model
+            .engine_type
+            .and_then(|s| s.parse::<EngineType>().ok())
+            .map(|t| t.to_string());
+
+        let aircraft_category = model
+            .aircraft_category
+            .and_then(|s| s.parse::<AircraftCategory>().ok())
+            .map(|t| t.to_string());
+
+        let builder_certification = model
+            .builder_certification
+            .and_then(|s| s.parse::<BuilderCertification>().ok())
+            .map(|t| t.to_string());
+
+        let weight_class = model
+            .weight_class
+            .and_then(|s| s.parse::<WeightClass>().ok())
+            .map(|t| t.to_string());
+
         Self {
             manufacturer_code: model.manufacturer_code,
             model_code: model.model_code,
             series_code: model.series_code,
             manufacturer_name: model.manufacturer_name,
             model_name: model.model_name,
-            aircraft_type: model.aircraft_type,
-            engine_type: model.engine_type,
-            aircraft_category: model.aircraft_category,
-            builder_certification: model.builder_certification,
+            aircraft_type,
+            engine_type,
+            aircraft_category,
+            builder_certification,
             number_of_engines: model.number_of_engines,
             number_of_seats: model.number_of_seats,
-            weight_class: model.weight_class,
+            weight_class,
             cruising_speed: model.cruising_speed,
             type_certificate_data_sheet: model.type_certificate_data_sheet,
             type_certificate_data_holder: model.type_certificate_data_holder,
