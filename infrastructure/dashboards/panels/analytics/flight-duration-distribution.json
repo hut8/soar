@@ -1,0 +1,89 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Distribution of flight durations across all flights",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "Number of Flights",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "drawStyle": "bars",
+        "fillOpacity": 80,
+        "gradientMode": "none",
+        "hideFrom": {
+          "tooltip": false,
+          "viz": false,
+          "legend": false
+        },
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "unit": "short"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [],
+      "displayMode": "hidden",
+      "placement": "bottom",
+      "showLegend": false
+    },
+    "tooltip": {
+      "mode": "single",
+      "sort": "none"
+    }
+  },
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  bucket_name as \"Duration\",\n  flight_count as \"Flights\"\nFROM flight_duration_buckets\nORDER BY bucket_order ASC",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Flight Duration Distribution",
+  "type": "barchart",
+  "_height": 9
+}

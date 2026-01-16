@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "title": "SOAR Flight Analytics",
+    "uid": "soar-analytics",
+    "tags": [
+      "soar",
+      "analytics",
+      "flights"
+    ],
+    "refresh": "1m",
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "graphTooltip": 0
+  },
+  "templating": [
+    "templating-environment.json",
+    "templating-postgres-datasource.json"
+  ],
+  "panels": [
+    "flight-analytics-summary",
+    "daily-flights-gliding",
+    "daily-flights-last-30-days",
+    "flight-duration-distribution",
+    "hourly-flight-activity-last-30-days",
+    "top-10-most-active-aircraft-last-30-days",
+    "average-flight-duration-trend-last-30-days",
+    "total-distance-flown-per-day-last-30-days",
+    "top-10-busiest-airports-last-30-days",
+    "club-activity-summary-last-30-days",
+    "flight-type-distribution-last-30-days",
+    "anomalous-aircraft-activity"
+  ]
+}

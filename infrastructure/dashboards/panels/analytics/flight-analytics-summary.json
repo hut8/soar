@@ -1,0 +1,61 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Key flight metrics from the last 30 days",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": []
+  },
+  "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "textMode": "auto"
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Aircraft (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Anomalous Aircraft\"",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Flight Analytics Summary",
+  "type": "stat",
+  "_height": 6
+}

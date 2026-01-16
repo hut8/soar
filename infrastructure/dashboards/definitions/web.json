@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "title": "SOAR Web Performance Dashboard",
+    "uid": "soar-web-performance",
+    "tags": [
+      "soar",
+      "web",
+      "monitoring"
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "graphTooltip": 1
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "SOAR Web - Process Metrics"
+    },
+    "version",
+    "build-details",
+    "process-uptime",
+    "process-status",
+    "process-memory-usage",
+    {
+      "row": "SOAR Web - HTTP Metrics"
+    },
+    "http-request-p95-duration-by-endpoint",
+    "http-request-rate-by-endpoint",
+    {
+      "row": "SOAR Web - WebSocket Metrics"
+    },
+    "websocket-connections",
+    "websocket-active-subscriptions",
+    "websocket-queue-depth",
+    "websocket-message-metrics",
+    "websocket-device-subscription-activity",
+    "websocket-area-subscription-activity"
+  ]
+}

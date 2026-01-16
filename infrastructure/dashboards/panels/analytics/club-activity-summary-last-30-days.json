@@ -1,0 +1,107 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Club activity breakdown for the last 30 days",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "custom": {
+        "align": "auto",
+        "cellOptions": {
+          "type": "auto"
+        },
+        "inspect": false
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Total Flights"
+        },
+        "properties": [
+          {
+            "id": "custom.width",
+            "value": 120
+          },
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "continuous-GrYlRd"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Total Airtime (hrs)"
+        },
+        "properties": [
+          {
+            "id": "unit",
+            "value": "h"
+          },
+          {
+            "id": "decimals",
+            "value": 1
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "cellHeight": "sm",
+    "footer": {
+      "countRows": false,
+      "fields": "",
+      "reducer": [
+        "sum"
+      ],
+      "show": false
+    },
+    "showHeader": true,
+    "sortBy": []
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  MAX(club_name) as \"Club\",\n  SUM(flight_count) as \"Total Flights\",\n  SUM(tow_count) as \"Tow Flights\",\n  COUNT(DISTINCT date) as \"Active Days\",\n  SUM(active_devices) / COUNT(*) as \"Avg Active Devices\",\n  SUM(total_airtime_seconds) / 3600.0 as \"Total Airtime (hrs)\"\nFROM club_analytics_daily\nWHERE date >= CURRENT_DATE - 30\nGROUP BY club_id\nORDER BY SUM(flight_count) DESC",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Club Activity Summary (Last 30 Days)",
+  "type": "table"
+}

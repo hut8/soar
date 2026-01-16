@@ -1,0 +1,96 @@
+{
+  "datasource": {
+    "type": "postgres",
+    "uid": "${postgres_datasource}"
+  },
+  "description": "Aircraft with anomalous flight patterns (z-score > 3.0)",
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "thresholds"
+      },
+      "custom": {
+        "align": "auto",
+        "cellOptions": {
+          "type": "auto"
+        },
+        "inspect": false
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Z-Score"
+        },
+        "properties": [
+          {
+            "id": "custom.width",
+            "value": 100
+          },
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "continuous-RdYlGr",
+              "seriesBy": "max"
+            }
+          },
+          {
+            "id": "decimals",
+            "value": 2
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "cellHeight": "sm",
+    "footer": {
+      "countRows": false,
+      "fields": "",
+      "reducer": [
+        "sum"
+      ],
+      "show": false
+    },
+    "showHeader": true,
+    "sortBy": []
+  },
+  "pluginVersion": "10.0.0",
+  "targets": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "${postgres_datasource}"
+      },
+      "editorMode": "code",
+      "format": "table",
+      "rawQuery": true,
+      "rawSql": "SELECT\n  d.registration || ' (' || d.address || ')' as \"Aircraft\",\n  d.aircraft_model as \"Model\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics aa\nJOIN aircraft d ON aa.aircraft_id = d.id\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC",
+      "refId": "A",
+      "sql": {
+        "columns": [],
+        "groupBy": [],
+        "limit": 50
+      }
+    }
+  ],
+  "title": "Anomalous Aircraft Activity",
+  "type": "table"
+}

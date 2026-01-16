@@ -597,6 +597,11 @@ jobs:
             echo "Grafana provisioning configuration included in deployment package"
           fi
 
+          # Build Grafana dashboards from panel files
+          echo "Building Grafana dashboards..."
+          python3 infrastructure/dashboards/build.py
+          echo "Dashboard build complete"
+
           # Copy Grafana dashboard files
           if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
             cp infrastructure/grafana-dashboard-*.json deploy-pkg/
@@ -780,6 +785,11 @@ jobs:
             cp -r infrastructure/grafana-provisioning deploy-pkg/
             echo "Grafana provisioning configuration included in deployment package"
           fi
+
+          # Build Grafana dashboards from panel files
+          echo "Building Grafana dashboards..."
+          python3 infrastructure/dashboards/build.py
+          echo "Dashboard build complete"
 
           # Copy Grafana dashboard files
           if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then

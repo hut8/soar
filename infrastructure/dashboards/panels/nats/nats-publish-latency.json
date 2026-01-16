@@ -1,0 +1,152 @@
+{
+  "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+  },
+  "fieldConfig": {
+    "defaults": {
+      "color": {
+        "mode": "palette-classic"
+      },
+      "custom": {
+        "axisBorderShow": false,
+        "axisCenteredZero": false,
+        "axisColorMode": "text",
+        "axisLabel": "Milliseconds",
+        "axisPlacement": "auto",
+        "barAlignment": 0,
+        "barWidthFactor": 0.6,
+        "drawStyle": "line",
+        "fillOpacity": 10,
+        "gradientMode": "none",
+        "hideFrom": {
+          "legend": false,
+          "tooltip": false,
+          "viz": false
+        },
+        "insertNulls": false,
+        "lineInterpolation": "linear",
+        "lineWidth": 1,
+        "pointSize": 5,
+        "scaleDistribution": {
+          "type": "linear"
+        },
+        "showPoints": "never",
+        "spanNulls": false,
+        "stacking": {
+          "group": "A",
+          "mode": "none"
+        },
+        "thresholdsStyle": {
+          "mode": "off"
+        }
+      },
+      "mappings": [],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": 0
+          },
+          {
+            "color": "yellow",
+            "value": 50
+          },
+          {
+            "color": "red",
+            "value": 100
+          }
+        ]
+      },
+      "unit": "ms"
+    },
+    "overrides": []
+  },
+  "options": {
+    "legend": {
+      "calcs": [
+        "mean",
+        "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom",
+      "showLegend": true
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "desc"
+    }
+  },
+  "pluginVersion": "12.2.1",
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.5\"}",
+      "legendFormat": "P50 - OGN (ingest-ogn)",
+      "range": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.95\"}",
+      "legendFormat": "P95 - OGN (ingest-ogn)",
+      "range": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.99\"}",
+      "legendFormat": "P99 - OGN (ingest-ogn)",
+      "range": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.5\"}",
+      "legendFormat": "P50 - ADS-B (ingest-adsb)",
+      "range": true,
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.95\"}",
+      "legendFormat": "P95 - ADS-B (ingest-adsb)",
+      "range": true,
+      "refId": "E"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "beast_nats_publish_duration_ms{component=\"ingest-adsb\",environment=\"$environment\",quantile=\"0.99\"}",
+      "legendFormat": "P99 - ADS-B (ingest-adsb)",
+      "range": true,
+      "refId": "F"
+    }
+  ],
+  "title": "NATS Publish Latency",
+  "type": "timeseries"
+}

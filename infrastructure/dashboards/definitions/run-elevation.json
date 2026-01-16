@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "title": "SOAR Run - Elevation Processing",
+    "uid": "soar-run-elevation",
+    "tags": [
+      "soar",
+      "run",
+      "aprs",
+      "monitoring"
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "graphTooltip": 1,
+    "description": "Elevation lookups and AGL calculations"
+  },
+  "templating": [
+    "templating-environment.json"
+  ],
+  "panels": [
+    {
+      "row": "SOAR Run - Elevation Processing"
+    },
+    "elevation-processing-rate",
+    "elevation-processing-duration",
+    "elevation-cache-hitmiss-rate",
+    "elevation-cache-hit-rate",
+    "elevation-cache-entries-max-500k",
+    "elevation-tile-cache-hitmiss-rate",
+    "elevation-tile-cache-hit-rate",
+    "open-hgt-tiles",
+    "elevation-lookup-breakdown-p95"
+  ]
+}
