@@ -74,9 +74,12 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 
 **Process for config changes:**
 1. Edit the config file in `infrastructure/` first
-2. Copy to the system location: `sudo cp infrastructure/<file> /etc/<service>/<file>`
+2. For manual deployment: Copy to the system location: `sudo cp infrastructure/<file> /etc/<service>/<file>`
 3. Restart the service if needed: `sudo systemctl restart <service>`
 4. Commit the infrastructure/ change to git
+
+**Auto-deployed by soar-deploy:** tempo-config.yml, loki-config.yml, pyroscope-config.yml, alloy-config.alloy, pgbouncer.ini
+**Manual deployment required:** prometheus.yml, netdata-config.conf, pgbouncer-userlist.txt
 
 This ensures config changes are tracked in version control and can be reproduced across environments.
 

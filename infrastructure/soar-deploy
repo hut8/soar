@@ -1092,6 +1092,31 @@ else
     log_warn "Alloy configuration file not found in deployment directory"
 fi
 
+# Install PgBouncer configuration
+if [ -f "$DEPLOY_DIR/pgbouncer.ini" ]; then
+    # Check if config has changed before installing
+    if ! diff -q "$DEPLOY_DIR/pgbouncer.ini" /etc/pgbouncer/pgbouncer.ini >/dev/null 2>&1; then
+        log_info "Installing PgBouncer configuration..."
+        sudo cp "$DEPLOY_DIR/pgbouncer.ini" /etc/pgbouncer/pgbouncer.ini
+        sudo chown postgres:postgres /etc/pgbouncer/pgbouncer.ini
+        sudo chmod 640 /etc/pgbouncer/pgbouncer.ini
+        log_info "PgBouncer configuration installed"
+
+        # Reload PgBouncer if running to pick up new config (graceful, no connection drop)
+        if systemctl is-active --quiet pgbouncer; then
+            log_info "Reloading PgBouncer to apply new configuration..."
+            if ! systemctl reload pgbouncer; then
+                log_warn "Failed to reload PgBouncer, attempting restart..."
+                systemctl restart pgbouncer || log_warn "Failed to restart PgBouncer"
+            fi
+        fi
+    else
+        log_info "PgBouncer configuration unchanged, skipping"
+    fi
+else
+    log_warn "PgBouncer configuration file not found in deployment directory"
+fi
+
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload

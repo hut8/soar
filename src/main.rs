@@ -491,11 +491,11 @@ async fn setup_diesel_database(
 
     // Create a Diesel connection pool - sized for pgbouncer in front
     // pgbouncer handles actual PostgreSQL connection pooling:
-    // - pgbouncer max_client_conn: 500
-    // - pgbouncer default_pool_size: 30 (actual PG connections)
-    // - pgbouncer max_db_connections: 40
+    // - pgbouncer max_client_conn: 1000
+    // - pgbouncer default_pool_size: 100 (actual PG connections)
+    // - pgbouncer max_db_connections: 120
     // Application pool can be larger since pgbouncer multiplexes connections
-    // Workers: 80 aircraft + 10 router + 6 receiver_status + 4 receiver_position + 2 server_status + misc
+    // Workers: 80 aircraft + 50 router + 6 receiver_status + 4 receiver_position + 2 server_status + misc
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
         .max_size(150)
