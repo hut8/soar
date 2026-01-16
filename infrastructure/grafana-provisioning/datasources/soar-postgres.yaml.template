@@ -1,0 +1,26 @@
+# Grafana PostgreSQL Datasource Configuration (Template)
+# This file is processed by soar-deploy to substitute environment-specific values
+#
+# Placeholders:
+#   {{POSTGRES_DATABASE}} - Database name (soar or soar_staging)
+#   {{POSTGRES_DATASOURCE_UID}} - Datasource UID (soar-postgres or soar-postgres-staging)
+#   {{POSTGRES_DATASOURCE_NAME}} - Datasource name (soar-postgres or soar-postgres-staging)
+#
+# Connection goes through PgBouncer on port 6432 with auth_type=any (no password needed)
+
+apiVersion: 1
+
+datasources:
+  - name: {{POSTGRES_DATASOURCE_NAME}}
+    type: postgres
+    uid: {{POSTGRES_DATASOURCE_UID}}
+    access: proxy
+    url: 127.0.0.1:6432
+    user: soar
+    editable: true
+    jsonData:
+      database: {{POSTGRES_DATABASE}}
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400

@@ -604,6 +604,16 @@ jobs:
             echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
           fi
 
+          # Copy observability stack configuration files
+          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy.template pgbouncer.ini; do
+            if [ -f "infrastructure/$config_file" ]; then
+              cp "infrastructure/$config_file" deploy-pkg/
+              echo "Observability config included: $config_file"
+            else
+              echo "Warning: infrastructure/$config_file not found"
+            fi
+          done
+
           # Copy backup scripts directory
           if [ -d scripts/backup ]; then
             mkdir -p deploy-pkg/scripts
@@ -777,6 +787,16 @@ jobs:
             DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
             echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
           fi
+
+          # Copy observability stack configuration files
+          for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-config.alloy.template pgbouncer.ini; do
+            if [ -f "infrastructure/$config_file" ]; then
+              cp "infrastructure/$config_file" deploy-pkg/
+              echo "Observability config included: $config_file"
+            else
+              echo "Warning: infrastructure/$config_file not found"
+            fi
+          done
 
           # Copy backup scripts directory
           if [ -d scripts/backup ]; then

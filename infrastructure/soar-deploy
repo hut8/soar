@@ -722,14 +722,44 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
         mkdir -p /etc/grafana/provisioning/datasources
 
         # Copy both .yml and .yaml files (Grafana datasources require .yaml extension)
+        # Skip template files - they will be processed separately
         for datasource_file in "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yml "$DEPLOY_DIR/grafana-provisioning/datasources"/*.yaml; do
             if [ -f "$datasource_file" ]; then
                 filename=$(basename "$datasource_file")
+                # Skip template files
+                if [[ "$filename" == *.template ]]; then
+                    continue
+                fi
                 cp "$datasource_file" /etc/grafana/provisioning/datasources/
                 chmod 644 "/etc/grafana/provisioning/datasources/$filename"
                 log_info "Installed datasource config: $filename"
             fi
         done
+
+        # Process PostgreSQL datasource template if it exists
+        if [ -f "$DEPLOY_DIR/grafana-provisioning/datasources/soar-postgres.yaml.template" ]; then
+            log_info "Processing PostgreSQL datasource template..."
+
+            # Set environment-specific values
+            if [ "$ENVIRONMENT" = "staging" ]; then
+                PG_DATABASE="soar_staging"
+                PG_DATASOURCE_UID="soar-postgres-staging"
+                PG_DATASOURCE_NAME="soar-postgres-staging"
+            else
+                PG_DATABASE="soar"
+                PG_DATASOURCE_UID="soar-postgres"
+                PG_DATASOURCE_NAME="soar-postgres"
+            fi
+
+            # Process template (no password needed - PgBouncer uses auth_type=any on localhost)
+            sed -e "s|{{POSTGRES_DATABASE}}|$PG_DATABASE|g" \
+                -e "s|{{POSTGRES_DATASOURCE_UID}}|$PG_DATASOURCE_UID|g" \
+                -e "s|{{POSTGRES_DATASOURCE_NAME}}|$PG_DATASOURCE_NAME|g" \
+                "$DEPLOY_DIR/grafana-provisioning/datasources/soar-postgres.yaml.template" \
+                > /etc/grafana/provisioning/datasources/soar-postgres.yaml
+            chmod 644 /etc/grafana/provisioning/datasources/soar-postgres.yaml
+            log_info "PostgreSQL datasource configured: $PG_DATASOURCE_NAME -> $PG_DATABASE"
+        fi
 
         # Set ownership to grafana user
         if id "grafana" &>/dev/null; then
@@ -1075,9 +1105,35 @@ else
     log_warn "Pyroscope configuration file not found in deployment directory"
 fi
 
-# Install Alloy configuration
-if [ -f "$DEPLOY_DIR/alloy-config.alloy" ]; then
-    log_info "Installing Alloy configuration..."
+# Install Alloy configuration (template with git commit for source code linking)
+if [ -f "$DEPLOY_DIR/alloy-config.alloy.template" ]; then
+    log_info "Processing Alloy configuration template..."
+
+    # Get git commit from VERSION file (set during CI)
+    if [ -f "$DEPLOY_DIR/VERSION" ]; then
+        GIT_COMMIT=$(cat "$DEPLOY_DIR/VERSION" | tr -d '\n' | tr -d '\r')
+        log_info "Git commit for profiling source links: $GIT_COMMIT"
+    else
+        GIT_COMMIT="unknown"
+        log_warn "VERSION file not found, profiling source links will not work"
+    fi
+
+    # Process template and install
+    sed -e "s|{{GIT_COMMIT}}|$GIT_COMMIT|g" \
+        "$DEPLOY_DIR/alloy-config.alloy.template" \
+        > /etc/alloy/config.alloy
+    sudo chown alloy:alloy /etc/alloy/config.alloy
+    sudo chmod 644 /etc/alloy/config.alloy
+    log_info "Alloy configuration installed with git commit: $GIT_COMMIT"
+
+    # Restart Alloy if running to pick up new config
+    if systemctl is-active --quiet alloy; then
+        log_info "Restarting Alloy to apply new configuration..."
+        systemctl restart alloy || log_warn "Failed to restart Alloy"
+    fi
+elif [ -f "$DEPLOY_DIR/alloy-config.alloy" ]; then
+    # Fallback to non-template version if present
+    log_info "Installing Alloy configuration (non-template)..."
     sudo cp "$DEPLOY_DIR/alloy-config.alloy" /etc/alloy/config.alloy
     sudo chown alloy:alloy /etc/alloy/config.alloy
     sudo chmod 644 /etc/alloy/config.alloy
