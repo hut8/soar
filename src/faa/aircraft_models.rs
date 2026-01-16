@@ -268,24 +268,19 @@ impl FromStr for WeightClass {
 
     fn from_str(s: &str) -> Result<Self> {
         let trimmed = s.trim();
-
-        // First try human-readable labels (for database round-tripping)
-        match trimmed {
-            "Up to 12,499 lbs" => return Ok(WeightClass::UpTo12499),
-            "12,500 to 19,999 lbs" => return Ok(WeightClass::From12500To19999),
-            "20,000 lbs and over" => return Ok(WeightClass::From20000AndOver),
-            "UAV up to 55 lbs" => return Ok(WeightClass::UavUpTo55),
-            _ => {}
-        }
-
-        // Fall back to FAA codes (with or without "CLASS " prefix)
         let code = trimmed.strip_prefix("CLASS ").unwrap_or(trimmed);
 
         match code {
+            // FAA codes
             "1" => Ok(WeightClass::UpTo12499),
             "2" => Ok(WeightClass::From12500To19999),
             "3" => Ok(WeightClass::From20000AndOver),
             "4" => Ok(WeightClass::UavUpTo55),
+            // Human-readable labels (for database round-tripping)
+            "Up to 12,499 lbs" => Ok(WeightClass::UpTo12499),
+            "12,500 to 19,999 lbs" => Ok(WeightClass::From12500To19999),
+            "20,000 lbs and over" => Ok(WeightClass::From20000AndOver),
+            "UAV up to 55 lbs" => Ok(WeightClass::UavUpTo55),
             _ => Err(anyhow!("Invalid weight class code: {}", s)),
         }
     }
