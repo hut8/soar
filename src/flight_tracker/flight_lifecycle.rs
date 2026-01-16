@@ -568,7 +568,7 @@ async fn complete_flight_in_background(
             }
 
             warn!(
-                "Spurious flight {} detected for aircraft {} - reasons: [{}]. Deleting.",
+                "Spurious flight {} detected for aircraft {:06X} - reasons: [{}]. Deleting.",
                 flight_id,
                 device.address,
                 reasons.join(", ")

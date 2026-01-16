@@ -1012,7 +1012,7 @@ impl AircraftFetcher {
                         AircraftSource::Flarmnet => "FLARM",
                     };
                     warn!(
-                        "Aircraft conflict for ID {}: using {} data: {} (over {})",
+                        "Aircraft conflict for ID {:06X}: using {} data: {} (over {})",
                         glidernet_device.address,
                         better_label,
                         registration.as_deref().unwrap_or("(none)"),
