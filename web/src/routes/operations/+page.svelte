@@ -29,6 +29,15 @@
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { getLogger } from '$lib/logging';
+	import {
+		saveMapState,
+		loadMapState,
+		saveAreaTrackerState,
+		loadAreaTrackerState,
+		saveMapType,
+		loadMapType,
+		CONUS_CENTER
+	} from '$lib/utils/mapStatePersistence';
 
 	const logger = getLogger(['soar', 'Operations']);
 
@@ -164,157 +173,6 @@
 		showAircraftStatusModal = true;
 	}
 
-	// Center of continental US
-	const CONUS_CENTER = {
-		lat: 39.8283,
-		lng: -98.5795
-	};
-
-	// Map persistence keys for localStorage
-	const MAP_STATE_KEY = 'operations-map-state';
-	const AREA_TRACKER_KEY = 'operations-area-tracker';
-	const MAP_TYPE_KEY = 'operations-map-type';
-
-	// Interface for stored map state
-	interface MapState {
-		center: google.maps.LatLngLiteral;
-		zoom: number;
-	}
-
-	// Save current map state to localStorage
-	function saveMapState(): void {
-		if (!map || !browser) return;
-
-		const state: MapState = {
-			center: {
-				lat: map.getCenter()?.lat() || CONUS_CENTER.lat,
-				lng: map.getCenter()?.lng() || CONUS_CENTER.lng
-			},
-			zoom: map.getZoom() || 4
-		};
-
-		try {
-			localStorage.setItem(MAP_STATE_KEY, JSON.stringify(state));
-			logger.debug('[MAP] Saved map state: {state}', { state });
-		} catch (e) {
-			logger.warn('[MAP] Failed to save map state to localStorage: {error}', { error: e });
-		}
-	}
-
-	// Load map state from URL params, localStorage, or fallback to CONUS center
-	function loadMapState(): MapState {
-		// First check URL parameters
-		if (browser) {
-			const params = $page.url.searchParams;
-			const lat = params.get('lat');
-			const lng = params.get('lng');
-			const zoom = params.get('zoom');
-
-			if (lat && lng) {
-				const parsedLat = parseFloat(lat);
-				const parsedLng = parseFloat(lng);
-				const parsedZoom = zoom ? parseInt(zoom, 10) : 13;
-
-				if (!isNaN(parsedLat) && !isNaN(parsedLng) && !isNaN(parsedZoom)) {
-					logger.debug('[MAP] Using URL parameters: {params}', {
-						params: {
-							lat: parsedLat,
-							lng: parsedLng,
-							zoom: parsedZoom
-						}
-					});
-					return { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom };
-				}
-			}
-		}
-
-		// Fall back to localStorage
-		if (!browser) {
-			return { center: CONUS_CENTER, zoom: 4 };
-		}
-
-		try {
-			const saved = localStorage.getItem(MAP_STATE_KEY);
-			if (saved) {
-				const state: MapState = JSON.parse(saved);
-				logger.debug('[MAP] Loaded saved map state: {state}', { state });
-				return state;
-			}
-		} catch (e) {
-			logger.warn('[MAP] Failed to load map state from localStorage: {error}', { error: e });
-		}
-
-		logger.debug('[MAP] Using default CONUS center');
-		return { center: CONUS_CENTER, zoom: 4 };
-	}
-
-	// Save area tracker state to localStorage
-	function saveAreaTrackerState(): void {
-		if (!browser) return;
-
-		try {
-			localStorage.setItem(AREA_TRACKER_KEY, JSON.stringify(areaTrackerActive));
-			logger.debug('[AREA TRACKER] Saved state: {state}', { state: areaTrackerActive });
-		} catch (e) {
-			logger.warn('[AREA TRACKER] Failed to save state to localStorage: {error}', { error: e });
-		}
-	}
-
-	// Load area tracker state from localStorage
-	function loadAreaTrackerState(): boolean {
-		if (!browser) return true;
-
-		// When limit is disabled, area tracker is always on
-		if (!AREA_TRACKER_LIMIT_ENABLED) {
-			logger.debug('[AREA TRACKER] Limit disabled, area tracker always on');
-			return true;
-		}
-
-		try {
-			const saved = localStorage.getItem(AREA_TRACKER_KEY);
-			if (saved !== null) {
-				const state = JSON.parse(saved);
-				logger.debug('[AREA TRACKER] Loaded saved state: {state}', { state });
-				return state;
-			}
-		} catch (e) {
-			logger.warn('[AREA TRACKER] Failed to load state from localStorage: {error}', { error: e });
-		}
-
-		logger.debug('[AREA TRACKER] Using default state: true');
-		return true;
-	}
-
-	// Save map type to localStorage
-	function saveMapType(): void {
-		if (!browser) return;
-
-		try {
-			localStorage.setItem(MAP_TYPE_KEY, mapType);
-			logger.debug('[MAP TYPE] Saved map type: {mapType}', { mapType });
-		} catch (e) {
-			logger.warn('[MAP TYPE] Failed to save map type to localStorage: {error}', { error: e });
-		}
-	}
-
-	// Load map type from localStorage
-	function loadMapType(): 'satellite' | 'roadmap' {
-		if (!browser) return 'satellite';
-
-		try {
-			const saved = localStorage.getItem(MAP_TYPE_KEY);
-			if (saved === 'satellite' || saved === 'roadmap') {
-				logger.debug('[MAP TYPE] Loaded saved map type: {saved}', { saved });
-				return saved;
-			}
-		} catch (e) {
-			logger.warn('[MAP TYPE] Failed to load map type from localStorage: {error}', { error: e });
-		}
-
-		logger.debug('[MAP TYPE] Using default: satellite');
-		return 'satellite';
-	}
-
 	// Toggle between map types
 	function toggleMapType(): void {
 		if (!map) return;
@@ -323,8 +181,21 @@
 		map.setMapTypeId(
 			mapType === 'satellite' ? google.maps.MapTypeId.SATELLITE : google.maps.MapTypeId.ROADMAP
 		);
-		saveMapType();
+		saveMapType(mapType);
 		logger.debug('[MAP TYPE] Toggled to: {mapType}', { mapType });
+	}
+
+	// Helper to save current map state
+	function saveCurrentMapState(): void {
+		if (!map) return;
+		const center = map.getCenter();
+		saveMapState(
+			{
+				lat: center?.lat() || CONUS_CENTER.lat,
+				lng: center?.lng() || CONUS_CENTER.lng
+			},
+			map.getZoom() || 4
+		);
 	}
 
 	// Reactive effects for settings changes
@@ -438,7 +309,7 @@
 			fixFeed.startLiveFixesFeed();
 
 			// Load area tracker state and apply it after map is initialized
-			const savedAreaTrackerState = loadAreaTrackerState();
+			const savedAreaTrackerState = loadAreaTrackerState(AREA_TRACKER_LIMIT_ENABLED);
 			if (savedAreaTrackerState && areaTrackerAvailable) {
 				// Defer activation until map is fully initialized
 				setTimeout(() => {
@@ -492,7 +363,7 @@
 		}
 
 		// Load saved map state or use continental US as fallback
-		const mapState = loadMapState();
+		const mapState = loadMapState($page.url.searchParams);
 
 		// Load saved map type preference
 		mapType = loadMapType();
@@ -556,7 +427,7 @@
 			}, 1000); // Wait 1 second after zoom stops
 
 			// Save map state after zoom changes
-			saveMapState();
+			saveCurrentMapState();
 		});
 
 		// Initial aircraft fetch after map is ready (even if area tracker is off)
@@ -584,7 +455,7 @@
 			}
 
 			// Save map state after panning
-			saveMapState();
+			saveCurrentMapState();
 		});
 
 		// Initial check for airports, receivers, airspaces, and runways
@@ -838,7 +709,7 @@
 		logger.debug('[AREA TRACKER] Area tracker toggled: {active}', {
 			active: areaTrackerActive
 		});
-		saveAreaTrackerState();
+		saveAreaTrackerState(areaTrackerActive);
 
 		if (areaTrackerActive) {
 			// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
