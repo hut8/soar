@@ -547,6 +547,7 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("flight_tracker.complete_flight_fast.latency_ms").record(0.0);
     metrics::histogram!("flight_tracker.enrich_flight_on_creation.latency_ms").record(0.0);
     metrics::histogram!("flight_tracker.enrich_flight_on_completion.latency_ms").record(0.0);
+    metrics::histogram!("flight_tracker.enrich_flight_airborne.latency_ms").record(0.0);
 
     // Flight coalescing metrics
     metrics::counter!("flight_tracker.coalesce.resumed_total").absolute(0);
@@ -678,11 +679,16 @@ pub fn initialize_run_metrics() {
         .absolute(0);
 
     // Flight location tracking metrics
-    metrics::counter!("flight_tracker.location.created_total", "type" => "start_takeoff")
+    metrics::counter!("flight_tracker.location.created_total", "type" => "start_no_airport_location")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "start_no_airport")
         .absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "start_airborne")
         .absolute(0);
-    metrics::counter!("flight_tracker.location.created_total", "type" => "end_landing").absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "end_no_airport_location")
+        .absolute(0);
+    metrics::counter!("flight_tracker.location.created_total", "type" => "end_no_airport")
+        .absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "end_timeout").absolute(0);
     metrics::counter!("flight_tracker.location.created_total", "type" => "unknown").absolute(0);
 

@@ -98,7 +98,11 @@ pub(crate) async fn create_flight_fast(
     );
 
     // Spawn background task to enrich flight with runway/location data (SLOW operations)
-    if !skip_airport_runway_lookup {
+    if skip_airport_runway_lookup {
+        // Airborne flight - just geocode the start location
+        spawn_flight_enrichment_airborne(ctx, fix.clone(), flight_id);
+    } else {
+        // Takeoff flight - full enrichment including runway detection
         spawn_flight_enrichment_on_creation(ctx, fix.clone(), aircraft, flight_id);
     }
 
@@ -170,7 +174,7 @@ fn spawn_flight_enrichment_on_creation(
                             &locations_repo,
                             fix.latitude,
                             fix.longitude,
-                            "start (takeoff)",
+                            "start (no airport location)",
                         )
                         .await
                     }
@@ -180,7 +184,7 @@ fn spawn_flight_enrichment_on_creation(
                     &locations_repo,
                     fix.latitude,
                     fix.longitude,
-                    "start (takeoff)",
+                    "start (no airport)",
                 )
                 .await
             };
@@ -215,6 +219,52 @@ fn spawn_flight_enrichment_on_creation(
 
             debug!(
                 "Enriched flight {} with runway/location data in background",
+                flight_id
+            );
+        }
+        .instrument(span),
+    );
+}
+
+/// Spawn background task to enrich airborne flight with start location only
+/// This is a simpler version for flights that started mid-air (no runway detection needed)
+fn spawn_flight_enrichment_airborne(ctx: &FlightProcessorContext<'_>, fix: Fix, flight_id: Uuid) {
+    let flights_repo = ctx.flights_repo.clone();
+    let locations_repo = ctx.locations_repo.clone();
+
+    // Create a new root span to prevent trace accumulation
+    let span = info_span!(parent: None, "flight_enrichment_airborne", %flight_id);
+    let _ = span.set_parent(opentelemetry::Context::new());
+
+    tokio::spawn(
+        async move {
+            let start = std::time::Instant::now();
+
+            // SLOW: Create location via geocoding (HTTP API call to Pelias)
+            let start_location_id = create_start_end_location(
+                &locations_repo,
+                fix.latitude,
+                fix.longitude,
+                "start (airborne)",
+            )
+            .await;
+
+            // Update flight with start location
+            if let Err(e) = flights_repo
+                .update_flight_start_location(flight_id, start_location_id)
+                .await
+            {
+                error!(
+                    "Failed to update airborne flight {} with start location: {}",
+                    flight_id, e
+                );
+            }
+
+            metrics::histogram!("flight_tracker.enrich_flight_airborne.latency_ms")
+                .record(start.elapsed().as_micros() as f64 / 1000.0);
+
+            debug!(
+                "Enriched airborne flight {} with start location in background",
                 flight_id
             );
         }
