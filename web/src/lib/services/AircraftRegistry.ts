@@ -224,6 +224,14 @@ export class AircraftRegistry {
 
 	// Create or update aircraft from backend API data
 	public async updateAircraftFromAPI(aircraftId: string): Promise<Aircraft | null> {
+		// Validate aircraftId is a non-empty string
+		if (!aircraftId || typeof aircraftId !== 'string') {
+			logger.warn('Invalid aircraftId provided to updateAircraftFromAPI: {aircraftId}', {
+				aircraftId
+			});
+			return null;
+		}
+
 		try {
 			const response = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
 			if (!response || !response.data) return null;
@@ -256,10 +264,8 @@ export class AircraftRegistry {
 	}
 
 	// Add a fix to the appropriate aircraft
-	public async addFixToAircraft(
-		fix: Fix,
-		allowApiFallback: boolean = true
-	): Promise<Aircraft | null> {
+	// If the aircraft isn't in cache, fetches it from the backend API
+	public async addFixToAircraft(fix: Fix): Promise<Aircraft | null> {
 		logger.debug('Adding fix to aircraft: {aircraftId} {timestamp} {lat} {lng}', {
 			aircraftId: fix.aircraftId,
 			timestamp: fix.timestamp,
@@ -275,25 +281,18 @@ export class AircraftRegistry {
 
 		let aircraft = this.getAircraft(aircraftId);
 		if (!aircraft) {
-			logger.debug(
-				'Aircraft not found in cache for fix: {aircraftId}, attempting to fetch from API',
-				{
-					aircraftId
-				}
-			);
+			logger.debug('Aircraft not found in cache for fix: {aircraftId}, fetching from API', {
+				aircraftId
+			});
 
-			// Always try to fetch from API when we don't have the aircraft
-			// The backend is the source of truth for aircraft data
-			if (allowApiFallback) {
-				try {
-					logger.debug('Fetching aircraft from API for: {aircraftId}', { aircraftId });
-					aircraft = await this.updateAircraftFromAPI(aircraftId);
-				} catch (error) {
-					logger.warn('Failed to fetch aircraft from API for: {aircraftId} {error}', {
-						aircraftId,
-						error
-					});
-				}
+			// Fetch aircraft from API - the backend is the source of truth
+			try {
+				aircraft = await this.updateAircraftFromAPI(aircraftId);
+			} catch (error) {
+				logger.warn('Failed to fetch aircraft from API for: {aircraftId} {error}', {
+					aircraftId,
+					error
+				});
 			}
 
 			// If we still don't have aircraft data, we can't show this fix
@@ -459,6 +458,14 @@ export class AircraftRegistry {
 	// Batch load recent fixes for an aircraft from API
 	// Fetches fixes from the last 8 hours by default
 	public async loadRecentFixesFromAPI(aircraftId: string, hoursBack: number = 8): Promise<Fix[]> {
+		// Validate aircraftId is a non-empty string
+		if (!aircraftId || typeof aircraftId !== 'string') {
+			logger.warn('Invalid aircraftId provided to loadRecentFixesFromAPI: {aircraftId}', {
+				aircraftId
+			});
+			return [];
+		}
+
 		try {
 			// Calculate timestamp for N hours ago in ISO 8601 UTC format
 			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
@@ -469,7 +476,7 @@ export class AircraftRegistry {
 			if (response.data) {
 				// Add fixes to aircraft
 				for (const fix of response.data) {
-					await this.addFixToAircraft(fix, false);
+					await this.addFixToAircraft(fix);
 				}
 				return response.data;
 			}
