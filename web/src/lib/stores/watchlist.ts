@@ -41,8 +41,11 @@ export const watchlist = {
 			});
 			const entries = response.data;
 
-			// Fetch aircraft details for each entry
-			const entriesWithAircraft = await Promise.all(
+			// Fetch aircraft details for each entry, removing invalid entries
+			const entriesWithAircraft: WatchlistEntryWithAircraft[] = [];
+			const entriesToRemove: string[] = [];
+
+			await Promise.all(
 				entries.map(async (entry) => {
 					try {
 						const aircraftResponse = await serverCall<DataResponse<Aircraft>>(
@@ -51,9 +54,23 @@ export const watchlist = {
 								method: 'GET'
 							}
 						);
-						return { ...entry, aircraft: aircraftResponse.data };
+						entriesWithAircraft.push({ ...entry, aircraft: aircraftResponse.data });
 					} catch {
-						return { ...entry, aircraft: undefined };
+						// Aircraft not found or invalid - mark for removal
+						entriesToRemove.push(entry.aircraftId);
+					}
+				})
+			);
+
+			// Remove invalid entries from the database
+			await Promise.all(
+				entriesToRemove.map(async (aircraftId) => {
+					try {
+						await serverCall(`/watchlist/${aircraftId}`, {
+							method: 'DELETE'
+						});
+					} catch {
+						// Ignore errors when cleaning up - entry may already be gone
 					}
 				})
 			);
