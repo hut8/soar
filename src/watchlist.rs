@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 /// Watchlist entry response (returned to API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchlistEntry {
     pub user_id: Uuid,
     pub aircraft_id: Uuid,
@@ -14,6 +15,7 @@ pub struct WatchlistEntry {
 
 /// Request to add aircraft to watchlist
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddToWatchlistRequest {
     pub aircraft_id: Uuid,
     #[serde(default)]
@@ -22,6 +24,7 @@ pub struct AddToWatchlistRequest {
 
 /// Request to update watchlist email preference
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateWatchlistRequest {
     pub send_email: bool,
 }
