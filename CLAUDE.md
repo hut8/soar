@@ -79,8 +79,8 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 3. Restart the service if needed: `sudo systemctl restart <service>`
 4. Commit the infrastructure/ change to git
 
-**Auto-deployed by soar-deploy:** tempo-config.yml, loki-config.yml, pyroscope-config.yml, alloy-config.alloy, pgbouncer.ini, grafana-provisioning/ (including datasource templates)
-**Manual deployment required:** prometheus.yml, netdata-config.conf, pgbouncer-userlist.txt
+**Auto-deployed by soar-deploy:** tempo-config.yml, loki-config.yml, pyroscope-config.yml, alloy-config.alloy, pgbouncer.ini, prometheus.yml, grafana-provisioning/ (including datasource templates)
+**Manual deployment required:** netdata-config.conf, pgbouncer-userlist.txt
 
 This ensures config changes are tracked in version control and can be reproduced across environments.
 
@@ -166,7 +166,7 @@ Before working with the frontend code, you MUST have Node.js 24+ installed and d
    ```bash
    # Using 'n' (recommended)
    sudo n 24
-   
+
    # Verify version
    node --version  # Should be v24.x.x
    npm --version   # Should be v11.x.x
@@ -182,7 +182,7 @@ Before working with the frontend code, you MUST have Node.js 24+ installed and d
    ```bash
    # Check formatting and linting pass
    npm run lint
-   
+
    # Check TypeScript compilation
    npm run check
    ```
@@ -404,7 +404,7 @@ All changes must pass these checks locally:
    - `npm run check` (TypeScript validation)
    - `npm test` (Playwright E2E tests)
    - `npm run build` (build verification)
-   
+
    **Note**: If formatting issues are found by `npm run lint`, run `npm run format` to auto-fix them.
 
 3. **File Quality**:

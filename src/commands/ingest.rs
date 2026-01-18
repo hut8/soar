@@ -327,7 +327,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 }
 
                                 // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "ogn")
+                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "OGN")
                                     .record(send_duration_ms as f64);
 
                                 // Successfully delivered - commit the message
@@ -337,7 +337,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                             }
                             Err(e) => {
                                 error!("Failed to send OGN message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "ogn")
+                                metrics::counter!("ingest.socket_send_error_total", "source" => "OGN")
                                     .increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
@@ -387,7 +387,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 }
 
                                 // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "beast")
+                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "Beast")
                                     .record(send_duration_ms as f64);
 
                                 // Successfully delivered - commit the message
@@ -397,7 +397,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                             }
                             Err(e) => {
                                 error!("Failed to send Beast message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "beast")
+                                metrics::counter!("ingest.socket_send_error_total", "source" => "Beast")
                                     .increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
@@ -447,7 +447,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 }
 
                                 // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "sbs")
+                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "SBS")
                                     .record(send_duration_ms as f64);
 
                                 // Successfully delivered - commit the message
@@ -457,7 +457,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                             }
                             Err(e) => {
                                 error!("Failed to send SBS message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "sbs")
+                                metrics::counter!("ingest.socket_send_error_total", "source" => "SBS")
                                     .increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
@@ -521,15 +521,15 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
             // Update per-source metrics
             if ogn_frames > 0 {
-                metrics::gauge!("ingest.messages_per_second", "source" => "ogn")
+                metrics::gauge!("ingest.messages_per_second", "source" => "OGN")
                     .set(ogn_frames as f64 / 30.0);
             }
             if beast_frames > 0 {
-                metrics::gauge!("ingest.messages_per_second", "source" => "beast")
+                metrics::gauge!("ingest.messages_per_second", "source" => "Beast")
                     .set(beast_frames as f64 / 30.0);
             }
             if sbs_frames > 0 {
-                metrics::gauge!("ingest.messages_per_second", "source" => "sbs")
+                metrics::gauge!("ingest.messages_per_second", "source" => "SBS")
                     .set(sbs_frames as f64 / 30.0);
             }
 
@@ -558,23 +558,23 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 ogn_depth.disk_data_bytes + beast_depth.disk_data_bytes + sbs_depth.disk_data_bytes;
 
             // Update queue depth metrics (using actual data bytes, not file size)
-            metrics::gauge!("ingest.queue_depth", "source" => "ogn", "type" => "memory")
+            metrics::gauge!("ingest.queue_depth", "source" => "OGN", "type" => "memory")
                 .set(ogn_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "ogn", "type" => "data")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "OGN", "type" => "data")
                 .set(ogn_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "ogn", "type" => "file")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "OGN", "type" => "file")
                 .set(ogn_depth.disk_file_bytes as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "beast", "type" => "memory")
+            metrics::gauge!("ingest.queue_depth", "source" => "Beast", "type" => "memory")
                 .set(beast_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "beast", "type" => "data")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "Beast", "type" => "data")
                 .set(beast_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "beast", "type" => "file")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "Beast", "type" => "file")
                 .set(beast_depth.disk_file_bytes as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "sbs", "type" => "memory")
+            metrics::gauge!("ingest.queue_depth", "source" => "SBS", "type" => "memory")
                 .set(sbs_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "sbs", "type" => "data")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "SBS", "type" => "data")
                 .set(sbs_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "sbs", "type" => "file")
+            metrics::gauge!("ingest.queue_depth_bytes", "source" => "SBS", "type" => "file")
                 .set(sbs_depth.disk_file_bytes as f64);
 
             // Calculate estimated drain time based on send rate
@@ -822,7 +822,7 @@ fn initialize_ingest_metrics() {
     metrics::counter!("ingest.messages_sent_total").absolute(0);
 
     // Per-source metrics (OGN, Beast, SBS)
-    for source in &["ogn", "beast", "sbs"] {
+    for source in &["OGN", "Beast", "SBS"] {
         metrics::gauge!("ingest.messages_per_second", "source" => *source).set(0.0);
         metrics::counter!("ingest.messages_received_total", "source" => *source).absolute(0);
         metrics::counter!("ingest.messages_sent_total", "source" => *source).absolute(0);
@@ -845,7 +845,7 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.health.socket_connected").set(0.0);
 
     // Queue capacity pause metrics (backpressure events)
-    metrics::counter!("queue.capacity_pause_total", "queue" => "ogn").absolute(0);
-    metrics::counter!("queue.capacity_pause_total", "queue" => "beast").absolute(0);
-    metrics::counter!("queue.capacity_pause_total", "queue" => "sbs").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "OGN").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "Beast").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "SBS").absolute(0);
 }

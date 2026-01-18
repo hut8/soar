@@ -98,6 +98,6 @@
       "refId": "B"
     }
   ],
-  "title": "Packet Type Distribution",
+  "title": "APRS Packet Type Distribution",
   "type": "timeseries"
 }

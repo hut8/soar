@@ -360,7 +360,7 @@ impl BeastClient {
                             "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
                             queue_clone.name()
                         );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "beast")
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "Beast")
                             .increment(1);
                         at_capacity_logged = true;
                     }

@@ -106,7 +106,7 @@ impl AprsClient {
                             "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
                             queue_clone.name()
                         );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "ogn")
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "OGN")
                             .increment(1);
                         at_capacity_logged = true;
                     }

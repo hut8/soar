@@ -41,7 +41,7 @@
     "messages-received-per-second",
     "messages-queued-per-second",
     {
-      "row": "OGN/APRS Socket Publishing"
+      "row": "Socket Publishing"
     },
     "messages-sent-to-socket-per-minute",
     "socket-send-errors",
