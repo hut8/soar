@@ -1,46 +1,66 @@
 <script lang="ts">
 	import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/svelte';
-	import type { ARAircraftPosition, ARDeviceOrientation } from '$lib/ar/types';
+	import type { ARAircraftPosition, ARDeviceOrientation, ARSettings } from '$lib/ar/types';
 
-	let { targetAircraft, deviceOrientation, onDismiss } = $props<{
+	let { targetAircraft, deviceOrientation, settings, onDismiss } = $props<{
 		targetAircraft: ARAircraftPosition;
 		deviceOrientation: ARDeviceOrientation;
+		settings: ARSettings;
 		onDismiss: () => void;
 	}>();
 
 	// Calculate relative bearing from device heading to aircraft
+	// Normalize to -180 to 180
 	const relativeBearing = $derived(() => {
 		let bearing = targetAircraft.bearing - deviceOrientation.heading;
-		// Normalize to -180 to 180
 		while (bearing > 180) bearing -= 360;
 		while (bearing < -180) bearing += 360;
 		return bearing;
 	});
 
-	// Determine which direction to show based on relative bearing
+	// Calculate adjusted elevation accounting for device pitch
+	const adjustedElevation = $derived(() => {
+		return targetAircraft.elevation - deviceOrientation.pitch;
+	});
+
+	// Determine which direction to show based on relative bearing and elevation
+	// Use FOV settings for accurate thresholds
 	const direction = $derived(() => {
 		const rb = relativeBearing();
-		const absRb = Math.abs(rb);
+		const elev = adjustedElevation();
+		const hFovHalf = settings.fovHorizontal / 2;
+		const vFovHalf = settings.fovVertical / 2;
 
-		// Check if aircraft is roughly in view (within ~45 degrees of center)
-		if (absRb < 45) {
-			// Check elevation - is it above or below?
-			if (targetAircraft.elevation > 20) return 'up';
-			if (targetAircraft.elevation < -20) return 'down';
-			return 'in-view'; // Roughly in view
+		// Add hysteresis to prevent flickering (use slightly larger threshold for "exit")
+		const hThreshold = hFovHalf * 0.9; // Slightly inside FOV edge
+		const vThreshold = vFovHalf * 0.9;
+
+		// Check if aircraft is within horizontal FOV
+		const withinHorizontalFov = Math.abs(rb) <= hThreshold;
+		// Check if aircraft is within vertical FOV
+		const withinVerticalFov = Math.abs(elev) <= vThreshold;
+
+		// If within both, aircraft should be visible
+		if (withinHorizontalFov && withinVerticalFov) {
+			return 'in-view';
 		}
 
-		// Aircraft is to the side
-		if (rb > 0) return 'right';
-		return 'left';
+		// If within horizontal FOV but outside vertical, show up/down
+		if (withinHorizontalFov) {
+			return elev > 0 ? 'up' : 'down';
+		}
+
+		// Otherwise show left/right
+		return rb > 0 ? 'right' : 'left';
 	});
 
 	// Calculate how far off-screen (for intensity of indicator)
 	const intensity = $derived(() => {
 		const rb = Math.abs(relativeBearing());
-		if (rb < 45) return 0;
-		if (rb < 90) return 1;
-		if (rb < 135) return 2;
+		const hFovHalf = settings.fovHorizontal / 2;
+		if (rb < hFovHalf) return 0;
+		if (rb < hFovHalf * 2) return 1;
+		if (rb < hFovHalf * 3) return 2;
 		return 3;
 	});
 
@@ -94,7 +114,7 @@
 	}
 
 	.direction-indicator.up {
-		top: 5rem;
+		top: 7rem;
 		left: 50%;
 		transform: translateX(-50%);
 		flex-direction: column;

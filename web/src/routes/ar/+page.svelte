@@ -362,7 +362,12 @@
 
 		<!-- Direction indicator for off-screen target -->
 		{#if targetAircraft && deviceOrientation && !targetScreenPosition()?.visible}
-			<DirectionIndicator {targetAircraft} {deviceOrientation} onDismiss={dismissTarget} />
+			<DirectionIndicator
+				{targetAircraft}
+				{deviceOrientation}
+				{settings}
+				onDismiss={dismissTarget}
+			/>
 		{/if}
 	{/if}
 
