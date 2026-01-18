@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
@@ -230,7 +230,7 @@ async fn profile_handler(
 ) -> impl IntoResponse {
     // Parse duration from query param, default to 10 seconds, max 60 seconds
     let duration_secs = params.seconds.unwrap_or(10).min(60);
-    info!("Starting CPU profiling for {} seconds", duration_secs);
+    trace!("Starting CPU profiling for {} seconds", duration_secs);
 
     // Create a profiler guard
     let guard = match pprof::ProfilerGuardBuilder::default()
@@ -272,7 +272,7 @@ async fn profile_handler(
                             Vec::new(),
                         );
                     }
-                    info!(
+                    trace!(
                         "CPU profiling completed, generated pprof ({} bytes)",
                         body.len()
                     );

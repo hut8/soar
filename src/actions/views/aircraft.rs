@@ -151,8 +151,6 @@ pub struct AircraftView {
     /// Current fix (latest position data for this aircraft)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_fix: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
 
 impl AircraftView {
@@ -216,7 +214,6 @@ impl AircraftView {
             longitude: device.longitude,
             adsb_emitter_category: device.adsb_emitter_category,
             current_fix: device.current_fix,
-            fixes: None,
         }
     }
 
@@ -274,7 +271,6 @@ impl AircraftView {
             longitude: device_model.longitude,
             adsb_emitter_category: device_model.adsb_emitter_category,
             current_fix: device_model.current_fix,
-            fixes: None,
         }
     }
 }

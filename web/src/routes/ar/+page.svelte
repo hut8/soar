@@ -18,6 +18,7 @@
 		ARScreenPosition
 	} from '$lib/ar/types';
 	import type { BulkAreaSubscriptionMessage } from '$lib/services/FixFeed';
+	import type { Fix } from '$lib/types';
 	import AircraftMarker from '$lib/components/ar/AircraftMarker.svelte';
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import ARControls from '$lib/components/ar/ARControls.svelte';
@@ -128,7 +129,7 @@
 
 	// Handle aircraft registry events
 	const unsubscribeRegistry = aircraftRegistry.subscribe((event) => {
-		if (event.type === 'fix_added' || event.type === 'aircraft_updated') {
+		if (event.type === 'fix_received' || event.type === 'aircraft_updated') {
 			updateAircraftProjections();
 		}
 	});
@@ -173,7 +174,7 @@
 		>();
 
 		for (const aircraft of allAircraft) {
-			const currentFix = aircraft.fixes?.[0];
+			const currentFix = aircraft.currentFix as Fix | null;
 			if (!currentFix) continue;
 
 			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration);

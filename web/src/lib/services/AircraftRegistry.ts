@@ -1,35 +1,28 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { Aircraft, Fix, DataListResponse, DataResponse } from '$lib/types';
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
+import type { Aircraft, Fix, DataResponse } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'AircraftRegistry']);
 
-// Initialize dayjs plugins
-dayjs.extend(utc);
-
 // Event types for subscribers
 export type AircraftRegistryEvent =
 	| { type: 'aircraft_updated'; aircraft: Aircraft }
-	| { type: 'fix_added'; aircraft: Aircraft; fix: Fix }
+	| { type: 'fix_received'; aircraft: Aircraft; fix: Fix }
 	| { type: 'aircraft_changed'; aircraft: Aircraft[] };
 
 export type AircraftRegistrySubscriber = (event: AircraftRegistryEvent) => void;
 
-// Internal type to store aircraft with its fixes and cache metadata
-interface AircraftWithFixesCache {
+// Internal type to store aircraft with cache metadata
+interface AircraftCache {
 	aircraft: Aircraft;
-	fixes: Fix[];
-	cached_at: number; // Timestamp when this aircraft was last fetched/updated
+	cachedAt: number; // Timestamp when this aircraft was last fetched/updated
 }
 
 export class AircraftRegistry {
 	private static instance: AircraftRegistry | null = null;
-	private aircraft = new Map<string, AircraftWithFixesCache>();
+	private aircraft = new Map<string, AircraftCache>();
 	private subscribers = new Set<AircraftRegistrySubscriber>();
-	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private readonly aircraftCacheExpiration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private refreshIntervalId: number | null = null;
 
@@ -89,22 +82,22 @@ export class AircraftRegistry {
 			return;
 		}
 
-		// Optimize: For devices_changed events, we only need the most recent one
+		// Optimize: For aircraft_changed events, we only need the most recent one
 		// since it contains the complete list of all aircraft
-		const hasDevicesChanged = events.some((e) => e.type === 'aircraft_changed');
+		const hasAircraftChanged = events.some((e) => e.type === 'aircraft_changed');
 
-		// Notify subscribers of all events except devices_changed
-		const nonDevicesChangedEvents = events.filter((e) => e.type !== 'aircraft_changed');
+		// Notify subscribers of all events except aircraft_changed
+		const nonAircraftChangedEvents = events.filter((e) => e.type !== 'aircraft_changed');
 
 		this.subscribers.forEach((subscriber) => {
 			try {
-				// Send all non-devices_changed events
-				for (const event of nonDevicesChangedEvents) {
+				// Send all non-aircraft_changed events
+				for (const event of nonAircraftChangedEvents) {
 					subscriber(event);
 				}
 
-				// Send only one devices_changed event with current aircraft list
-				if (hasDevicesChanged) {
+				// Send only one aircraft_changed event with current aircraft list
+				if (hasAircraftChanged) {
 					subscriber({
 						type: 'aircraft_changed',
 						aircraft: this.getAllAircraft()
@@ -121,8 +114,7 @@ export class AircraftRegistry {
 		// Check in-memory cache
 		if (this.aircraft.has(aircraftId)) {
 			const cached = this.aircraft.get(aircraftId)!;
-			// Return aircraft with current fixes
-			return { ...cached.aircraft, fixes: cached.fixes };
+			return cached.aircraft;
 		}
 
 		return null;
@@ -152,74 +144,38 @@ export class AircraftRegistry {
 			return;
 		}
 
-		// Get existing fixes if any, or use the ones from the aircraft, or empty array
-		let existingFixes = this.aircraft.get(aircraft.id)?.fixes || aircraft.fixes || [];
+		// Check if we have a newer currentFix in the existing cache
+		const existing = this.aircraft.get(aircraft.id);
+		let currentFix = aircraft.currentFix;
 
-		// If this is a new aircraft with a currentFix but no fixes array, use currentFix as the initial fix
-		if (
-			!this.aircraft.has(aircraft.id) &&
-			aircraft.currentFix &&
-			(!aircraft.fixes || aircraft.fixes.length === 0)
-		) {
-			try {
-				// currentFix is already a Fix object (or should be)
-				const fix = aircraft.currentFix as Fix;
-				existingFixes = [fix];
-				logger.debug('Initialized aircraft with currentFix: {aircraftId} {fixTimestamp}', {
-					aircraftId: aircraft.id,
-					fixTimestamp: fix.timestamp
-				});
-			} catch (error) {
-				logger.warn('Failed to parse currentFix: {error}', { error });
+		if (existing?.aircraft.currentFix && currentFix) {
+			const existingFix = existing.aircraft.currentFix as Fix;
+			const newFix = currentFix as Fix;
+			// Keep the newer fix
+			if (new Date(existingFix.timestamp) > new Date(newFix.timestamp)) {
+				currentFix = existing.aircraft.currentFix;
 			}
+		} else if (existing?.aircraft.currentFix && !currentFix) {
+			// Keep existing fix if new aircraft doesn't have one
+			currentFix = existing.aircraft.currentFix;
 		}
 
-		// Strip out currentFix after we've used it - fixes array is the source of truth
-		const aircraftToStore = { ...aircraft, currentFix: null };
+		// Store aircraft with the best currentFix
+		const aircraftToStore: Aircraft = { ...aircraft, currentFix };
+		const cachedAt = Date.now();
 
-		const cached_at = Date.now();
-
-		this.aircraft.set(aircraft.id, { aircraft: aircraftToStore, fixes: existingFixes, cached_at });
+		this.aircraft.set(aircraft.id, { aircraft: aircraftToStore, cachedAt });
 
 		// Notify subscribers
 		this.notifySubscribers({
 			type: 'aircraft_updated',
-			aircraft: { ...aircraft, fixes: existingFixes }
+			aircraft: aircraftToStore
 		});
 
 		this.notifySubscribers({
 			type: 'aircraft_changed',
 			aircraft: this.getAllAircraft()
 		});
-	}
-
-	// Helper method to clean up old fixes
-	private cleanupOldFixes(fixes: Fix[]): Fix[] {
-		const cutoffTime = Date.now() - this.maxFixAge;
-		return fixes.filter((fix) => {
-			const fixTime = new Date(fix.timestamp).getTime();
-			return fixTime > cutoffTime;
-		});
-	}
-
-	// Add a new fix to aircraft's fixes array
-	private addFixToAircraftCache(aircraftId: string, fix: Fix): void {
-		const cached = this.aircraft.get(aircraftId);
-		if (!cached) return;
-
-		// Add fix to the beginning (most recent first)
-		cached.fixes.unshift(fix);
-
-		// Clean up old fixes (by age)
-		cached.fixes = this.cleanupOldFixes(cached.fixes);
-
-		// Limit to most recent 100 fixes
-		if (cached.fixes.length > 100) {
-			cached.fixes = cached.fixes.slice(0, 100);
-		}
-
-		// Update the map
-		this.aircraft.set(aircraftId, cached);
 	}
 
 	// Create or update aircraft from backend API data
@@ -250,12 +206,7 @@ export class AircraftRegistry {
 	// Update aircraft from Aircraft data (from WebSocket or bbox search)
 	public async updateAircraftFromAircraftData(aircraft: Aircraft): Promise<Aircraft | null> {
 		try {
-			// The aircraft is already in the correct format
 			this.setAircraft(aircraft);
-
-			// Don't automatically load fixes - they will come from WebSocket
-			// This reduces initial page load time and database load
-
 			return this.getAircraft(aircraft.id);
 		} catch (error) {
 			logger.warn('Failed to update aircraft from aircraft data: {error}', { error });
@@ -263,10 +214,10 @@ export class AircraftRegistry {
 		}
 	}
 
-	// Add a fix to the appropriate aircraft
+	// Update the current fix for an aircraft
 	// If the aircraft isn't in cache, fetches it from the backend API
-	public async addFixToAircraft(fix: Fix): Promise<Aircraft | null> {
-		logger.debug('Adding fix to aircraft: {aircraftId} {timestamp} {lat} {lng}', {
+	public async updateCurrentFix(fix: Fix): Promise<Aircraft | null> {
+		logger.debug('Updating current fix for aircraft: {aircraftId} {timestamp} {lat} {lng}', {
 			aircraftId: fix.aircraftId,
 			timestamp: fix.timestamp,
 			lat: fix.latitude,
@@ -275,94 +226,80 @@ export class AircraftRegistry {
 
 		const aircraftId = fix.aircraftId;
 		if (!aircraftId) {
-			logger.warn('No aircraftId in fix, cannot add');
+			logger.warn('No aircraftId in fix, cannot update');
 			return null;
 		}
 
-		let aircraft = this.getAircraft(aircraftId);
-		if (!aircraft) {
+		let cached = this.aircraft.get(aircraftId);
+		if (!cached) {
 			logger.debug('Aircraft not found in cache for fix: {aircraftId}, fetching from API', {
 				aircraftId
 			});
 
 			// Fetch aircraft from API - the backend is the source of truth
-			logger.debug('Fetching aircraft from API for: {aircraftId}', {
-				aircraftId
-			});
 			try {
-				aircraft = await this.updateAircraftFromAPI(aircraftId);
+				const aircraft = await this.updateAircraftFromAPI(aircraftId);
+				if (!aircraft) {
+					logger.warn('Cannot display fix - aircraft not found in backend: {aircraftId}', {
+						aircraftId
+					});
+					return null;
+				}
+				cached = this.aircraft.get(aircraftId)!;
 			} catch (error) {
 				logger.warn('Failed to fetch aircraft from API for: {aircraftId} {error}', {
 					aircraftId,
 					error
 				});
-			}
-
-			// If we still don't have aircraft data, we can't show this fix
-			// Don't create "minimal" aircraft - the backend should have all aircraft data
-			if (!aircraft) {
-				logger.warn('Cannot display fix - aircraft not found in backend: {aircraftId}', {
-					aircraftId
-				});
 				return null;
 			}
-		} else {
-			logger.debug('Using existing aircraft: {aircraftId} {registration} {existingFixCount}', {
-				aircraftId,
-				registration: aircraft.registration,
-				existingFixCount: aircraft.fixes?.length || 0
-			});
 		}
 
-		// Add the fix using the helper method
-		this.addFixToAircraftCache(aircraftId, fix);
+		// Update the current fix (only if newer than existing)
+		const existingFix = cached.aircraft.currentFix as Fix | null;
+		const existingTimestamp = existingFix ? new Date(existingFix.timestamp).getTime() : 0;
+		const newTimestamp = new Date(fix.timestamp).getTime();
+
+		if (newTimestamp >= existingTimestamp) {
+			cached.aircraft = { ...cached.aircraft, currentFix: fix };
+			this.aircraft.set(aircraftId, cached);
+		}
 
 		// Get the updated aircraft
-		aircraft = this.getAircraft(aircraftId)!;
-
-		// Always persist aircraft (setAircraft will normalize registration to "Unknown" if needed)
-		this.setAircraft(aircraft);
-
-		logger.debug('Fix added to aircraft. New fix count: {count}', {
-			count: aircraft.fixes?.length || 0
-		});
+		const aircraft = this.getAircraft(aircraftId)!;
 
 		// Notify subscribers about the fix
 		this.notifySubscribers({
-			type: 'fix_added',
+			type: 'fix_received',
 			aircraft,
 			fix
 		});
 
-		logger.debug('Notified subscribers about fix_added');
+		logger.debug('Updated current fix for aircraft');
 
 		return aircraft;
 	}
 
 	// Get all aircraft
 	public getAllAircraft(): Aircraft[] {
-		return Array.from(this.aircraft.values()).map((cached) => ({
-			...cached.aircraft,
-			fixes: cached.fixes
-		}));
+		return Array.from(this.aircraft.values()).map((cached) => cached.aircraft);
 	}
 
-	// Get all aircraft with recent fixes (within last hour)
+	// Get all aircraft with recent fixes (within specified hours)
 	public getActiveAircraft(withinHours: number = 1): Aircraft[] {
 		const cutoffTime = Date.now() - withinHours * 60 * 60 * 1000;
 
 		return this.getAllAircraft().filter((aircraft) => {
-			const fixes = aircraft.fixes || [];
-			if (fixes.length === 0) return false;
-			const latestFix = fixes[0]; // Most recent is first
-			return new Date(latestFix.timestamp).getTime() > cutoffTime;
+			const currentFix = aircraft.currentFix as Fix | null;
+			if (!currentFix) return false;
+			return new Date(currentFix.timestamp).getTime() > cutoffTime;
 		});
 	}
 
-	// Get fixes for a specific aircraft
-	public getFixesForAircraft(aircraftId: string): Fix[] {
+	// Get the current fix for a specific aircraft
+	public getCurrentFix(aircraftId: string): Fix | null {
 		const cached = this.aircraft.get(aircraftId);
-		return cached ? cached.fixes : [];
+		return (cached?.aircraft.currentFix as Fix) ?? null;
 	}
 
 	// Clear all aircraft (for cleanup)
@@ -396,9 +333,9 @@ export class AircraftRegistry {
 	}
 
 	// Check if an aircraft cache entry is stale
-	private isAircraftStale(cached: AircraftWithFixesCache): boolean {
+	private isAircraftStale(cached: AircraftCache): boolean {
 		const now = Date.now();
-		const age = now - cached.cached_at;
+		const age = now - cached.cachedAt;
 		return age > this.aircraftCacheExpiration;
 	}
 
@@ -455,41 +392,6 @@ export class AircraftRegistry {
 		if (this.refreshIntervalId !== null) {
 			window.clearInterval(this.refreshIntervalId);
 			this.refreshIntervalId = null;
-		}
-	}
-
-	// Batch load recent fixes for an aircraft from API
-	// Fetches fixes from the last 8 hours by default
-	public async loadRecentFixesFromAPI(aircraftId: string, hoursBack: number = 8): Promise<Fix[]> {
-		// Validate aircraftId is a non-empty string
-		if (!aircraftId || typeof aircraftId !== 'string') {
-			logger.warn('Invalid aircraftId provided to loadRecentFixesFromAPI: {aircraftId}', {
-				aircraftId
-			});
-			return [];
-		}
-
-		try {
-			// Calculate timestamp for N hours ago in ISO 8601 UTC format
-			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
-
-			const response = await serverCall<DataListResponse<Fix>>(`/aircraft/${aircraftId}/fixes`, {
-				params: { after }
-			});
-			if (response.data) {
-				// Add fixes to aircraft
-				for (const fix of response.data) {
-					await this.addFixToAircraft(fix);
-				}
-				return response.data;
-			}
-			return [];
-		} catch (error) {
-			logger.warn('Failed to load recent fixes for aircraft {aircraftId}: {error}', {
-				aircraftId,
-				error
-			});
-			return [];
 		}
 	}
 }

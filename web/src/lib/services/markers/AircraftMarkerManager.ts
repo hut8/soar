@@ -1,8 +1,8 @@
 /**
- * AircraftMarkerManager - Manages aircraft markers and trails on a Google Map
+ * AircraftMarkerManager - Manages aircraft markers on a Google Map
  *
  * Handles creating, updating, and clearing aircraft markers with automatic
- * scaling based on zoom level. Also manages position trails for aircraft.
+ * scaling based on zoom level. Stores only the current fix per aircraft.
  */
 
 import { SvelteMap } from 'svelte/reactivity';
@@ -24,18 +24,11 @@ export interface AircraftMarkerManagerOptions {
 	onAircraftClick?: (aircraft: Aircraft) => void;
 }
 
-interface TrailData {
-	polylines: google.maps.Polyline[];
-	dots: google.maps.Circle[];
-}
-
 export class AircraftMarkerManager {
 	private map: google.maps.Map | null = null;
 	private markers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
-	private latestFixes = new SvelteMap<string, Fix>();
-	private trails = new SvelteMap<string, TrailData>();
+	private currentFixes = new SvelteMap<string, Fix>();
 	private options: AircraftMarkerManagerOptions;
-	private positionFixWindow: number = 8; // hours
 
 	constructor(options: AircraftMarkerManagerOptions = {}) {
 		this.options = options;
@@ -56,17 +49,10 @@ export class AircraftMarkerManager {
 	}
 
 	/**
-	 * Get the latest fixes map (for external access)
+	 * Get the current fixes map (for external access)
 	 */
-	getLatestFixes(): SvelteMap<string, Fix> {
-		return this.latestFixes;
-	}
-
-	/**
-	 * Set the position fix window for trails (in hours)
-	 */
-	setPositionFixWindow(hours: number): void {
-		this.positionFixWindow = hours;
+	getCurrentFixes(): SvelteMap<string, Fix> {
+		return this.currentFixes;
 	}
 
 	/**
@@ -77,35 +63,28 @@ export class AircraftMarkerManager {
 
 		// Use currentFix if available (it's a full Fix object stored as JSONB)
 		if (aircraft.currentFix) {
-			const currentFix = aircraft.currentFix as unknown as Fix;
-			this.updateMarkerFromDevice(aircraft, currentFix);
+			const fix = aircraft.currentFix as unknown as Fix;
+			this.updateMarker(aircraft, fix);
 		} else {
-			// Fallback to using fixes array if present
-			const fixes = aircraft.fixes || [];
-			const latestFix = fixes.length > 0 ? fixes[0] : null;
-			if (latestFix) {
-				this.updateMarkerFromDevice(aircraft, latestFix);
-			} else {
-				logger.debug('[MARKER] No position data available for aircraft: {id}', {
-					id: aircraft.id
-				});
-			}
+			logger.debug('[MARKER] No position data available for aircraft: {id}', {
+				id: aircraft.id
+			});
 		}
 	}
 
 	/**
-	 * Update or create an aircraft marker from device and fix data
+	 * Update or create an aircraft marker from aircraft and fix data
 	 */
-	updateMarkerFromDevice(aircraft: Aircraft, latestFix: Fix): void {
-		logger.debug('[MARKER] updateMarkerFromDevice called: {params}', {
+	updateMarker(aircraft: Aircraft, fix: Fix): void {
+		logger.debug('[MARKER] updateMarker called: {params}', {
 			params: {
-				deviceId: aircraft.id,
+				aircraftId: aircraft.id,
 				registration: aircraft.registration,
-				latestFix: {
-					lat: latestFix.latitude,
-					lng: latestFix.longitude,
-					alt: latestFix.altitudeMslFeet,
-					timestamp: latestFix.timestamp
+				fix: {
+					lat: fix.latitude,
+					lng: fix.longitude,
+					alt: fix.altitudeMslFeet,
+					timestamp: fix.timestamp
 				},
 				mapExists: !!this.map
 			}
@@ -118,21 +97,21 @@ export class AircraftMarkerManager {
 
 		const aircraftKey = aircraft.id;
 		if (!aircraftKey) {
-			logger.warn('[MARKER] No device ID available');
+			logger.warn('[MARKER] No aircraft ID available');
 			return;
 		}
 
-		// Update latest fix for this device
-		this.latestFixes.set(aircraftKey, latestFix);
-		logger.debug('[MARKER] Updated latest fix for aircraft: {key}', { key: aircraftKey });
+		// Update current fix for this aircraft
+		this.currentFixes.set(aircraftKey, fix);
+		logger.debug('[MARKER] Updated current fix for aircraft: {key}', { key: aircraftKey });
 
 		// Get or create marker for this aircraft
 		let marker = this.markers.get(aircraftKey);
 
 		if (!marker) {
 			logger.debug('[MARKER] Creating new marker for aircraft: {key}', { key: aircraftKey });
-			// Create new aircraft marker with device info
-			marker = this.createMarker(aircraft, latestFix);
+			// Create new aircraft marker
+			marker = this.createMarker(aircraft, fix);
 			this.markers.set(aircraftKey, marker);
 			logger.debug('[MARKER] New marker created and stored. Total markers: {count}', {
 				count: this.markers.size
@@ -142,11 +121,8 @@ export class AircraftMarkerManager {
 				key: aircraftKey
 			});
 			// Update existing marker position and info
-			this.updateMarkerPosition(marker, aircraft, latestFix);
+			this.updateMarkerPosition(marker, aircraft, fix);
 		}
-
-		// Update trail for this aircraft
-		this.updateTrail(aircraft);
 	}
 
 	/**
@@ -165,16 +141,7 @@ export class AircraftMarkerManager {
 	}
 
 	/**
-	 * Update all aircraft trails (e.g., when position fix window changes)
-	 */
-	updateAllTrails(activeDevices: Aircraft[]): void {
-		activeDevices.forEach((device) => {
-			this.updateTrail(device);
-		});
-	}
-
-	/**
-	 * Clear all aircraft markers and trails
+	 * Clear all aircraft markers
 	 */
 	clear(): void {
 		logger.debug('[MARKER] Clearing all aircraft markers. Count: {count}', {
@@ -184,9 +151,8 @@ export class AircraftMarkerManager {
 			marker.map = null;
 		});
 		this.markers.clear();
-		this.latestFixes.clear();
-		this.clearAllTrails();
-		logger.debug('[MARKER] All aircraft markers and trails cleared');
+		this.currentFixes.clear();
+		logger.debug('[MARKER] All aircraft markers cleared');
 	}
 
 	/**
@@ -203,7 +169,7 @@ export class AircraftMarkerManager {
 	private createMarker(aircraft: Aircraft, fix: Fix): google.maps.marker.AdvancedMarkerElement {
 		logger.debug('[MARKER] Creating marker for aircraft: {params}', {
 			params: {
-				deviceId: aircraft.id,
+				aircraftId: aircraft.id,
 				registration: aircraft.registration,
 				address: aircraft.address,
 				position: { lat: fix.latitude, lng: fix.longitude },
@@ -240,10 +206,10 @@ export class AircraftMarkerManager {
 		infoLabel.style.background = markerColor.replace('rgb', 'rgba').replace(')', ', 0.75)');
 		infoLabel.style.borderColor = markerColor;
 
-		// Use proper device registration, fallback to address
+		// Use proper aircraft registration, fallback to address
 		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
 		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
-		// Use aircraftModel string from device, or detailed model name if available
+		// Use aircraftModel string from aircraft
 		const aircraftModel = aircraft.aircraftModel || null;
 
 		logger.debug('[MARKER] Aircraft info: {info}', {
@@ -334,7 +300,7 @@ export class AircraftMarkerManager {
 	): void {
 		logger.debug('[MARKER] Updating existing marker position: {params}', {
 			params: {
-				deviceId: aircraft.id,
+				aircraftId: aircraft.id,
 				oldPosition: marker.position,
 				newPosition: { lat: fix.latitude, lng: fix.longitude }
 			}
@@ -366,10 +332,10 @@ export class AircraftMarkerManager {
 			}
 
 			if (tailDiv && altDiv) {
-				// Use proper device registration, fallback to address
+				// Use proper aircraft registration, fallback to address
 				const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
 				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
-				// Use aircraftModel string from device
+				// Use aircraftModel string from aircraft
 				const aircraftModel = aircraft.aircraftModel || null;
 
 				// Include aircraft model after tail number if available
@@ -450,104 +416,5 @@ export class AircraftMarkerManager {
 		// Transform origin 'center top' ensures scaling keeps the icon horizontally centered.
 		markerContent.style.transform = `scale(${scale}) translateY(53px)`;
 		markerContent.style.transformOrigin = 'center top';
-	}
-
-	/**
-	 * Update trail for an aircraft
-	 */
-	private updateTrail(aircraft: Aircraft): void {
-		if (!this.map || this.positionFixWindow === 0) {
-			// Remove trail if disabled
-			this.clearTrailForAircraft(aircraft.id);
-			return;
-		}
-
-		const fixes = aircraft.fixes || []; // Get all fixes from device
-
-		// Filter fixes to those within the position fix window
-		const cutoffTime = dayjs().subtract(this.positionFixWindow, 'hour');
-		const trailFixes = fixes.filter((fix) => dayjs(fix.timestamp).isAfter(cutoffTime));
-
-		if (trailFixes.length < 2) {
-			// Need at least 2 points to draw a trail
-			this.clearTrailForAircraft(aircraft.id);
-			return;
-		}
-
-		// Clear existing trail
-		this.clearTrailForAircraft(aircraft.id);
-
-		// Create polyline segments with progressive transparency
-		const polylines: google.maps.Polyline[] = [];
-		for (let i = 0; i < trailFixes.length - 1; i++) {
-			// Calculate opacity: newest segment (i=0) = 0.7, oldest = 0.2
-			const segmentOpacity = 0.7 - (i / (trailFixes.length - 2)) * 0.5;
-
-			// Use color based on active status and altitude from the newer fix in the segment
-			const segmentColor = getMarkerColor(trailFixes[i].active, trailFixes[i].altitudeMslFeet);
-
-			const segment = new google.maps.Polyline({
-				path: [
-					{ lat: trailFixes[i].latitude, lng: trailFixes[i].longitude },
-					{ lat: trailFixes[i + 1].latitude, lng: trailFixes[i + 1].longitude }
-				],
-				geodesic: true,
-				strokeColor: segmentColor,
-				strokeOpacity: segmentOpacity,
-				strokeWeight: 2,
-				map: this.map
-			});
-
-			polylines.push(segment);
-		}
-
-		// Create dots at each fix position
-		const dots: google.maps.Circle[] = [];
-		trailFixes.forEach((fix, index) => {
-			// Calculate opacity: newest (index 0) = 0.7, oldest = 0.2
-			const opacity = 0.7 - (index / (trailFixes.length - 1)) * 0.5;
-
-			// Use color based on active status and altitude for each dot
-			const dotColor = getMarkerColor(fix.active, fix.altitudeMslFeet);
-
-			const dot = new google.maps.Circle({
-				center: { lat: fix.latitude, lng: fix.longitude },
-				radius: 10, // 10 meters radius
-				strokeColor: dotColor,
-				strokeOpacity: opacity,
-				strokeWeight: 1,
-				fillColor: dotColor,
-				fillOpacity: opacity * 0.5,
-				map: this.map
-			});
-
-			dots.push(dot);
-		});
-
-		// Store trail data
-		this.trails.set(aircraft.id, { polylines, dots });
-	}
-
-	/**
-	 * Clear trail for a specific aircraft
-	 */
-	private clearTrailForAircraft(aircraftId: string): void {
-		const trail = this.trails.get(aircraftId);
-		if (trail) {
-			trail.polylines.forEach((polyline) => polyline.setMap(null));
-			trail.dots.forEach((dot) => dot.setMap(null));
-			this.trails.delete(aircraftId);
-		}
-	}
-
-	/**
-	 * Clear all trails
-	 */
-	private clearAllTrails(): void {
-		this.trails.forEach((trail) => {
-			trail.polylines.forEach((polyline) => polyline.setMap(null));
-			trail.dots.forEach((dot) => dot.setMap(null));
-		});
-		this.trails.clear();
 	}
 }

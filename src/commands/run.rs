@@ -131,7 +131,6 @@ async fn process_beast_message(
     beast_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
     accumulator: &Arc<AdsbAccumulator>,
-    receiver_id: Option<Uuid>,
 ) {
     let start_time = std::time::Instant::now();
 
@@ -287,7 +286,7 @@ async fn process_beast_message(
             aircraft_id: aircraft.id,
             received_at,
             is_active,
-            receiver_id,
+            receiver_id: None, // ADS-B doesn't have a receiver concept
             raw_message_id,
             altitude_agl_valid: false, // Will be calculated later
             time_gap_seconds: None,    // Will be set by flight tracker
@@ -768,31 +767,7 @@ pub async fn handle_run(
         // Wraps CPR decoder and adds state accumulation across message types
         let adsb_accumulator = Arc::new(AdsbAccumulator::new());
 
-        // Get Beast receiver ID from environment or use default
-        // This allows multiple Beast receivers to be configured via BEAST_RECEIVER_ID env var
-        let beast_receiver_id = env::var("BEAST_RECEIVER_ID")
-            .ok()
-            .and_then(|s| Uuid::parse_str(&s).ok())
-            .unwrap_or_else(|| {
-                // Use a deterministic UUID for the default Beast receiver
-                // This ensures the same receiver ID is used across restarts
-                let namespace = Uuid::NAMESPACE_DNS;
-                let name = if is_production {
-                    "adsb-receiver-production"
-                } else {
-                    "adsb-receiver-staging"
-                };
-                Uuid::new_v5(&namespace, name.as_bytes())
-            });
-
-        info!("Beast receiver ID: {}", beast_receiver_id);
-
-        Some((
-            aircraft_repo,
-            beast_repo,
-            adsb_accumulator,
-            beast_receiver_id,
-        ))
+        Some((aircraft_repo, beast_repo, adsb_accumulator))
     } else {
         None
     };
@@ -1023,7 +998,7 @@ pub async fn handle_run(
     // Using 200 workers: ADS-B traffic is ~30,000 msg/sec vs OGN's ~300 msg/sec (100x more)
     // With 200 workers at ~150 msg/sec per worker, we can handle up to 30k msg/sec
     if let (
-        Some((beast_aircraft_repo, beast_repo_clone, beast_accumulator, beast_receiver_id)),
+        Some((beast_aircraft_repo, beast_repo_clone, beast_accumulator)),
         Some((_, beast_intake_rx)),
     ) = (beast_infrastructure.as_ref(), beast_intake_opt.as_ref())
     {
@@ -1035,7 +1010,6 @@ pub async fn handle_run(
             let beast_repo_clone = beast_repo_clone.clone();
             let beast_fix_processor = fix_processor.clone();
             let beast_accumulator = beast_accumulator.clone();
-            let beast_receiver_id = *beast_receiver_id;
             let beast_intake_rx = beast_intake_rx.clone();
 
             tokio::spawn(async move {
@@ -1048,7 +1022,6 @@ pub async fn handle_run(
                         &beast_repo_clone,
                         &beast_fix_processor,
                         &beast_accumulator,
-                        Some(beast_receiver_id),
                     )
                     .await;
 
@@ -1071,7 +1044,7 @@ pub async fn handle_run(
     // SBS typically has lower traffic than Beast, so fewer workers are needed
     // Using 50 workers should be sufficient for most SBS data sources
     // SBS shares the same accumulator with Beast for consistent state tracking
-    if let (Some((sbs_aircraft_repo, sbs_repo, sbs_accumulator, _)), Some((_, sbs_intake_rx))) =
+    if let (Some((sbs_aircraft_repo, sbs_repo, sbs_accumulator)), Some((_, sbs_intake_rx))) =
         (beast_infrastructure.as_ref(), sbs_intake_opt.as_ref())
     {
         let num_sbs_workers = 50;

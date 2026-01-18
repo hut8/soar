@@ -145,13 +145,11 @@ export class FixFeed {
 
 					// Handle different message types based on the "type" field
 					if (rawMessage.type === 'fix') {
-						// Transform WebSocket fix data to match FixWithExtras interface (includes legacy fields)
+						// Transform WebSocket fix data to match FixWithExtras interface
 						const fix: FixWithExtras = {
 							id: rawMessage.id,
 							aircraftId: rawMessage.aircraftId,
 							source: rawMessage.source || '',
-							aprsType: rawMessage.aprsType || '',
-							via: rawMessage.via || [],
 							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
 							longitude: rawMessage.longitude,
@@ -170,18 +168,12 @@ export class FixFeed {
 							receiverId: rawMessage.receiverId || '',
 							rawMessageId: rawMessage.rawMessageId || '',
 							altitudeAglValid: rawMessage.altitudeAglValid ?? false,
-							timeGapSeconds: rawMessage.timeGapSeconds || null,
-							// Legacy fields from FixWithExtras
-							deviceAddressHex: rawMessage.deviceAddressHex,
-							registration: rawMessage.registration,
-							model: rawMessage.model
+							timeGapSeconds: rawMessage.timeGapSeconds || null
 						};
 
-						// Add fix to aircraft registry
-						// For fixes from WebSocket, AircraftRegistry will fetch or update aircraft details via the API
-						// as part of its normal workflow; aircraft messages are a complementary optimization.
-						this.aircraftRegistry.addFixToAircraft(fix).catch((error) => {
-							logger.warn('Failed to add fix to aircraft registry: {error}', { error });
+						// Update aircraft's current fix in the registry
+						this.aircraftRegistry.updateCurrentFix(fix).catch((error) => {
+							logger.warn('Failed to update aircraft current fix: {error}', { error });
 						});
 
 						// Notify subscribers
@@ -193,28 +185,10 @@ export class FixFeed {
 						// Handle Aircraft message
 						const aircraft: Aircraft = rawMessage;
 
-						// IMPORTANT: Register aircraft FIRST, then add fixes
-						// This ensures the aircraft exists in cache before we try to add fixes to it
+						// Register/update the aircraft in the registry
 						this.aircraftRegistry.updateAircraftFromAircraftData(aircraft).catch((error) => {
 							logger.warn('Failed to update aircraft info in registry: {error}', { error });
 						});
-
-						// Add all recent fixes to aircraft registry (aircraft is now in cache)
-						const aircraftFixes = aircraft.fixes || [];
-						if (aircraftFixes.length > 0) {
-							for (const fix of aircraftFixes) {
-								// Ensure fix has aircraftId set (should come from backend, but validate)
-								if (!fix.aircraftId && aircraft.id) {
-									logger.warn('Fix missing aircraftId, setting from parent aircraft: {id}', {
-										id: aircraft.id
-									});
-									fix.aircraftId = aircraft.id;
-								}
-								this.aircraftRegistry.addFixToAircraft(fix).catch((error) => {
-									logger.warn('Failed to add aircraft fix to registry: {error}', { error });
-								});
-							}
-						}
 
 						// Notify subscribers
 						this.notifySubscribers({
@@ -344,9 +318,8 @@ export class FixFeed {
 				aircraftId
 			});
 
-			// Fetch aircraft info and recent fixes from API
+			// Fetch aircraft info from API (currentFix will be included)
 			await this.aircraftRegistry.updateAircraftFromAPI(aircraftId);
-			await this.aircraftRegistry.loadRecentFixesFromAPI(aircraftId);
 		} else {
 			logger.error('Failed to subscribe to aircraft {aircraftId}: WebSocket not connected', {
 				aircraftId

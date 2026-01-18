@@ -211,14 +211,19 @@ impl FixesRepository {
                         new_fix.longitude
                     );
 
-                    // Update aircraft's current_fix column with the complete fix data
-                    // Note: latitude/longitude are already updated by aircraft_for_fix() which is called
-                    // earlier in the pipeline, so we only need to update current_fix here
+                    // Update aircraft's current_fix, latitude, longitude, and last_fix_at
+                    // This is the single point where position data is synced to the aircraft table
+                    // for all data sources (APRS, Beast, SBS).
                     if let Ok(fix_json) = serde_json::to_value(&new_fix) {
                         use crate::schema::aircraft;
                         let _ = diesel::update(aircraft::table)
                             .filter(aircraft::id.eq(new_fix.aircraft_id))
-                            .set(aircraft::current_fix.eq(fix_json))
+                            .set((
+                                aircraft::current_fix.eq(fix_json),
+                                aircraft::latitude.eq(new_fix.latitude),
+                                aircraft::longitude.eq(new_fix.longitude),
+                                aircraft::last_fix_at.eq(new_fix.timestamp),
+                            ))
                             .execute(&mut conn);
                     }
 
@@ -1249,9 +1254,10 @@ impl FixesRepository {
             );
 
             // Build base query for selecting fixes
+            // Note: aprs_type and via are now in source_metadata, not separate columns
             let mut select_sql = format!(
                 r#"
-                SELECT id, source, aprs_type, via, timestamp, latitude, longitude,
+                SELECT id, source, timestamp, latitude, longitude,
                        altitude_msl_feet, altitude_agl_feet, flight_number, squawk,
                        ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                        source_metadata, flight_id, aircraft_id, received_at, is_active,
