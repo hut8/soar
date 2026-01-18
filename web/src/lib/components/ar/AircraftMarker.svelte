@@ -13,7 +13,7 @@
 	const altitude = $derived(
 		aircraft.altitudeFeet ? `${Math.round(aircraft.altitudeFeet)}ft` : 'N/A'
 	);
-	const distance = $derived(`${aircraft.distance.toFixed(1)}km`);
+	const distance = $derived(`${aircraft.distance.toFixed(1)} nm`);
 	const speed = $derived(
 		aircraft.groundSpeedKnots ? `${Math.round(aircraft.groundSpeedKnots)}kt` : 'N/A'
 	);

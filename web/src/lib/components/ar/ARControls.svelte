@@ -1,18 +1,35 @@
 <script lang="ts">
-	import { Settings, Minus, Plus } from '@lucide/svelte';
+	import { Settings, Minus, Plus, List } from '@lucide/svelte';
 	import type { ARSettings } from '$lib/ar/types';
 
-	let { settings = $bindable(), onSettingsClick } = $props<{
+	const MIN_RANGE = 10;
+	const MAX_RANGE = 250;
+	const STEP = 10;
+
+	// Fixed tick marks for the slider
+	const TICK_MARKS = [10, 50, 100, 150, 200, 250];
+
+	let {
+		settings = $bindable(),
+		onSettingsClick,
+		onListClick
+	} = $props<{
 		settings: ARSettings;
 		onSettingsClick?: () => void;
+		onListClick?: () => void;
 	}>();
 
 	function increaseRange() {
-		settings.rangeKm = Math.min(100, settings.rangeKm + 5);
+		settings.rangeNm = Math.min(MAX_RANGE, settings.rangeNm + STEP);
 	}
 
 	function decreaseRange() {
-		settings.rangeKm = Math.max(5, settings.rangeKm - 5);
+		settings.rangeNm = Math.max(MIN_RANGE, settings.rangeNm - STEP);
+	}
+
+	// Calculate percentage position for a tick mark
+	function tickPosition(value: number): number {
+		return ((value - MIN_RANGE) / (MAX_RANGE - MIN_RANGE)) * 100;
 	}
 </script>
 
@@ -20,27 +37,41 @@
 	<div class="controls-panel">
 		<!-- Range control -->
 		<div class="control-group">
-			<label class="control-label">Range: {settings.rangeKm}km</label>
+			<label class="control-label">Range: {settings.rangeNm} nm</label>
 			<div class="range-buttons">
-				<button class="btn-icon" onclick={decreaseRange} disabled={settings.rangeKm <= 5}>
+				<button class="btn-icon" onclick={decreaseRange} disabled={settings.rangeNm <= MIN_RANGE}>
 					<Minus size={20} />
 				</button>
-				<input
-					type="range"
-					min="5"
-					max="100"
-					step="5"
-					bind:value={settings.rangeKm}
-					class="range-slider"
-				/>
-				<button class="btn-icon" onclick={increaseRange} disabled={settings.rangeKm >= 100}>
+				<div class="slider-container">
+					<input
+						type="range"
+						min={MIN_RANGE}
+						max={MAX_RANGE}
+						step={STEP}
+						bind:value={settings.rangeNm}
+						class="range-slider"
+					/>
+					<div class="tick-marks">
+						{#each TICK_MARKS as tick (tick)}
+							<div class="tick" style:left="{tickPosition(tick)}%">
+								<span class="tick-label">{tick}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+				<button class="btn-icon" onclick={increaseRange} disabled={settings.rangeNm >= MAX_RANGE}>
 					<Plus size={20} />
 				</button>
 			</div>
 		</div>
 
+		<!-- List button -->
+		<button class="btn-action" onclick={onListClick}>
+			<List size={24} />
+		</button>
+
 		<!-- Settings button -->
-		<button class="btn-settings" onclick={onSettingsClick}>
+		<button class="btn-action" onclick={onSettingsClick}>
 			<Settings size={24} />
 		</button>
 	</div>
@@ -86,8 +117,14 @@
 		gap: 0.5rem;
 	}
 
-	.range-slider {
+	.slider-container {
 		flex: 1;
+		position: relative;
+		padding-bottom: 1.25rem;
+	}
+
+	.range-slider {
+		width: 100%;
 		height: 4px;
 		background: rgba(255, 255, 255, 0.2);
 		border-radius: 2px;
@@ -104,6 +141,35 @@
 		background: rgb(var(--color-primary-500));
 		border-radius: 50%;
 		cursor: pointer;
+	}
+
+	.tick-marks {
+		position: absolute;
+		top: 8px;
+		left: 10px;
+		right: 10px;
+		height: 20px;
+	}
+
+	.tick {
+		position: absolute;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.tick::before {
+		content: '';
+		width: 1px;
+		height: 6px;
+		background: rgba(255, 255, 255, 0.4);
+	}
+
+	.tick-label {
+		color: rgba(255, 255, 255, 0.6);
+		font-size: 0.625rem;
+		margin-top: 2px;
 	}
 
 	.btn-icon {
@@ -123,12 +189,17 @@
 		cursor: not-allowed;
 	}
 
-	.btn-settings {
+	.btn-action {
 		background: rgba(255, 255, 255, 0.2);
 		border: none;
 		border-radius: 0.5rem;
 		padding: 0.75rem;
 		color: white;
 		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.btn-action:active {
+		background: rgba(255, 255, 255, 0.3);
 	}
 </style>

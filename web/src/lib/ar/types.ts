@@ -23,7 +23,7 @@ export interface ARAircraftPosition {
 	groundSpeedKnots: number | null;
 	climbFpm: number | null;
 	timestamp: string;
-	distance: number; // km from user
+	distance: number; // nautical miles from user
 	bearing: number; // 0-360°
 	elevation: number; // degrees above horizon (-90 to 90)
 }
@@ -32,13 +32,13 @@ export interface ARScreenPosition {
 	x: number; // pixels from left
 	y: number; // pixels from top
 	visible: boolean; // within camera FOV
-	distance: number; // km
+	distance: number; // nautical miles
 	bearing: number; // relative to device heading
 	elevation: number; // angle
 }
 
 export interface ARSettings {
-	rangeKm: number; // 5-100
+	rangeNm: number; // 10-250 nautical miles
 	filterAirborne: boolean; // Only show flying aircraft
 	showDebug: boolean;
 	fovHorizontal: number; // Camera FOV horizontal (degrees)
