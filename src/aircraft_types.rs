@@ -156,3 +156,67 @@ impl EngineType {
         }
     }
 }
+
+/// Wing type for ICAO aircraft type classification
+/// Data source: https://www.kaggle.com/datasets/colmog/aircraft-and-aircraft-manufacturers
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::WingType")]
+#[serde(rename_all = "snake_case")]
+pub enum WingType {
+    FixedWing,
+    RotaryWing,
+}
+
+impl FromStr for WingType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.trim() {
+            "Fixed Wing" => Ok(WingType::FixedWing),
+            "Rotary Wing" => Ok(WingType::RotaryWing),
+            _ => Err(anyhow!("Invalid wing type: {}", s)),
+        }
+    }
+}
+
+impl fmt::Display for WingType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            WingType::FixedWing => "Fixed Wing",
+            WingType::RotaryWing => "Rotary Wing",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+/// Aircraft category for ICAO type classification (Airplane vs Helicopter)
+/// Data source: https://www.kaggle.com/datasets/colmog/aircraft-and-aircraft-manufacturers
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::IcaoAircraftCategory")]
+#[serde(rename_all = "snake_case")]
+pub enum IcaoAircraftCategory {
+    Airplane,
+    Helicopter,
+}
+
+impl FromStr for IcaoAircraftCategory {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.trim() {
+            "Airplane" => Ok(IcaoAircraftCategory::Airplane),
+            "Helicopter" => Ok(IcaoAircraftCategory::Helicopter),
+            _ => Err(anyhow!("Invalid aircraft category: {}", s)),
+        }
+    }
+}
+
+impl fmt::Display for IcaoAircraftCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            IcaoAircraftCategory::Airplane => "Airplane",
+            IcaoAircraftCategory::Helicopter => "Helicopter",
+        };
+        write!(f, "{}", name)
+    }
+}

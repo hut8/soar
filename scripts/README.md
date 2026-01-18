@@ -482,7 +482,7 @@ For a one-off copy without using S3:
 
 ```bash
 # On staging server, dump directly
-pg_dump -h localhost -U postgres -d soar_staging -Fd -j 4 -f /tmp/staging-dump
+pg_dump -h localhost -U postgres -d soar_staging -Fd -j 8 -f /tmp/staging-dump
 
 # Transfer to production (rsync or scp)
 rsync -avz /tmp/staging-dump/ glider.flights:/tmp/staging-dump/

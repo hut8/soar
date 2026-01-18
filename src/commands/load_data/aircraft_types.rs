@@ -3,36 +3,133 @@ use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Instant;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
+use soar::aircraft_types::{IcaoAircraftCategory, WingType};
 use soar::email_reporter::EntityMetrics;
 use soar::schema::aircraft_types;
 
-// Statically embed the aircraft types JSON file into the binary
-const AIRCRAFT_TYPES_JSON: &str = include_str!("../../../data/aircraft-types-icao-iata.json");
+// Statically embed the aircraft types CSV file into the binary
+// Data source: https://www.kaggle.com/datasets/colmog/aircraft-and-aircraft-manufacturers
+const AIRCRAFT_TYPES_CSV: &str = include_str!("../../../data/aircraft-and-manufacturers.csv");
 
+/// CSV record from aircraft-and-manufacturers.csv
+/// Columns: IATACode,ICAOCode,Model,Aircraft_Manufacturer,WingType,Type,Manufacturer
 #[derive(Debug, Deserialize)]
-struct AircraftTypeRecord {
-    #[serde(rename = "icaoCode")]
+struct CsvRecord {
+    #[serde(rename = "IATACode")]
+    iata_code: String,
+    #[serde(rename = "ICAOCode")]
     icao_code: String,
-    #[serde(rename = "iataCode")]
-    iata_code: Option<String>,
+    #[serde(rename = "Model")]
+    model: String,
+    #[serde(rename = "Aircraft_Manufacturer")]
+    aircraft_manufacturer: String,
+    #[serde(rename = "WingType")]
+    wing_type: String,
+    #[serde(rename = "Type")]
+    aircraft_type: String,
+    // Note: "Manufacturer" column is ignored (duplicate of Aircraft_Manufacturer)
+}
+
+/// Processed record ready for database insertion
+#[derive(Debug)]
+struct AircraftTypeRecord {
+    icao_code: String,
+    iata_code: String, // Empty string for NULL/N/A/(undefined)
     description: String,
+    manufacturer: Option<String>,
+    wing_type: Option<WingType>,
+    aircraft_category: Option<IcaoAircraftCategory>,
 }
 
 #[derive(Debug, Insertable, AsChangeset)]
 #[diesel(table_name = aircraft_types)]
 struct NewAircraftType {
     icao_code: String,
-    iata_code: Option<String>,
+    iata_code: String,
     description: String,
+    manufacturer: Option<String>,
+    wing_type: Option<WingType>,
+    aircraft_category: Option<IcaoAircraftCategory>,
+}
+
+/// Normalize IATA code: convert "N/A" and "(undefined)" to empty string
+fn normalize_iata_code(s: &str) -> String {
+    let trimmed = s.trim();
+    if trimmed == "N/A" || trimmed == "(undefined)" {
+        String::new()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Normalize manufacturer: convert "(undefined)" to None
+fn normalize_manufacturer(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() || trimmed == "(undefined)" {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn read_aircraft_types_embedded() -> Result<Vec<AircraftTypeRecord>> {
-    info!("Reading aircraft types from embedded data");
-    let records: Vec<AircraftTypeRecord> = serde_json::from_str(AIRCRAFT_TYPES_JSON)?;
-    info!("Parsed {} aircraft types from embedded data", records.len());
+    info!("Reading aircraft types from embedded CSV data");
+
+    let mut reader = csv::Reader::from_reader(AIRCRAFT_TYPES_CSV.as_bytes());
+    let mut records = Vec::new();
+
+    for result in reader.deserialize() {
+        let csv_record: CsvRecord = match result {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Skipping malformed CSV row: {}", e);
+                continue;
+            }
+        };
+
+        // Parse wing type
+        let wing_type = match WingType::from_str(&csv_record.wing_type) {
+            Ok(wt) => Some(wt),
+            Err(e) => {
+                warn!(
+                    "Invalid wing type '{}' for ICAO {}: {}",
+                    csv_record.wing_type, csv_record.icao_code, e
+                );
+                None
+            }
+        };
+
+        // Parse aircraft category
+        let aircraft_category = match IcaoAircraftCategory::from_str(&csv_record.aircraft_type) {
+            Ok(ac) => Some(ac),
+            Err(e) => {
+                warn!(
+                    "Invalid aircraft category '{}' for ICAO {}: {}",
+                    csv_record.aircraft_type, csv_record.icao_code, e
+                );
+                None
+            }
+        };
+
+        records.push(AircraftTypeRecord {
+            icao_code: csv_record.icao_code.trim().to_string(),
+            iata_code: normalize_iata_code(&csv_record.iata_code),
+            description: csv_record.model.trim().to_string(),
+            manufacturer: normalize_manufacturer(&csv_record.aircraft_manufacturer),
+            wing_type,
+            aircraft_category,
+        });
+    }
+
+    info!(
+        "Parsed {} aircraft types from embedded CSV data",
+        records.len()
+    );
     Ok(records)
 }
 
@@ -40,14 +137,13 @@ async fn upsert_aircraft_types(
     pool: Pool<ConnectionManager<PgConnection>>,
     types: Vec<AircraftTypeRecord>,
 ) -> Result<usize> {
-    use std::collections::HashMap;
-
-    // Deduplicate by icao_code, merging descriptions with " / " separator
-    let mut dedup_map: HashMap<String, NewAircraftType> = HashMap::new();
+    // Deduplicate by (icao_code, iata_code), merging descriptions with " / " separator
+    let mut dedup_map: HashMap<(String, String), NewAircraftType> = HashMap::new();
 
     for record in types {
+        let key = (record.icao_code.clone(), record.iata_code.clone());
         dedup_map
-            .entry(record.icao_code.clone())
+            .entry(key)
             .and_modify(|existing| {
                 // Merge descriptions if different
                 if !existing.description.contains(&record.description) {
@@ -59,6 +155,9 @@ async fn upsert_aircraft_types(
                 icao_code: record.icao_code,
                 iata_code: record.iata_code,
                 description: record.description,
+                manufacturer: record.manufacturer,
+                wing_type: record.wing_type,
+                aircraft_category: record.aircraft_category,
             });
     }
 
@@ -69,11 +168,14 @@ async fn upsert_aircraft_types(
         let mut conn = pool.get()?;
         diesel::insert_into(aircraft_types::table)
             .values(&new_types)
-            .on_conflict(aircraft_types::icao_code)
+            .on_conflict((aircraft_types::icao_code, aircraft_types::iata_code))
             .do_update()
             .set((
-                aircraft_types::iata_code.eq(diesel::dsl::sql("excluded.iata_code")),
                 aircraft_types::description.eq(diesel::dsl::sql("excluded.description")),
+                aircraft_types::manufacturer.eq(diesel::dsl::sql("excluded.manufacturer")),
+                aircraft_types::wing_type.eq(diesel::dsl::sql("excluded.wing_type")),
+                aircraft_types::aircraft_category
+                    .eq(diesel::dsl::sql("excluded.aircraft_category")),
                 aircraft_types::updated_at.eq(diesel::dsl::now),
             ))
             .execute(&mut conn)?;
@@ -94,7 +196,7 @@ async fn get_aircraft_types_count(pool: Pool<ConnectionManager<PgConnection>>) -
 pub async fn load_aircraft_types(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<(usize, i64)> {
-    info!("Loading aircraft types from embedded data");
+    info!("Loading aircraft types from embedded CSV data");
 
     let types = read_aircraft_types_embedded()?;
 
