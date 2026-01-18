@@ -37,12 +37,16 @@
 	let userPosition: ARUserPosition | null = $state(null);
 	let deviceOrientation: ARDeviceOrientation | null = $state(null);
 
+	// Base FOV for the camera lens (wider dimension)
+	const BASE_FOV_WIDE = 60;
+	const BASE_FOV_NARROW = 45;
+
 	let settings: ARSettings = $state({
 		rangeNm: 50,
 		filterAirborne: false,
 		showDebug: false,
-		fovHorizontal: 60,
-		fovVertical: 45
+		fovHorizontal: BASE_FOV_NARROW, // Portrait default
+		fovVertical: BASE_FOV_WIDE
 	});
 
 	// Aircraft list modal and target tracking
@@ -63,6 +67,15 @@
 	// Screen dimensions
 	let screenWidth = $state(0);
 	let screenHeight = $state(0);
+
+	// Update FOV based on orientation (portrait vs landscape)
+	$effect(() => {
+		if (screenWidth > 0 && screenHeight > 0) {
+			const isPortrait = screenHeight > screenWidth;
+			settings.fovHorizontal = isPortrait ? BASE_FOV_NARROW : BASE_FOV_WIDE;
+			settings.fovVertical = isPortrait ? BASE_FOV_WIDE : BASE_FOV_NARROW;
+		}
+	});
 
 	// Services
 	const arTracker = ARTracker.getInstance();
