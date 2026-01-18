@@ -13,6 +13,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev, browser } from '$app/environment';
+	import { isStaging } from '$lib/config';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
@@ -65,11 +66,41 @@
 	);
 	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
 
+	// Invert favicon colors for staging environment
+	function invertFavicon() {
+		if (!isStaging()) return;
+
+		// Find all favicon link elements and apply inversion via canvas
+		const faviconLinks = document.querySelectorAll<HTMLLinkElement>(
+			'link[rel="icon"], link[rel="apple-touch-icon"]'
+		);
+
+		faviconLinks.forEach((link) => {
+			const img = new Image();
+			img.crossOrigin = 'anonymous';
+			img.onload = () => {
+				const canvas = document.createElement('canvas');
+				canvas.width = img.width || 32;
+				canvas.height = img.height || 32;
+				const ctx = canvas.getContext('2d');
+				if (ctx) {
+					ctx.filter = 'invert(1)';
+					ctx.drawImage(img, 0, 0);
+					link.href = canvas.toDataURL('image/png');
+				}
+			};
+			img.src = link.href;
+		});
+	}
+
 	// Initialize auth, theme, and backend mode from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
 		theme.init();
 		backendMode.init();
+
+		// Invert favicon on staging for visual distinction
+		invertFavicon();
 
 		// Load Google Analytics only on production domain
 		if (browser && window.location.hostname === 'glider.flights') {
