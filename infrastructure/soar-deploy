@@ -554,8 +554,40 @@ else
     log_warn "scripts/backup directory not found in deployment, skipping backup script installation"
 fi
 
-# Install Prometheus job configuration files
+# Install main Prometheus configuration file
 PROMETHEUS_NEEDS_RELOAD=false
+if [ -f "$DEPLOY_DIR/prometheus.yml" ]; then
+    log_info "Installing main Prometheus configuration file..."
+
+    # Check if config differs from current
+    if [ -f "/etc/prometheus/prometheus.yml" ]; then
+        if ! diff -q "$DEPLOY_DIR/prometheus.yml" "/etc/prometheus/prometheus.yml" > /dev/null 2>&1; then
+            log_info "Prometheus config has changed, updating..."
+            cp "$DEPLOY_DIR/prometheus.yml" /etc/prometheus/prometheus.yml
+            chmod 644 /etc/prometheus/prometheus.yml
+            if id "prometheus" &>/dev/null; then
+                chown prometheus:prometheus /etc/prometheus/prometheus.yml
+            fi
+            PROMETHEUS_NEEDS_RELOAD=true
+            log_info "Prometheus configuration file updated"
+        else
+            log_info "Prometheus config unchanged, skipping"
+        fi
+    else
+        log_info "No existing Prometheus config, installing..."
+        cp "$DEPLOY_DIR/prometheus.yml" /etc/prometheus/prometheus.yml
+        chmod 644 /etc/prometheus/prometheus.yml
+        if id "prometheus" &>/dev/null; then
+            chown prometheus:prometheus /etc/prometheus/prometheus.yml
+        fi
+        PROMETHEUS_NEEDS_RELOAD=true
+        log_info "Prometheus configuration file installed"
+    fi
+else
+    log_warn "prometheus.yml not found in deployment, skipping main Prometheus config"
+fi
+
+# Install Prometheus job configuration files
 if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     log_info "Installing Prometheus job configuration files..."
     mkdir -p /etc/prometheus/jobs

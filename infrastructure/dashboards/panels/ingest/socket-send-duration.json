@@ -77,8 +77,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "histogram_quantile(0.50, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
-      "legendFormat": "p50",
+      "expr": "histogram_quantile(0.50, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
+      "legendFormat": "{{source}} p50",
       "range": true,
       "refId": "A"
     },
@@ -88,9 +88,9 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "histogram_quantile(0.95, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
+      "expr": "histogram_quantile(0.95, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
       "hide": false,
-      "legendFormat": "p95",
+      "legendFormat": "{{source}} p95",
       "range": true,
       "refId": "B"
     },
@@ -100,9 +100,9 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "histogram_quantile(0.99, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
+      "expr": "histogram_quantile(0.99, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
       "hide": false,
-      "legendFormat": "p99",
+      "legendFormat": "{{source}} p99",
       "range": true,
       "refId": "C"
     }

@@ -79,8 +79,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(socket_client_messages_sent_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-      "legendFormat": "Messages/min",
+      "expr": "rate(ingest_messages_sent_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+      "legendFormat": "{{source}}",
       "range": true,
       "refId": "A"
     }

@@ -34,13 +34,15 @@ flowchart TB
     %% External Systems
     APRS[OGN APRS-IS Network]
     Beast[Beast ADS-B Feed]
+    SBS[SBS ADS-B Feed]
     WebClients[Web Clients via WebSocket]
 
     %% Ingestion Process (soar ingest)
     subgraph Ingest ["Data Ingestion - soar ingest"]
         AprsClient[APRS Client]
         BeastClient[Beast Client]
-        DiskQueue["Persistent Disk Queue"]
+        SbsClient[SBS Client]
+        DiskQueue["Persistent Disk Queues"]
         SocketClient[Unix Socket Client]
     end
 
@@ -50,24 +52,25 @@ flowchart TB
     %% Processing Process (soar run)
     subgraph Processing ["Message Processing - soar run"]
         SocketServer[Socket Server]
-        EnvelopeQueue["Envelope Intake Queue<br/>1,000 messages"]
+        EnvelopeQueue["Envelope Intake Queue"]
 
         subgraph IntakeQueues ["Intake Queues"]
-            AprsIntake["APRS Intake Queue<br/>1,000 messages"]
-            BeastIntake["Beast Intake Queue<br/>1,000 messages"]
+            AprsIntake["APRS Intake Queue"]
+            BeastIntake["Beast Intake Queue"]
+            SbsIntake["SBS Intake Queue"]
         end
 
         subgraph RouterBox ["Packet Router"]
-            RouterQueue["Router Queue<br/>1,000 messages"]
+            RouterQueue["Router Queue"]
             Router[Router Workers x10]
         end
 
         %% Processing Queues
         subgraph Queues ["Processing Queues"]
-            AircraftQueue["Aircraft Queue<br/>1,000 messages"]
-            RecvStatusQueue["Receiver Status Queue<br/>50 messages"]
-            RecvPosQueue["Receiver Position Queue<br/>50 messages"]
-            ServerQueue["Server Status Queue<br/>50 messages"]
+            AircraftQueue["Aircraft Queue"]
+            RecvStatusQueue["Receiver Status Queue"]
+            RecvPosQueue["Receiver Position Queue"]
+            ServerQueue["Server Status Queue"]
         end
 
         %% Processors
@@ -83,7 +86,7 @@ flowchart TB
         FlightTracker[Flight Tracker]
 
         %% NATS Publishing
-        NatsQueue["NATS Publisher Queue<br/>1,000 messages"]
+        NatsQueue["NATS Publisher Queue"]
         NatsPublisher[NATS Publisher]
     end
 
@@ -102,8 +105,10 @@ flowchart TB
     %% Data Flow - Ingestion
     APRS --> AprsClient
     Beast --> BeastClient
+    SBS --> SbsClient
     AprsClient --> DiskQueue
     BeastClient --> DiskQueue
+    SbsClient --> DiskQueue
     DiskQueue --> SocketClient
     SocketClient --> UnixSocket
 
@@ -112,10 +117,12 @@ flowchart TB
     SocketServer --> EnvelopeQueue
     EnvelopeQueue -->|APRS| AprsIntake
     EnvelopeQueue -->|Beast| BeastIntake
+    EnvelopeQueue -->|SBS| SbsIntake
 
     %% Data Flow - Routing
     AprsIntake --> RouterQueue
     BeastIntake --> AircraftProc
+    SbsIntake --> AircraftProc
     RouterQueue --> Router
 
     %% Data Flow - Router to Queues
@@ -154,27 +161,27 @@ flowchart TB
     classDef storageStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef externalStyle fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
 
-    class EnvelopeQueue,AprsIntake,BeastIntake,RouterQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,NatsQueue,DiskQueue queueStyle
-    class AprsClient,BeastClient,SocketClient,SocketServer,Router,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,NatsPublisher,Sitemap procStyle
+    class EnvelopeQueue,AprsIntake,BeastIntake,SbsIntake,RouterQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,NatsQueue,DiskQueue queueStyle
+    class AprsClient,BeastClient,SbsClient,SocketClient,SocketServer,Router,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,NatsPublisher,Sitemap procStyle
     class Database,NatsPubSub,ArchiveFiles,UnixSocket storageStyle
-    class APRS,Beast,WebClients externalStyle
+    class APRS,Beast,SBS,WebClients externalStyle
 ```
 
 ### Key Components
 
 **Ingestion (`soar ingest`)**
-- Connects to OGN APRS-IS network and/or Beast ADS-B feeds
-- Buffers messages in persistent disk queue (survives restarts)
+- Connects to OGN APRS-IS network, Beast ADS-B feeds, and/or SBS ADS-B feeds
+- Buffers messages in persistent disk queues (survives restarts)
 - Sends protobuf-encoded envelopes via Unix socket to `soar run`
 - Applies backpressure when disk queue approaches capacity
 
 **Processing (`soar run`)**
 - **Socket Server**: Receives envelopes from `soar ingest` via Unix socket
-- **Envelope Intake Queue**: Buffers incoming envelopes (1,000 messages)
-- **Intake Queues**: Separate queues for APRS (1,000) and Beast (1,000) messages
-- **Packet Router**: 10 workers route APRS messages by type, archive raw messages
-- **Type-specific Queues**: Aircraft (1,000), receiver status/position (50 each), server (50)
-- **Worker Processors**: 80 aircraft workers, 6 receiver status, 4 receiver position, 2 server
+- **Envelope Intake Queue**: Buffers incoming envelopes
+- **Intake Queues**: Separate queues for APRS, Beast, and SBS messages
+- **Packet Router**: Routes APRS messages by type, archives raw messages
+- **Type-specific Queues**: Aircraft, receiver status/position, server
+- **Worker Processors**: Process messages by type (aircraft, receiver status, receiver position, server)
 - **Flight Tracking**: Fix Processor and Flight Tracker analyze aircraft movement patterns
 - **NATS Publisher**: Publishes fixes to NATS Pub/Sub for real-time web clients
 
@@ -213,7 +220,7 @@ This message type contains ADS-B version info, NIC/NAC/SIL integrity values, and
 - **Persistent Disk Queue**: Buffers ingested messages when processing is slow
 
 **Real-time Broadcasting**
-- NATS Publisher with 1,000-message queue publishes aircraft positions
+- NATS Publisher publishes aircraft positions
 - Publishes to NATS Pub/Sub (subjects: `aircraft.area.{lat}.{lon}`)
 - Web server's LiveFixService bridges NATS Pub/Sub messages to WebSocket clients
 

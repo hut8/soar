@@ -79,8 +79,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "(rate(aprs_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-      "legendFormat": "Socket Send Errors/min",
+      "expr": "(rate(ingest_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+      "legendFormat": "{{source}}",
       "range": true,
       "refId": "A"
     }

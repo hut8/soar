@@ -209,7 +209,7 @@ impl SbsClient {
                             "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
                             queue_clone.name()
                         );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "sbs")
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "SBS")
                             .increment(1);
                         at_capacity_logged = true;
                     }

@@ -22,17 +22,17 @@
   "links": [],
   "panels": [
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Core System & Infrastructure",
+      "id": 1,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 1000,
-      "panels": [],
-      "title": "Core System & Infrastructure",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -57,13 +57,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 1
-      },
-      "id": 10000,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -102,7 +95,14 @@
           }
         }
       ],
-      "type": "stat"
+      "type": "stat",
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      }
     },
     {
       "datasource": {
@@ -171,13 +171,6 @@
           }
         ]
       },
-      "gridPos": {
-        "h": 4,
-        "w": 18,
-        "x": 6,
-        "y": 1
-      },
-      "id": 10001,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -238,7 +231,14 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
     },
     {
       "datasource": {
@@ -297,13 +297,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 55
-      },
-      "id": 9999,
       "options": {
         "legend": {
           "calcs": [
@@ -359,7 +352,14 @@
       ],
       "title": "Message Routing Rates",
       "type": "timeseries",
-      "description": "Rate of messages routed from socket server to processing queues"
+      "description": "Rate of messages routed from socket server to processing queues",
+      "id": 4,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
     },
     {
       "datasource": {
@@ -393,13 +393,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 5,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1001,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -432,7 +425,14 @@
         }
       ],
       "title": "Process Uptime",
-      "type": "stat"
+      "type": "stat",
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
     },
     {
       "datasource": {
@@ -480,13 +480,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1002,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -517,7 +510,14 @@
         }
       ],
       "title": "Process Status",
-      "type": "gauge"
+      "type": "gauge",
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      }
     },
     {
       "datasource": {
@@ -577,13 +577,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 47,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1003,
       "options": {
         "legend": {
           "calcs": [
@@ -616,7 +609,14 @@
         }
       ],
       "title": "Process Memory Usage",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      }
     },
     {
       "datasource": {
@@ -715,13 +715,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 80,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1004,
       "options": {
         "legend": {
           "calcs": [
@@ -864,7 +857,14 @@
         }
       ],
       "title": "Packet Queue",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      }
     },
     {
       "datasource": {
@@ -940,13 +940,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 122,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1005,
       "options": {
         "legend": {
           "calcs": [
@@ -990,7 +983,14 @@
         }
       ],
       "title": "NATS Fix Publishing Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      }
     },
     {
       "datasource": {
@@ -1048,13 +1048,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 176,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1050,
       "options": {
         "legend": {
           "calcs": [
@@ -1107,7 +1100,14 @@
         }
       ],
       "title": "NATS Publish Latency (per message)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      }
     },
     {
       "datasource": {
@@ -1164,12 +1164,6 @@
           "unit": "ms"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 63,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -1308,7 +1302,13 @@
       ],
       "title": "Aircraft Processing Latency Breakdown (P50)",
       "type": "timeseries",
-      "id": 1007
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      }
     },
     {
       "datasource": {
@@ -1365,12 +1365,6 @@
           "unit": "ms"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 71,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -1509,7 +1503,13 @@
       ],
       "title": "Aircraft Processing Latency Breakdown (P95)",
       "type": "timeseries",
-      "id": 1008
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      }
     },
     {
       "datasource": {
@@ -1569,13 +1569,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 374,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1009,
       "options": {
         "legend": {
           "calcs": [
@@ -1630,7 +1623,14 @@
         }
       ],
       "title": "Database Connection Pool Stats",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 81
+      }
     },
     {
       "datasource": {
@@ -1705,13 +1705,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 648,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1012,
       "options": {
         "legend": {
           "calcs": [
@@ -1754,20 +1747,27 @@
         }
       ],
       "title": "Receiver latest_packet_at Cache",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 89
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Packet Processing & Routing",
+      "id": 15,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 656
+        "y": 97
       },
-      "id": 1013,
-      "panels": [],
-      "title": "Packet Processing & Routing",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -1858,13 +1858,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 658,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1014,
       "options": {
         "legend": {
           "calcs": [
@@ -1952,7 +1945,14 @@
         }
       ],
       "title": "Parse Success/Failure Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 98
+      }
     },
     {
       "datasource": {
@@ -2059,13 +2059,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 675,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1015,
       "options": {
         "legend": {
           "calcs": [
@@ -2120,7 +2113,14 @@
         }
       ],
       "title": "Fix Processing Details",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 106
+      }
     },
     {
       "datasource": {
@@ -2197,13 +2197,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 733,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1017,
       "options": {
         "legend": {
           "calcs": [
@@ -2269,7 +2262,14 @@
         }
       ],
       "title": "Router Processing Details",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 114
+      }
     },
     {
       "datasource": {
@@ -2337,13 +2337,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 775,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1018,
       "options": {
         "legend": {
           "calcs": [
@@ -2462,7 +2455,14 @@
         }
       ],
       "title": "Queue Depths",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 122
+      }
     },
     {
       "datasource": {
@@ -2522,13 +2522,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 825
-      },
-      "id": 2001,
       "options": {
         "legend": {
           "calcs": [
@@ -2559,7 +2552,14 @@
         }
       ],
       "title": "Worker Activity",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 130
+      }
     },
     {
       "datasource": {
@@ -2619,13 +2619,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 825
-      },
-      "id": 2002,
       "options": {
         "legend": {
           "calcs": [
@@ -2656,7 +2649,14 @@
         }
       ],
       "title": "Queue Send Blocked Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 138
+      }
     },
     {
       "datasource": {
@@ -2716,13 +2716,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 833
-      },
-      "id": 2004,
       "options": {
         "legend": {
           "calcs": [
@@ -2808,7 +2801,14 @@
         }
       ],
       "title": "Aircraft Pipeline Latency (p99)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 146
+      }
     },
     {
       "datasource": {
@@ -2868,13 +2868,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 841
-      },
-      "id": 2003,
       "options": {
         "legend": {
           "calcs": [
@@ -2905,7 +2898,14 @@
         }
       ],
       "title": "Aircraft Pipeline Stages",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 154
+      }
     },
     {
       "datasource": {
@@ -2965,13 +2965,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 849,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1019,
       "options": {
         "legend": {
           "calcs": [
@@ -3014,8 +3007,15 @@
           "refId": "B"
         }
       ],
-      "title": "Packet Type Distribution",
-      "type": "timeseries"
+      "title": "APRS Packet Type Distribution",
+      "type": "timeseries",
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 162
+      }
     },
     {
       "datasource": {
@@ -3091,13 +3091,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 883,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1020,
       "options": {
         "legend": {
           "calcs": [
@@ -3151,8 +3144,15 @@
           "refId": "C"
         }
       ],
-      "title": "Router Processing",
-      "type": "timeseries"
+      "title": "APRS Router Processing",
+      "type": "timeseries",
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 170
+      }
     },
     {
       "datasource": {
@@ -3209,12 +3209,6 @@
           "unit": "short"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 957,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -3243,7 +3237,13 @@
       ],
       "title": "OGN Messages Processed from Socket",
       "type": "timeseries",
-      "id": 1021
+      "id": 26,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 178
+      }
     },
     {
       "datasource": {
@@ -3300,12 +3300,6 @@
           "unit": "short"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1039,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -3356,7 +3350,13 @@
       ],
       "title": "OGN Socket Processing Errors",
       "type": "timeseries",
-      "id": 1022
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 186
+      }
     },
     {
       "datasource": {
@@ -3413,12 +3413,6 @@
           "unit": "ops"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1227,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -3480,7 +3474,13 @@
       ],
       "title": "APRS Messages Processed by Type",
       "type": "timeseries",
-      "id": 1024
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 194
+      }
     },
     {
       "datasource": {
@@ -3537,12 +3537,6 @@
           "unit": "ops"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1333,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -3571,7 +3565,13 @@
       ],
       "title": "Fixes Skipped by Aircraft Type",
       "type": "timeseries",
-      "id": 1025
+      "id": 29,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 202
+      }
     },
     {
       "datasource": {
@@ -3628,12 +3628,6 @@
           "unit": "ops"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1447,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -3693,9 +3687,15 @@
           "refId": "D"
         }
       ],
-      "title": "Router Processing Call Details",
+      "title": "APRS Router Processing Call Details",
       "type": "timeseries",
-      "id": 1026
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 210
+      }
     },
     {
       "datasource": {
@@ -3753,12 +3753,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1569,
-        "w": 24,
-        "h": 8
-      },
       "options": {
         "legend": {
           "calcs": [],
@@ -3797,7 +3791,13 @@
       ],
       "title": "Socket Router Throughput",
       "type": "timeseries",
-      "id": 1027
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 218
+      }
     },
     {
       "datasource": {
@@ -3857,13 +3857,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1767,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1029,
       "options": {
         "legend": {
           "calcs": [
@@ -3896,20 +3889,27 @@
         }
       ],
       "title": "Receiver Status Updates",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 32,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 226
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Data Ingestion Pipelines",
+      "id": 33,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1775
+        "y": 234
       },
-      "id": 1030,
-      "panels": [],
-      "title": "Data Ingestion Pipelines",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -3968,13 +3968,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1777,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1031,
       "options": {
         "legend": {
           "calcs": [
@@ -4006,7 +3999,14 @@
         }
       ],
       "title": "APRS Type Distribution (Before Filtering)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 34,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 235
+      }
     },
     {
       "datasource": {
@@ -4042,13 +4042,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1794,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1032,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -4079,7 +4072,14 @@
         }
       ],
       "title": "Receiver Cache Hit Rate",
-      "type": "gauge"
+      "type": "gauge",
+      "id": 35,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 243
+      }
     },
     {
       "datasource": {
@@ -4139,13 +4139,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1819,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1033,
       "options": {
         "legend": {
           "calcs": [
@@ -4189,7 +4182,14 @@
         }
       ],
       "title": "Receiver Cache Hit/Miss",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 36,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 251
+      }
     },
     {
       "datasource": {
@@ -4265,13 +4265,6 @@
           }
         ]
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1853,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1034,
       "options": {
         "legend": {
           "calcs": [
@@ -4315,7 +4308,14 @@
         }
       ],
       "title": "Beast Decode Success/Failure Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 37,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 259
+      }
     },
     {
       "datasource": {
@@ -4375,13 +4375,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1895,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1035,
       "options": {
         "legend": {
           "calcs": [
@@ -4436,7 +4429,14 @@
         }
       ],
       "title": "Beast Fixes Processed",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 38,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 267
+      }
     },
     {
       "datasource": {
@@ -4504,13 +4504,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1945,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1036,
       "options": {
         "legend": {
           "calcs": [
@@ -4566,20 +4559,27 @@
         }
       ],
       "title": "Beast Processing Latency (Percentiles)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 39,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 275
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Aircraft & Flight Tracking",
+      "id": 40,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 1953
+        "y": 283
       },
-      "id": 1037,
-      "panels": [],
-      "title": "Aircraft & Flight Tracking",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -4613,13 +4613,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1955,
-        "w": 12,
-        "h": 8
-      },
-      "id": 1038,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -4652,7 +4645,14 @@
         }
       ],
       "title": "Active Aircraft (All Flights)",
-      "type": "stat"
+      "type": "stat",
+      "id": 41,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 284
+      }
     },
     {
       "datasource": {
@@ -4682,13 +4682,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 12,
-        "y": 1955,
-        "w": 12,
-        "h": 8
-      },
-      "id": 1099,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -4721,7 +4714,14 @@
         }
       ],
       "title": "Aircraft States Restored (Last Startup)",
-      "type": "stat"
+      "type": "stat",
+      "id": 42,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 292
+      }
     },
     {
       "datasource": {
@@ -4781,13 +4781,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 1997,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1040,
       "options": {
         "legend": {
           "calcs": [
@@ -4831,7 +4824,14 @@
         }
       ],
       "title": "Flight Ends (5m)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 43,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 300
+      }
     },
     {
       "datasource": {
@@ -4888,12 +4888,6 @@
           "unit": "ops"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 2031,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -4988,7 +4982,13 @@
       ],
       "title": "Flight Coalesce Events",
       "type": "timeseries",
-      "id": 1041
+      "id": 44,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 308
+      }
     },
     {
       "datasource": {
@@ -5046,12 +5046,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 2073,
-        "w": 24,
-        "h": 8
-      },
       "options": {
         "legend": {
           "calcs": [],
@@ -5090,7 +5084,13 @@
       ],
       "title": "Coalesce Distance (P50)",
       "type": "timeseries",
-      "id": 1042
+      "id": 45,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 316
+      }
     },
     {
       "datasource": {
@@ -5148,13 +5148,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 2123,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1043,
       "options": {
         "legend": {
           "calcs": [
@@ -5206,7 +5199,14 @@
         }
       ],
       "title": "Rejected Coalesce Gap Duration",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 46,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 324
+      }
     },
     {
       "datasource": {
@@ -5263,12 +5263,6 @@
           "unit": "ops"
         },
         "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 2181,
-        "w": 24,
-        "h": 8
       },
       "options": {
         "legend": {
@@ -5330,7 +5324,13 @@
       ],
       "title": "Flight Timeouts by Phase",
       "type": "timeseries",
-      "id": 1044
+      "id": 47,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 332
+      }
     },
     {
       "datasource": {
@@ -5338,13 +5338,6 @@
         "uid": "-- Mixed --"
       },
       "description": "Explanation of flight phase detection logic",
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 2248
-      },
-      "id": 1045,
       "options": {
         "code": {
           "language": "markdown",
@@ -5356,7 +5349,14 @@
       },
       "pluginVersion": "12.2.1",
       "title": "Flight Phase Definitions",
-      "type": "text"
+      "type": "text",
+      "id": 48,
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 340
+      }
     },
     {
       "datasource": {
@@ -5416,13 +5416,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "x": 0,
-        "y": 2328,
-        "w": 24,
-        "h": 8
-      },
-      "id": 1046,
       "options": {
         "legend": {
           "calcs": [
@@ -5466,11 +5459,17 @@
         }
       ],
       "title": "Flight Creation (5m)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 49,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 350
+      }
     }
   ],
   "preload": false,
-  "refresh": "10s",
   "schemaVersion": 42,
   "tags": [
     "soar",
@@ -5482,11 +5481,10 @@
     "list": [
       {
         "current": {
-          "selected": true,
-          "text": "Production",
-          "value": "production"
+          "selected": false,
+          "text": "staging",
+          "value": "staging"
         },
-        "description": "Select environment (production or staging)",
         "hide": 0,
         "includeAll": false,
         "label": "Environment",
@@ -5494,13 +5492,13 @@
         "name": "environment",
         "options": [
           {
-            "selected": true,
-            "text": "Production",
+            "selected": false,
+            "text": "production",
             "value": "production"
           },
           {
-            "selected": false,
-            "text": "Staging",
+            "selected": true,
+            "text": "staging",
             "value": "staging"
           }
         ],
@@ -5519,6 +5517,6 @@
   "timezone": "",
   "title": "SOAR Run",
   "uid": "soar-run-combined",
-  "version": 19,
+  "refresh": "10s",
   "description": "System-level metrics, database, and message publishing"
 }

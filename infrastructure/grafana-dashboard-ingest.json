@@ -22,17 +22,17 @@
   "links": [],
   "panels": [
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Process Metrics",
+      "id": 1,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 1,
-      "panels": [],
-      "title": "Process Metrics",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -57,13 +57,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 1
-      },
-      "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -102,7 +95,14 @@
           }
         }
       ],
-      "type": "stat"
+      "type": "stat",
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      }
     },
     {
       "datasource": {
@@ -171,13 +171,6 @@
           }
         ]
       },
-      "gridPos": {
-        "h": 4,
-        "w": 18,
-        "x": 6,
-        "y": 1
-      },
-      "id": 3,
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -238,7 +231,14 @@
           }
         }
       ],
-      "type": "table"
+      "type": "table",
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
     },
     {
       "datasource": {
@@ -272,13 +272,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
-      "id": 4,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -311,7 +304,14 @@
         }
       ],
       "title": "Process Uptime",
-      "type": "stat"
+      "type": "stat",
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
     },
     {
       "datasource": {
@@ -359,13 +359,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "id": 5,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -396,7 +389,14 @@
         }
       ],
       "title": "Process Status",
-      "type": "gauge"
+      "type": "gauge",
+      "id": 5,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      }
     },
     {
       "datasource": {
@@ -430,13 +430,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 17
-      },
-      "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -469,20 +462,27 @@
         }
       ],
       "title": "Process Memory Usage",
-      "type": "stat"
+      "type": "stat",
+      "id": 6,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "OGN/APRS Connection",
+      "id": 7,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 25
       },
-      "id": 7,
-      "panels": [],
-      "title": "OGN/APRS Connection",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -530,13 +530,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
-      "id": 8,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -567,7 +560,14 @@
         }
       ],
       "title": "APRS Connection Status",
-      "type": "gauge"
+      "type": "gauge",
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      }
     },
     {
       "datasource": {
@@ -627,13 +627,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      },
-      "id": 9,
       "options": {
         "legend": {
           "calcs": [
@@ -686,7 +679,14 @@
         }
       ],
       "title": "Connection Events",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      }
     },
     {
       "datasource": {
@@ -746,13 +746,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 38
-      },
-      "id": 10,
       "options": {
         "legend": {
           "calcs": [
@@ -783,7 +776,14 @@
         }
       ],
       "title": "Keepalive Messages per Minute",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      }
     },
     {
       "datasource": {
@@ -843,13 +843,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 46
-      },
-      "id": 11,
       "options": {
         "legend": {
           "calcs": [
@@ -902,20 +895,27 @@
         }
       ],
       "title": "Connection & Ingestion Errors",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "OGN/APRS Message Processing",
+      "id": 12,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 58
       },
-      "id": 12,
-      "panels": [],
-      "title": "OGN/APRS Message Processing",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -975,13 +975,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 55
-      },
-      "id": 13,
       "options": {
         "legend": {
           "calcs": [
@@ -1034,7 +1027,14 @@
         }
       ],
       "title": "Messages Received per Second",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 59
+      }
     },
     {
       "datasource": {
@@ -1094,13 +1094,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 63
-      },
-      "id": 14,
       "options": {
         "legend": {
           "calcs": [
@@ -1142,20 +1135,27 @@
         }
       ],
       "title": "Messages Queued per Second",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 67
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Socket Publishing",
+      "id": 15,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 75
       },
-      "id": 16,
-      "panels": [],
-      "title": "OGN/APRS Socket Publishing",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -1215,13 +1215,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 80
-      },
-      "id": 17,
       "options": {
         "legend": {
           "calcs": [
@@ -1245,14 +1238,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(socket_client_messages_sent_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "Messages/min",
+          "expr": "rate(ingest_messages_sent_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+          "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Messages Sent to Socket per Minute",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      }
     },
     {
       "datasource": {
@@ -1312,13 +1312,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 88
-      },
-      "id": 18,
       "options": {
         "legend": {
           "calcs": [
@@ -1342,14 +1335,21 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(rate(aprs_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-          "legendFormat": "Socket Send Errors/min",
+          "expr": "(rate(ingest_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
+          "legendFormat": "{{source}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Socket Send Errors",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 84
+      }
     },
     {
       "datasource": {
@@ -1408,13 +1408,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 96
-      },
-      "id": 19,
       "options": {
         "legend": {
           "calcs": [
@@ -1437,8 +1430,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
-          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
+          "legendFormat": "{{source}} p50",
           "range": true,
           "refId": "A"
         },
@@ -1448,9 +1441,9 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
           "hide": false,
-          "legendFormat": "p95",
+          "legendFormat": "{{source}} p95",
           "range": true,
           "refId": "B"
         },
@@ -1460,15 +1453,22 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(socket_client_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(ingest_socket_send_duration_ms_bucket{component=\"ingest\",environment=~\"$environment\"}[5m])) by (le, source))",
           "hide": false,
-          "legendFormat": "p99",
+          "legendFormat": "{{source}} p99",
           "range": true,
           "refId": "C"
         }
       ],
       "title": "Socket Send Duration",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 92
+      }
     },
     {
       "datasource": {
@@ -1524,13 +1524,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 104
-      },
-      "id": 20,
       "options": {
         "legend": {
           "calcs": [],
@@ -1556,20 +1549,27 @@
         }
       ],
       "title": "Slow Socket Sends per Minute",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "ADS-B Connection & Data",
+      "id": 20,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 112
+        "y": 108
       },
-      "id": 21,
-      "panels": [],
-      "title": "ADS-B Connection & Data",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -1617,13 +1617,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 113
-      },
-      "id": 22,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
@@ -1654,7 +1647,14 @@
         }
       ],
       "title": "ADS-B Connection Status",
-      "type": "gauge"
+      "type": "gauge",
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      }
     },
     {
       "datasource": {
@@ -1714,13 +1714,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 121
-      },
-      "id": 23,
       "options": {
         "legend": {
           "calcs": [
@@ -1773,7 +1766,14 @@
         }
       ],
       "title": "Connection Events",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 117
+      }
     },
     {
       "datasource": {
@@ -1833,13 +1833,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 121
-      },
-      "id": 24,
       "options": {
         "legend": {
           "calcs": [
@@ -1871,7 +1864,14 @@
         }
       ],
       "title": "Data Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 23,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 125
+      }
     },
     {
       "datasource": {
@@ -1931,13 +1931,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 129
-      },
-      "id": 25,
       "options": {
         "legend": {
           "calcs": [
@@ -1968,7 +1961,14 @@
         }
       ],
       "title": "Message Rate",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 24,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 133
+      }
     },
     {
       "datasource": {
@@ -2028,13 +2028,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 129
-      },
-      "id": 26,
       "options": {
         "legend": {
           "calcs": [
@@ -2076,20 +2069,27 @@
         }
       ],
       "title": "ADS-B Frames Published vs Dropped",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 25,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 141
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Queue Depths",
+      "id": 26,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 130
+        "y": 149
       },
-      "id": 120,
-      "panels": [],
-      "title": "Queue Depths",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -2147,13 +2147,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 131
-      },
-      "id": 121,
       "options": {
         "legend": {
           "calcs": [
@@ -2183,7 +2176,14 @@
         }
       ],
       "title": "Memory Queue Depth (by Source)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 27,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 150
+      }
     },
     {
       "datasource": {
@@ -2241,13 +2241,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 131
-      },
-      "id": 122,
       "options": {
         "legend": {
           "calcs": [
@@ -2277,20 +2270,27 @@
         }
       ],
       "title": "Disk Queue Size (by Source)",
-      "type": "timeseries"
+      "type": "timeseries",
+      "id": 28,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 158
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Queue Segments",
+      "id": 29,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 139
+        "y": 166
       },
-      "id": 130,
-      "panels": [],
-      "title": "Queue Segments",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -2348,13 +2348,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 140
-      },
-      "id": 131,
       "options": {
         "legend": {
           "calcs": [
@@ -2407,7 +2400,14 @@
       ],
       "title": "Queue Segments Created per Minute",
       "type": "timeseries",
-      "description": "Rate of new segment files being created in the persistent queue (rotated when exceeding 10MB)"
+      "description": "Rate of new segment files being created in the persistent queue (rotated when exceeding 10MB)",
+      "id": 30,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 167
+      }
     },
     {
       "datasource": {
@@ -2465,13 +2465,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 140
-      },
-      "id": 132,
       "options": {
         "legend": {
           "calcs": [
@@ -2524,20 +2517,27 @@
       ],
       "title": "Queue Segments Deleted per Minute",
       "type": "timeseries",
-      "description": "Rate of segment files being deleted after being fully drained"
+      "description": "Rate of segment files being deleted after being fully drained",
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 175
+      }
     },
     {
+      "type": "row",
       "collapsed": false,
+      "title": "Backpressure Events",
+      "id": 32,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 148
+        "y": 183
       },
-      "id": 150,
-      "panels": [],
-      "title": "Backpressure Events",
-      "type": "row"
+      "panels": []
     },
     {
       "datasource": {
@@ -2595,13 +2595,6 @@
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 156
-      },
-      "id": 151,
       "options": {
         "legend": {
           "calcs": [
@@ -2632,11 +2625,17 @@
       ],
       "title": "Queue Capacity Pauses (Backpressure Events)",
       "type": "timeseries",
-      "description": "Number of times message consumption paused because disk queue was at 95% capacity. This triggers source disconnection to apply backpressure."
+      "description": "Number of times message consumption paused because disk queue was at 95% capacity. This triggers source disconnection to apply backpressure.",
+      "id": 33,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 184
+      }
     }
   ],
   "preload": false,
-  "refresh": "10s",
   "schemaVersion": 42,
   "tags": [
     "soar",
@@ -2649,11 +2648,10 @@
     "list": [
       {
         "current": {
-          "selected": true,
-          "text": "Production",
-          "value": "production"
+          "selected": false,
+          "text": "staging",
+          "value": "staging"
         },
-        "description": "Select environment (production or staging)",
         "hide": 0,
         "includeAll": false,
         "label": "Environment",
@@ -2661,13 +2659,13 @@
         "name": "environment",
         "options": [
           {
-            "selected": true,
-            "text": "Production",
+            "selected": false,
+            "text": "production",
             "value": "production"
           },
           {
-            "selected": false,
-            "text": "Staging",
+            "selected": true,
+            "text": "staging",
             "value": "staging"
           }
         ],
@@ -2686,5 +2684,5 @@
   "timezone": "",
   "title": "SOAR Ingest",
   "uid": "soar-ingest",
-  "version": 1
+  "refresh": "10s"
 }
