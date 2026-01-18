@@ -47,13 +47,18 @@
 
 	// Aircraft list modal and target tracking
 	let showAircraftList = $state(false);
-	let targetAircraft: ARAircraftPosition | null = $state(null);
+	let targetAircraftId: string | null = $state(null);
 
 	let aircraftPositions = new SvelteMap<
 		string,
 		{ aircraft: ARAircraftPosition; screen: ARScreenPosition }
 	>();
 	let currentSubscription: BulkAreaSubscriptionMessage | null = null;
+
+	// Derive target aircraft from the positions map (auto-updates as aircraft moves)
+	const targetAircraft = $derived(
+		targetAircraftId ? (aircraftPositions.get(targetAircraftId)?.aircraft ?? null) : null
+	);
 
 	// Screen dimensions
 	let screenWidth = $state(0);
@@ -201,7 +206,7 @@
 
 	// Handle aircraft selection from the modal
 	function handleAircraftSelect(aircraft: ARAircraftPosition) {
-		targetAircraft = aircraft;
+		targetAircraftId = aircraft.aircraftId;
 		showAircraftList = false;
 		logger.debug('Target aircraft selected: {registration}', {
 			registration: aircraft.registration
@@ -210,7 +215,7 @@
 
 	// Dismiss target tracking
 	function dismissTarget() {
-		targetAircraft = null;
+		targetAircraftId = null;
 	}
 
 	// Get all aircraft positions as array for the modal
@@ -218,19 +223,9 @@
 
 	// Check if target aircraft is visible on screen
 	const targetScreenPosition = $derived(() => {
-		if (!targetAircraft) return null;
-		const position = aircraftPositions.get(targetAircraft.aircraftId);
+		if (!targetAircraftId) return null;
+		const position = aircraftPositions.get(targetAircraftId);
 		return position?.screen ?? null;
-	});
-
-	// Update target aircraft position from latest data
-	$effect(() => {
-		if (targetAircraft) {
-			const updated = aircraftPositions.get(targetAircraft.aircraftId);
-			if (updated) {
-				targetAircraft = updated.aircraft;
-			}
-		}
 	});
 
 	// Initialize AR on mount

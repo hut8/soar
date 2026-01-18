@@ -74,6 +74,11 @@
 		transform: translateX(-50%);
 	}
 
+	/* Lucide Navigation icon points northeast by default; rotate to point north */
+	.compass-north :global(svg) {
+		transform: rotate(-45deg);
+	}
+
 	.compass-label {
 		position: absolute;
 		top: 50%;
