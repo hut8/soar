@@ -15,7 +15,9 @@
 		Image,
 		History,
 		FileText,
-		Cog
+		Cog,
+		ChevronDown,
+		ChevronUp
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -100,6 +102,7 @@
 	let savingClub = false;
 	let aircraftImages: AircraftImage[] = [];
 	let loadingImages = true;
+	let isFixesCollapsed = true;
 
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.isAdmin === true;
@@ -882,60 +885,77 @@
 
 			<!-- Position Fixes Section -->
 			<div class="space-y-4 card p-6">
-				<h2 class="flex items-center gap-2 h2">
-					<Activity class="h-6 w-6" />
-					Recent Position Fixes
-				</h2>
+				<div class="flex items-center justify-between">
+					<h2 class="flex items-center gap-2 h2">
+						<Activity class="h-6 w-6" />
+						Recent Position Fixes
+					</h2>
+					<button
+						class="btn preset-tonal btn-sm"
+						onclick={() => (isFixesCollapsed = !isFixesCollapsed)}
+						type="button"
+					>
+						{#if isFixesCollapsed}
+							<ChevronDown class="h-4 w-4" />
+							<span>Show</span>
+						{:else}
+							<ChevronUp class="h-4 w-4" />
+							<span>Hide</span>
+						{/if}
+					</button>
+				</div>
 
-				<FixesList
-					{fixes}
-					loading={loadingFixes}
-					showHideInactive={true}
-					showRaw={true}
-					emptyMessage="No position fixes found in the last 24 hours"
-					hideInactiveValue={hideInactiveFixes}
-					onHideInactiveChange={handleHideInactiveChange}
-					fixesInChronologicalOrder={false}
-				/>
+				<div class:hidden={isFixesCollapsed}>
+					<FixesList
+						{fixes}
+						loading={loadingFixes}
+						showHideInactive={true}
+						showRaw={true}
+						emptyMessage="No position fixes found in the last 24 hours"
+						hideInactiveValue={hideInactiveFixes}
+						onHideInactiveChange={handleHideInactiveChange}
+						fixesInChronologicalOrder={false}
+					/>
 
-				<!-- Pagination for fixes -->
-				{#if fixesTotalPages > 1}
-					<div class="flex items-center justify-between pt-4">
-						<p class="text-surface-600-300-token text-sm">
-							Page {fixesPage} of {fixesTotalPages}
-						</p>
-						<div class="flex gap-2">
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage <= 1}
-								onclick={() => loadFixes(1)}
-							>
-								Newest
-							</button>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage <= 1}
-								onclick={() => loadFixes(fixesPage - 1)}
-							>
-								Previous
-							</button>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage >= fixesTotalPages}
-								onclick={() => loadFixes(fixesPage + 1)}
-							>
-								Next
-							</button>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage >= fixesTotalPages}
-								onclick={() => loadFixes(fixesTotalPages)}
-							>
-								Oldest
-							</button>
+					<!-- Pagination for fixes -->
+					{#if fixesTotalPages > 1}
+						<div class="flex items-center justify-between pt-4">
+							<p class="text-surface-600-300-token text-sm">
+								Page {fixesPage} of {fixesTotalPages}
+							</p>
+							<div class="flex gap-2">
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={fixesPage <= 1}
+									onclick={() => loadFixes(1)}
+								>
+									Newest
+								</button>
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={fixesPage <= 1}
+									onclick={() => loadFixes(fixesPage - 1)}
+								>
+									Previous
+								</button>
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={fixesPage >= fixesTotalPages}
+									onclick={() => loadFixes(fixesPage + 1)}
+								>
+									Next
+								</button>
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={fixesPage >= fixesTotalPages}
+									onclick={() => loadFixes(fixesTotalPages)}
+								>
+									Oldest
+								</button>
+							</div>
 						</div>
-					</div>
-				{/if}
+					{/if}
+				</div>
 			</div>
 		</div>
 	{/if}

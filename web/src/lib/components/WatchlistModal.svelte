@@ -10,6 +10,7 @@
 	import { getAddressTypeLabel } from '$lib/formatters';
 	import type { Aircraft, DataListResponse, DataResponse, Club } from '$lib/types';
 	import { getLogger } from '$lib/logging';
+	import { toaster } from '$lib/toaster';
 
 	const logger = getLogger(['soar', 'WatchlistModal']);
 
@@ -116,25 +117,43 @@
 
 			// Add the aircraft to the registry and watchlist
 			AircraftRegistry.getInstance().setAircraft(aircraft);
-			await watchlist.add(aircraft.id, false);
-			// Clear the search inputs on success
-			newWatchlistEntry = {
-				type: 'registration',
-				registration: '',
-				aircraftAddressType: 'I',
-				aircraftAddress: ''
-			};
+			try {
+				await watchlist.add(aircraft.id, false);
+				// Clear the search inputs on success
+				newWatchlistEntry = {
+					type: 'registration',
+					registration: '',
+					aircraftAddressType: 'I',
+					aircraftAddress: ''
+				};
+			} catch (error) {
+				logger.warn('Failed to add aircraft to watchlist: {error}', { error });
+				const message = error instanceof Error ? error.message : 'Failed to add to watchlist';
+				toaster.error({ title: 'Failed to add to watchlist', description: message });
+			}
 		}
 	}
 
 	// Remove entry from watchlist
 	async function removeWatchlistEntry(id: string) {
-		await watchlist.remove(id);
+		try {
+			await watchlist.remove(id);
+		} catch (error) {
+			logger.warn('Failed to remove from watchlist: {error}', { error });
+			const message = error instanceof Error ? error.message : 'Failed to remove from watchlist';
+			toaster.error({ title: 'Failed to remove from watchlist', description: message });
+		}
 	}
 
 	// Toggle email notification for entry
 	async function toggleEmailNotification(id: string, currentValue: boolean) {
-		await watchlist.updateEmailPreference(id, !currentValue);
+		try {
+			await watchlist.updateEmailPreference(id, !currentValue);
+		} catch (error) {
+			logger.warn('Failed to update email preference: {error}', { error });
+			const message = error instanceof Error ? error.message : 'Failed to update email preference';
+			toaster.error({ title: 'Failed to update email preference', description: message });
+		}
 	}
 
 	// Load aircraft for selected club
@@ -174,7 +193,13 @@
 		}
 
 		AircraftRegistry.getInstance().setAircraft(aircraft);
-		await watchlist.add(aircraft.id, false);
+		try {
+			await watchlist.add(aircraft.id, false);
+		} catch (error) {
+			logger.warn('Failed to add aircraft to watchlist: {error}', { error });
+			const message = error instanceof Error ? error.message : 'Failed to add to watchlist';
+			toaster.error({ title: 'Failed to add to watchlist', description: message });
+		}
 	}
 
 	// Add all club aircraft to watchlist

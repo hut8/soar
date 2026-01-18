@@ -6,7 +6,7 @@ use axum::{
 use tracing::error;
 use uuid::Uuid;
 
-use crate::actions::{DataListResponse, DataResponse};
+use crate::actions::{DataListResponse, DataResponse, json_error};
 use crate::auth::AuthUser;
 use crate::watchlist::{AddToWatchlistRequest, UpdateWatchlistRequest};
 use crate::watchlist_repo::WatchlistRepository;
@@ -24,7 +24,7 @@ pub async fn get_watchlist(
         Ok(entries) => Json(DataListResponse { data: entries }).into_response(),
         Err(e) => {
             error!("Failed to get watchlist: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get watchlist").into_response()
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get watchlist").into_response()
         }
     }
 }
@@ -42,11 +42,11 @@ pub async fn add_to_watchlist(
         Ok(entry) => (StatusCode::CREATED, Json(DataResponse { data: entry })).into_response(),
         Err(e) => {
             error!("Failed to add to watchlist: {}", e);
-            (
+            json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to add to watchlist",
             )
-                .into_response()
+            .into_response()
         }
     }
 }
@@ -66,14 +66,14 @@ pub async fn update_watchlist_email(
         .await
     {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => (StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
+        Ok(false) => json_error(StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
         Err(e) => {
             error!("Failed to update watchlist: {}", e);
-            (
+            json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update watchlist",
             )
-                .into_response()
+            .into_response()
         }
     }
 }
@@ -89,14 +89,14 @@ pub async fn remove_from_watchlist(
 
     match repo.remove(user_id, aircraft_id).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => (StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
+        Ok(false) => json_error(StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
         Err(e) => {
             error!("Failed to remove from watchlist: {}", e);
-            (
+            json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to remove from watchlist",
             )
-                .into_response()
+            .into_response()
         }
     }
 }
@@ -113,11 +113,11 @@ pub async fn clear_watchlist(
         Ok(_count) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to clear watchlist: {}", e);
-            (
+            json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to clear watchlist",
             )
-                .into_response()
+            .into_response()
         }
     }
 }
