@@ -663,6 +663,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/flights/{id}/device", get(actions::get_flight_device))
         .route("/flights/{id}/kml", get(actions::get_flight_kml))
         .route("/flights/{id}/fixes", get(actions::get_flight_fixes))
+        .route("/flights/{id}/path", get(actions::get_flight_path))
         .route("/flights/{id}/gaps", get(actions::get_flight_gaps))
         .route(
             "/flights/{id}/spline-path",

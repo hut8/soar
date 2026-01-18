@@ -54,6 +54,14 @@ export interface Point {
 	longitude: number;
 }
 
+// Lightweight path point for flight trail rendering (from RDP-compressed /path endpoint)
+export interface PathPoint {
+	latitude: number;
+	longitude: number;
+	altitudeFeet: number | null;
+	speedKnots: number | null;
+}
+
 export interface Location {
 	id: string;
 	street1?: string;

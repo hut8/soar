@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { serverCall } from '$lib/api/server';
-import type { Flight, Aircraft, Fix, DataListResponse } from '$lib/types';
+import type { Flight, Aircraft, Fix, PathPoint, DataListResponse } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'FlightMapLoader']);
@@ -14,9 +14,10 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const { id } = params;
 
 	try {
-		// First fetch flight and fixes in parallel
-		const [flightResponse, fixesResponse] = await Promise.all([
+		// Fetch flight, compressed path (for trail), and fixes (for chart/details) in parallel
+		const [flightResponse, pathResponse, fixesResponse] = await Promise.all([
 			serverCall<FlightResponse>(`/flights/${id}`, { fetch }),
+			serverCall<DataListResponse<PathPoint>>(`/flights/${id}/path?epsilon=50`, { fetch }),
 			serverCall<DataListResponse<Fix>>(`/flights/${id}/fixes`, { fetch })
 		]);
 
@@ -25,12 +26,14 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			? await serverCall<Aircraft>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
 			: undefined;
 
+		const path = pathResponse.data || [];
 		const fixes = fixesResponse.data || [];
 
 		return {
 			flight: flightResponse.flight,
 			device,
-			fixes,
+			path, // Compressed path for trail rendering
+			fixes, // Full fixes for chart and info windows
 			fixesCount: fixes.length
 		};
 	} catch (err) {

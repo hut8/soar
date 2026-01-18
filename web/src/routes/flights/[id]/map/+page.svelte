@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Receiver, DataListResponse } from '$lib/types';
+	import type { Receiver, PathPoint, DataListResponse } from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -43,18 +43,18 @@
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitudeAglFeet !== null));
 
-	// Calculate maximum altitude from fixes
+	// Calculate maximum altitude from path data (used for trail coloring)
 	const maxAltitude = $derived(() => {
-		if (data.fixes.length === 0) return null;
-		const maxMsl = Math.max(...data.fixes.map((f) => f.altitudeMslFeet || 0));
+		if (data.path.length === 0) return null;
+		const maxMsl = Math.max(...data.path.map((p) => p.altitudeFeet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
-	// Calculate minimum altitude from fixes
+	// Calculate minimum altitude from path data
 	const minAltitude = $derived(() => {
-		if (data.fixes.length === 0) return null;
-		const validAltitudes = data.fixes
-			.map((f) => f.altitudeMslFeet)
+		if (data.path.length === 0) return null;
+		const validAltitudes = data.path
+			.map((p) => p.altitudeFeet)
 			.filter((alt): alt is number => alt !== null && alt !== undefined);
 		if (validAltitudes.length === 0) return null;
 		return Math.min(...validAltitudes);
@@ -176,26 +176,24 @@
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
 
-		// Track last arrow timestamp to display one every 10 minutes
-		let lastArrowTime: Date | null = null;
-		const TEN_MINUTES_MS = 10 * 60 * 1000;
+		// Path is already in chronological order (oldest first)
+		const pathPoints = data.path;
+		const totalPoints = pathPoints.length;
 
-		const fixes = [...data.fixes].reverse();
-		const totalFixes = fixes.length;
+		// Show arrow every ~10% of points
+		const arrowInterval = Math.max(1, Math.floor(totalPoints / 10));
 
 		flightPathSegments.forEach((segment, index) => {
 			const path = segment.getPath();
 			if (path.getLength() < 2) return;
 
 			// Get color based on segment index
-			if (index >= fixes.length) return;
-			const fix = fixes[index];
-			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
+			if (index >= pathPoints.length) return;
+			const point = pathPoints[index];
+			const color = getFixColor(index, point.altitudeFeet, minAlt, maxAlt, totalPoints);
 
-			// Check if we should display an arrow for this segment
-			const fixTime = new Date(fix.timestamp);
-			const shouldShowArrow =
-				lastArrowTime === null || fixTime.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+			// Show arrow at regular intervals
+			const shouldShowArrow = index % arrowInterval === 0;
 
 			// Only add arrow icon if this segment should have one
 			const icons = [];
@@ -213,7 +211,6 @@
 					icon: arrowSymbol,
 					offset: '50%'
 				});
-				lastArrowTime = fixTime;
 			}
 
 			segment.setOptions({
@@ -222,9 +219,9 @@
 		});
 	}
 
-	// Helper function to create gradient polyline segments
+	// Helper function to create gradient polyline segments from compressed path data
 	function createGradientPolylines(
-		fixesInOrder: typeof data.fixes,
+		pathPoints: PathPoint[],
 		targetMap: google.maps.Map
 	): google.maps.Polyline[] {
 		const minAlt = minAltitude() ?? 0;
@@ -232,22 +229,19 @@
 		const segments: google.maps.Polyline[] = [];
 		const zoom = targetMap.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
-		const totalFixes = fixesInOrder.length;
+		const totalPoints = pathPoints.length;
 
-		// Track last arrow timestamp to display one every 10 minutes
-		let lastArrowTime: Date | null = null;
-		const TEN_MINUTES_MS = 10 * 60 * 1000;
+		// Show arrow every ~10% of points (since we don't have timestamps in path data)
+		const arrowInterval = Math.max(1, Math.floor(totalPoints / 10));
 
-		for (let i = 0; i < fixesInOrder.length - 1; i++) {
-			const fix1 = fixesInOrder[i];
-			const fix2 = fixesInOrder[i + 1];
+		for (let i = 0; i < pathPoints.length - 1; i++) {
+			const point1 = pathPoints[i];
+			const point2 = pathPoints[i + 1];
 
-			const color = getFixColor(i, fix1.altitudeMslFeet, minAlt, maxAlt, totalFixes);
+			const color = getFixColor(i, point1.altitudeFeet, minAlt, maxAlt, totalPoints);
 
-			// Check if we should display an arrow for this segment
-			const fix1Time = new Date(fix1.timestamp);
-			const shouldShowArrow =
-				lastArrowTime === null || fix1Time.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+			// Show arrow at regular intervals
+			const shouldShowArrow = i % arrowInterval === 0;
 
 			// Define arrow symbol for this segment if needed
 			const icons = [];
@@ -265,13 +259,12 @@
 					icon: arrowSymbol,
 					offset: '50%'
 				});
-				lastArrowTime = fix1Time;
 			}
 
 			const segment = new google.maps.Polyline({
 				path: [
-					{ lat: fix1.latitude, lng: fix1.longitude },
-					{ lat: fix2.latitude, lng: fix2.longitude }
+					{ lat: point1.latitude, lng: point1.longitude },
+					{ lat: point2.latitude, lng: point2.longitude }
 				],
 				geodesic: true,
 				strokeColor: color,
@@ -351,9 +344,7 @@
 
 	// Update map with new data
 	function updateMap() {
-		if (data.fixes.length === 0 || !map || flightPathSegments.length === 0) return;
-
-		const fixesInOrder = [...data.fixes].reverse();
+		if (data.path.length === 0 || !map || flightPathSegments.length === 0) return;
 
 		// Clear existing flight path segments
 		flightPathSegments.forEach((segment) => {
@@ -361,8 +352,8 @@
 		});
 		flightPathSegments = [];
 
-		// Create new gradient polyline segments
-		flightPathSegments = createGradientPolylines(fixesInOrder, map);
+		// Create new gradient polyline segments from compressed path
+		flightPathSegments = createGradientPolylines(data.path, map);
 
 		// Clear existing fix markers
 		fixMarkers.forEach((marker) => {
@@ -370,7 +361,8 @@
 		});
 		fixMarkers = [];
 
-		// Wait for map to be ready before adding markers
+		// Wait for map to be ready before adding markers (still uses fixes for detail)
+		const fixesInOrder = [...data.fixes].reverse();
 		google.maps.event.addListenerOnce(map, 'idle', () => {
 			addFixMarkers(fixesInOrder);
 		});
@@ -493,7 +485,7 @@
 
 	// Initialize map
 	onMount(async () => {
-		if (data.fixes.length === 0 || !mapContainer) return;
+		if (data.path.length === 0 || !mapContainer) return;
 
 		try {
 			setOptions({
@@ -504,12 +496,10 @@
 			await importLibrary('maps');
 			await importLibrary('marker');
 
-			const fixesInOrder = [...data.fixes].reverse();
-
-			// Calculate center and bounds
+			// Use path data for bounds calculation (compressed but covers full flight)
 			const bounds = new google.maps.LatLngBounds();
-			fixesInOrder.forEach((fix) => {
-				bounds.extend({ lat: fix.latitude, lng: fix.longitude });
+			data.path.forEach((point) => {
+				bounds.extend({ lat: point.latitude, lng: point.longitude });
 			});
 
 			const center = bounds.getCenter();
@@ -533,8 +523,8 @@
 			// Fit bounds
 			map.fitBounds(bounds);
 
-			// Create gradient polyline segments
-			flightPathSegments = createGradientPolylines(fixesInOrder, map);
+			// Create gradient polyline segments from compressed path
+			flightPathSegments = createGradientPolylines(data.path, map);
 
 			// Add zoom listener to update arrow scales
 			map.addListener('zoom_changed', () => {
@@ -546,9 +536,12 @@
 
 			// Wait for map to be ready before adding markers
 			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Add takeoff marker (green)
-				if (fixesInOrder.length > 0) {
-					const first = fixesInOrder[0];
+				// Use fixes for detailed markers (takeoff, landing, directional arrows)
+				const fixesInOrder = [...data.fixes].reverse();
+
+				// Add takeoff marker (green) - use path for position
+				if (data.path.length > 0) {
+					const first = data.path[0];
 					const takeoffPin = document.createElement('div');
 					takeoffPin.innerHTML = `
 						<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
@@ -562,9 +555,9 @@
 					});
 				}
 
-				// Add landing marker if flight is complete
-				if (data.flight.landingTime && fixesInOrder.length > 0) {
-					const last = fixesInOrder[fixesInOrder.length - 1];
+				// Add landing marker if flight is complete - use path for position
+				if (data.flight.landingTime && data.path.length > 0) {
+					const last = data.path[data.path.length - 1];
 					const landingPin = document.createElement('div');
 					landingPin.innerHTML = `
 						<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
@@ -578,7 +571,7 @@
 					});
 				}
 
-				// Add directional arrow markers at selected intervals
+				// Add directional arrow markers at selected intervals (uses full fixes for detail)
 				addFixMarkers(fixesInOrder);
 			});
 		} catch (error) {

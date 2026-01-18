@@ -219,9 +219,8 @@ export class AircraftMarkerManager {
 		const aircraftIcon = document.createElement('div');
 		aircraftIcon.className = 'aircraft-icon';
 
-		// Calculate color based on active status and altitude
+		// Calculate color based on active status and altitude (used for label)
 		const markerColor = getMarkerColor(fix.active, fix.altitudeMslFeet);
-		aircraftIcon.style.background = markerColor;
 
 		// Create SVG airplane icon that's more visible and oriented correctly
 		aircraftIcon.innerHTML = `
@@ -358,7 +357,6 @@ export class AircraftMarkerManager {
 			if (aircraftIcon) {
 				const track = fix.trackDegrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
-				aircraftIcon.style.background = markerColor;
 				logger.debug('[MARKER] Updated icon rotation to: {track} degrees', { track });
 			}
 
