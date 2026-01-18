@@ -442,8 +442,9 @@ export class AircraftMarkerManager {
 		}
 
 		// Apply transform to the entire marker content
+		// Use 'center top' origin so scaling preserves the aircraft icon position at the geographic coordinate
 		markerContent.style.transform = `scale(${scale})`;
-		markerContent.style.transformOrigin = 'center bottom'; // Anchor at bottom center
+		markerContent.style.transformOrigin = 'center top';
 	}
 
 	/**

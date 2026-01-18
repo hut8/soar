@@ -1103,7 +1103,10 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
-		transform-origin: center center; /* Center the marker on the aircraft position */
+		/* Offset the marker so the aircraft icon center aligns with the geographic position.
+		   The icon is 24px tall (center at 12px from top). Without offset, the anchor is at
+		   the center of the entire marker (icon + label), causing misalignment with the trail. */
+		transform-origin: center top;
 		transition: all 0.2s ease;
 	}
 
@@ -1120,6 +1123,9 @@
 		color: #1e293b;
 		transition: all 0.2s ease;
 		position: relative;
+		/* Position the icon so its center is at the marker's anchor point (top of .aircraft-marker).
+		   The icon is 24px tall, so we shift it up by 12px to center it on the anchor. */
+		margin-top: -12px;
 	}
 
 	:global(.aircraft-icon svg) {
