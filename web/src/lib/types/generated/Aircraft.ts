@@ -2,7 +2,6 @@
 import type { JsonValue } from '../../../../../bindings/serde_json/JsonValue';
 import type { AdsbEmitterCategory } from './AdsbEmitterCategory';
 import type { AircraftType } from './AircraftType';
-import type { Fix } from './Fix';
 
 /**
  * Complete aircraft information with device and latest fix
@@ -51,5 +50,4 @@ export type Aircraft = {
 	 * Current fix (latest position data for this aircraft)
 	 */
 	currentFix: JsonValue | null;
-	fixes: Array<Fix> | null;
 };

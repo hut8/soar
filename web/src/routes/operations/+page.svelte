@@ -262,14 +262,14 @@
 				if (map) {
 					aircraftMarkerManager.updateMarkerFromAircraft(event.aircraft);
 				}
-			} else if (event.type === 'fix_added') {
-				logger.debug('Fix added to aircraft: {aircraftId} {fix}', {
+			} else if (event.type === 'fix_received') {
+				logger.debug('Fix received for aircraft: {aircraftId} {fix}', {
 					aircraftId: event.aircraft.id,
 					fix: event.fix
 				});
-				// Update the aircraft marker immediately when a new fix is added
+				// Update the aircraft marker immediately when a new fix is received
 				if (map && event.fix) {
-					aircraftMarkerManager.updateMarkerFromDevice(event.aircraft, event.fix);
+					aircraftMarkerManager.updateMarker(event.aircraft, event.fix);
 				}
 			}
 		});

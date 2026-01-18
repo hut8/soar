@@ -191,9 +191,8 @@
 					if (isAircraftItem(item)) {
 						const aircraft = item.data;
 
-						// Get latest fix from currentFix or fall back to fixes array
-						// currentFix is JsonValue, fixes array contains Fix objects
-						const latestFix = aircraft.fixes?.[0] || aircraft.currentFix;
+						// Get latest fix from currentFix (API data has currentFix, not latestFix)
+						const latestFix = aircraft.currentFix;
 
 						// Skip if no fix data available
 						if (!latestFix) continue;
@@ -430,26 +429,16 @@
 				return;
 			}
 
-			// Add fix to fixes array
-			if (aircraft.fixes) {
-				aircraft.fixes.unshift(fix);
-				// Limit to 100 fixes
-				if (aircraft.fixes.length > 100) {
-					aircraft.fixes = aircraft.fixes.slice(0, 100);
-				}
-			} else {
-				aircraft.fixes = [fix];
-			}
-
-			// Update aircraft entity
+			// Update aircraft entity with the new fix
+			// The latestFix is tracked by the AircraftRegistry
 			updateAircraftPosition(aircraft, fix);
 		} else if (event.type === 'aircraft_received') {
-			// Full aircraft data with recent fixes
+			// Full aircraft data
 			const aircraft = event.aircraft;
 			aircraftData.set(aircraft.id, aircraft);
 
-			// Update entity if aircraft has currentFix or fixes
-			const latestFix = aircraft.fixes?.[0] || aircraft.currentFix;
+			// Update entity if aircraft has currentFix
+			const latestFix = aircraft.currentFix;
 			if (latestFix) {
 				updateAircraftPosition(aircraft, latestFix as Fix);
 			}

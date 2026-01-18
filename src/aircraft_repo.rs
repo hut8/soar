@@ -217,21 +217,18 @@ impl AircraftRepository {
     /// Get or insert an aircraft for fix processing
     /// This method is optimized for the high-frequency fix processing path:
     /// - If aircraft doesn't exist, creates it with all available fields from the packet
-    /// - If aircraft exists, atomically updates all packet-derived fields in one operation:
-    ///   - last_fix_at (always)
+    /// - If aircraft exists, atomically updates APRS-specific metadata fields:
     ///   - aircraft_type_ogn, icao_model_code, adsb_emitter_category, tracker_device_type, registration
     /// - Always returns the aircraft in one atomic operation
     ///
-    /// This avoids both no-op updates and separate update tasks for modified fields
+    /// Note: latitude, longitude, and last_fix_at are updated in fixes_repo.insert()
+    /// which is the common endpoint for all data sources (APRS, Beast, SBS).
     #[tracing::instrument(skip(self, packet_fields), fields(%address, ?address_type))]
     pub async fn aircraft_for_fix(
         &self,
         address: i32,
         address_type: AddressType,
-        fix_timestamp: DateTime<Utc>,
         packet_fields: AircraftPacketFields,
-        latitude: f64,
-        longitude: f64,
     ) -> Result<AircraftModel> {
         let pool = self.pool.clone();
 
@@ -266,7 +263,7 @@ impl AircraftRepository {
                 pilot_name: None,
                 home_base_airport_ident: None,
                 aircraft_type_ogn: packet_fields.aircraft_type,
-                last_fix_at: Some(fix_timestamp),
+                last_fix_at: None, // Updated in fixes_repo.insert()
                 club_id: None,
                 icao_model_code: packet_fields.icao_model_code.clone(),
                 adsb_emitter_category: packet_fields.adsb_emitter_category,
@@ -297,12 +294,14 @@ impl AircraftRepository {
                 "aircraft.registration".to_string()
             };
 
+            // Note: latitude, longitude, and last_fix_at are updated in fixes_repo.insert()
+            // which is called at the end of the pipeline for all data sources (APRS, Beast, SBS).
+            // This function only updates APRS-specific metadata fields.
             let model = diesel::insert_into(aircraft::table)
                 .values(&new_aircraft)
                 .on_conflict((aircraft::address_type, aircraft::address))
                 .do_update()
                 .set((
-                    aircraft::last_fix_at.eq(fix_timestamp),
                     aircraft::aircraft_type_ogn.eq(packet_fields.aircraft_type),
                     // Only update icao_model_code if current value is NULL (preserve data from authoritative sources)
                     aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(aircraft.icao_model_code, excluded.icao_model_code)")),
@@ -317,8 +316,6 @@ impl AircraftRepository {
                     )),
                     aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>(&registration_sql)),
                     aircraft::country_code.eq(&country_code),
-                    aircraft::latitude.eq(latitude),
-                    aircraft::longitude.eq(longitude),
                 ))
                 .returning(AircraftModel::as_returning())
                 .get_result(&mut conn)?;

@@ -194,8 +194,7 @@
 				latitude: null,
 				longitude: null,
 				adsbEmitterCategory: null,
-				currentFix: null,
-				fixes: null
+				currentFix: null
 			},
 			fix
 		);
