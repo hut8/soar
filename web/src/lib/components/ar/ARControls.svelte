@@ -27,6 +27,12 @@
 		settings.rangeNm = Math.max(MIN_RANGE, settings.rangeNm - STEP);
 	}
 
+	// Slider thumb and container padding - used to align indicator with thumb position
+	const SLIDER_PADDING_PX = 10; // Padding on each side of the slider track
+	const THUMB_WIDTH_PX = 20; // Width of the slider thumb
+	// Thumb width as fraction of percentage range (20px over 100% = 0.2)
+	const THUMB_FRACTION = THUMB_WIDTH_PX / 100;
+
 	// Calculate percentage position for a value
 	function valuePosition(value: number): number {
 		return ((value - MIN_RANGE) / (MAX_RANGE - MIN_RANGE)) * 100;
@@ -34,6 +40,11 @@
 
 	// Current value position as a derived value
 	const currentPosition = $derived(valuePosition(settings.rangeNm));
+
+	// Calculate the left offset for the indicator to align with slider thumb center
+	const indicatorLeftOffset = $derived(
+		`calc(${currentPosition}% + ${SLIDER_PADDING_PX}px - ${currentPosition * THUMB_FRACTION}px)`
+	);
 </script>
 
 <div class="ar-controls">
@@ -54,10 +65,7 @@
 						class="range-slider"
 					/>
 					<!-- Current value indicator line -->
-					<div
-						class="current-indicator"
-						style:left="calc({currentPosition}% + 10px - {currentPosition * 0.2}px)"
-					>
+					<div class="current-indicator" style:left={indicatorLeftOffset}>
 						<div class="indicator-line"></div>
 						<div class="indicator-label">{settings.rangeNm} nm</div>
 					</div>

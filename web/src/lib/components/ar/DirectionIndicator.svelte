@@ -2,6 +2,10 @@
 	import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/svelte';
 	import type { ARAircraftPosition, ARDeviceOrientation, ARSettings } from '$lib/ar/types';
 
+	// Hysteresis factor to prevent flickering at FOV edges (0.9 = 90% of FOV edge)
+	// Using a slightly smaller threshold than actual FOV prevents rapid on/off toggling
+	const FOV_EDGE_HYSTERESIS = 0.9;
+
 	let { targetAircraft, deviceOrientation, settings, onDismiss } = $props<{
 		targetAircraft: ARAircraftPosition;
 		deviceOrientation: ARDeviceOrientation;
@@ -31,9 +35,9 @@
 		const hFovHalf = settings.fovHorizontal / 2;
 		const vFovHalf = settings.fovVertical / 2;
 
-		// Add hysteresis to prevent flickering (use slightly larger threshold for "exit")
-		const hThreshold = hFovHalf * 0.9; // Slightly inside FOV edge
-		const vThreshold = vFovHalf * 0.9;
+		// Add hysteresis to prevent flickering (use slightly smaller threshold for visibility)
+		const hThreshold = hFovHalf * FOV_EDGE_HYSTERESIS;
+		const vThreshold = vFovHalf * FOV_EDGE_HYSTERESIS;
 
 		// Check if aircraft is within horizontal FOV
 		const withinHorizontalFov = Math.abs(rb) <= hThreshold;

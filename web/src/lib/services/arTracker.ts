@@ -5,6 +5,14 @@ import type { ARDeviceOrientation, ARUserPosition } from '$lib/ar/types';
 import type { DeviceOrientationEventWithCompass } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
+/**
+ * Check if deviceorientationabsolute event is supported.
+ * This event provides compass-calibrated heading on Android devices.
+ */
+function hasDeviceOrientationAbsolute(): boolean {
+	return typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window;
+}
+
 const logger = getLogger(['soar', 'ARTracker']);
 
 export type ARTrackerEvent =
@@ -143,10 +151,11 @@ export class ARTracker {
 
 		// Try deviceorientationabsolute first (better for Android compass)
 		// Fall back to deviceorientation if absolute is not available
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const win = window as any;
-		if ('ondeviceorientationabsolute' in win) {
-			win.addEventListener('deviceorientationabsolute', this.handleOrientationEvent);
+		if (hasDeviceOrientationAbsolute()) {
+			window.addEventListener(
+				'deviceorientationabsolute' as keyof WindowEventMap,
+				this.handleOrientationEvent as EventListener
+			);
 			this.orientationEventType = 'deviceorientationabsolute';
 			this.hasAbsoluteOrientation = true;
 			logger.debug('Using deviceorientationabsolute for compass');
@@ -201,8 +210,10 @@ export class ARTracker {
 
 		// Remove the correct event listener type
 		if (this.orientationEventType) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(window as any).removeEventListener(this.orientationEventType, this.handleOrientationEvent);
+			window.removeEventListener(
+				this.orientationEventType as keyof WindowEventMap,
+				this.handleOrientationEvent as EventListener
+			);
 			this.orientationEventType = null;
 		}
 
