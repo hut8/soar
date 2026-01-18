@@ -31,6 +31,7 @@
 	import {
 		saveMapState,
 		loadMapState,
+		updateUrlWithBounds,
 		saveAreaTrackerState,
 		loadAreaTrackerState,
 		saveMapType,
@@ -184,7 +185,7 @@
 		logger.debug('[MAP TYPE] Toggled to: {mapType}', { mapType });
 	}
 
-	// Helper to save current map state
+	// Helper to save current map state to localStorage and URL
 	function saveCurrentMapState(): void {
 		if (!map) return;
 		const center = map.getCenter();
@@ -195,6 +196,8 @@
 			},
 			map.getZoom() || 4
 		);
+		// Also update URL with bounds for sharing
+		updateUrlWithBounds(map);
 	}
 
 	// Reactive effects for settings changes
@@ -377,7 +380,7 @@
 		}
 
 		// Load saved map state or use continental US as fallback
-		const mapState = loadMapState($page.url.searchParams);
+		const loadedMapState = loadMapState($page.url.searchParams);
 
 		// Load saved map type preference
 		mapType = loadMapType();
@@ -385,8 +388,8 @@
 		// Initialize map with saved or default state
 		map = new google.maps.Map(mapContainer, {
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
-			center: mapState.center,
-			zoom: mapState.zoom,
+			center: loadedMapState.state.center,
+			zoom: loadedMapState.state.zoom,
 			mapTypeId:
 				mapType === 'satellite'
 					? window.google.maps.MapTypeId.SATELLITE
@@ -408,6 +411,16 @@
 		aircraftMarkerManager.setPositionFixWindow(currentSettings.positionFixWindow);
 		clusterMarkerManager.setMap(map);
 		viewportController.setMap(map);
+
+		// If bounds were loaded from URL, fit to them
+		if (loadedMapState.bounds) {
+			map.fitBounds({
+				north: loadedMapState.bounds.north,
+				south: loadedMapState.bounds.south,
+				west: loadedMapState.bounds.west,
+				east: loadedMapState.bounds.east
+			});
+		}
 
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {

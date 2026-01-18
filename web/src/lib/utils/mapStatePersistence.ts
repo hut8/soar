@@ -26,6 +26,18 @@ export interface MapState {
 	zoom: number;
 }
 
+export interface MapBounds {
+	north: number;
+	south: number;
+	west: number;
+	east: number;
+}
+
+export interface LoadedMapState {
+	state: MapState;
+	bounds?: MapBounds;
+}
+
 export type MapType = 'satellite' | 'roadmap';
 
 /**
@@ -45,13 +57,79 @@ export function saveMapState(center: { lat: number; lng: number }, zoom: number)
 }
 
 /**
- * Load map state from URL params or localStorage
- * @param urlParams - URL search params to check for lat/lng/zoom
- * @returns MapState with center and zoom
+ * Update URL with current map bounds
+ * @param map - Google Maps instance to get bounds from
  */
-export function loadMapState(urlParams?: URLSearchParams): MapState {
-	// First check URL parameters
+export function updateUrlWithBounds(map: google.maps.Map): void {
+	if (!browser) return;
+
+	const bounds = map.getBounds();
+	if (!bounds) return;
+
+	const ne = bounds.getNorthEast();
+	const sw = bounds.getSouthWest();
+
+	const url = new URL(window.location.href);
+	url.searchParams.set('north', ne.lat().toFixed(6));
+	url.searchParams.set('south', sw.lat().toFixed(6));
+	url.searchParams.set('west', sw.lng().toFixed(6));
+	url.searchParams.set('east', ne.lng().toFixed(6));
+
+	// Remove old lat/lng/zoom params if present
+	url.searchParams.delete('lat');
+	url.searchParams.delete('lng');
+	url.searchParams.delete('zoom');
+
+	history.replaceState(null, '', url.toString());
+	logger.debug('[MAP] Updated URL with bounds: {bounds}', {
+		bounds: { north: ne.lat(), south: sw.lat(), west: sw.lng(), east: ne.lng() }
+	});
+}
+
+/**
+ * Load map state from URL params or localStorage
+ * @param urlParams - URL search params to check for bounds or lat/lng/zoom
+ * @returns LoadedMapState with center, zoom, and optional bounds
+ */
+export function loadMapState(urlParams?: URLSearchParams): LoadedMapState {
+	// First check URL parameters for bounds (north, south, west, east)
 	if (browser && urlParams) {
+		const north = urlParams.get('north');
+		const south = urlParams.get('south');
+		const west = urlParams.get('west');
+		const east = urlParams.get('east');
+
+		if (north && south && west && east) {
+			const parsedNorth = parseFloat(north);
+			const parsedSouth = parseFloat(south);
+			const parsedWest = parseFloat(west);
+			const parsedEast = parseFloat(east);
+
+			if (!isNaN(parsedNorth) && !isNaN(parsedSouth) && !isNaN(parsedWest) && !isNaN(parsedEast)) {
+				logger.debug('[MAP] Using URL bounds parameters: {bounds}', {
+					bounds: {
+						north: parsedNorth,
+						south: parsedSouth,
+						west: parsedWest,
+						east: parsedEast
+					}
+				});
+				// Return center of bounds with bounds for fitBounds
+				const centerLat = (parsedNorth + parsedSouth) / 2;
+				const centerLng = (parsedWest + parsedEast) / 2;
+				return {
+					state: { center: { lat: centerLat, lng: centerLng }, zoom: 10 },
+					bounds: {
+						north: parsedNorth,
+						south: parsedSouth,
+						west: parsedWest,
+						east: parsedEast
+					}
+				};
+			}
+		}
+
+		// Check for legacy lat/lng/zoom parameters
 		const lat = urlParams.get('lat');
 		const lng = urlParams.get('lng');
 		const zoom = urlParams.get('zoom');
@@ -65,14 +143,14 @@ export function loadMapState(urlParams?: URLSearchParams): MapState {
 				logger.debug('[MAP] Using URL parameters: {params}', {
 					params: { lat: parsedLat, lng: parsedLng, zoom: parsedZoom }
 				});
-				return { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom };
+				return { state: { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom } };
 			}
 		}
 	}
 
 	// Fall back to localStorage
 	if (!browser) {
-		return { center: CONUS_CENTER, zoom: 4 };
+		return { state: { center: CONUS_CENTER, zoom: 4 } };
 	}
 
 	try {
@@ -80,14 +158,14 @@ export function loadMapState(urlParams?: URLSearchParams): MapState {
 		if (saved) {
 			const state: MapState = JSON.parse(saved);
 			logger.debug('[MAP] Loaded saved map state: {state}', { state });
-			return state;
+			return { state };
 		}
 	} catch (e) {
 		logger.warn('[MAP] Failed to load map state from localStorage: {error}', { error: e });
 	}
 
 	logger.debug('[MAP] Using default CONUS center');
-	return { center: CONUS_CENTER, zoom: 4 };
+	return { state: { center: CONUS_CENTER, zoom: 4 } };
 }
 
 /**
