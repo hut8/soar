@@ -27,17 +27,30 @@
 		settings.rangeNm = Math.max(MIN_RANGE, settings.rangeNm - STEP);
 	}
 
-	// Calculate percentage position for a tick mark
-	function tickPosition(value: number): number {
+	// Slider thumb and container padding - used to align indicator with thumb position
+	const SLIDER_PADDING_PX = 10; // Padding on each side of the slider track
+	const THUMB_WIDTH_PX = 20; // Width of the slider thumb
+	// Thumb width as fraction of percentage range (20px over 100% = 0.2)
+	const THUMB_FRACTION = THUMB_WIDTH_PX / 100;
+
+	// Calculate percentage position for a value
+	function valuePosition(value: number): number {
 		return ((value - MIN_RANGE) / (MAX_RANGE - MIN_RANGE)) * 100;
 	}
+
+	// Current value position as a derived value
+	const currentPosition = $derived(valuePosition(settings.rangeNm));
+
+	// Calculate the left offset for the indicator to align with slider thumb center
+	const indicatorLeftOffset = $derived(
+		`calc(${currentPosition}% + ${SLIDER_PADDING_PX}px - ${currentPosition * THUMB_FRACTION}px)`
+	);
 </script>
 
 <div class="ar-controls">
 	<div class="controls-panel">
 		<!-- Range control -->
 		<div class="control-group">
-			<label class="control-label">Range: {settings.rangeNm} nm</label>
 			<div class="range-buttons">
 				<button class="btn-icon" onclick={decreaseRange} disabled={settings.rangeNm <= MIN_RANGE}>
 					<Minus size={20} />
@@ -51,9 +64,18 @@
 						bind:value={settings.rangeNm}
 						class="range-slider"
 					/>
+					<!-- Current value indicator line -->
+					<div class="current-indicator" style:left={indicatorLeftOffset}>
+						<div class="indicator-line"></div>
+						<div class="indicator-label">{settings.rangeNm} nm</div>
+					</div>
 					<div class="tick-marks">
 						{#each TICK_MARKS as tick (tick)}
-							<div class="tick" style:left="{tickPosition(tick)}%">
+							<div
+								class="tick"
+								class:active={tick === settings.rangeNm}
+								style:left="{valuePosition(tick)}%"
+							>
 								<span class="tick-label">{tick}</span>
 							</div>
 						{/each}
@@ -105,12 +127,6 @@
 		gap: 0.5rem;
 	}
 
-	.control-label {
-		color: white;
-		font-size: 0.875rem;
-		font-weight: 600;
-	}
-
 	.range-buttons {
 		display: flex;
 		align-items: center;
@@ -120,7 +136,8 @@
 	.slider-container {
 		flex: 1;
 		position: relative;
-		padding-bottom: 1.25rem;
+		padding-bottom: 1.5rem;
+		padding-top: 1.75rem;
 	}
 
 	.range-slider {
@@ -143,9 +160,39 @@
 		cursor: pointer;
 	}
 
+	/* Current value indicator */
+	.current-indicator {
+		position: absolute;
+		top: 0;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: none;
+	}
+
+	.indicator-line {
+		width: 2px;
+		height: 50px;
+		background: linear-gradient(to bottom, #22c55e, #22c55e 80%, transparent);
+		border-radius: 1px;
+	}
+
+	.indicator-label {
+		position: absolute;
+		top: -2px;
+		background: #22c55e;
+		color: black;
+		font-size: 0.75rem;
+		font-weight: 700;
+		padding: 2px 6px;
+		border-radius: 4px;
+		white-space: nowrap;
+	}
+
 	.tick-marks {
 		position: absolute;
-		top: 8px;
+		top: calc(1.75rem + 8px);
 		left: 10px;
 		right: 10px;
 		height: 20px;
@@ -166,10 +213,20 @@
 		background: rgba(255, 255, 255, 0.4);
 	}
 
+	.tick.active::before {
+		background: #22c55e;
+		width: 2px;
+	}
+
 	.tick-label {
 		color: rgba(255, 255, 255, 0.6);
 		font-size: 0.625rem;
 		margin-top: 2px;
+	}
+
+	.tick.active .tick-label {
+		color: #22c55e;
+		font-weight: 600;
 	}
 
 	.btn-icon {

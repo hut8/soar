@@ -5,6 +5,14 @@ import type { ARDeviceOrientation, ARUserPosition } from '$lib/ar/types';
 import type { DeviceOrientationEventWithCompass } from '$lib/types';
 import { getLogger } from '$lib/logging';
 
+/**
+ * Check if deviceorientationabsolute event is supported.
+ * This event provides compass-calibrated heading on Android devices.
+ */
+function hasDeviceOrientationAbsolute(): boolean {
+	return typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window;
+}
+
 const logger = getLogger(['soar', 'ARTracker']);
 
 export type ARTrackerEvent =
@@ -115,6 +123,10 @@ export class ARTracker {
 		);
 	}
 
+	// Track whether we have absolute orientation support
+	private hasAbsoluteOrientation = false;
+	private orientationEventType: 'deviceorientationabsolute' | 'deviceorientation' | null = null;
+
 	/**
 	 * Request device orientation permission (iOS 13+) and start tracking
 	 */
@@ -137,25 +149,43 @@ export class ARTracker {
 			}
 		}
 
-		window.addEventListener('deviceorientation', this.handleOrientationEvent);
+		// Try deviceorientationabsolute first (better for Android compass)
+		// Fall back to deviceorientation if absolute is not available
+		if (hasDeviceOrientationAbsolute()) {
+			window.addEventListener(
+				'deviceorientationabsolute' as keyof WindowEventMap,
+				this.handleOrientationEvent as EventListener
+			);
+			this.orientationEventType = 'deviceorientationabsolute';
+			this.hasAbsoluteOrientation = true;
+			logger.debug('Using deviceorientationabsolute for compass');
+		} else {
+			window.addEventListener('deviceorientation', this.handleOrientationEvent);
+			this.orientationEventType = 'deviceorientation';
+			logger.debug('Using deviceorientation for compass (absolute not available)');
+		}
 	}
 
 	private handleOrientationEvent = (event: DeviceOrientationEventWithCompass): void => {
-		let heading = event.alpha ?? 0;
+		let heading: number;
 
 		// iOS provides webkitCompassHeading (true compass heading)
-		if (event.webkitCompassHeading !== undefined) {
+		if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
 			heading = event.webkitCompassHeading;
-		} else if (event.absolute) {
-			// Android: convert alpha to compass heading
-			heading = 360 - heading;
+		} else if (event.absolute || this.hasAbsoluteOrientation) {
+			// Android with absolute orientation: convert alpha to compass heading
+			// alpha is measured counter-clockwise from north, compass heading is clockwise
+			heading = (360 - (event.alpha ?? 0)) % 360;
+		} else {
+			// Fallback: use raw alpha (may be inaccurate)
+			heading = (360 - (event.alpha ?? 0)) % 360;
 		}
 
 		this.currentOrientation = {
 			heading,
 			pitch: event.beta ?? 0,
 			roll: event.gamma ?? 0,
-			absolute: event.absolute
+			absolute: event.absolute || this.hasAbsoluteOrientation
 		};
 
 		this.notify({
@@ -178,10 +208,18 @@ export class ARTracker {
 			this.watchId = null;
 		}
 
-		window.removeEventListener('deviceorientation', this.handleOrientationEvent);
+		// Remove the correct event listener type
+		if (this.orientationEventType) {
+			window.removeEventListener(
+				this.orientationEventType as keyof WindowEventMap,
+				this.handleOrientationEvent as EventListener
+			);
+			this.orientationEventType = null;
+		}
 
 		this.currentOrientation = null;
 		this.currentPosition = null;
+		this.hasAbsoluteOrientation = false;
 	}
 
 	public getCurrentPosition(): ARUserPosition | null {

@@ -182,283 +182,298 @@
 	<!-- Google Analytics is loaded dynamically in onMount for production only -->
 </svelte:head>
 
-<div class="flex h-full min-h-screen flex-col">
-	<AppBar
-		class="relative z-[70] bg-gradient-to-br from-orange-300 to-orange-500 p-1 dark:bg-gradient-to-br dark:from-red-950 dark:to-red-800"
-	>
-		<LoadingBar />
-		<AppBar.Toolbar class="grid grid-cols-[auto_1fr_auto] gap-3 p-0">
-			<AppBar.Lead>
-				<a href={base} class="relative z-10 btn preset-filled-primary-500 btn-sm">
-					<Plane />
-					Glider.flights
-				</a>
-			</AppBar.Lead>
-			<AppBar.Headline class="flex items-center justify-center">
-				<!-- WebSocket Status Indicator -->
-				<div class="hidden lg:flex">
-					{#if $websocketStatus.connected}
-						<div
-							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-							title="Live - WebSocket connected{$debugStatus.operationsPageActive
-								? ', Operations page active'
-								: ''}"
-						>
-							<Wifi size={16} />
-							<span class="text-xs font-medium">Live</span>
-							<RadarLoader />
-						</div>
-					{:else if $websocketStatus.reconnecting}
-						<div
-							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-warning-700 shadow-sm dark:bg-warning-500/20 dark:text-warning-400"
-						>
-							<RotateCcw size={16} class="animate-spin" />
-							<span class="text-xs font-medium">Reconnecting</span>
-						</div>
-					{:else if $websocketStatus.error}
-						<div
-							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-error-700 shadow-sm dark:bg-error-500/20 dark:text-error-400"
-							title={$websocketStatus.error}
-						>
-							<AlertCircle size={16} />
-							<span class="text-xs font-medium">Offline</span>
-						</div>
-					{:else}
-						<div
-							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-surface-700 shadow-sm dark:bg-surface-400/20 dark:text-surface-400"
-						>
-							<WifiOff size={16} />
-							<span class="text-xs font-medium">Disconnected</span>
-						</div>
-					{/if}
-				</div>
-			</AppBar.Headline>
-			<AppBar.Trail class="justify-end">
-				<div class="relative z-10 flex items-center gap-4">
-					<!-- Desktop Navigation -->
-					<nav class="hidden space-x-4 md:flex">
-						{#if hasClub}
-							<a href={clubOpsPath} class="btn preset-filled-success-500 btn-sm">
-								<Radar /> Club Ops
-							</a>
-						{/if}
-
-						<!-- Desktop Hamburger Menu -->
-						<div class="desktop-menu relative">
-							<button
-								class="desktop-menu-button preset-tonal-surface-500 btn btn-sm"
-								onclick={(e) => {
-									e.stopPropagation();
-									showDesktopMenu = !showDesktopMenu;
-								}}
+<!-- AR page gets full-screen treatment without app bar -->
+{#if page.route.id === '/ar'}
+	{@render children?.()}
+{:else}
+	<div class="flex h-full min-h-screen flex-col">
+		<AppBar
+			class="relative z-[70] bg-gradient-to-br from-orange-300 to-orange-500 p-1 dark:bg-gradient-to-br dark:from-red-950 dark:to-red-800"
+		>
+			<LoadingBar />
+			<AppBar.Toolbar class="grid grid-cols-[auto_1fr_auto] gap-3 p-0">
+				<AppBar.Lead>
+					<a href={base} class="relative z-10 btn preset-filled-primary-500 btn-sm">
+						<Plane />
+						Glider.flights
+					</a>
+				</AppBar.Lead>
+				<AppBar.Headline class="flex items-center justify-center">
+					<!-- WebSocket Status Indicator -->
+					<div class="hidden lg:flex">
+						{#if $websocketStatus.connected}
+							<div
+								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
+								title="Live - WebSocket connected{$debugStatus.operationsPageActive
+									? ', Operations page active'
+									: ''}"
 							>
-								<Menu size={18} />
-							</button>
+								<Wifi size={16} />
+								<span class="text-xs font-medium">Live</span>
+								<RadarLoader />
+							</div>
+						{:else if $websocketStatus.reconnecting}
+							<div
+								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-warning-700 shadow-sm dark:bg-warning-500/20 dark:text-warning-400"
+							>
+								<RotateCcw size={16} class="animate-spin" />
+								<span class="text-xs font-medium">Reconnecting</span>
+							</div>
+						{:else if $websocketStatus.error}
+							<div
+								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-error-700 shadow-sm dark:bg-error-500/20 dark:text-error-400"
+								title={$websocketStatus.error}
+							>
+								<AlertCircle size={16} />
+								<span class="text-xs font-medium">Offline</span>
+							</div>
+						{:else}
+							<div
+								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-surface-700 shadow-sm dark:bg-surface-400/20 dark:text-surface-400"
+							>
+								<WifiOff size={16} />
+								<span class="text-xs font-medium">Disconnected</span>
+							</div>
+						{/if}
+					</div>
+				</AppBar.Headline>
+				<AppBar.Trail class="justify-end">
+					<div class="relative z-10 flex items-center gap-4">
+						<!-- Desktop Navigation -->
+						<nav class="hidden space-x-4 md:flex">
+							{#if hasClub}
+								<a href={clubOpsPath} class="btn preset-filled-success-500 btn-sm">
+									<Radar /> Club Ops
+								</a>
+							{/if}
 
-							{#if showDesktopMenu}
-								<div class="absolute top-12 left-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
-									<div class="space-y-1">
-										<a
-											href={clubsPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<Users size={16} /> Clubs
-										</a>
-										<a
-											href={aircraftPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<Plane size={16} /> Aircraft
-										</a>
-										<a
-											href={receiversPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<Antenna size={16} /> Receivers
-										</a>
-										<a
-											href={airportsPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<MapPin size={16} /> Airports
-										</a>
-										<a
-											href={flightsPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<PlaneTakeoff size={16} /> Flights
-										</a>
-										{#if $auth.isAuthenticated}
+							<!-- Desktop Hamburger Menu -->
+							<div class="desktop-menu relative">
+								<button
+									class="desktop-menu-button preset-tonal-surface-500 btn btn-sm"
+									onclick={(e) => {
+										e.stopPropagation();
+										showDesktopMenu = !showDesktopMenu;
+									}}
+								>
+									<Menu size={18} />
+								</button>
+
+								{#if showDesktopMenu}
+									<div
+										class="absolute top-12 left-0 z-10 w-48 card preset-filled-primary-50-950 p-2"
+									>
+										<div class="space-y-1">
 											<a
-												href={watchlistPath}
+												href={clubsPath}
 												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
 												onclick={() => (showDesktopMenu = false)}
 											>
-												<Eye size={16} /> Watchlist
+												<Users size={16} /> Clubs
 											</a>
-										{/if}
-										<a
-											href={arPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<Globe size={16} /> AR
-										</a>
-										<a
-											href={infoPath}
-											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-											onclick={() => (showDesktopMenu = false)}
-										>
-											<Info size={16} /> Info
-										</a>
-									</div>
-								</div>
-							{/if}
-						</div>
-
-						<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
-							<Radar /> Operations
-						</a>
-						<!-- 3D Globe link temporarily disabled
-						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
-							<Globe /> 3D Globe
-						</a>
-						-->
-					</nav>
-
-					<!-- Backend Toggle (Dev Only) -->
-					{#if dev}
-						<button
-							class="preset-tonal-surface-500 btn btn-sm font-mono font-bold"
-							onclick={() => backendMode.toggle()}
-							title={$backendMode === 'dev'
-								? 'Using local backend (localhost:1337) - Click to switch to production'
-								: 'Using production backend (glider.flights) - Click to switch to local'}
-						>
-							{$backendMode === 'dev' ? 'D' : 'P'}
-						</button>
-					{/if}
-
-					<!-- Theme Toggle -->
-					<button
-						class="preset-tonal-surface-500 btn btn-sm"
-						onclick={() => theme.toggle()}
-						title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-					>
-						{#if $theme === 'dark'}
-							<Sun size={18} />
-						{:else}
-							<Moon size={18} />
-						{/if}
-					</button>
-
-					<!-- Desktop Auth -->
-					<div class="hidden md:flex">
-						{#if $auth.isAuthenticated && $auth.user}
-							<div class="user-menu relative">
-								<button
-									class="btn hidden preset-filled-primary-500 btn-sm sm:inline-flex"
-									onclick={() => (showUserMenu = !showUserMenu)}
-								>
-									<User size={16} />
-									{$auth.user.firstName}
-								</button>
-
-								{#if showUserMenu}
-									<div
-										class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2"
-									>
-										<div class="space-y-1">
-											<div class="px-3 py-2 text-sm">
-												<div class="font-medium">
-													{$auth.user.firstName}
-													{$auth.user.lastName}
-												</div>
-												<div class="text-surface-600-300-token">{$auth.user.email}</div>
-											</div>
-											<hr class="!my-2" />
 											<a
-												href={profilePath}
+												href={aircraftPath}
 												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
 											>
-												<User size={16} /> Profile
+												<Plane size={16} /> Aircraft
 											</a>
-											<button
+											<a
+												href={receiversPath}
 												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-												onclick={handleLogout}
+												onclick={() => (showDesktopMenu = false)}
 											>
-												Sign out
-											</button>
+												<Antenna size={16} /> Receivers
+											</a>
+											<a
+												href={airportsPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<MapPin size={16} /> Airports
+											</a>
+											<a
+												href={flightsPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<PlaneTakeoff size={16} /> Flights
+											</a>
+											{#if $auth.isAuthenticated}
+												<a
+													href={watchlistPath}
+													class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+													onclick={() => (showDesktopMenu = false)}
+												>
+													<Eye size={16} /> Watchlist
+												</a>
+											{/if}
+											<a
+												href={arPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<Globe size={16} /> AR
+											</a>
+											<a
+												href={infoPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<Info size={16} /> Info
+											</a>
 										</div>
 									</div>
 								{/if}
 							</div>
-						{:else}
-							<div class="flex space-x-2">
-								<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
-								<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
-									><SignUp /> Sign Up</a
-								>
-							</div>
-						{/if}
-					</div>
 
-					<!-- Mobile Hamburger Menu -->
-					<div class="md:hidden">
+							<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
+								<Radar /> Operations
+							</a>
+							<!-- 3D Globe link temporarily disabled
+						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
+							<Globe /> 3D Globe
+						</a>
+						-->
+						</nav>
+
+						<!-- Backend Toggle (Dev Only) -->
+						{#if dev}
+							<button
+								class="preset-tonal-surface-500 btn btn-sm font-mono font-bold"
+								onclick={() => backendMode.toggle()}
+								title={$backendMode === 'dev'
+									? 'Using local backend (localhost:1337) - Click to switch to production'
+									: 'Using production backend (glider.flights) - Click to switch to local'}
+							>
+								{$backendMode === 'dev' ? 'D' : 'P'}
+							</button>
+						{/if}
+
+						<!-- Theme Toggle -->
 						<button
-							class="mobile-menu-button preset-tonal-surface-500 btn p-2 btn-sm"
-							onclick={(e) => {
-								e.stopPropagation();
-								showMobileMenu = !showMobileMenu;
-							}}
+							class="preset-tonal-surface-500 btn btn-sm"
+							onclick={() => theme.toggle()}
+							title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
 						>
-							{#if showMobileMenu}
-								<X size={20} />
+							{#if $theme === 'dark'}
+								<Sun size={18} />
 							{:else}
-								<Menu size={20} />
+								<Moon size={18} />
 							{/if}
 						</button>
-					</div>
-				</div>
-			</AppBar.Trail>
-		</AppBar.Toolbar>
-	</AppBar>
 
-	<!-- Mobile Menu Overlay -->
-	{#if showMobileMenu}
-		<div
-			class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
-		>
-			<nav class="flex flex-col space-y-4 p-6">
-				{#if hasClub}
+						<!-- Desktop Auth -->
+						<div class="hidden md:flex">
+							{#if $auth.isAuthenticated && $auth.user}
+								<div class="user-menu relative">
+									<button
+										class="btn hidden preset-filled-primary-500 btn-sm sm:inline-flex"
+										onclick={() => (showUserMenu = !showUserMenu)}
+									>
+										<User size={16} />
+										{$auth.user.firstName}
+									</button>
+
+									{#if showUserMenu}
+										<div
+											class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2"
+										>
+											<div class="space-y-1">
+												<div class="px-3 py-2 text-sm">
+													<div class="font-medium">
+														{$auth.user.firstName}
+														{$auth.user.lastName}
+													</div>
+													<div class="text-surface-600-300-token">{$auth.user.email}</div>
+												</div>
+												<hr class="!my-2" />
+												<a
+													href={profilePath}
+													class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												>
+													<User size={16} /> Profile
+												</a>
+												<button
+													class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+													onclick={handleLogout}
+												>
+													Sign out
+												</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+							{:else}
+								<div class="flex space-x-2">
+									<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"
+										><LogIn /> Login</a
+									>
+									<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
+										><SignUp /> Sign Up</a
+									>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Mobile Hamburger Menu -->
+						<div class="md:hidden">
+							<button
+								class="mobile-menu-button preset-tonal-surface-500 btn p-2 btn-sm"
+								onclick={(e) => {
+									e.stopPropagation();
+									showMobileMenu = !showMobileMenu;
+								}}
+							>
+								{#if showMobileMenu}
+									<X size={20} />
+								{:else}
+									<Menu size={20} />
+								{/if}
+							</button>
+						</div>
+					</div>
+				</AppBar.Trail>
+			</AppBar.Toolbar>
+		</AppBar>
+
+		<!-- Mobile Menu Overlay -->
+		{#if showMobileMenu}
+			<div
+				class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
+			>
+				<nav class="flex flex-col space-y-4 p-6">
+					{#if hasClub}
+						<a
+							href={clubOpsPath}
+							class="btn w-full justify-start preset-filled-success-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<Radar size={16} /> Club Ops
+						</a>
+					{/if}
 					<a
-						href={clubOpsPath}
-						class="btn w-full justify-start preset-filled-success-500"
+						href={clubsPath}
+						class="btn w-full justify-start preset-filled-primary-500"
 						onclick={() => (showMobileMenu = false)}
 					>
-						<Radar size={16} /> Club Ops
+						<Users size={16} /> Clubs
 					</a>
-				{/if}
-				<a
-					href={clubsPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<Users size={16} /> Clubs
-				</a>
-				<a
-					href={operationsPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<Radar size={16} /> Operations
-				</a>
-				<!-- 3D Globe link temporarily disabled
+					<a
+						href={operationsPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Radar size={16} /> Operations
+					</a>
+					<a
+						href={arPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Globe size={16} /> AR
+					</a>
+					<!-- 3D Globe link temporarily disabled
 				<a
 					href={globePath}
 					class="btn w-full justify-start preset-filled-primary-500"
@@ -467,128 +482,129 @@
 					<Globe size={16} /> 3D Globe
 				</a>
 				-->
-				<a
-					href={aircraftPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<Plane size={16} /> Aircraft
-				</a>
-				<a
-					href={receiversPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<Antenna size={16} /> Receivers
-				</a>
-				<a
-					href={airportsPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<MapPin size={16} /> Airports
-				</a>
-				<a
-					href={flightsPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<PlaneTakeoff size={16} /> Flights
-				</a>
-				<a
-					href={infoPath}
-					class="btn w-full justify-start preset-filled-primary-500"
-					onclick={() => (showMobileMenu = false)}
-				>
-					<Info size={16} /> System Info
-				</a>
-
-				{#if $auth.isAuthenticated}
 					<a
-						href={watchlistPath}
+						href={aircraftPath}
 						class="btn w-full justify-start preset-filled-primary-500"
 						onclick={() => (showMobileMenu = false)}
 					>
-						<Eye size={16} /> Watchlist
+						<Plane size={16} /> Aircraft
 					</a>
-				{/if}
+					<a
+						href={receiversPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Antenna size={16} /> Receivers
+					</a>
+					<a
+						href={airportsPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<MapPin size={16} /> Airports
+					</a>
+					<a
+						href={flightsPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<PlaneTakeoff size={16} /> Flights
+					</a>
+					<a
+						href={infoPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Info size={16} /> System Info
+					</a>
 
-				{#if $auth.isAuthenticated && $auth.user}
-					<div class="space-y-4">
+					{#if $auth.isAuthenticated}
 						<a
-							href={profilePath}
+							href={watchlistPath}
 							class="btn w-full justify-start preset-filled-primary-500"
 							onclick={() => (showMobileMenu = false)}
 						>
-							<User size={16} /> Profile
+							<Eye size={16} /> Watchlist
 						</a>
+					{/if}
+
+					{#if $auth.isAuthenticated && $auth.user}
+						<div class="space-y-4">
+							<a
+								href={profilePath}
+								class="btn w-full justify-start preset-filled-primary-500"
+								onclick={() => (showMobileMenu = false)}
+							>
+								<User size={16} /> Profile
+							</a>
+							<button
+								class="btn w-full justify-start preset-filled-primary-500"
+								onclick={() => {
+									handleLogout();
+									showMobileMenu = false;
+								}}
+							>
+								Sign out
+							</button>
+						</div>
+					{:else}
+						<div class="space-y-4">
+							<a
+								href={loginPath}
+								class="btn w-full justify-start preset-filled-primary-500"
+								onclick={() => (showMobileMenu = false)}
+							>
+								<LogIn size={16} /> Login
+							</a>
+							<a
+								href={registerPath}
+								class="btn w-full justify-start preset-filled-primary-500"
+								onclick={() => (showMobileMenu = false)}
+							>
+								<SignUp size={16} /> Sign Up
+							</a>
+						</div>
+					{/if}
+
+					<!-- Mobile Backend Toggle (Dev Only) -->
+					{#if dev}
 						<button
-							class="btn w-full justify-start preset-filled-primary-500"
-							onclick={() => {
-								handleLogout();
-								showMobileMenu = false;
-							}}
+							class="btn w-full justify-start preset-filled-surface-500"
+							onclick={() => backendMode.toggle()}
 						>
-							Sign out
+							<span class="font-mono font-bold">
+								{$backendMode === 'dev' ? 'D' : 'P'}
+							</span>
+							{$backendMode === 'dev' ? 'Local Backend' : 'Production Backend'}
 						</button>
-					</div>
-				{:else}
-					<div class="space-y-4">
-						<a
-							href={loginPath}
-							class="btn w-full justify-start preset-filled-primary-500"
-							onclick={() => (showMobileMenu = false)}
-						>
-							<LogIn size={16} /> Login
-						</a>
-						<a
-							href={registerPath}
-							class="btn w-full justify-start preset-filled-primary-500"
-							onclick={() => (showMobileMenu = false)}
-						>
-							<SignUp size={16} /> Sign Up
-						</a>
-					</div>
-				{/if}
+					{/if}
 
-				<!-- Mobile Backend Toggle (Dev Only) -->
-				{#if dev}
+					<!-- Mobile Theme Toggle -->
 					<button
 						class="btn w-full justify-start preset-filled-surface-500"
-						onclick={() => backendMode.toggle()}
+						onclick={() => theme.toggle()}
 					>
-						<span class="font-mono font-bold">
-							{$backendMode === 'dev' ? 'D' : 'P'}
-						</span>
-						{$backendMode === 'dev' ? 'Local Backend' : 'Production Backend'}
+						{#if $theme === 'dark'}
+							<Sun size={16} /> Light Mode
+						{:else}
+							<Moon size={16} /> Dark Mode
+						{/if}
 					</button>
-				{/if}
+				</nav>
+			</div>
+		{/if}
 
-				<!-- Mobile Theme Toggle -->
-				<button
-					class="btn w-full justify-start preset-filled-surface-500"
-					onclick={() => theme.toggle()}
-				>
-					{#if $theme === 'dark'}
-						<Sun size={16} /> Light Mode
-					{:else}
-						<Moon size={16} /> Dark Mode
-					{/if}
-				</button>
-			</nav>
-		</div>
-	{/if}
+		<main class="container mx-auto flex-1">
+			{@render children?.()}
+		</main>
 
-	<main class="container mx-auto flex-1">
-		{@render children?.()}
-	</main>
-
-	{#if !page.route.id?.includes('operations') && !page.route.id?.includes('/flights/[id]/map')}
-		<footer class="bg-surface-100-800-token p-4 text-center text-sm">
-			<p>&copy; 2025 Liam Bowen</p>
-		</footer>
-	{/if}
-</div>
+		{#if !page.route.id?.includes('operations') && !page.route.id?.includes('/flights/[id]/map')}
+			<footer class="bg-surface-100-800-token p-4 text-center text-sm">
+				<p>&copy; 2025 Liam Bowen</p>
+			</footer>
+		{/if}
+	</div>
+{/if}
 
 <Toast.Group {toaster}></Toast.Group>
 <BottomLoadingBar />

@@ -1,9 +1,5 @@
 <script lang="ts">
-	import { Navigation } from '@lucide/svelte';
-
 	let { heading = 0 } = $props<{ heading: number }>();
-
-	const compassDirections = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 	// Track display rotation for smooth transitions around 0/360 boundary
 	let displayRotation = $state(0);
@@ -25,61 +21,172 @@
 		// Apply the delta to get smooth rotation
 		displayRotation = displayRotation + delta;
 	});
+
+	// Get the normalized heading for display
+	const displayHeading = $derived(Math.round(((heading % 360) + 360) % 360));
+
+	// Cardinal directions with their rotation positions
+	const directions = [
+		{ label: 'N', angle: 0, isNorth: true },
+		{ label: 'NE', angle: 45, isNorth: false },
+		{ label: 'E', angle: 90, isNorth: false },
+		{ label: 'SE', angle: 135, isNorth: false },
+		{ label: 'S', angle: 180, isNorth: false },
+		{ label: 'SW', angle: 225, isNorth: false },
+		{ label: 'W', angle: 270, isNorth: false },
+		{ label: 'NW', angle: 315, isNorth: false }
+	];
 </script>
 
 <div class="compass-overlay">
 	<div class="compass-ring" style:transform="rotate({displayRotation}deg)">
-		<div class="compass-north">
-			<Navigation size={28} class="text-primary-500" />
-		</div>
-		{#each compassDirections as direction, i (direction)}
-			<div class="compass-label" style:transform="rotate({i * 45}deg)">
-				<span class="label-text" style:transform="rotate({-displayRotation}deg)">{direction}</span>
+		<!-- SVG for the compass circle and tick marks -->
+		<svg width="100" height="100" viewBox="0 0 100 100" class="compass-svg">
+			<!-- Outer circle -->
+			<circle
+				cx="50"
+				cy="50"
+				r="48"
+				fill="rgba(0, 0, 0, 0.7)"
+				stroke="rgba(255, 255, 255, 0.8)"
+				stroke-width="2"
+			/>
+
+			<!-- Cardinal direction tick marks -->
+			<!-- North (red) -->
+			<line
+				x1="50"
+				y1="4"
+				x2="50"
+				y2="14"
+				stroke="#dc2626"
+				stroke-width="3"
+				stroke-linecap="round"
+			/>
+			<!-- North arrow -->
+			<polygon points="50,6 54,14 50,11 46,14" fill="#dc2626" />
+
+			<!-- South -->
+			<line
+				x1="50"
+				y1="86"
+				x2="50"
+				y2="96"
+				stroke="rgba(255, 255, 255, 0.6)"
+				stroke-width="2"
+				stroke-linecap="round"
+			/>
+
+			<!-- East -->
+			<line
+				x1="86"
+				y1="50"
+				x2="96"
+				y2="50"
+				stroke="rgba(255, 255, 255, 0.6)"
+				stroke-width="2"
+				stroke-linecap="round"
+			/>
+
+			<!-- West -->
+			<line
+				x1="4"
+				y1="50"
+				x2="14"
+				y2="50"
+				stroke="rgba(255, 255, 255, 0.6)"
+				stroke-width="2"
+				stroke-linecap="round"
+			/>
+
+			<!-- Intercardinal ticks -->
+			<line
+				x1="82"
+				y1="18"
+				x2="88"
+				y2="12"
+				stroke="rgba(255, 255, 255, 0.4)"
+				stroke-width="1.5"
+				stroke-linecap="round"
+			/>
+			<line
+				x1="82"
+				y1="82"
+				x2="88"
+				y2="88"
+				stroke="rgba(255, 255, 255, 0.4)"
+				stroke-width="1.5"
+				stroke-linecap="round"
+			/>
+			<line
+				x1="18"
+				y1="82"
+				x2="12"
+				y2="88"
+				stroke="rgba(255, 255, 255, 0.4)"
+				stroke-width="1.5"
+				stroke-linecap="round"
+			/>
+			<line
+				x1="18"
+				y1="18"
+				x2="12"
+				y2="12"
+				stroke="rgba(255, 255, 255, 0.4)"
+				stroke-width="1.5"
+				stroke-linecap="round"
+			/>
+		</svg>
+
+		<!-- Direction labels using HTML for proper counter-rotation -->
+		{#each directions as dir (dir.label)}
+			<div class="direction-label" style:transform="rotate({dir.angle}deg)">
+				<span
+					class="label-text"
+					class:north={dir.isNorth}
+					style:transform="rotate({-displayRotation - dir.angle}deg)"
+				>
+					{dir.label}
+				</span>
 			</div>
 		{/each}
 	</div>
-	<div class="compass-heading">
-		{Math.round(((heading % 360) + 360) % 360)}°
+
+	<!-- Heading display inside the compass (doesn't rotate) -->
+	<div class="heading-display">
+		<span class="heading-value">{displayHeading}°</span>
 	</div>
 </div>
 
 <style>
 	.compass-overlay {
 		position: fixed;
-		top: 4.5rem;
+		top: 1rem;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 90;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 0.5rem;
+		filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
 	}
 
 	.compass-ring {
 		position: relative;
-		width: 120px;
-		height: 120px;
-		border: 3px solid rgba(255, 255, 255, 0.8);
-		border-radius: 50%;
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(8px);
+		width: 100px;
+		height: 100px;
 		transition: transform 0.15s ease-out;
 	}
 
-	.compass-north {
+	.compass-svg {
 		position: absolute;
-		top: 6px;
-		left: 50%;
-		transform: translateX(-50%);
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
 	}
 
-	/* Lucide Navigation icon points northeast by default; rotate to point north */
-	.compass-north :global(svg) {
-		transform: rotate(-45deg);
-	}
-
-	.compass-label {
+	.direction-label {
 		position: absolute;
 		top: 50%;
 		left: 50%;
@@ -88,26 +195,37 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		transform-origin: center center;
 	}
 
 	.label-text {
 		position: absolute;
-		top: -52px;
-		color: white;
+		top: -42px;
+		color: rgba(255, 255, 255, 0.9);
 		font-weight: 600;
-		font-size: 0.75rem;
+		font-size: 11px;
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 		white-space: nowrap;
 	}
 
-	.compass-heading {
-		background: rgba(0, 0, 0, 0.85);
+	.label-text.north {
+		color: #dc2626;
+		font-weight: bold;
+		font-size: 13px;
+	}
+
+	.heading-display {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		text-align: center;
+		pointer-events: none;
+	}
+
+	.heading-value {
+		font-size: 18px;
+		font-weight: bold;
 		color: white;
-		padding: 0.5rem 1rem;
-		border-radius: 0.5rem;
-		font-weight: 700;
-		font-size: 1.125rem;
-		backdrop-filter: blur(8px);
+		text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 	}
 </style>
