@@ -183,6 +183,20 @@
 		zoom: number;
 	}
 
+	// Interface for URL-based bounds
+	interface MapBounds {
+		north: number;
+		south: number;
+		west: number;
+		east: number;
+	}
+
+	// State loaded from URL or storage
+	interface LoadedMapState {
+		state: MapState;
+		bounds?: MapBounds;
+	}
+
 	// Helper function to calculate color based on altitude (red at 500 ft, blue at 18000+ ft)
 	function getAltitudeColor(altitudeMslFeet: number | null | undefined): string {
 		const altitude = altitudeMslFeet || 0;
@@ -265,11 +279,79 @@
 		}
 	}
 
+	// Update URL with current map bounds
+	function updateUrlWithBounds(): void {
+		if (!map || !browser) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		const url = new URL(window.location.href);
+		url.searchParams.set('north', ne.lat().toFixed(6));
+		url.searchParams.set('south', sw.lat().toFixed(6));
+		url.searchParams.set('west', sw.lng().toFixed(6));
+		url.searchParams.set('east', ne.lng().toFixed(6));
+
+		// Remove old lat/lng/zoom params if present
+		url.searchParams.delete('lat');
+		url.searchParams.delete('lng');
+		url.searchParams.delete('zoom');
+
+		history.replaceState(null, '', url.toString());
+		logger.debug('[MAP] Updated URL with bounds: {bounds}', {
+			bounds: { north: ne.lat(), south: sw.lat(), west: sw.lng(), east: ne.lng() }
+		});
+	}
+
 	// Load map state from URL params, localStorage, or fallback to CONUS center
-	function loadMapState(): MapState {
-		// First check URL parameters
+	function loadMapState(): LoadedMapState {
+		// First check URL parameters for bounds (north, south, west, east)
 		if (browser) {
 			const params = $page.url.searchParams;
+			const north = params.get('north');
+			const south = params.get('south');
+			const west = params.get('west');
+			const east = params.get('east');
+
+			if (north && south && west && east) {
+				const parsedNorth = parseFloat(north);
+				const parsedSouth = parseFloat(south);
+				const parsedWest = parseFloat(west);
+				const parsedEast = parseFloat(east);
+
+				if (
+					!isNaN(parsedNorth) &&
+					!isNaN(parsedSouth) &&
+					!isNaN(parsedWest) &&
+					!isNaN(parsedEast)
+				) {
+					logger.debug('[MAP] Using URL bounds parameters: {bounds}', {
+						bounds: {
+							north: parsedNorth,
+							south: parsedSouth,
+							west: parsedWest,
+							east: parsedEast
+						}
+					});
+					// Return center of bounds with bounds for fitBounds
+					const centerLat = (parsedNorth + parsedSouth) / 2;
+					const centerLng = (parsedWest + parsedEast) / 2;
+					return {
+						state: { center: { lat: centerLat, lng: centerLng }, zoom: 10 },
+						bounds: {
+							north: parsedNorth,
+							south: parsedSouth,
+							west: parsedWest,
+							east: parsedEast
+						}
+					};
+				}
+			}
+
+			// Check for legacy lat/lng/zoom parameters
 			const lat = params.get('lat');
 			const lng = params.get('lng');
 			const zoom = params.get('zoom');
@@ -287,14 +369,14 @@
 							zoom: parsedZoom
 						}
 					});
-					return { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom };
+					return { state: { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom } };
 				}
 			}
 		}
 
 		// Fall back to localStorage
 		if (!browser) {
-			return { center: CONUS_CENTER, zoom: 4 };
+			return { state: { center: CONUS_CENTER, zoom: 4 } };
 		}
 
 		try {
@@ -302,14 +384,14 @@
 			if (saved) {
 				const state: MapState = JSON.parse(saved);
 				logger.debug('[MAP] Loaded saved map state: {state}', { state });
-				return state;
+				return { state };
 			}
 		} catch (e) {
 			logger.warn('[MAP] Failed to load map state from localStorage: {error}', { error: e });
 		}
 
 		logger.debug('[MAP] Using default CONUS center');
-		return { center: CONUS_CENTER, zoom: 4 };
+		return { state: { center: CONUS_CENTER, zoom: 4 } };
 	}
 
 	// Save area tracker state to localStorage
@@ -569,7 +651,7 @@
 		}
 
 		// Load saved map state or use continental US as fallback
-		const mapState = loadMapState();
+		const loadedState = loadMapState();
 
 		// Load saved map type preference
 		mapType = loadMapType();
@@ -577,8 +659,8 @@
 		// Initialize map with saved or default state
 		map = new google.maps.Map(mapContainer, {
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
-			center: mapState.center,
-			zoom: mapState.zoom,
+			center: loadedState.state.center,
+			zoom: loadedState.state.zoom,
 			mapTypeId:
 				mapType === 'satellite'
 					? window.google.maps.MapTypeId.SATELLITE
@@ -590,6 +672,17 @@
 			fullscreenControl: false,
 			gestureHandling: 'greedy' // Allow one-finger gestures on mobile
 		});
+
+		// If bounds were provided in URL, fit the map to those bounds
+		if (loadedState.bounds) {
+			const { north, south, west, east } = loadedState.bounds;
+			const bounds = new google.maps.LatLngBounds(
+				{ lat: south, lng: west }, // southwest corner
+				{ lat: north, lng: east } // northeast corner
+			);
+			map.fitBounds(bounds);
+			logger.debug('[MAP] Applied URL bounds to map');
+		}
 
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {
@@ -623,6 +716,7 @@
 
 			// Save map state after zoom changes
 			saveMapState();
+			updateUrlWithBounds();
 		});
 
 		// Initial aircraft fetch after map is ready (even if area tracker is off)
@@ -650,6 +744,7 @@
 
 			// Save map state after panning
 			saveMapState();
+			updateUrlWithBounds();
 		});
 
 		// Initial check for airports, receivers, airspaces, and runways
