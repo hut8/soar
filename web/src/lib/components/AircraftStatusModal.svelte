@@ -47,7 +47,6 @@
 	let loadingRegistration = $state(false);
 	let loadingModel = $state(false);
 	let loadingFlight = $state(false);
-	let recentFixes: Fix[] = $state([]);
 
 	// Direction arrow variables
 	let userLocation: { lat: number; lng: number } | null = $state(null);
@@ -71,7 +70,6 @@
 			aircraftRegistration = null;
 			aircraftModel = null;
 			currentFlight = null;
-			recentFixes = [];
 			isInWatchlist = false;
 		}
 	});
@@ -87,15 +85,6 @@
 		try {
 			// Import serverCall
 			const { serverCall } = await import('$lib/api/server');
-
-			// Update recent fixes from the aircraft (last 24 hours)
-			const now = Date.now();
-			const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
-			const allFixes = selectedAircraft.fixes || [];
-			recentFixes = allFixes.filter((fix: Fix) => {
-				const fixTime = new Date(fix.timestamp).getTime();
-				return fixTime > twentyFourHoursAgo;
-			});
 
 			// Load aircraft registration and model data from API
 			const [registrationResponse, modelResponse, flightResponse] = await Promise.all([
@@ -120,7 +109,6 @@
 			aircraftRegistration = null;
 			aircraftModel = null;
 			currentFlight = null;
-			recentFixes = [];
 		} finally {
 			loadingRegistration = false;
 			loadingModel = false;
@@ -188,9 +176,8 @@
 			return;
 		}
 
-		const fixes = selectedAircraft.fixes || [];
-		const latestFix = fixes.length > 0 ? fixes[0] : null;
-		if (!latestFix) {
+		const currentFix = selectedAircraft.currentFix as Fix | null;
+		if (!currentFix) {
 			return;
 		}
 
@@ -198,8 +185,8 @@
 		const bearing = calculateBearing(
 			userLocation.lat,
 			userLocation.lng,
-			latestFix.latitude,
-			latestFix.longitude
+			currentFix.latitude,
+			currentFix.longitude
 		);
 
 		// Calculate the arrow rotation to point at the aircraft
@@ -468,6 +455,11 @@
 										</dt>
 										<dd class="text-sm">
 											{selectedAircraft.aircraftModel || 'Unknown'}
+											{#if selectedAircraft.icaoModelCode}
+												<span class="ml-1 text-xs text-surface-500"
+													>({selectedAircraft.icaoModelCode})</span
+												>
+											{/if}
 										</dd>
 									</div>
 									<div>
@@ -841,33 +833,29 @@
 					<div class="space-y-4">
 						<h3 class="flex items-center gap-2 text-lg font-semibold">
 							<Navigation size={20} />
-							Current Fix
+							Current Position
 						</h3>
 
-						{#if recentFixes.length === 0}
+						{#if !selectedAircraft.currentFix}
 							<div class="py-8 text-center text-surface-500 dark:text-surface-500">
 								<MapPin size={48} class="mx-auto mb-2 opacity-50" />
 								<p>No recent position data available</p>
 							</div>
 						{:else}
-							<!-- Latest Fix Summary -->
-							{@const latestFix = recentFixes[0]}
+							{@const currentFix = selectedAircraft.currentFix as Fix}
 							<div
 								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
 							>
-								<h4 class="mb-3 font-medium text-surface-900 dark:text-surface-100">
-									Latest Position
-								</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Altitude (ft)
 										</dt>
 										<dd>
-											{#if latestFix.altitudeMslFeet !== undefined && latestFix.altitudeMslFeet !== null}
-												{latestFix.altitudeMslFeet.toLocaleString()} MSL
-												{#if latestFix.altitudeAglFeet !== undefined && latestFix.altitudeAglFeet !== null}
-													/ {latestFix.altitudeAglFeet.toLocaleString()} AGL
+											{#if currentFix.altitudeMslFeet !== undefined && currentFix.altitudeMslFeet !== null}
+												{currentFix.altitudeMslFeet.toLocaleString()} MSL
+												{#if currentFix.altitudeAglFeet !== undefined && currentFix.altitudeAglFeet !== null}
+													/ {currentFix.altitudeAglFeet.toLocaleString()} AGL
 												{/if}
 											{:else}
 												Unknown
@@ -876,23 +864,23 @@
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
-										<dd>{formatSpeed(latestFix.groundSpeedKnots ?? undefined)}</dd>
+										<dd>{formatSpeed(currentFix.groundSpeedKnots ?? undefined)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
-										<dd>{formatTrack(latestFix.trackDegrees ?? undefined)}</dd>
+										<dd>{formatTrack(currentFix.trackDegrees ?? undefined)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
 										<dd>
 											<span
-												class="{latestFix.climbFpm !== undefined &&
-												latestFix.climbFpm !== null &&
-												latestFix.climbFpm < 0
+												class="{currentFix.climbFpm !== undefined &&
+												currentFix.climbFpm !== null &&
+												currentFix.climbFpm < 0
 													? 'text-red-600 dark:text-red-400'
 													: 'text-green-600 dark:text-green-400'} font-semibold"
 											>
-												{formatClimbRate(latestFix.climbFpm ?? undefined)}
+												{formatClimbRate(currentFix.climbFpm ?? undefined)}
 											</span>
 										</dd>
 									</div>
@@ -902,15 +890,15 @@
 										{@const distanceNm = calculateDistance(
 											userLocation.lat,
 											userLocation.lng,
-											latestFix.latitude,
-											latestFix.longitude,
+											currentFix.latitude,
+											currentFix.longitude,
 											'nm'
 										)}
 										{@const bearing = calculateBearing(
 											userLocation.lat,
 											userLocation.lng,
-											latestFix.latitude,
-											latestFix.longitude
+											currentFix.latitude,
+											currentFix.longitude
 										)}
 										{@const distances = formatDistance(distanceNm)}
 										<div>
@@ -944,14 +932,14 @@
 									<div class="col-span-2">
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Coordinates</dt>
 										<dd class="font-mono">
-											{formatCoordinates(latestFix.latitude, latestFix.longitude)}
+											{formatCoordinates(currentFix.latitude, currentFix.longitude)}
 										</dd>
 									</div>
 									<div class="col-span-2">
 										<dd>
-											Last seen {formatTimestamp(latestFix.timestamp).relative}
+											Last seen {formatTimestamp(currentFix.timestamp).relative}
 											<div class="text-xs text-surface-500 dark:text-surface-500">
-												{formatTimestamp(latestFix.timestamp).absolute}
+												{formatTimestamp(currentFix.timestamp).absolute}
 											</div>
 										</dd>
 									</div>
