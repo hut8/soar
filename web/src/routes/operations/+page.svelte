@@ -405,6 +405,7 @@
 		airspaceOverlayManager.setMap(map);
 		runwayOverlayManager.setMap(map);
 		aircraftMarkerManager.setMap(map);
+		aircraftMarkerManager.setPositionFixWindow(currentSettings.positionFixWindow);
 		clusterMarkerManager.setMap(map);
 		viewportController.setMap(map);
 
