@@ -211,17 +211,14 @@ impl FixesRepository {
                         new_fix.longitude
                     );
 
-                    // Update aircraft's current_fix, latitude, and longitude columns with the new fix
-                    // The latitude/longitude columns are used to generate location_geom for spatial queries
+                    // Update aircraft's current_fix column with the complete fix data
+                    // Note: latitude/longitude are already updated by aircraft_for_fix() which is called
+                    // earlier in the pipeline, so we only need to update current_fix here
                     if let Ok(fix_json) = serde_json::to_value(&new_fix) {
                         use crate::schema::aircraft;
                         let _ = diesel::update(aircraft::table)
                             .filter(aircraft::id.eq(new_fix.aircraft_id))
-                            .set((
-                                aircraft::current_fix.eq(fix_json),
-                                aircraft::latitude.eq(new_fix.latitude),
-                                aircraft::longitude.eq(new_fix.longitude),
-                            ))
+                            .set(aircraft::current_fix.eq(fix_json))
                             .execute(&mut conn);
                     }
 
