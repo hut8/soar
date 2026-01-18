@@ -27,7 +27,7 @@ use uuid::Uuid;
 const NATS_INTAKE_QUEUE_SIZE: usize = 5000;
 const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
 const SBS_INTAKE_QUEUE_SIZE: usize = 1000;
-const AIRCRAFT_QUEUE_SIZE: usize = 1000;
+const AIRCRAFT_QUEUE_SIZE: usize = 5000;
 const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
 const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
 const SERVER_STATUS_QUEUE_SIZE: usize = 50;
