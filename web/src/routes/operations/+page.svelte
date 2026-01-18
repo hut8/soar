@@ -1103,15 +1103,17 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
-		/* Offset the marker so the aircraft icon center aligns with the geographic position.
-		   The icon is 24px tall (center at 12px from top). Without offset, the anchor is at
-		   the center of the entire marker (icon + label), causing misalignment with the trail. */
+		/* The AdvancedMarkerElement anchor is at the bottom-center of the content.
+		   Vertical positioning (translateY) is applied via JS in updateMarkerScale() to
+		   align the aircraft icon center with the geographic fix point. */
 		transform-origin: center top;
 		transition: all 0.2s ease;
 	}
 
 	:global(.aircraft-marker:hover) {
-		transform: scale(1.15);
+		/* Note: This may be overridden by inline styles from JS. The translateY(53px)
+		   offset must match the JS value to maintain icon-to-fix alignment on hover. */
+		transform: scale(1.15) translateY(53px);
 	}
 
 	:global(.aircraft-icon) {
@@ -1123,8 +1125,8 @@
 		color: #1e293b;
 		transition: all 0.2s ease;
 		position: relative;
-		/* Position the icon so its center is at the marker's anchor point (top of .aircraft-marker).
-		   The icon is 24px tall, so we shift it up by 12px to center it on the anchor. */
+		/* Negative margin allows the icon to overlap with content above (if any) and
+		   reduces the marker's total height for a more compact appearance. */
 		margin-top: -12px;
 	}
 

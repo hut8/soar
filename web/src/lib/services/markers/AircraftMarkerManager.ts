@@ -441,9 +441,14 @@ export class AircraftMarkerManager {
 			scale = 0.9 + Math.min(zoom - 12, 6) * 0.0167; // 0.9 to 1.0 max
 		}
 
-		// Apply transform to the entire marker content
-		// Use 'center top' origin so scaling preserves the aircraft icon position at the geographic coordinate
-		markerContent.style.transform = `scale(${scale})`;
+		// Apply transform to the entire marker content.
+		// The AdvancedMarkerElement positions markers with the bottom-center of the content
+		// at the geographic point. To align the aircraft ICON center with the fix point,
+		// we translate down by the distance from icon center to marker bottom (~53px).
+		// Using scale() first means translateY is in scaled coordinates, which automatically
+		// adjusts the offset proportionally at different zoom levels.
+		// Transform origin 'center top' ensures scaling keeps the icon horizontally centered.
+		markerContent.style.transform = `scale(${scale}) translateY(53px)`;
 		markerContent.style.transformOrigin = 'center top';
 	}
 
