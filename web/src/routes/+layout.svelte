@@ -458,6 +458,13 @@
 				>
 					<Radar size={16} /> Operations
 				</a>
+				<a
+					href={arPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Globe size={16} /> AR
+				</a>
 				<!-- 3D Globe link temporarily disabled
 				<a
 					href={globePath}
