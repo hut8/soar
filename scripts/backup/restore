@@ -108,7 +108,8 @@ PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
 PGDATABASE="${PGDATABASE:-soar}"
 PGUSER="${PGUSER:-postgres}"
-PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-4}"
+# NOTE: Parallel restore (-j) is intentionally NOT used because it breaks
+# TimescaleDB catalog restoration. Do not add parallel jobs here.
 
 # Restore configuration
 RESTORE_DIR="$TEMP_DIR/restore-$(date +%Y%m%d-%H%M%S)"
@@ -282,7 +283,10 @@ restore_database() {
     fi
 
     # Restore from dump using pg_restore
-    log INFO "Restoring from backup using pg_restore (parallel jobs: $PARALLEL_JOBS)..."
+    # NOTE: Do NOT use -j (parallel) flag with TimescaleDB! Parallel restore breaks
+    # the TimescaleDB catalog, causing chunk metadata to not be restored properly.
+    # See: https://docs.timescale.com/self-hosted/latest/backup-and-restore/
+    log INFO "Restoring from backup using pg_restore (single-threaded for TimescaleDB compatibility)..."
     log INFO "This may take a while for large databases..."
 
     if ! pg_restore \
@@ -290,7 +294,6 @@ restore_database() {
         -p "$PGPORT" \
         -U "$PGUSER" \
         -d "$PGDATABASE" \
-        -j "$PARALLEL_JOBS" \
         -v \
         "$dump_dir" \
         2>&1 | tee -a "$LOG_DIR/restore.log"; then
