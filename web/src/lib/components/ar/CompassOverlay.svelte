@@ -24,11 +24,24 @@
 
 	// Get the normalized heading for display
 	const displayHeading = $derived(Math.round(((heading % 360) + 360) % 360));
+
+	// Cardinal directions with their rotation positions
+	const directions = [
+		{ label: 'N', angle: 0, isNorth: true },
+		{ label: 'NE', angle: 45, isNorth: false },
+		{ label: 'E', angle: 90, isNorth: false },
+		{ label: 'SE', angle: 135, isNorth: false },
+		{ label: 'S', angle: 180, isNorth: false },
+		{ label: 'SW', angle: 225, isNorth: false },
+		{ label: 'W', angle: 270, isNorth: false },
+		{ label: 'NW', angle: 315, isNorth: false }
+	];
 </script>
 
 <div class="compass-overlay">
 	<div class="compass-ring" style:transform="rotate({displayRotation}deg)">
-		<svg width="100" height="100" viewBox="0 0 100 100">
+		<!-- SVG for the compass circle and tick marks -->
+		<svg width="100" height="100" viewBox="0 0 100 100" class="compass-svg">
 			<!-- Outer circle -->
 			<circle
 				cx="50"
@@ -39,24 +52,24 @@
 				stroke-width="2"
 			/>
 
-			<!-- Cardinal direction markers -->
+			<!-- Cardinal direction tick marks -->
 			<!-- North (red) -->
 			<line
 				x1="50"
 				y1="4"
 				x2="50"
-				y2="16"
+				y2="14"
 				stroke="#dc2626"
 				stroke-width="3"
 				stroke-linecap="round"
 			/>
 			<!-- North arrow -->
-			<polygon points="50,6 54,14 50,12 46,14" fill="#dc2626" />
+			<polygon points="50,6 54,14 50,11 46,14" fill="#dc2626" />
 
 			<!-- South -->
 			<line
 				x1="50"
-				y1="84"
+				y1="86"
 				x2="50"
 				y2="96"
 				stroke="rgba(255, 255, 255, 0.6)"
@@ -66,7 +79,7 @@
 
 			<!-- East -->
 			<line
-				x1="84"
+				x1="86"
 				y1="50"
 				x2="96"
 				y2="50"
@@ -79,99 +92,67 @@
 			<line
 				x1="4"
 				y1="50"
-				x2="16"
+				x2="14"
 				y2="50"
 				stroke="rgba(255, 255, 255, 0.6)"
 				stroke-width="2"
 				stroke-linecap="round"
 			/>
 
-			<!-- Intercardinal ticks (NE, SE, SW, NW) -->
+			<!-- Intercardinal ticks -->
 			<line
-				x1="74"
-				y1="26"
-				x2="80"
-				y2="20"
+				x1="82"
+				y1="18"
+				x2="88"
+				y2="12"
 				stroke="rgba(255, 255, 255, 0.4)"
 				stroke-width="1.5"
 				stroke-linecap="round"
 			/>
 			<line
-				x1="74"
-				y1="74"
-				x2="80"
-				y2="80"
+				x1="82"
+				y1="82"
+				x2="88"
+				y2="88"
 				stroke="rgba(255, 255, 255, 0.4)"
 				stroke-width="1.5"
 				stroke-linecap="round"
 			/>
 			<line
-				x1="26"
-				y1="74"
-				x2="20"
-				y2="80"
+				x1="18"
+				y1="82"
+				x2="12"
+				y2="88"
 				stroke="rgba(255, 255, 255, 0.4)"
 				stroke-width="1.5"
 				stroke-linecap="round"
 			/>
 			<line
-				x1="26"
-				y1="26"
-				x2="20"
-				y2="20"
+				x1="18"
+				y1="18"
+				x2="12"
+				y2="12"
 				stroke="rgba(255, 255, 255, 0.4)"
 				stroke-width="1.5"
 				stroke-linecap="round"
 			/>
-
-			<!-- Direction labels that counter-rotate to stay upright -->
-			<text
-				x="50"
-				y="26"
-				text-anchor="middle"
-				fill="#dc2626"
-				font-weight="bold"
-				font-size="14"
-				transform="rotate({-displayRotation}, 50, 26)"
-			>
-				N
-			</text>
-			<text
-				x="50"
-				y="82"
-				text-anchor="middle"
-				fill="rgba(255, 255, 255, 0.8)"
-				font-weight="600"
-				font-size="11"
-				transform="rotate({-displayRotation}, 50, 82)"
-			>
-				S
-			</text>
-			<text
-				x="78"
-				y="54"
-				text-anchor="middle"
-				fill="rgba(255, 255, 255, 0.8)"
-				font-weight="600"
-				font-size="11"
-				transform="rotate({-displayRotation}, 78, 54)"
-			>
-				E
-			</text>
-			<text
-				x="22"
-				y="54"
-				text-anchor="middle"
-				fill="rgba(255, 255, 255, 0.8)"
-				font-weight="600"
-				font-size="11"
-				transform="rotate({-displayRotation}, 22, 54)"
-			>
-				W
-			</text>
 		</svg>
+
+		<!-- Direction labels using HTML for proper counter-rotation -->
+		{#each directions as dir (dir.label)}
+			<div class="direction-label" style:transform="rotate({dir.angle}deg)">
+				<span
+					class="label-text"
+					class:north={dir.isNorth}
+					style:transform="rotate({-displayRotation - dir.angle}deg)"
+				>
+					{dir.label}
+				</span>
+			</div>
+		{/each}
 	</div>
-	<!-- Heading display inside the compass -->
+
+	<!-- Heading display inside the compass (doesn't rotate) -->
 	<div class="heading-display">
 		<span class="heading-value">{displayHeading}°</span>
 	</div>
@@ -195,6 +176,41 @@
 		width: 100px;
 		height: 100px;
 		transition: transform 0.15s ease-out;
+	}
+
+	.compass-svg {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+	}
+
+	.direction-label {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 0;
+		height: 0;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.label-text {
+		position: absolute;
+		top: -42px;
+		color: rgba(255, 255, 255, 0.9);
+		font-weight: 600;
+		font-size: 11px;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		white-space: nowrap;
+	}
+
+	.label-text.north {
+		color: #dc2626;
+		font-weight: bold;
+		font-size: 13px;
 	}
 
 	.heading-display {
