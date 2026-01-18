@@ -4,31 +4,52 @@
 	let { heading = 0 } = $props<{ heading: number }>();
 
 	const compassDirections = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+	// Track display rotation for smooth transitions around 0/360 boundary
+	let displayRotation = $state(0);
+
+	// Calculate shortest rotation path to avoid spinning around at 0/360 boundary
+	$effect(() => {
+		// Normalize incoming heading to 0-360
+		const normalizedHeading = ((heading % 360) + 360) % 360;
+		// Target rotation (negative because we rotate compass opposite to heading)
+		const targetRotation = -normalizedHeading;
+
+		// Calculate the delta from current display rotation
+		let delta = targetRotation - displayRotation;
+
+		// Normalize delta to -180 to 180 range for shortest path
+		while (delta > 180) delta -= 360;
+		while (delta < -180) delta += 360;
+
+		// Apply the delta to get smooth rotation
+		displayRotation = displayRotation + delta;
+	});
 </script>
 
 <div class="compass-overlay">
-	<div class="compass-ring" style:transform="rotate({-heading}deg)">
+	<div class="compass-ring" style:transform="rotate({displayRotation}deg)">
 		<div class="compass-north">
-			<Navigation size={32} class="text-primary-500" />
+			<Navigation size={28} class="text-primary-500" />
 		</div>
 		{#each compassDirections as direction, i (direction)}
-			<div class="compass-label" style:transform="rotate({i * 45}deg) translateY(-60px)">
-				<span style:transform="rotate({heading}deg)">{direction}</span>
+			<div class="compass-label" style:transform="rotate({i * 45}deg)">
+				<span class="label-text" style:transform="rotate({-displayRotation}deg)">{direction}</span>
 			</div>
 		{/each}
 	</div>
 	<div class="compass-heading">
-		{Math.round(heading)}°
+		{Math.round(((heading % 360) + 360) % 360)}°
 	</div>
 </div>
 
 <style>
 	.compass-overlay {
 		position: fixed;
-		top: 1rem;
+		top: 4.5rem;
 		left: 50%;
 		transform: translateX(-50%);
-		z-index: 100;
+		z-index: 90;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -43,12 +64,12 @@
 		border-radius: 50%;
 		background: rgba(0, 0, 0, 0.6);
 		backdrop-filter: blur(8px);
-		transition: transform 0.3s ease-out;
+		transition: transform 0.15s ease-out;
 	}
 
 	.compass-north {
 		position: absolute;
-		top: 8px;
+		top: 6px;
 		left: 50%;
 		transform: translateX(-50%);
 	}
@@ -57,12 +78,22 @@
 		position: absolute;
 		top: 50%;
 		left: 50%;
-		color: white;
-		font-weight: 600;
-		font-size: 0.875rem;
+		width: 0;
+		height: 0;
 		display: flex;
 		justify-content: center;
 		align-items: center;
+		transform-origin: center center;
+	}
+
+	.label-text {
+		position: absolute;
+		top: -52px;
+		color: white;
+		font-weight: 600;
+		font-size: 0.75rem;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+		white-space: nowrap;
 	}
 
 	.compass-heading {

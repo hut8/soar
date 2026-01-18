@@ -6,6 +6,7 @@ import type { Fix } from '$lib/types';
 import type { GeoBounds } from '$lib/services/FixFeed';
 
 const METERS_TO_FEET = 3.28084;
+const NM_TO_FEET = 6076.12; // 1 nautical mile = 6076.12 feet
 
 /**
  * Calculate elevation angle from user to aircraft
@@ -14,11 +15,11 @@ const METERS_TO_FEET = 3.28084;
 export function calculateElevationAngle(
 	userPosition: ARUserPosition,
 	aircraftAltitudeFeet: number,
-	groundDistanceKm: number
+	groundDistanceNm: number
 ): number {
 	const userAltitudeFeet = userPosition.altitude * METERS_TO_FEET;
 	const altitudeDifferenceFeet = aircraftAltitudeFeet - userAltitudeFeet;
-	const groundDistanceFeet = groundDistanceKm * 3280.84; // km to feet
+	const groundDistanceFeet = groundDistanceNm * NM_TO_FEET;
 
 	if (groundDistanceFeet === 0) return 0;
 
@@ -47,7 +48,7 @@ export function fixToARPosition(
 		userPosition.longitude,
 		fix.latitude,
 		fix.longitude,
-		'km'
+		'nm'
 	);
 
 	const bearing = calculateBearing(
@@ -75,6 +76,8 @@ export function fixToARPosition(
 	};
 }
 
+const NM_TO_KM = 1.852; // 1 nautical mile = 1.852 km
+
 /**
  * Calculate bounding box for aircraft subscription
  * Returns geographic bounds for a circle of given radius around center point
@@ -82,8 +85,9 @@ export function fixToARPosition(
 export function calculateBoundingBox(
 	centerLat: number,
 	centerLon: number,
-	radiusKm: number
+	radiusNm: number
 ): GeoBounds {
+	const radiusKm = radiusNm * NM_TO_KM;
 	const earthRadiusKm = 6371;
 	const latDelta = (radiusKm / earthRadiusKm) * (180 / Math.PI);
 	const lonDelta = latDelta / Math.abs(Math.cos((centerLat * Math.PI) / 180));

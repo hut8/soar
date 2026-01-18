@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Camera, AlertCircle, X, Info } from '@lucide/svelte';
+	import { Camera, AlertCircle, X } from '@lucide/svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { ARTracker } from '$lib/services/arTracker';
 	import { FixFeed } from '$lib/services/FixFeed';
@@ -22,6 +22,8 @@
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import ARControls from '$lib/components/ar/ARControls.svelte';
 	import DebugPanel from '$lib/components/ar/DebugPanel.svelte';
+	import AircraftListModal from '$lib/components/ar/AircraftListModal.svelte';
+	import DirectionIndicator from '$lib/components/ar/DirectionIndicator.svelte';
 
 	const logger = getLogger(['soar', 'ARPage']);
 
@@ -36,12 +38,16 @@
 	let deviceOrientation: ARDeviceOrientation | null = $state(null);
 
 	let settings: ARSettings = $state({
-		rangeKm: 25,
+		rangeNm: 50,
 		filterAirborne: false,
 		showDebug: false,
 		fovHorizontal: 60,
 		fovVertical: 45
 	});
+
+	// Aircraft list modal and target tracking
+	let showAircraftList = $state(false);
+	let targetAircraft: ARAircraftPosition | null = $state(null);
 
 	let aircraftPositions = new SvelteMap<
 		string,
@@ -116,7 +122,7 @@
 		const bounds = calculateBoundingBox(
 			userPosition.latitude,
 			userPosition.longitude,
-			settings.rangeKm
+			settings.rangeNm
 		);
 
 		// Unsubscribe from old area if exists
@@ -156,7 +162,7 @@
 			if (!arPosition) continue;
 
 			// Filter by range
-			if (arPosition.distance > settings.rangeKm) continue;
+			if (arPosition.distance > settings.rangeNm) continue;
 
 			// Filter airborne only if enabled
 			if (settings.filterAirborne && arPosition.altitudeFeet < 100) continue;
@@ -187,6 +193,45 @@
 			logger.debug('Aircraft details: {aircraft}', { aircraft });
 		}
 	}
+
+	// Handle aircraft list button click
+	function handleListClick() {
+		showAircraftList = true;
+	}
+
+	// Handle aircraft selection from the modal
+	function handleAircraftSelect(aircraft: ARAircraftPosition) {
+		targetAircraft = aircraft;
+		showAircraftList = false;
+		logger.debug('Target aircraft selected: {registration}', {
+			registration: aircraft.registration
+		});
+	}
+
+	// Dismiss target tracking
+	function dismissTarget() {
+		targetAircraft = null;
+	}
+
+	// Get all aircraft positions as array for the modal
+	const allAircraftList = $derived(Array.from(aircraftPositions.values()).map((p) => p.aircraft));
+
+	// Check if target aircraft is visible on screen
+	const targetScreenPosition = $derived(() => {
+		if (!targetAircraft) return null;
+		const position = aircraftPositions.get(targetAircraft.aircraftId);
+		return position?.screen ?? null;
+	});
+
+	// Update target aircraft position from latest data
+	$effect(() => {
+		if (targetAircraft) {
+			const updated = aircraftPositions.get(targetAircraft.aircraftId);
+			if (updated) {
+				targetAircraft = updated.aircraft;
+			}
+		}
+	});
 
 	// Initialize AR on mount
 	onMount(async () => {
@@ -300,7 +345,11 @@
 		<CompassOverlay heading={deviceOrientation.heading} />
 
 		<!-- Controls -->
-		<ARControls bind:settings onSettingsClick={() => (settings.showDebug = !settings.showDebug)} />
+		<ARControls
+			bind:settings
+			onSettingsClick={() => (settings.showDebug = !settings.showDebug)}
+			onListClick={handleListClick}
+		/>
 
 		<!-- Debug panel -->
 		{#if settings.showDebug}
@@ -316,11 +365,19 @@
 			<X size={24} />
 		</button>
 
-		<!-- Info hint -->
-		<div class="info-hint">
-			<Info size={16} />
-			<span>Tap aircraft to view details</span>
-		</div>
+		<!-- Direction indicator for off-screen target -->
+		{#if targetAircraft && deviceOrientation && !targetScreenPosition()?.visible}
+			<DirectionIndicator {targetAircraft} {deviceOrientation} onDismiss={dismissTarget} />
+		{/if}
+	{/if}
+
+	<!-- Aircraft list modal -->
+	{#if showAircraftList}
+		<AircraftListModal
+			aircraft={allAircraftList}
+			onSelect={handleAircraftSelect}
+			onClose={() => (showAircraftList = false)}
+		/>
 	{/if}
 </div>
 
@@ -396,23 +453,6 @@
 		color: white;
 		cursor: pointer;
 		z-index: 100;
-	}
-
-	.info-hint {
-		position: fixed;
-		top: 160px;
-		left: 50%;
-		transform: translateX(-50%);
-		background: rgba(0, 0, 0, 0.85);
-		backdrop-filter: blur(8px);
-		color: white;
-		padding: 0.5rem 1rem;
-		border-radius: 1rem;
-		font-size: 0.875rem;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		z-index: 90;
 	}
 
 	@keyframes pulse {
