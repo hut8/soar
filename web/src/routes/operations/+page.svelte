@@ -126,22 +126,8 @@
 		showAirportMarkers: true,
 		showReceiverMarkers: true,
 		showAirspaceMarkers: true,
-		showRunwayOverlays: false,
-		positionFixWindow: 8
+		showRunwayOverlays: false
 	});
-
-	// Debounced update for aircraft trails
-	let updateTrailsTimeout: ReturnType<typeof setTimeout> | null = null;
-	function debouncedUpdateAircraftTrails() {
-		if (updateTrailsTimeout) {
-			clearTimeout(updateTrailsTimeout);
-		}
-		updateTrailsTimeout = setTimeout(() => {
-			if (map) {
-				aircraftMarkerManager.updateAllTrails(activeDevices);
-			}
-		}, 300); // 300ms debounce
-	}
 
 	// Handle settings changes from SettingsModal
 	function handleSettingsChange(newSettings: {
@@ -150,18 +136,9 @@
 		showReceiverMarkers: boolean;
 		showAirspaceMarkers: boolean;
 		showRunwayOverlays: boolean;
-		positionFixWindow: number;
 	}) {
-		const previousFixWindow = currentSettings.positionFixWindow;
-
 		// Replace entire object to ensure Svelte 5 reactivity triggers
 		currentSettings = { ...newSettings };
-
-		// Update aircraft trails when position fix window changes
-		if (previousFixWindow !== newSettings.positionFixWindow) {
-			aircraftMarkerManager.setPositionFixWindow(newSettings.positionFixWindow);
-			debouncedUpdateAircraftTrails();
-		}
 	}
 
 	// Handle aircraft marker click
@@ -408,7 +385,6 @@
 		airspaceOverlayManager.setMap(map);
 		runwayOverlayManager.setMap(map);
 		aircraftMarkerManager.setMap(map);
-		aircraftMarkerManager.setPositionFixWindow(currentSettings.positionFixWindow);
 		clusterMarkerManager.setMap(map);
 		viewportController.setMap(map);
 
@@ -1108,29 +1084,21 @@
 	}
 
 	:global(.aircraft-icon) {
-		background: #ef4444;
-		border: 3px solid #ffffff;
-		border-radius: 50%;
-		width: 36px;
-		height: 36px;
+		width: 24px;
+		height: 24px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: white;
-		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+		color: #1e293b;
 		transition: all 0.2s ease;
 		position: relative;
 	}
 
-	:global(.aircraft-marker:hover .aircraft-icon) {
-		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
-		border-width: 4px;
-	}
-
 	:global(.aircraft-icon svg) {
-		width: 20px;
-		height: 20px;
-		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+		width: 24px;
+		height: 24px;
+		filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.9))
+			drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
 	}
 
 	:global(.aircraft-label) {

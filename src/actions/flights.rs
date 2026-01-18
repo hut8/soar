@@ -16,6 +16,7 @@ use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::{Flight, haversine_distance};
 use crate::flights_repo::FlightsRepository;
+use crate::geometry::rdp::simplify_path_indices;
 use crate::geometry::spline::{GeoPoint, generate_spline_path};
 use crate::locations_repo::LocationsRepository;
 use crate::web::AppState;
@@ -34,6 +35,24 @@ pub struct SplinePoint {
     pub latitude: f64,
     pub longitude: f64,
     pub altitude_meters: Option<f64>,
+}
+
+/// Lightweight path point for flight visualization
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathPoint {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude_feet: Option<i32>,
+    pub speed_knots: Option<f32>,
+}
+
+/// Query parameters for flight path endpoint
+#[derive(Debug, Deserialize)]
+pub struct FlightPathParams {
+    /// RDP simplification epsilon in meters (default: 50m)
+    /// Set to 0 to disable simplification
+    pub epsilon: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -338,6 +357,102 @@ pub async fn get_flight_fixes(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flight fixes",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Get lightweight path for a flight
+/// Returns only essential data: lat, lng, altitude, speed
+/// Get lightweight path for a flight with optional RDP simplification
+///
+/// Query parameters:
+/// - `epsilon`: RDP simplification tolerance in meters (default: 50m, use 0 to disable)
+pub async fn get_flight_path(
+    Path(id): Path<Uuid>,
+    Query(params): Query<FlightPathParams>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+
+    // Default epsilon of 50 meters provides good compression for typical flights
+    let epsilon = params.epsilon.unwrap_or(50.0);
+
+    // First verify the flight exists
+    let flight = match flights_repo.get_flight_by_id(id).await {
+        Ok(Some(flight)) => flight,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
+                .into_response();
+        }
+    };
+
+    // Get fixes for the flight
+    let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
+    let end_time = flight.landing_time.unwrap_or_else(chrono::Utc::now);
+
+    match fixes_repo
+        .get_fixes_for_aircraft_with_time_range(
+            &flight.aircraft_id.unwrap_or(Uuid::nil()),
+            start_time,
+            end_time,
+            None,
+        )
+        .await
+    {
+        Ok(fixes) => {
+            let path: Vec<PathPoint> = if epsilon > 0.0 && fixes.len() > 2 {
+                // Convert fixes to GeoPoints for RDP (with altitude in meters)
+                let geo_points: Vec<GeoPoint> = fixes
+                    .iter()
+                    .map(|fix| {
+                        let altitude_meters = fix.altitude_msl_feet.map(|ft| ft as f64 * 0.3048);
+                        match altitude_meters {
+                            Some(alt) => {
+                                GeoPoint::new_with_altitude(fix.latitude, fix.longitude, alt)
+                            }
+                            None => GeoPoint::new(fix.latitude, fix.longitude),
+                        }
+                    })
+                    .collect();
+
+                // Apply RDP to get indices of points to keep
+                let kept_indices = simplify_path_indices(&geo_points, epsilon);
+
+                // Build path from kept indices, preserving original fix data
+                kept_indices
+                    .iter()
+                    .map(|&i| PathPoint {
+                        latitude: fixes[i].latitude,
+                        longitude: fixes[i].longitude,
+                        altitude_feet: fixes[i].altitude_msl_feet,
+                        speed_knots: fixes[i].ground_speed_knots,
+                    })
+                    .collect()
+            } else {
+                // No simplification - return all points
+                fixes
+                    .iter()
+                    .map(|fix| PathPoint {
+                        latitude: fix.latitude,
+                        longitude: fix.longitude,
+                        altitude_feet: fix.altitude_msl_feet,
+                        speed_knots: fix.ground_speed_knots,
+                    })
+                    .collect()
+            };
+
+            Json(DataListResponse { data: path }).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get flight path",
             )
             .into_response()
         }

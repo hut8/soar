@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Switch, Slider } from '@skeletonlabs/skeleton-svelte';
+	import { Switch } from '@skeletonlabs/skeleton-svelte';
 	import { X, Trash2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -21,9 +21,6 @@
 		showReceiverMarkers?: boolean;
 		showAirspaceMarkers?: boolean;
 		showRunwayOverlays?: boolean;
-		positionFixWindow?: number;
-		// Legacy support for old settings
-		trailLength?: number[];
 	}
 
 	// Settings state
@@ -32,7 +29,6 @@
 	let showReceiverMarkers = $state(true);
 	let showAirspaceMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
-	let positionFixWindow = $state(8); // Hours - default 8 hours
 
 	// Settings persistence functions
 	async function loadSettings() {
@@ -54,10 +50,6 @@
 					showReceiverMarkers = backendSettings.showReceiverMarkers ?? true;
 					showAirspaceMarkers = backendSettings.showAirspaceMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
-					// Use positionFixWindow, or fallback to trailLength for legacy support
-					positionFixWindow =
-						backendSettings.positionFixWindow ??
-						(backendSettings.trailLength ? backendSettings.trailLength[0] : 8);
 					return;
 				}
 			} catch (e) {
@@ -77,15 +69,9 @@
 				showReceiverMarkers = settings.showReceiverMarkers ?? true;
 				showAirspaceMarkers = settings.showAirspaceMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
-				// Use positionFixWindow, or fallback to trailLength for legacy support
-				positionFixWindow =
-					settings.positionFixWindow ?? (settings.trailLength ? settings.trailLength[0] : 8);
 			} catch (e) {
 				logger.warn('Failed to load settings from localStorage: {error}', { error: e });
-				positionFixWindow = 8;
 			}
-		} else {
-			positionFixWindow = 8;
 		}
 	}
 
@@ -97,8 +83,7 @@
 			showAirportMarkers,
 			showReceiverMarkers,
 			showAirspaceMarkers,
-			showRunwayOverlays,
-			positionFixWindow
+			showRunwayOverlays
 		};
 
 		// Always save to localStorage for offline support
@@ -129,8 +114,7 @@
 				showAirportMarkers,
 				showReceiverMarkers,
 				showAirspaceMarkers,
-				showRunwayOverlays,
-				positionFixWindow
+				showRunwayOverlays
 			});
 		}
 	}
@@ -145,8 +129,7 @@
 					showAirportMarkers,
 					showReceiverMarkers,
 					showAirspaceMarkers,
-					showRunwayOverlays,
-					positionFixWindow
+					showRunwayOverlays
 				});
 			}
 		}
@@ -272,47 +255,6 @@
 							</Switch.Control>
 							<Switch.HiddenInput name="runways-toggle" />
 						</Switch>
-					</div>
-				</section>
-
-				<!-- Position Fix Window -->
-				<section>
-					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
-					<p class="mb-3 text-sm text-surface-600 dark:text-surface-400">
-						Only show aircraft that have been seen within this time window
-					</p>
-					<div class="space-y-4">
-						<div class="text-sm font-medium">
-							Duration: {positionFixWindow === 0
-								? 'None'
-								: positionFixWindow < 1
-									? `${Math.round(positionFixWindow * 60)} minutes`
-									: `${positionFixWindow} hours`}
-						</div>
-						<Slider
-							value={[positionFixWindow]}
-							onValueChange={(details) => {
-								positionFixWindow = details.value[0];
-								saveSettings();
-							}}
-							min={0}
-							max={24}
-							step={1}
-						>
-							<Slider.Control>
-								<Slider.Track>
-									<Slider.Range />
-								</Slider.Track>
-								<Slider.Thumb index={0}>
-									<Slider.HiddenInput />
-								</Slider.Thumb>
-							</Slider.Control>
-						</Slider>
-						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
-							<span>None</span>
-							<span>12h</span>
-							<span>24h</span>
-						</div>
 					</div>
 				</section>
 
