@@ -6,15 +6,16 @@
 	import {
 		ArrowLeft,
 		Plane,
-		User,
-		Calendar,
-		Info,
 		Activity,
 		Building2,
 		Save,
 		Eye,
 		EyeOff,
-		HelpCircle
+		HelpCircle,
+		Image,
+		History,
+		FileText,
+		Cog
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -386,27 +387,23 @@
 						</div>
 
 						<div class="mt-3 flex flex-wrap gap-2">
-							<span
-								class="badge {aircraft.tracked
-									? 'preset-filled-success-500'
-									: 'preset-filled-surface-500'}"
-							>
-								{aircraft.tracked ? 'Tracked' : 'Not Tracked'}
-							</span>
-							<span
-								class="badge {aircraft.identified
-									? 'preset-filled-primary-500'
-									: 'preset-filled-surface-500'}"
-							>
-								{aircraft.identified ? 'Identified' : 'Unidentified'}
-							</span>
-							<span
-								class="badge {aircraft.fromOgnDdb
-									? 'preset-filled-success-500'
-									: 'preset-filled-secondary-500'}"
-							>
-								{aircraft.fromOgnDdb ? 'In OGN DB' : 'Not in OGN DB'}
-							</span>
+							{#if aircraft.fromOgnDdb}
+								<span
+									class="badge {aircraft.tracked
+										? 'preset-filled-success-500'
+										: 'preset-filled-surface-500'}"
+								>
+									{aircraft.tracked ? 'Tracked' : 'Not Tracked'}
+								</span>
+								<span
+									class="badge {aircraft.identified
+										? 'preset-filled-primary-500'
+										: 'preset-filled-surface-500'}"
+								>
+									{aircraft.identified ? 'Identified' : 'Unidentified'}
+								</span>
+								<span class="badge preset-filled-success-500">In OGN DB</span>
+							{/if}
 							<span
 								class="badge {aircraft.fromAdsbxDdb
 									? 'preset-filled-success-500'
@@ -458,7 +455,7 @@
 			{#if !loadingImages && aircraftImages.length > 0}
 				<div class="space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
-						<Plane class="h-6 w-6" />
+						<Image class="h-6 w-6" />
 						Aircraft Photos
 					</h2>
 
@@ -493,7 +490,7 @@
 			<!-- Flights Section -->
 			<div class="space-y-4 card p-6">
 				<h2 class="flex items-center gap-2 h2">
-					<Plane class="h-6 w-6" />
+					<History class="h-6 w-6" />
 					Flight History
 				</h2>
 
@@ -602,7 +599,7 @@
 				{#if aircraftModel}
 					<div class="order-2 space-y-4 card p-6">
 						<h2 class="flex items-center gap-2 h2">
-							<Plane class="h-6 w-6" />
+							<Cog class="h-6 w-6" />
 							Aircraft Model Details
 						</h2>
 
@@ -687,248 +684,190 @@
 				<!-- Aircraft Registration -->
 				<div class="order-1 space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
-						<Plane class="h-6 w-6" />
+						<FileText class="h-6 w-6" />
 						Aircraft Registration
 					</h2>
 
 					{#if aircraftRegistration}
-						<div class="space-y-3">
+						<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
 							<!-- Registration Number -->
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
-									<p class="font-mono font-semibold">
-										{aircraft.registration || aircraftRegistration.registrationNumber || 'Unknown'}
-									</p>
-								</div>
+							<div>
+								<dt class="text-surface-600-300-token mb-1 font-medium">Registration Number</dt>
+								<dd class="font-mono font-semibold">
+									{aircraft.registration || aircraftRegistration.registrationNumber || 'Unknown'}
+								</dd>
 							</div>
 
 							<!-- Serial Number -->
-							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
-									<p class="font-mono">{aircraftRegistration.serialNumber}</p>
-								</div>
+							<div>
+								<dt class="text-surface-600-300-token mb-1 font-medium">Serial Number</dt>
+								<dd class="font-mono">{aircraftRegistration.serialNumber}</dd>
 							</div>
-
-							<!-- Manufacturer/Model/Series Codes -->
-							{#if aircraftRegistration.manufacturerCode || aircraftRegistration.modelCode || aircraftRegistration.seriesCode}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer/Model/Series</p>
-										<p class="font-mono">
-											{[
-												aircraftRegistration.manufacturerCode,
-												aircraftRegistration.modelCode,
-												aircraftRegistration.seriesCode
-											]
-												.filter(Boolean)
-												.join('-')}
-										</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Engine Codes -->
-							{#if aircraftRegistration.engineManufacturerCode || aircraftRegistration.engineModelCode}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Engine Manufacturer/Model</p>
-										<p class="font-mono">
-											{[
-												aircraftRegistration.engineManufacturerCode,
-												aircraftRegistration.engineModelCode
-											]
-												.filter(Boolean)
-												.join('-')}
-										</p>
-									</div>
-								</div>
-							{/if}
 
 							<!-- Year Manufactured -->
 							{#if aircraftRegistration.yearManufactured}
-								<div class="flex items-start gap-3">
-									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
-										<p>{aircraftRegistration.yearManufactured}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Year Manufactured</dt>
+									<dd>{aircraftRegistration.yearManufactured}</dd>
 								</div>
 							{/if}
 
 							<!-- Aircraft Type -->
 							{#if aircraftRegistration.aircraftType}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Type</p>
-										<p>{aircraftRegistration.aircraftType}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
+									<dd>{aircraftRegistration.aircraftType}</dd>
+								</div>
+							{/if}
+
+							<!-- Manufacturer/Model/Series Codes -->
+							{#if aircraftRegistration.manufacturerCode || aircraftRegistration.modelCode || aircraftRegistration.seriesCode}
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Mfr/Model/Series</dt>
+									<dd class="font-mono">
+										{[
+											aircraftRegistration.manufacturerCode,
+											aircraftRegistration.modelCode,
+											aircraftRegistration.seriesCode
+										]
+											.filter(Boolean)
+											.join('-')}
+									</dd>
 								</div>
 							{/if}
 
 							<!-- Engine Type -->
-							<!-- Note: Explicit null/undefined check needed because 0 is a valid engine type (None) -->
 							{#if aircraftRegistration.engineType !== null && aircraftRegistration.engineType !== undefined}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Engine Type</p>
-										<p>{getEngineTypeLabel(aircraftRegistration.engineType)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
+									<dd>{getEngineTypeLabel(aircraftRegistration.engineType)}</dd>
+								</div>
+							{/if}
+
+							<!-- Engine Codes -->
+							{#if aircraftRegistration.engineManufacturerCode || aircraftRegistration.engineModelCode}
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Engine Mfr/Model</dt>
+									<dd class="font-mono">
+										{[
+											aircraftRegistration.engineManufacturerCode,
+											aircraftRegistration.engineModelCode
+										]
+											.filter(Boolean)
+											.join('-')}
+									</dd>
 								</div>
 							{/if}
 
 							<!-- Registrant Name -->
 							{#if aircraftRegistration.registrantName}
-								<div class="flex items-start gap-3">
-									<User class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
-										<p>{aircraftRegistration.registrantName}</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Home Base Airport -->
-							{#if aircraft?.homeBaseAirportIdent}
-								<div class="flex items-start gap-3">
-									<Building2 class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
-										<p>{aircraft.homeBaseAirportIdent}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Owner</dt>
+									<dd>{aircraftRegistration.registrantName}</dd>
 								</div>
 							{/if}
 
 							<!-- Registrant Type -->
 							{#if aircraftRegistration.registrantType}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Registrant Type</p>
-										<p>{aircraftRegistration.registrantType}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Registrant Type</dt>
+									<dd>{aircraftRegistration.registrantType}</dd>
+								</div>
+							{/if}
+
+							<!-- Home Base Airport -->
+							{#if aircraft?.homeBaseAirportIdent}
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Home Base Airport</dt>
+									<dd>{aircraft.homeBaseAirportIdent}</dd>
 								</div>
 							{/if}
 
 							<!-- Status Code -->
 							{#if aircraftRegistration.statusCode}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
-										<p>
-											{getStatusCodeDescription(aircraftRegistration.statusCode)}
-											<span class="ml-1 text-xs text-surface-500"
-												>({aircraftRegistration.statusCode})</span
-											>
-										</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Status</dt>
+									<dd>
+										{getStatusCodeDescription(aircraftRegistration.statusCode)}
+										<span class="ml-1 text-xs text-surface-500"
+											>({aircraftRegistration.statusCode})</span
+										>
+									</dd>
 								</div>
 							{/if}
 
 							<!-- Transponder Code -->
 							{#if aircraftRegistration.transponderCode}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
-										<p class="font-mono">
-											{formatTransponderCode(aircraftRegistration.transponderCode)}
-										</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Transponder Code</dt>
+									<dd class="font-mono">
+										{formatTransponderCode(aircraftRegistration.transponderCode)}
+									</dd>
 								</div>
 							{/if}
 
 							<!-- Airworthiness Class -->
 							{#if aircraftRegistration.airworthinessClass}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Class</p>
-										<p>{aircraftRegistration.airworthinessClass}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Airworthiness Class</dt>
+									<dd>{aircraftRegistration.airworthinessClass}</dd>
 								</div>
 							{/if}
 
 							<!-- Airworthiness Date -->
 							{#if aircraftRegistration.airworthinessDate}
-								<div class="flex items-start gap-3">
-									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
-										<p>{dayjs(aircraftRegistration.airworthinessDate).format('YYYY-MM-DD')}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Airworthiness Date</dt>
+									<dd>{dayjs(aircraftRegistration.airworthinessDate).format('YYYY-MM-DD')}</dd>
 								</div>
 							{/if}
 
 							<!-- Certificate Issue Date -->
 							{#if aircraftRegistration.certificateIssueDate}
-								<div class="flex items-start gap-3">
-									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
-										<p>
-											{dayjs(aircraftRegistration.certificateIssueDate).format('YYYY-MM-DD')}
-										</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">
+										Certificate Issue Date
+									</dt>
+									<dd>{dayjs(aircraftRegistration.certificateIssueDate).format('YYYY-MM-DD')}</dd>
 								</div>
 							{/if}
 
 							<!-- Expiration Date -->
 							{#if aircraftRegistration.expirationDate}
-								<div class="flex items-start gap-3">
-									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
-										<p>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Expiration Date</dt>
+									<dd>{dayjs(aircraftRegistration.expirationDate).format('YYYY-MM-DD')}</dd>
 								</div>
 							{/if}
 
 							<!-- Kit Manufacturer/Model -->
 							{#if aircraftRegistration.kitManufacturerName || aircraftRegistration.kitModelName}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Kit</p>
-										<p>
-											{[aircraftRegistration.kitManufacturerName, aircraftRegistration.kitModelName]
-												.filter(Boolean)
-												.join(' ')}
-										</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Kit</dt>
+									<dd>
+										{[aircraftRegistration.kitManufacturerName, aircraftRegistration.kitModelName]
+											.filter(Boolean)
+											.join(' ')}
+									</dd>
 								</div>
 							{/if}
 
 							<!-- Light Sport Type -->
 							{#if aircraftRegistration.lightSportType}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Light Sport Type</p>
-										<p>{aircraftRegistration.lightSportType}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Light Sport Type</dt>
+									<dd>{aircraftRegistration.lightSportType}</dd>
 								</div>
 							{/if}
 
 							<!-- Other Names -->
 							{#if aircraftRegistration.otherNames && aircraftRegistration.otherNames.length > 0}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Other Names</p>
-										<p>{aircraftRegistration.otherNames.join(', ')}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Other Names</dt>
+									<dd>{aircraftRegistration.otherNames.join(', ')}</dd>
 								</div>
 							{/if}
-						</div>
+						</dl>
 					{:else}
 						<div class="text-surface-600-300-token py-4 text-center text-xs">
 							<p>
