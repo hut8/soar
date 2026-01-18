@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 /// Watchlist entry response (returned to API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchlistEntry {
     pub user_id: Uuid,
     pub aircraft_id: Uuid,

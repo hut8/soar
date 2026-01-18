@@ -58,6 +58,9 @@
 	let previousCompassHeading: number = 0;
 	let isCompassActive: boolean = $state(false);
 	let displayHeading: number = $state(0);
+	let hasAbsoluteOrientation: boolean = false;
+	let compassWarningShown: boolean = false;
+	let orientationEventType: 'deviceorientationabsolute' | 'deviceorientation' | null = null;
 
 	// Airport marker manager (created first as runway manager depends on it)
 	const airportMarkerManager = new AirportMarkerManager({
@@ -328,6 +331,7 @@
 			aircraftMarkerManager.clear();
 			clusterMarkerManager.clear();
 			viewportController.stopRefreshTimer();
+			cleanupCompass();
 		};
 	});
 
@@ -620,7 +624,28 @@
 			}
 		}
 
-		window.addEventListener('deviceorientation', handleOrientationChange);
+		// Try deviceorientationabsolute first (better for Android)
+		// Fall back to deviceorientation if absolute is not available
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const win = window as any;
+		if ('ondeviceorientationabsolute' in win) {
+			win.addEventListener('deviceorientationabsolute', handleOrientationChange);
+			orientationEventType = 'deviceorientationabsolute';
+			hasAbsoluteOrientation = true;
+			logger.debug('Using deviceorientationabsolute for compass');
+		} else {
+			window.addEventListener('deviceorientation', handleOrientationChange);
+			orientationEventType = 'deviceorientation';
+			logger.debug('Using deviceorientation for compass (absolute not available)');
+		}
+	}
+
+	function cleanupCompass(): void {
+		if (orientationEventType) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			(window as any).removeEventListener(orientationEventType, handleOrientationChange);
+			orientationEventType = null;
+		}
 	}
 
 	function calculateViewportArea(): number {
@@ -661,17 +686,22 @@
 			if (webkitHeading !== undefined && webkitHeading !== null) {
 				// iOS: Use webkitCompassHeading directly (already magnetic heading)
 				magneticHeading = webkitHeading;
-			} else if (event.absolute && event.alpha !== null) {
-				// Android with absolute orientation: Convert alpha to magnetic heading
-				// alpha is counter-clockwise from north, compass is clockwise from north
+			} else if (event.absolute || hasAbsoluteOrientation) {
+				// Android with absolute orientation (from deviceorientationabsolute event
+				// or deviceorientation with absolute=true): Convert alpha to magnetic heading
+				// alpha is measured counter-clockwise from north, compass heading is clockwise
 				magneticHeading = (360 - event.alpha) % 360;
 			} else {
-				// Fallback: Use alpha as-is (may not be accurate, default to 0 if somehow null)
-				logger.warn(
-					'Using raw alpha for heading (absolute={absolute}), compass may be inaccurate',
-					{ absolute: event.absolute }
-				);
-				magneticHeading = event.alpha ?? 0;
+				// Fallback: Use raw alpha (may not be accurate)
+				// Only log warning once to avoid console spam
+				if (!compassWarningShown) {
+					logger.warn(
+						'Using raw alpha for heading (absolute={absolute}), compass may be inaccurate',
+						{ absolute: event.absolute }
+					);
+					compassWarningShown = true;
+				}
+				magneticHeading = (360 - event.alpha) % 360;
 			}
 
 			// Display the magnetic heading (what direction the device is pointing)
