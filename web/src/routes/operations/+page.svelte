@@ -929,16 +929,14 @@
 			</button>
 		{/if}
 
+		<!-- Map Type Toggle Button -->
+		<button class="location-btn" onclick={toggleMapType} title="Toggle Map Type">
+			<span class="text-sm font-medium">{mapType === 'satellite' ? 'Map' : 'Satellite'}</span>
+		</button>
+
 		<!-- Settings Button -->
 		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
 			<Settings size={20} />
-		</button>
-	</div>
-
-	<!-- Map Type Toggle Button -->
-	<div class="absolute bottom-4 left-4 z-10">
-		<button class="location-btn" onclick={toggleMapType} title="Toggle Map Type">
-			<span class="text-sm font-medium">{mapType === 'satellite' ? 'Map' : 'Satellite'}</span>
 		</button>
 	</div>
 
