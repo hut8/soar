@@ -57,12 +57,9 @@
   },
   "options": {
     "legend": {
-      "calcs": [
-        "mean",
-        "max"
-      ],
-      "displayMode": "table",
-      "placement": "right",
+      "calcs": [],
+      "displayMode": "list",
+      "placement": "bottom",
       "showLegend": true
     },
     "tooltip": {

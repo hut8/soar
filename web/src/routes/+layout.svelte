@@ -42,7 +42,7 @@
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
-	const globePath = resolve('/globe');
+	// const globePath = resolve('/globe'); // temporarily disabled
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
@@ -293,9 +293,11 @@
 						<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
 							<Radar /> Operations
 						</a>
+						<!-- 3D Globe link temporarily disabled
 						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
 							<Globe /> 3D Globe
 						</a>
+						-->
 					</nav>
 
 					<!-- Backend Toggle (Dev Only) -->
@@ -425,6 +427,7 @@
 				>
 					<Radar size={16} /> Operations
 				</a>
+				<!-- 3D Globe link temporarily disabled
 				<a
 					href={globePath}
 					class="btn w-full justify-start preset-filled-primary-500"
@@ -432,6 +435,7 @@
 				>
 					<Globe size={16} /> 3D Globe
 				</a>
+				-->
 				<a
 					href={aircraftPath}
 					class="btn w-full justify-start preset-filled-primary-500"

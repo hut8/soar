@@ -7,4 +7,7 @@ import type { AircraftCluster } from './AircraftCluster';
  */
 export type AircraftOrCluster =
 	| { type: 'aircraft'; data: Aircraft }
-	| { type: 'cluster'; data: AircraftCluster };
+	| {
+			type: 'cluster';
+			data: AircraftCluster;
+	  };

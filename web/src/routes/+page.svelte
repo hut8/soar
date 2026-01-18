@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera, Globe } from '@lucide/svelte';
+	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera } from '@lucide/svelte';
+	// import { Globe } from '@lucide/svelte'; // temporarily disabled
 	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
@@ -10,7 +11,7 @@
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
 	const arPath = resolve('/ar');
-	const globePath = resolve('/globe');
+	// const globePath = resolve('/globe'); // temporarily disabled
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -194,7 +195,7 @@
 					</div>
 				</a>
 
-				<!-- 3D Globe Button -->
+				<!-- 3D Globe Button - temporarily disabled
 				<a
 					href={globePath}
 					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
@@ -212,6 +213,7 @@
 						</div>
 					</div>
 				</a>
+				-->
 			</div>
 		</div>
 	</section>

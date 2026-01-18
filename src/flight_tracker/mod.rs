@@ -62,6 +62,7 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub runways_repo: &'a RunwaysRepository,
     pub fixes_repo: &'a FixesRepository,
     pub elevation_db: &'a ElevationDB,
+    pub magnetic_service: &'a crate::magnetic::MagneticService,
     pub aircraft_states: &'a AircraftStatesMap,
     pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
 }
@@ -76,6 +77,7 @@ pub struct FlightTracker {
     fixes_repo: FixesRepository,
     locations_repo: LocationsRepository,
     elevation_db: ElevationDB,
+    magnetic_service: crate::magnetic::MagneticService,
     // Unified aircraft state map: all aircraft seen in last 18 hours
     // DashMap provides concurrent per-key locking so one aircraft update doesn't block another
     aircraft_states: AircraftStatesMap,
@@ -94,6 +96,7 @@ impl Clone for FlightTracker {
             fixes_repo: self.fixes_repo.clone(),
             locations_repo: self.locations_repo.clone(),
             elevation_db: self.elevation_db.clone(),
+            magnetic_service: self.magnetic_service.clone(),
             aircraft_states: Arc::clone(&self.aircraft_states),
             device_locks: Arc::clone(&self.device_locks),
         }
@@ -103,6 +106,7 @@ impl Clone for FlightTracker {
 impl FlightTracker {
     pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+        let magnetic_service = crate::magnetic::MagneticService::new();
         Self {
             pool: pool.clone(),
             flights_repo: FlightsRepository::new(pool.clone()),
@@ -112,6 +116,7 @@ impl FlightTracker {
             fixes_repo: FixesRepository::new(pool.clone()),
             locations_repo: LocationsRepository::new(pool.clone()),
             elevation_db,
+            magnetic_service,
             aircraft_states: Arc::new(DashMap::new()),
             device_locks: Arc::new(DashMap::new()),
         }
@@ -128,6 +133,7 @@ impl FlightTracker {
             runways_repo: &self.runways_repo,
             fixes_repo: &self.fixes_repo,
             elevation_db: &self.elevation_db,
+            magnetic_service: &self.magnetic_service,
             aircraft_states: &self.aircraft_states,
             pool: self.pool.clone(),
         }

@@ -188,20 +188,27 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
         )
         .expect("failed to set buckets for flight_tracker.coalesce.rejected.gap_hours")
         // Configure Beast message processing latency histogram with millisecond buckets
-        // Buckets: 1ms, 2ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1000ms
+        // Buckets: 1ms to 30s to capture slow processing and identify bottlenecks
         .set_buckets_for_metric(
             metrics_exporter_prometheus::Matcher::Full(
                 "beast.run.message_processing_latency_ms".to_string(),
             ),
-            &[1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0],
+            &[
+                1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0,
+                10000.0, 30000.0,
+            ],
         )
         .expect("failed to set buckets for beast.run.message_processing_latency_ms")
         // Configure SBS message processing latency histogram with millisecond buckets
+        // Buckets: 1ms to 30s to capture slow processing and identify bottlenecks
         .set_buckets_for_metric(
             metrics_exporter_prometheus::Matcher::Full(
                 "sbs.run.message_processing_latency_ms".to_string(),
             ),
-            &[1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0],
+            &[
+                1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0,
+                10000.0, 30000.0,
+            ],
         )
         .expect("failed to set buckets for sbs.run.message_processing_latency_ms")
         .install_recorder()
@@ -586,6 +593,13 @@ pub fn initialize_run_metrics() {
     metrics::counter!("elevation_tile_cache_hits_total").absolute(0);
     metrics::counter!("elevation_tile_cache_misses_total").absolute(0);
     metrics::gauge!("elevation_tile_cache_entries").set(0.0);
+
+    // Magnetic declination cache metrics
+    metrics::counter!("magnetic_cache_hits_total").absolute(0);
+    metrics::counter!("magnetic_cache_misses_total").absolute(0);
+    metrics::gauge!("magnetic_cache_entries").set(0.0);
+    metrics::histogram!("magnetic_lookup_duration_seconds").record(0.0);
+    metrics::histogram!("magnetic_calculation_duration_seconds").record(0.0);
 
     // Receiver cache metrics
     metrics::counter!("generic_processor.receiver_cache.hit_total").absolute(0);

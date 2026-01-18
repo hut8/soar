@@ -41,6 +41,11 @@ jobs:
         run: npm ci
 
       - name: Build SvelteKit project
+        env:
+          # Sentry source map upload (requires secrets to be configured in GitHub)
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: npm run build
 
       - name: Upload build artifacts

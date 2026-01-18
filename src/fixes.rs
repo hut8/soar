@@ -74,28 +74,13 @@ pub struct Fix {
     pub time_gap_seconds: Option<i32>,
 }
 
-/// Extended Fix struct that includes raw packet data from aprs_messages table
-/// Used for API responses where raw packet data is needed
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FixWithRawPacket {
-    #[serde(flatten)]
-    pub fix: Fix,
-
-    /// Raw APRS packet data (joined from aprs_messages table)
-    pub raw_packet: Option<String>,
-}
-
-/// Extended Fix struct that includes both raw packet and aircraft information
+/// Extended Fix struct that includes aircraft information
 /// Used for receiver fixes API where aircraft details need to be displayed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FixWithAircraftInfo {
     #[serde(flatten)]
     pub fix: Fix,
-
-    /// Raw APRS packet data (joined from aprs_messages table)
-    pub raw_packet: Option<String>,
 
     /// Full aircraft information (joined from aircraft table)
     pub aircraft: Option<crate::actions::views::AircraftView>,
@@ -114,39 +99,10 @@ pub struct FixWithFlightInfo {
     pub flight: Option<crate::flights::Flight>,
 }
 
-impl FixWithRawPacket {
-    /// Create a FixWithRawPacket from a Fix and optional raw packet string
-    pub fn new(fix: Fix, raw_packet: Option<String>) -> Self {
-        Self { fix, raw_packet }
-    }
-}
-
 impl FixWithAircraftInfo {
-    /// Create a FixWithAircraftInfo from a Fix, raw packet, and aircraft information
-    pub fn new(
-        fix: Fix,
-        raw_packet: Option<String>,
-        aircraft: Option<crate::actions::views::AircraftView>,
-    ) -> Self {
-        Self {
-            fix,
-            raw_packet,
-            aircraft,
-        }
-    }
-}
-
-impl std::ops::Deref for FixWithRawPacket {
-    type Target = Fix;
-
-    fn deref(&self) -> &Self::Target {
-        &self.fix
-    }
-}
-
-impl std::ops::DerefMut for FixWithRawPacket {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.fix
+    /// Create a FixWithAircraftInfo from a Fix and aircraft information
+    pub fn new(fix: Fix, aircraft: Option<crate::actions::views::AircraftView>) -> Self {
+        Self { fix, aircraft }
     }
 }
 

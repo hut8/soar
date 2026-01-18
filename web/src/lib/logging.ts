@@ -27,6 +27,11 @@ export async function configureLogging(): Promise<void> {
 		},
 		loggers: [
 			{
+				category: ['logtape', 'meta'],
+				lowestLevel: 'warning',
+				sinks: ['console']
+			},
+			{
 				category: ['soar'],
 				lowestLevel: 'debug',
 				sinks: ['console']

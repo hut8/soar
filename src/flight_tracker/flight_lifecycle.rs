@@ -122,6 +122,7 @@ fn spawn_flight_enrichment_on_creation(
     let runways_repo = ctx.runways_repo.clone();
     let airports_repo = ctx.airports_repo.clone();
     let locations_repo = ctx.locations_repo.clone();
+    let magnetic_service = ctx.magnetic_service.clone();
 
     // Create a new root span to prevent trace accumulation
     let span = info_span!(parent: None, "flight_enrichment_creation", %flight_id);
@@ -153,6 +154,7 @@ fn spawn_flight_enrichment_on_creation(
             let takeoff_runway_info = determine_runway_identifier(
                 &fixes_repo,
                 &runways_repo,
+                &magnetic_service,
                 &aircraft,
                 fix.timestamp,
                 fix.latitude,
@@ -395,6 +397,7 @@ pub(crate) fn spawn_complete_flight(
     let locations_repo = ctx.locations_repo.clone();
     let runways_repo = ctx.runways_repo.clone();
     let elevation_db = ctx.elevation_db.clone();
+    let magnetic_service = ctx.magnetic_service.clone();
     let pool = ctx.pool.clone();
 
     let device_clone = device.clone();
@@ -413,6 +416,7 @@ pub(crate) fn spawn_complete_flight(
                 &locations_repo,
                 &runways_repo,
                 &elevation_db,
+                &magnetic_service,
                 pool,
                 &device_clone,
                 flight_id,
@@ -439,6 +443,7 @@ async fn complete_flight_in_background(
     locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
     elevation_db: &ElevationDB,
+    magnetic_service: &crate::magnetic::MagneticService,
     pool: PgPool,
     device: &Aircraft,
     flight_id: Uuid,
@@ -642,6 +647,7 @@ async fn complete_flight_in_background(
         airports_repo,
         locations_repo,
         runways_repo,
+        magnetic_service,
         fix.clone(),
         device.clone(),
         flight_id,
@@ -803,6 +809,7 @@ fn spawn_flight_enrichment_on_completion_direct(
     airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
+    magnetic_service: &crate::magnetic::MagneticService,
     fix: Fix,
     aircraft: Aircraft,
     flight_id: Uuid,
@@ -812,6 +819,7 @@ fn spawn_flight_enrichment_on_completion_direct(
     let runways_repo = runways_repo.clone();
     let airports_repo = airports_repo.clone();
     let locations_repo = locations_repo.clone();
+    let magnetic_service = magnetic_service.clone();
 
     // Create a new root span to prevent trace accumulation
     let span = info_span!(parent: None, "flight_enrichment_completion", %flight_id);
@@ -846,6 +854,7 @@ fn spawn_flight_enrichment_on_completion_direct(
             let landing_runway_info = determine_runway_identifier(
                 &fixes_repo,
                 &runways_repo,
+                &magnetic_service,
                 &aircraft,
                 fix.timestamp,
                 fix.latitude,

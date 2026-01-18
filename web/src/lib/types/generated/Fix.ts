@@ -58,8 +58,9 @@ export type Fix = {
 	active: boolean;
 	/**
 	 * Receiver that reported this fix (from via array)
+	 * NULL for ADS-B/Beast and SBS data sources which don't have receiver information
 	 */
-	receiverId: string;
+	receiverId: string | null;
 	/**
 	 * Reference to the raw message that contains the raw packet data
 	 */

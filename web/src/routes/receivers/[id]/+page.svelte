@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getLogger } from '$lib/logging';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	const logger = getLogger(['soar', 'ReceiverDetails']);
 	import {
@@ -20,13 +21,21 @@
 		Signal,
 		ChevronLeft,
 		ChevronRight,
-		FileText
+		FileText,
+		Loader2
 	} from '@lucide/svelte';
 	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Aircraft, Receiver, Fix, PaginatedDataResponse, DataResponse } from '$lib/types';
+	import type {
+		Aircraft,
+		Receiver,
+		Fix,
+		PaginatedDataResponse,
+		DataResponse,
+		RawMessageResponse
+	} from '$lib/types';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
@@ -79,10 +88,9 @@
 		fixCountsByAircraft: AircraftFixCount[];
 	}
 
-	// Extends Fix with aircraft and raw packet data
+	// Extends Fix with aircraft data
 	interface FixWithAircraft extends Fix {
 		aircraft?: Aircraft;
-		rawPacket?: string;
 		// Legacy sourceMetadata fields exposed at top level for backward compatibility
 		snrDb?: number;
 		bitErrorsCorrected?: number;
@@ -123,6 +131,57 @@
 
 	let receiverId = $derived($page.params.id || '');
 
+	// Cache for on-demand raw message fetching in fixes
+	let fixRawMessagesCache = new SvelteMap<
+		string,
+		{
+			data?: RawMessageResponse;
+			loading: boolean;
+			error?: string;
+		}
+	>();
+
+	// Fetch raw message for a fix
+	async function fetchFixRawMessage(rawMessageId: string) {
+		if (
+			fixRawMessagesCache.get(rawMessageId)?.data ||
+			fixRawMessagesCache.get(rawMessageId)?.loading
+		) {
+			return;
+		}
+
+		fixRawMessagesCache.set(rawMessageId, { loading: true });
+
+		try {
+			const response = await serverCall<{ data: RawMessageResponse }>(
+				`/raw-messages/${rawMessageId}`
+			);
+			fixRawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';
+			fixRawMessagesCache.set(rawMessageId, { loading: false, error: errorMessage });
+		}
+	}
+
+	// Get raw message display for a fix
+	function getFixRawMessageDisplay(rawMessageId: string): {
+		content?: string;
+		loading: boolean;
+		error?: string;
+		source?: 'aprs' | 'adsb';
+	} {
+		const cached = fixRawMessagesCache.get(rawMessageId);
+		if (!cached) {
+			return { loading: false };
+		}
+		return {
+			content: cached.data?.rawMessage,
+			loading: cached.loading,
+			error: cached.error,
+			source: cached.data?.source
+		};
+	}
+
 	onMount(async () => {
 		if (receiverId) {
 			await loadReceiver();
@@ -143,6 +202,15 @@
 	$effect(() => {
 		if (activeTab === 'received-fixes' && receiverId && fixes === null && !loadingFixes) {
 			loadFixes();
+		}
+	});
+
+	// Fetch raw messages for fixes when showRawFixes is toggled on
+	$effect(() => {
+		if (showRawFixes && fixes && fixes.length > 0) {
+			for (const fix of fixes) {
+				fetchFixRawMessage(fix.rawMessageId);
+			}
 		}
 	});
 
@@ -1180,14 +1248,32 @@
 																: '—'}</td
 														>
 													</tr>
-													{#if showRawFixes && fix.rawPacket}
+													{#if showRawFixes}
+														{@const rawDisplay = getFixRawMessageDisplay(fix.rawMessageId)}
 														<tr
 															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
 																? 'bg-gray-100 dark:bg-gray-800'
 																: ''}"
 														>
 															<td colspan="6" class="px-3 py-2 font-mono text-sm">
-																{fix.rawPacket}
+																{#if rawDisplay.loading}
+																	<span class="inline-flex items-center gap-1 text-surface-500">
+																		<Loader2 class="h-3 w-3 animate-spin" />
+																		Loading...
+																	</span>
+																{:else if rawDisplay.error}
+																	<span class="text-error-500">Error: {rawDisplay.error}</span>
+																{:else if rawDisplay.content}
+																	<span
+																		class="text-surface-400"
+																		title="Source: {rawDisplay.source}"
+																	>
+																		[{rawDisplay.source?.toUpperCase()}]
+																	</span>
+																	{rawDisplay.content}
+																{:else}
+																	<span class="text-surface-400">No raw message available</span>
+																{/if}
 															</td>
 														</tr>
 													{/if}
@@ -1253,10 +1339,31 @@
 												</div>
 											</dl>
 
-											{#if showRawFixes && fix.rawPacket}
+											{#if showRawFixes}
+												{@const rawDisplay = getFixRawMessageDisplay(fix.rawMessageId)}
 												<div class="mt-3 border-t border-surface-300 pt-3 dark:border-surface-600">
-													<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
-													<div class="overflow-x-auto font-mono text-xs">{fix.rawPacket}</div>
+													<div class="text-surface-600-300-token mb-1 text-xs">
+														Raw Packet
+														{#if rawDisplay.source}
+															<span class="text-surface-400">
+																({rawDisplay.source.toUpperCase()})
+															</span>
+														{/if}
+													</div>
+													{#if rawDisplay.loading}
+														<div class="inline-flex items-center gap-1 text-surface-500">
+															<Loader2 class="h-3 w-3 animate-spin" />
+															<span>Loading...</span>
+														</div>
+													{:else if rawDisplay.error}
+														<div class="text-xs text-error-500">Error: {rawDisplay.error}</div>
+													{:else if rawDisplay.content}
+														<div class="overflow-x-auto font-mono text-xs">
+															{rawDisplay.content}
+														</div>
+													{:else}
+														<div class="text-xs text-surface-400">No raw message available</div>
+													{/if}
 												</div>
 											{/if}
 										</div>
