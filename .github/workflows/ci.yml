@@ -74,6 +74,17 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
+      - name: Pull or build PostgreSQL image
+        working-directory: .
+        run: |
+          if docker pull ghcr.io/hut8/postgis-timescaledb:latest; then
+            echo "Using pre-built image from GHCR"
+            docker tag ghcr.io/hut8/postgis-timescaledb:latest postgis-timescaledb:test
+          else
+            echo "GHCR image not available, building locally"
+            docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
+          fi
+
       - name: Start PostgreSQL service with TimescaleDB
         working-directory: .
         run: |
@@ -87,7 +98,7 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            ghcr.io/hut8/postgis-timescaledb:latest
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         working-directory: .
@@ -290,6 +301,16 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
+      - name: Pull or build PostgreSQL image
+        run: |
+          if docker pull ghcr.io/hut8/postgis-timescaledb:latest; then
+            echo "Using pre-built image from GHCR"
+            docker tag ghcr.io/hut8/postgis-timescaledb:latest postgis-timescaledb:test
+          else
+            echo "GHCR image not available, building locally"
+            docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
+          fi
+
       - name: Start PostgreSQL service with TimescaleDB
         run: |
           docker run -d \
@@ -302,7 +323,7 @@ jobs:
             --health-interval=10s \
             --health-timeout=5s \
             --health-retries=5 \
-            ghcr.io/hut8/postgis-timescaledb:latest
+            postgis-timescaledb:test
 
       - name: Wait for PostgreSQL to be ready
         run: |
