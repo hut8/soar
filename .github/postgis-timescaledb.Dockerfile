@@ -1,20 +1,15 @@
 # Custom PostgreSQL + PostGIS + TimescaleDB image for CI
 FROM postgis/postgis:17-3.5
 
-# Install dependencies
+# Install dependencies for adding apt repository
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
-        gnupg \
         lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
-# Add TimescaleDB repository
-RUN mkdir -p /usr/share/keyrings && \
-    curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | \
-    gpg --dearmor -o /usr/share/keyrings/timescaledb.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
+# Add TimescaleDB repository (using bundled GPG key to avoid packagecloud rate limits)
+COPY .github/timescaledb.gpg /usr/share/keyrings/timescaledb.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -cs) main" | \
     tee /etc/apt/sources.list.d/timescaledb.list
 
 # Install TimescaleDB, H3, and pg_partman extensions
