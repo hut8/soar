@@ -1360,15 +1360,21 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Send success notification (email)
-            if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
-                let report = MigrationReport::success(applied_migrations, duration_secs);
-                if let Err(e) = send_migration_email_report(&email_config, &report) {
-                    warn!("Failed to send migration success email: {}", e);
+            // Send success notification (email) only if migrations were actually applied
+            let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
+            if !applied_migrations.is_empty() {
+                if let Ok(email_config) = MigrationEmailConfig::from_env() {
+                    let report = MigrationReport::success(applied_migrations, duration_secs);
+                    if let Err(e) = send_migration_email_report(&email_config, &report) {
+                        warn!("Failed to send migration success email: {}", e);
+                    }
+                } else {
+                    warn!(
+                        "Email configuration not available, skipping migration email notification"
+                    );
                 }
             } else {
-                warn!("Email configuration not available, skipping migration email notification");
+                info!("No migrations applied, skipping email notification");
             }
 
             Ok(())
