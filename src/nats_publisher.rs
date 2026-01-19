@@ -4,7 +4,7 @@ use serde_json;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::fixes::FixWithFlightInfo;
+use crate::fixes::Fix;
 
 // Queue size for NATS publish queue
 const NATS_PUBLISH_QUEUE_SIZE: usize = 1000;
@@ -17,17 +17,13 @@ fn get_topic_prefix() -> &'static str {
     }
 }
 
-/// Publish FixWithFlightInfo to NATS (both device and area topics)
-#[tracing::instrument(skip(nats_client, fix_with_flight), fields(aircraft_id = %aircraft_id))]
-async fn publish_to_nats(
-    nats_client: &Client,
-    aircraft_id: &str,
-    fix_with_flight: &FixWithFlightInfo,
-) -> Result<()> {
+/// Publish Fix to NATS (both device and area topics)
+#[tracing::instrument(skip(nats_client, fix), fields(aircraft_id = %aircraft_id))]
+async fn publish_to_nats(nats_client: &Client, aircraft_id: &str, fix: &Fix) -> Result<()> {
     let topic_prefix = get_topic_prefix();
 
-    // Serialize the FixWithFlightInfo to JSON once
-    let payload = serde_json::to_vec(fix_with_flight)?;
+    // Serialize the Fix to JSON once
+    let payload = serde_json::to_vec(fix)?;
 
     // TODO: Temporarily disabled to reduce NATS publish load
     // Publish by device
@@ -37,11 +33,7 @@ async fn publish_to_nats(
     //     .await?;
 
     // Publish by area
-    let area_subject = get_area_subject(
-        topic_prefix,
-        fix_with_flight.latitude,
-        fix_with_flight.longitude,
-    );
+    let area_subject = get_area_subject(topic_prefix, fix.latitude, fix.longitude);
 
     let publish_start = std::time::Instant::now();
     nats_client.publish(area_subject, payload.into()).await?;
@@ -66,7 +58,7 @@ pub struct NatsFixPublisher {
     // Even though we don't use it directly after initialization,
     // dropping it would close the connection
     _nats_client: Arc<Client>,
-    fix_sender: flume::Sender<FixWithFlightInfo>,
+    fix_sender: flume::Sender<Fix>,
 }
 
 impl NatsFixPublisher {
@@ -110,8 +102,7 @@ impl NatsFixPublisher {
         let nats_client = Arc::new(nats_client);
 
         // Create bounded channel for fixes (~2MB buffer)
-        let (fix_sender, fix_receiver) =
-            flume::bounded::<FixWithFlightInfo>(NATS_PUBLISH_QUEUE_SIZE);
+        let (fix_sender, fix_receiver) = flume::bounded::<Fix>(NATS_PUBLISH_QUEUE_SIZE);
 
         info!(
             "NATS publisher initialized with bounded channel (capacity: {} fixes, ~2MB buffer)",
@@ -125,11 +116,11 @@ impl NatsFixPublisher {
             let mut fixes_published = 0u64;
             let mut last_stats_log = std::time::Instant::now();
 
-            while let Ok(fix_with_flight) = fix_receiver.recv_async().await {
+            while let Ok(fix) = fix_receiver.recv_async().await {
                 metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
-                let aircraft_id = fix_with_flight.aircraft_id.to_string();
+                let aircraft_id = fix.aircraft_id.to_string();
 
-                match publish_to_nats(&client_clone, &aircraft_id, &fix_with_flight).await {
+                match publish_to_nats(&client_clone, &aircraft_id, &fix).await {
                     Ok(()) => {
                         fixes_published += 1;
                         metrics::counter!("nats.fix_publisher.published_total").increment(1);
@@ -175,14 +166,14 @@ impl NatsFixPublisher {
 impl NatsFixPublisher {
     /// Process a fix and publish it to NATS (blocking)
     /// This will block if the queue is full, applying backpressure to the caller
-    pub async fn process_fix(&self, fix_with_flight: FixWithFlightInfo, _raw_message: &str) {
+    pub async fn process_fix(&self, fix: Fix, _raw_message: &str) {
         // Track if send will block (queue is full)
         if self.fix_sender.is_full() {
             metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").increment(1);
         }
 
         // Use send_async to block until space is available - never drop fixes
-        match self.fix_sender.send_async(fix_with_flight).await {
+        match self.fix_sender.send_async(fix).await {
             Ok(_) => {
                 // Fix successfully queued for publishing
             }

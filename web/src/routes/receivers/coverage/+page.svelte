@@ -320,18 +320,16 @@
 						['linear'],
 						['get', 'fixCount'],
 						0,
-						'#440154', // Dark purple (no coverage)
-						maxFixCount * 0.25,
-						'#31688e', // Blue
-						maxFixCount * 0.5,
-						'#35b779', // Green
-						maxFixCount * 0.75,
-						'#fde724', // Yellow
+						'#3b82f6', // Blue (low coverage)
+						maxFixCount * 0.33,
+						'#22c55e', // Green
+						maxFixCount * 0.66,
+						'#eab308', // Yellow
 						maxFixCount,
-						'#ff0000' // Red (high coverage)
+						'#f97316' // Orange (high coverage)
 					],
-					'fill-opacity': 0.7,
-					'fill-outline-color': '#000000'
+					'fill-opacity': 0.35,
+					'fill-outline-color': 'rgba(0, 0, 0, 0.3)'
 				}
 			});
 
@@ -490,17 +488,17 @@
 	}
 </script>
 
-<div class="flex h-screen flex-col">
+<div class="fixed inset-x-0 top-[42px] bottom-0 flex w-full flex-col">
 	<!-- Header -->
-	<div class="bg-surface-800 p-4 shadow-md">
+	<div class="bg-surface-800 px-4 py-3 shadow-md">
 		<div class="flex items-center justify-between">
 			<div>
-				<h1 class="text-2xl font-bold text-white">Receiver Coverage Map</h1>
-				<p class="text-sm text-gray-300">
+				<h1 class="text-xl font-bold text-white">Receiver Coverage Map</h1>
+				<p class="text-xs text-gray-300">
 					Visualizing aircraft reception coverage using H3 hexagons
 				</p>
 			</div>
-			<a href={resolve('/receivers')} class="btn gap-2 preset-outlined">
+			<a href={resolve('/receivers')} class="btn gap-2 preset-outlined btn-sm">
 				<Radio class="h-4 w-4" />
 				View Receivers
 			</a>
@@ -508,7 +506,7 @@
 	</div>
 
 	<!-- Controls -->
-	<div class="bg-surface-700 p-4 shadow-sm">
+	<div class="bg-surface-700 px-4 py-2 shadow-sm">
 		<div class="flex flex-wrap gap-4">
 			<!-- Resolution selector -->
 			<div class="flex items-center gap-2">
@@ -697,28 +695,24 @@
 	<div bind:this={mapContainer} class="flex-1"></div>
 
 	<!-- Legend -->
-	<div class="bg-surface-700 p-4">
-		<div class="flex flex-wrap items-center gap-3">
-			<span class="text-sm font-medium text-gray-300">Fix Count:</span>
-			<div class="flex items-center gap-2">
-				<div class="h-4 w-8 rounded" style="background-color: #440154;"></div>
+	<div class="bg-surface-700 px-4 py-2">
+		<div class="flex flex-wrap items-center gap-4">
+			<span class="text-sm font-medium text-gray-300">Density:</span>
+			<div class="flex items-center gap-1">
+				<div class="h-3 w-6 rounded-sm" style="background-color: #3b82f6;"></div>
 				<span class="text-xs text-gray-400">Low</span>
 			</div>
-			<div class="flex items-center gap-2">
-				<div class="h-4 w-8 rounded" style="background-color: #31688e;"></div>
+			<div class="flex items-center gap-1">
+				<div class="h-3 w-6 rounded-sm" style="background-color: #22c55e;"></div>
 				<span class="text-xs text-gray-400">Medium</span>
 			</div>
-			<div class="flex items-center gap-2">
-				<div class="h-4 w-8 rounded" style="background-color: #35b779;"></div>
+			<div class="flex items-center gap-1">
+				<div class="h-3 w-6 rounded-sm" style="background-color: #eab308;"></div>
 				<span class="text-xs text-gray-400">High</span>
 			</div>
-			<div class="flex items-center gap-2">
-				<div class="h-4 w-8 rounded" style="background-color: #fde724;"></div>
+			<div class="flex items-center gap-1">
+				<div class="h-3 w-6 rounded-sm" style="background-color: #f97316;"></div>
 				<span class="text-xs text-gray-400">Very High</span>
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="h-4 w-8 rounded" style="background-color: #ff0000;"></div>
-				<span class="text-xs text-gray-400">Maximum</span>
 			</div>
 		</div>
 	</div>
@@ -743,10 +737,9 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
-		transition: transform 0.2s ease-in-out;
 	}
 
-	:global(.receiver-marker:hover) {
+	:global(.receiver-marker:hover .receiver-icon) {
 		transform: scale(1.1);
 	}
 
@@ -761,7 +754,11 @@
 		justify-content: center;
 		color: #374151;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-		transition: all 0.2s ease-in-out;
+		transition:
+			background 0.2s ease-in-out,
+			border-color 0.2s ease-in-out,
+			box-shadow 0.2s ease-in-out,
+			transform 0.2s ease-in-out;
 	}
 
 	@media (prefers-color-scheme: dark) {

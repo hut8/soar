@@ -1,7 +1,13 @@
 <script lang="ts">
-	import { Hexagon, X, Loader } from '@lucide/svelte';
+	import { Hexagon, X, Loader, Radio } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
-	import type { CoverageHexProperties, Fix, FixesInHexResponse } from '$lib/types';
+	import type {
+		CoverageHexProperties,
+		Fix,
+		FixesInHexResponse,
+		HexReceiversResponse,
+		Receiver
+	} from '$lib/types';
 	import dayjs from 'dayjs';
 	import { resolve } from '$app/paths';
 
@@ -24,6 +30,11 @@
 	let currentPage = $state(1);
 	let isLoading = $state(false);
 	let error = $state('');
+
+	// Receivers state
+	let receivers = $state<Receiver[]>([]);
+	let isLoadingReceivers = $state(false);
+	let receiversError = $state('');
 
 	const fixesPerPage = 100;
 
@@ -57,8 +68,6 @@
 		try {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- URLSearchParams created fresh on each call, no persistent state
 			const params = new URLSearchParams({
-				start_date: dateRange.start,
-				end_date: dateRange.end,
 				limit: fixesPerPage.toString(),
 				offset: ((currentPage - 1) * fixesPerPage).toString()
 			});
@@ -69,6 +78,14 @@
 			if (altitudeFilter) {
 				params.append('min_altitude', altitudeFilter.min.toString());
 				params.append('max_altitude', altitudeFilter.max.toString());
+			}
+
+			// Pass first_seen and last_seen for efficient partition pruning (required)
+			if (hexProperties.firstSeenAt) {
+				params.append('first_seen', hexProperties.firstSeenAt);
+			}
+			if (hexProperties.lastSeenAt) {
+				params.append('last_seen', hexProperties.lastSeenAt);
 			}
 
 			const response = await serverCall<FixesInHexResponse>(
@@ -86,20 +103,54 @@
 		}
 	}
 
+	async function loadReceivers() {
+		if (!hexProperties) return;
+
+		isLoadingReceivers = true;
+		receiversError = '';
+
+		try {
+			const params = new URLSearchParams({
+				start_date: dateRange.start,
+				end_date: dateRange.end
+			});
+
+			const response = await serverCall<HexReceiversResponse>(
+				`/coverage/hexes/${hexProperties.h3Index}/receivers?${params}`
+			);
+
+			receivers = response.data;
+		} catch (err) {
+			receiversError = `Failed to load receivers: ${err instanceof Error ? err.message : 'Unknown error'}`;
+			receivers = [];
+		} finally {
+			isLoadingReceivers = false;
+		}
+	}
+
 	function changePage(newPage: number) {
 		currentPage = newPage;
 		loadFixes();
 	}
 
-	// Load fixes when modal opens or hex changes
+	// Load fixes and receivers when modal opens or hex changes
 	$effect(() => {
 		if (showModal && hexProperties) {
 			currentPage = 1;
 			loadFixes();
+			loadReceivers();
 		}
 	});
 
 	const totalPages = $derived(Math.ceil(total / fixesPerPage));
+
+	// Create a map of receiver ID to callsign for efficient lookup
+	const receiverMap = $derived(new Map(receivers.map((r) => [r.id, r.callsign])));
+
+	function getReceiverCallsign(receiverId: string | null): string {
+		if (!receiverId) return '—';
+		return receiverMap.get(receiverId) || receiverId.substring(0, 8);
+	}
 </script>
 
 {#if showModal && hexProperties}
@@ -228,7 +279,55 @@
 					</div>
 				</div>
 
-				<!-- Section 2: Individual Position Fixes -->
+				<!-- Section 2: Contributing Receivers -->
+				<div>
+					<div class="mb-4 flex items-center gap-2">
+						<Radio size={20} class="text-primary-500" />
+						<h3 class="text-lg font-semibold">Contributing Receivers</h3>
+					</div>
+
+					{#if isLoadingReceivers}
+						<div class="flex items-center gap-2 p-4">
+							<Loader class="h-5 w-5 animate-spin text-primary-500" />
+							<span class="text-sm text-surface-600 dark:text-surface-400"
+								>Loading receivers...</span
+							>
+						</div>
+					{:else if receiversError}
+						<div
+							class="rounded-lg border border-error-500 bg-error-50 p-4 text-error-900 dark:bg-error-900/20 dark:text-error-100"
+						>
+							<p class="text-sm">{receiversError}</p>
+						</div>
+					{:else if receivers.length === 0}
+						<div class="rounded-lg bg-surface-100 p-4 dark:bg-surface-800">
+							<p class="text-sm text-surface-600 dark:text-surface-400">
+								No receiver information available
+							</p>
+						</div>
+					{:else}
+						<div class="flex flex-wrap gap-3">
+							{#each receivers as receiver (receiver.id)}
+								<a
+									href={resolve(`/receivers/${receiver.id}`)}
+									class="flex items-center gap-2 rounded-lg bg-surface-100 px-4 py-3 transition-colors hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700"
+								>
+									<Radio size={16} class="text-primary-500" />
+									<div>
+										<div class="font-medium">{receiver.callsign}</div>
+										{#if receiver.city || receiver.region}
+											<div class="text-xs text-surface-600 dark:text-surface-400">
+												{[receiver.city, receiver.region].filter(Boolean).join(', ')}
+											</div>
+										{/if}
+									</div>
+								</a>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Section 3: Individual Position Fixes -->
 				<div>
 					<div class="mb-4 flex items-center justify-between">
 						<h3 class="text-lg font-semibold">Individual Position Fixes</h3>
@@ -267,6 +366,7 @@
 									<tr>
 										<th>Time</th>
 										<th>Aircraft</th>
+										<th>Receiver</th>
 										<th>Altitude MSL</th>
 										<th>Altitude AGL</th>
 										<th>Speed</th>
@@ -287,6 +387,15 @@
 													</a>
 												{:else}
 													<span class="font-mono text-sm">{fix.source || 'Unknown'}</span>
+												{/if}
+											</td>
+											<td>
+												{#if fix.receiverId}
+													<a href={resolve(`/receivers/${fix.receiverId}`)} class="anchor text-sm">
+														{getReceiverCallsign(fix.receiverId)}
+													</a>
+												{:else}
+													<span class="text-surface-500">—</span>
 												{/if}
 											</td>
 											<td class="text-right">

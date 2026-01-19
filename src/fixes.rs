@@ -86,19 +86,6 @@ pub struct FixWithAircraftInfo {
     pub aircraft: Option<crate::actions::views::AircraftView>,
 }
 
-/// Extended Fix struct that includes flight metadata for WebSocket streaming
-/// Used when streaming fixes to include current flight information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FixWithFlightInfo {
-    #[serde(flatten)]
-    pub fix: Fix,
-
-    /// Current flight information (if fix is part of an active flight)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flight: Option<crate::flights::Flight>,
-}
-
 impl FixWithAircraftInfo {
     /// Create a FixWithAircraftInfo from a Fix and aircraft information
     pub fn new(fix: Fix, aircraft: Option<crate::actions::views::AircraftView>) -> Self {
@@ -115,27 +102,6 @@ impl std::ops::Deref for FixWithAircraftInfo {
 }
 
 impl std::ops::DerefMut for FixWithAircraftInfo {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.fix
-    }
-}
-
-impl FixWithFlightInfo {
-    /// Create a FixWithFlightInfo from a Fix and optional Flight
-    pub fn new(fix: Fix, flight: Option<crate::flights::Flight>) -> Self {
-        Self { fix, flight }
-    }
-}
-
-impl std::ops::Deref for FixWithFlightInfo {
-    type Target = Fix;
-
-    fn deref(&self) -> &Self::Target {
-        &self.fix
-    }
-}
-
-impl std::ops::DerefMut for FixWithFlightInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }

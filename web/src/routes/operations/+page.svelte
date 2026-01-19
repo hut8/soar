@@ -36,7 +36,9 @@
 		loadAreaTrackerState,
 		saveMapType,
 		loadMapType,
-		CONUS_CENTER
+		CONUS_CENTER,
+		MAP_TYPE_LABELS,
+		type MapType
 	} from '$lib/utils/mapStatePersistence';
 
 	const logger = getLogger(['soar', 'Operations']);
@@ -48,9 +50,7 @@
 	const MAX_AIRCRAFT_DISPLAY = 50;
 
 	// Threshold for hiding aircraft labels (in square miles)
-	// Based on bounding box: north=44.208404, south=40.529051, west=-76.502017, east=-65.955142
-	// which is approximately 136,000 sq miles, rounded down to 100,000
-	const LABEL_HIDE_THRESHOLD_SQ_MILES = 100000;
+	const LABEL_HIDE_THRESHOLD_SQ_MILES = 5000;
 
 	// Debug info state (for staging)
 	let debugBounds = $state<{ north: number; south: number; east: number; west: number } | null>(
@@ -122,6 +122,9 @@
 	// Zoom debounce timer
 	let zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Area subscription debounce timer (prevents duplicate subscriptions from overlapping calls)
+	let areaSubscriptionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Settings modal state
 	let showSettingsModal = $state(false);
 	let showWatchlistModal = $state(false);
@@ -168,16 +171,42 @@
 		showAircraftStatusModal = true;
 	}
 
-	// Toggle between map types
-	function toggleMapType(): void {
+	// Convert MapType to Google Maps MapTypeId
+	function getGoogleMapTypeId(type: MapType): google.maps.MapTypeId {
+		switch (type) {
+			case 'roadmap':
+				return google.maps.MapTypeId.ROADMAP;
+			case 'satellite':
+				return google.maps.MapTypeId.SATELLITE;
+			case 'terrain':
+				return google.maps.MapTypeId.TERRAIN;
+			case 'hybrid':
+				return google.maps.MapTypeId.HYBRID;
+		}
+	}
+
+	// Set map type
+	function setMapType(type: MapType): void {
 		if (!map) return;
 
-		mapType = mapType === 'satellite' ? 'roadmap' : 'satellite';
-		map.setMapTypeId(
-			mapType === 'satellite' ? google.maps.MapTypeId.SATELLITE : google.maps.MapTypeId.ROADMAP
-		);
+		mapType = type;
+		map.setMapTypeId(getGoogleMapTypeId(type));
 		saveMapType(mapType);
-		logger.debug('[MAP TYPE] Toggled to: {mapType}', { mapType });
+		showMapTypeDropdown = false;
+		logger.debug('[MAP TYPE] Set to: {mapType}', { mapType });
+	}
+
+	// Toggle map type dropdown
+	function toggleMapTypeDropdown(): void {
+		showMapTypeDropdown = !showMapTypeDropdown;
+	}
+
+	// Close dropdown when clicking outside
+	function handleClickOutside(event: MouseEvent): void {
+		const target = event.target as HTMLElement;
+		if (!target.closest('.map-type-dropdown-container')) {
+			showMapTypeDropdown = false;
+		}
 	}
 
 	// Helper to save current map state to localStorage and URL
@@ -268,7 +297,8 @@
 	});
 
 	// Map type state
-	let mapType = $state<'satellite' | 'roadmap'>('satellite');
+	let mapType = $state<MapType>('satellite');
+	let showMapTypeDropdown = $state(false);
 
 	$effect(() => {
 		const unsubscribeRegistry = aircraftRegistry.subscribe((event: AircraftRegistryEvent) => {
@@ -397,11 +427,8 @@
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
 			center: loadedMapState.state.center,
 			zoom: loadedMapState.state.zoom,
-			mapTypeId:
-				mapType === 'satellite'
-					? window.google.maps.MapTypeId.SATELLITE
-					: window.google.maps.MapTypeId.ROADMAP,
-			mapTypeControl: false, // We'll use a custom toggle button
+			mapTypeId: getGoogleMapTypeId(mapType),
+			mapTypeControl: false, // We'll use a custom dropdown
 			zoomControl: false,
 			scaleControl: true,
 			streetViewControl: false,
@@ -878,6 +905,20 @@
 			return;
 		}
 
+		// Debounce area subscription updates to prevent duplicate messages from overlapping calls
+		if (areaSubscriptionDebounceTimer) {
+			clearTimeout(areaSubscriptionDebounceTimer);
+		}
+
+		areaSubscriptionDebounceTimer = setTimeout(() => {
+			areaSubscriptionDebounceTimer = null;
+			sendAreaSubscription();
+		}, 100); // 100ms debounce
+	}
+
+	function sendAreaSubscription(): void {
+		if (!map) return;
+
 		const bounds = map.getBounds();
 		if (!bounds) return;
 
@@ -952,6 +993,8 @@
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
+<svelte:window onclick={handleClickOutside} />
+
 <div class="fixed inset-x-0 top-[42px] bottom-0 w-full">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
@@ -1002,10 +1045,25 @@
 			</button>
 		{/if}
 
-		<!-- Map Type Toggle Button -->
-		<button class="location-btn" onclick={toggleMapType} title="Toggle Map Type">
-			<span class="text-sm font-medium">{mapType === 'satellite' ? 'Map' : 'Satellite'}</span>
-		</button>
+		<!-- Map Type Dropdown -->
+		<div class="map-type-dropdown-container relative">
+			<button class="location-btn" onclick={toggleMapTypeDropdown} title="Change Map Type">
+				<span class="text-sm font-medium">{MAP_TYPE_LABELS[mapType]}</span>
+			</button>
+			{#if showMapTypeDropdown}
+				<div class="map-type-dropdown">
+					{#each Object.entries(MAP_TYPE_LABELS) as [type, label] (type)}
+						<button
+							class="map-type-option"
+							class:selected={mapType === type}
+							onclick={() => setMapType(type as MapType)}
+						>
+							{label}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 
 		<!-- Settings Button -->
 		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
@@ -1398,5 +1456,46 @@
 	/* Hide aircraft labels when viewport is too large */
 	:global(.hide-aircraft-labels .aircraft-label) {
 		display: none !important;
+	}
+
+	/* Map type dropdown styling */
+	.map-type-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		margin-top: 4px;
+		background: white;
+		border-radius: 0.375rem;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		overflow: hidden;
+		min-width: 100px;
+		z-index: 20;
+	}
+
+	.map-type-option {
+		display: block;
+		width: 100%;
+		padding: 0.625rem 0.875rem;
+		text-align: left;
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: #374151;
+		background: white;
+		border: none;
+		cursor: pointer;
+		transition: background-color 150ms;
+	}
+
+	.map-type-option:hover {
+		background: #f3f4f6;
+	}
+
+	.map-type-option.selected {
+		background: #eff6ff;
+		color: #2563eb;
+	}
+
+	.map-type-option:not(:last-child) {
+		border-bottom: 1px solid #e5e7eb;
 	}
 </style>
