@@ -147,14 +147,20 @@ pub struct NewSbsMessage {
     pub id: Uuid,
     pub raw_message: Vec<u8>, // UTF-8 encoded SBS CSV line
     pub received_at: DateTime<Utc>,
-    pub receiver_id: Option<Uuid>, // NULL for SBS - no receiver concept
+    pub receiver_id: Option<Uuid>, // Should always be None for SBS (no receiver concept in SBS protocol)
     pub unparsed: Option<String>,
     pub raw_message_hash: Vec<u8>,
 }
 
 impl NewSbsMessage {
-    /// Create a new SBS message with computed hash
-    /// receiver_id should be None for SBS messages (no receiver concept)
+    /// Create a new SBS message with computed hash.
+    ///
+    /// # Arguments
+    /// * `raw_message` - UTF-8 encoded SBS CSV line
+    /// * `received_at` - Timestamp when the message was received
+    /// * `receiver_id` - Should be `None` for SBS messages since the SBS-1 BaseStation
+    ///   protocol doesn't have a receiver concept (unlike APRS which has receiver callsigns)
+    /// * `unparsed` - Optional unparsed portion of the message
     pub fn new(
         raw_message: Vec<u8>, // UTF-8 encoded SBS CSV line
         received_at: DateTime<Utc>,
