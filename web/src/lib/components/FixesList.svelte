@@ -344,6 +344,7 @@
 										</span>
 										{#if rawDisplay.debugFormat}
 											<pre class="mt-1 text-xs whitespace-pre-wrap">{rawDisplay.content}
+─── Parsed ───
 {rawDisplay.debugFormat}</pre>
 										{:else}
 											{rawDisplay.content}
@@ -443,6 +444,7 @@
 								{#if rawDisplay.debugFormat}
 									<pre
 										class="overflow-x-auto font-mono text-xs whitespace-pre-wrap">{rawDisplay.content}
+─── Parsed ───
 {rawDisplay.debugFormat}</pre>
 								{:else}
 									<div class="overflow-x-auto font-mono text-xs">{rawDisplay.content}</div>
