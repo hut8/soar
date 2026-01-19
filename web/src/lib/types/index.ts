@@ -211,10 +211,11 @@ export interface FixWithExtras extends Fix {
 // Raw message response from /data/raw-messages/{id} endpoint
 export interface RawMessageResponse {
 	id: string;
-	rawMessage: string; // UTF-8 for APRS, hex-encoded for ADS-B
-	source: 'aprs' | 'adsb';
+	rawMessage: string; // UTF-8 for APRS/SBS, hex-encoded for Beast
+	source: 'aprs' | 'beast' | 'sbs';
 	receivedAt: string;
 	receiverId: string | null;
+	debugFormat?: string; // Pretty-printed Rust debug format of parsed message
 }
 
 // User authentication and profile (now includes pilot fields)

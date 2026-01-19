@@ -86,7 +86,8 @@
 		content?: string;
 		loading: boolean;
 		error?: string;
-		source?: 'aprs' | 'adsb';
+		source?: 'aprs' | 'beast' | 'sbs';
+		debugFormat?: string;
 	} {
 		const cached = rawMessagesCache.get(rawMessageId);
 		if (!cached) {
@@ -96,7 +97,8 @@
 			content: cached.data?.rawMessage,
 			loading: cached.loading,
 			error: cached.error,
-			source: cached.data?.source
+			source: cached.data?.source,
+			debugFormat: cached.data?.debugFormat
 		};
 	}
 
@@ -340,7 +342,12 @@
 										<span class="text-surface-400" title="Source: {rawDisplay.source}">
 											[{rawDisplay.source?.toUpperCase()}]
 										</span>
-										{rawDisplay.content}
+										{#if rawDisplay.debugFormat}
+											<pre class="mt-1 text-xs whitespace-pre-wrap">{rawDisplay.content}
+{rawDisplay.debugFormat}</pre>
+										{:else}
+											{rawDisplay.content}
+										{/if}
 									{:else}
 										<span class="text-surface-400">No raw message available</span>
 									{/if}
@@ -433,7 +440,13 @@
 							{:else if rawDisplay.error}
 								<div class="text-xs text-error-500">Error: {rawDisplay.error}</div>
 							{:else if rawDisplay.content}
-								<div class="overflow-x-auto font-mono text-xs">{rawDisplay.content}</div>
+								{#if rawDisplay.debugFormat}
+									<pre
+										class="overflow-x-auto font-mono text-xs whitespace-pre-wrap">{rawDisplay.content}
+{rawDisplay.debugFormat}</pre>
+								{:else}
+									<div class="overflow-x-auto font-mono text-xs">{rawDisplay.content}</div>
+								{/if}
 							{:else}
 								<div class="text-xs text-surface-400">No raw message available</div>
 							{/if}

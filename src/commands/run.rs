@@ -14,7 +14,7 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
-use soar::raw_messages_repo::{NewBeastMessage, RawMessagesRepository};
+use soar::raw_messages_repo::{NewBeastMessage, NewSbsMessage, RawMessagesRepository};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
@@ -403,10 +403,9 @@ async fn process_sbs_message(
         }
     };
 
-    // Store raw SBS message in database (stored as UTF-8 bytes with 'adsb' source)
-    // SBS and Beast are both ADS-B data, just different wire formats
+    // Store raw SBS message in database (stored as UTF-8 bytes with 'sbs' source)
     let raw_message_id = match sbs_repo
-        .insert_beast(NewBeastMessage::new(
+        .insert_sbs(NewSbsMessage::new(
             csv_bytes.to_vec(),
             received_at,
             None, // receiver_id - SBS has no receiver concept
