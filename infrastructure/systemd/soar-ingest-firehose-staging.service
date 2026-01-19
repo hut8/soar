@@ -1,0 +1,49 @@
+[Unit]
+Description=SOAR Firehose Ingest (Staging) - ADSB.lol Firehose ADS-B Service
+Documentation=https://github.com/hut8/soar
+After=network-online.target
+Wants=network-online.target
+# This service ingests ADS-B data via Beast protocol from ADSB.lol firehose
+# Uses persistent queues to buffer messages when soar-run is unavailable
+# MANUAL SERVICE: Not enabled by default, start manually when needed
+# When started, this service will stop soar-ingest-staging.service
+Conflicts=soar-ingest-staging.service
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/lib/soar
+SyslogIdentifier=soar-ingest-firehose-staging
+# Firehose configuration - connects to ADSB.lol firehose proxy on port 41365
+ExecStart=/usr/local/bin/soar-staging ingest --beast radar:41365
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+
+# Graceful shutdown configuration
+# Allow 30 seconds for graceful shutdown (queue flush + connection cleanup)
+TimeoutStopSec=30
+# Send SIGTERM first, then SIGKILL after timeout
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart configuration
+# Restart aggressively to minimize message loss during failures
+Restart=on-failure
+RestartSec=2
+StartLimitInterval=60s
+StartLimitBurst=5
+
+# Process limits
+LimitNOFILE=65536
+# Memory limit for firehose ingestion (may need more due to higher volume)
+MemoryMax=6G
+
+[Install]
+# Not enabled by default - start manually with: systemctl start soar-ingest-firehose-staging.service
+WantedBy=multi-user.target
