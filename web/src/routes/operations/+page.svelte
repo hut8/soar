@@ -4,7 +4,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { page } from '$app/stores';
-	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
+	import { Settings, ListChecks, MapPlus, MapMinus, Bug } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
@@ -60,6 +60,7 @@
 	let debugAircraftCount = $state(0);
 	let debugZoomLevel = $state(0);
 	let hideLabels = $state(false);
+	let showDebugPanel = $state(false);
 
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
@@ -1019,45 +1020,50 @@
 		</div>
 	{/if}
 
-	<!-- Debug Info Panel (staging only) -->
-	{#if isStaging() && debugBounds}
-		<div class="debug-panel">
-			<div class="debug-title">Debug Info</div>
-			<div class="debug-row">
-				<span class="debug-label">Zoom:</span>
-				<span class="debug-value">{debugZoomLevel.toFixed(1)}</span>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">Aircraft:</span>
-				<span class="debug-value">{debugAircraftCount}</span>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">Area:</span>
-				<span class="debug-value"
-					>{debugSquareMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq mi</span
-				>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">N:</span>
-				<span class="debug-value">{debugBounds.north.toFixed(4)}</span>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">S:</span>
-				<span class="debug-value">{debugBounds.south.toFixed(4)}</span>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">E:</span>
-				<span class="debug-value">{debugBounds.east.toFixed(4)}</span>
-			</div>
-			<div class="debug-row">
-				<span class="debug-label">W:</span>
-				<span class="debug-value">{debugBounds.west.toFixed(4)}</span>
-			</div>
-			{#if hideLabels}
-				<div class="debug-row debug-warning">
-					<span>Labels hidden (>{LABEL_HIDE_THRESHOLD_SQ_MILES.toLocaleString()} sq mi)</span>
+	<!-- Debug Toggle Button and Panel (staging only) -->
+	{#if isStaging()}
+		<div class="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
+			<!-- Debug Panel (above button) -->
+			{#if showDebugPanel && debugBounds}
+				<div class="debug-panel">
+					<div class="debug-title">Debug Info</div>
+					<div class="debug-row">
+						<span class="debug-label">Zoom:</span>
+						<span class="debug-value">{debugZoomLevel.toFixed(1)}</span>
+					</div>
+					<div class="debug-row">
+						<span class="debug-label">Aircraft:</span>
+						<span class="debug-value">{debugAircraftCount}</span>
+					</div>
+					<div class="debug-row">
+						<span class="debug-label">Area:</span>
+						<span class="debug-value"
+							>{debugSquareMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq mi</span
+						>
+					</div>
+					<div class="debug-row">
+						<span class="debug-value"
+							>N:{debugBounds.north.toFixed(3)} S:{debugBounds.south.toFixed(3)} E:{debugBounds.east.toFixed(
+								3
+							)} W:{debugBounds.west.toFixed(3)}</span
+						>
+					</div>
+					{#if hideLabels}
+						<div class="debug-row debug-warning">
+							<span>Labels hidden (>{LABEL_HIDE_THRESHOLD_SQ_MILES.toLocaleString()} sq mi)</span>
+						</div>
+					{/if}
 				</div>
 			{/if}
+			<!-- Debug Toggle Button -->
+			<button
+				class="location-btn"
+				class:debug-active={showDebugPanel}
+				onclick={() => (showDebugPanel = !showDebugPanel)}
+				title={showDebugPanel ? 'Hide Debug Info' : 'Show Debug Info'}
+			>
+				<Bug size={20} />
+			</button>
 		</div>
 	{/if}
 </div>
@@ -1336,12 +1342,18 @@
 		visibility: visible;
 	}
 
+	/* Debug button active state */
+	.debug-active {
+		background: #10b981; /* Green background when active */
+		color: white;
+	}
+
+	.debug-active:hover {
+		background: #059669; /* Darker green on hover */
+	}
+
 	/* Debug panel styling (staging only) */
 	.debug-panel {
-		position: absolute;
-		top: 4rem;
-		right: 1rem;
-		z-index: 10;
 		background: rgba(0, 0, 0, 0.85);
 		color: #10b981;
 		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
