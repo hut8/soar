@@ -168,7 +168,7 @@
 		content?: string;
 		loading: boolean;
 		error?: string;
-		source?: 'aprs' | 'adsb';
+		source?: 'aprs' | 'beast' | 'sbs';
 	} {
 		const cached = fixRawMessagesCache.get(rawMessageId);
 		if (!cached) {

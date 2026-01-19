@@ -9,15 +9,17 @@ use uuid::Uuid;
 
 use crate::web::PgPool;
 
-/// Message source enum - distinguishes between APRS and ADS-B (Beast) messages
+/// Message source enum - distinguishes between protocol types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[serde(rename_all = "lowercase")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::MessageSource")]
 pub enum MessageSourceType {
-    /// APRS message (text-based, UTF-8)
+    /// APRS/OGN message (text-based, UTF-8)
     Aprs,
-    /// ADS-B/Beast message (binary)
-    Adsb,
+    /// Beast protocol message (binary ADS-B frames)
+    Beast,
+    /// SBS-1 BaseStation message (CSV format)
+    Sbs,
 }
 
 /// Raw message with source type - used for API responses
@@ -38,7 +40,8 @@ pub struct RawMessageWithSource {
 
 /// API response for a raw message
 /// For APRS: raw_message is UTF-8 text
-/// For ADS-B/Beast: raw_message is hex-encoded binary
+/// For Beast: raw_message is hex-encoded binary
+/// For SBS: raw_message is UTF-8 CSV text
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RawMessageResponse {
@@ -47,18 +50,47 @@ pub struct RawMessageResponse {
     pub source: MessageSourceType,
     pub received_at: DateTime<Utc>,
     pub receiver_id: Option<Uuid>,
+    /// Pretty-printed Rust debug format of the decoded/parsed message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug_format: Option<String>,
 }
 
 impl From<RawMessageWithSource> for RawMessageResponse {
     fn from(msg: RawMessageWithSource) -> Self {
-        let raw_message = match msg.source {
+        let (raw_message, debug_format) = match msg.source {
             MessageSourceType::Aprs => {
                 // APRS is text - decode as UTF-8 (lossy for safety)
-                String::from_utf8_lossy(&msg.raw_message).to_string()
+                let text = String::from_utf8_lossy(&msg.raw_message).to_string();
+
+                // Try to parse and get debug format
+                let debug_fmt = ogn_parser::parse(&text)
+                    .map(|parsed| format!("{:#?}", parsed))
+                    .ok();
+
+                (text, debug_fmt)
             }
-            MessageSourceType::Adsb => {
-                // ADS-B/Beast is binary - encode as hex
-                hex::encode(&msg.raw_message)
+            MessageSourceType::Beast => {
+                // Beast is binary - encode as hex
+                let hex_encoded = hex::encode(&msg.raw_message);
+
+                // Try to decode and get debug format
+                let debug_fmt =
+                    crate::beast::decoder::decode_beast_frame(&msg.raw_message, msg.received_at)
+                        .map(|decoded| format!("{:#?}", decoded.message))
+                        .ok();
+
+                (hex_encoded, debug_fmt)
+            }
+            MessageSourceType::Sbs => {
+                // SBS is text CSV - decode as UTF-8 (lossy for safety)
+                let text = String::from_utf8_lossy(&msg.raw_message).to_string();
+
+                // Try to parse and get debug format
+                let debug_fmt = crate::sbs::parser::parse_sbs_message(&text)
+                    .map(|parsed| format!("{:#?}", parsed))
+                    .ok();
+
+                (text, debug_fmt)
             }
         };
 
@@ -68,6 +100,7 @@ impl From<RawMessageWithSource> for RawMessageResponse {
             source: msg.source,
             received_at: msg.received_at,
             receiver_id: msg.receiver_id,
+            debug_format,
         }
     }
 }
@@ -88,6 +121,42 @@ impl NewBeastMessage {
     /// receiver_id should be None for ADS-B messages (no receiver concept)
     pub fn new(
         raw_message: Vec<u8>, // Binary Beast frame
+        received_at: DateTime<Utc>,
+        receiver_id: Option<Uuid>,
+        unparsed: Option<String>,
+    ) -> Self {
+        // Compute SHA-256 hash of raw message for deduplication
+        let mut hasher = Sha256::new();
+        hasher.update(&raw_message);
+        let hash = hasher.finalize().to_vec();
+
+        Self {
+            id: Uuid::now_v7(),
+            raw_message,
+            received_at,
+            receiver_id,
+            unparsed,
+            raw_message_hash: hash,
+        }
+    }
+}
+
+// Diesel model for inserting new SBS messages (using raw SQL for enum)
+#[derive(Clone)]
+pub struct NewSbsMessage {
+    pub id: Uuid,
+    pub raw_message: Vec<u8>, // UTF-8 encoded SBS CSV line
+    pub received_at: DateTime<Utc>,
+    pub receiver_id: Option<Uuid>, // NULL for SBS - no receiver concept
+    pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
+}
+
+impl NewSbsMessage {
+    /// Create a new SBS message with computed hash
+    /// receiver_id should be None for SBS messages (no receiver concept)
+    pub fn new(
+        raw_message: Vec<u8>, // UTF-8 encoded SBS CSV line
         received_at: DateTime<Utc>,
         receiver_id: Option<Uuid>,
         unparsed: Option<String>,
@@ -296,10 +365,10 @@ impl RawMessagesRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Use raw SQL to insert with enum value 'adsb'
+            // Use raw SQL to insert with enum value 'beast'
             let insert_result = diesel::sql_query(
                 "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                 VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)"
+                 VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)"
             )
             .bind::<diesel::sql_types::Uuid, _>(message_id)
             .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // Binary Beast frame
@@ -367,11 +436,11 @@ impl RawMessagesRepository {
 
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 for message in &messages_vec {
-                    // Use raw SQL to insert with enum value 'adsb'
+                    // Use raw SQL to insert with enum value 'beast'
                     // No ON CONFLICT clause - let duplicates fail naturally on primary key
                     let insert_result = diesel::sql_query(
                         "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                         VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)"
+                         VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)"
                     )
                     .bind::<diesel::sql_types::Uuid, _>(message.id)
                     .bind::<diesel::sql_types::Bytea, _>(&message.raw_message)
@@ -393,6 +462,76 @@ impl RawMessagesRepository {
         .await??;
 
         Ok(())
+    }
+
+    /// Insert a new SBS message into the database
+    /// Returns the ID of the inserted message
+    /// On duplicate (redelivery after crash), returns the existing message ID
+    pub async fn insert_sbs(&self, new_message: NewSbsMessage) -> Result<Uuid> {
+        let message_id = new_message.id;
+        let pool = self.pool.clone();
+        let receiver = new_message.receiver_id;
+        let timestamp = new_message.received_at;
+        let hash = new_message.raw_message_hash.clone();
+        let raw_msg = new_message.raw_message;
+        let unparsed_val = new_message.unparsed;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use raw SQL to insert with enum value 'sbs'
+            let insert_result = diesel::sql_query(
+                "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'sbs'::message_source)"
+            )
+            .bind::<diesel::sql_types::Uuid, _>(message_id)
+            .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // UTF-8 encoded SBS CSV
+            .bind::<diesel::sql_types::Timestamptz, _>(timestamp)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(receiver)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&unparsed_val)
+            .bind::<diesel::sql_types::Bytea, _>(&hash)
+            .execute(&mut conn);
+
+            match insert_result {
+                Ok(_) => {
+                    metrics::counter!("sbs.messages.inserted_total").increment(1);
+                    Ok::<Uuid, anyhow::Error>(message_id)
+                }
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    // Duplicate message on redelivery - this is expected after crashes
+                    debug!("Duplicate SBS message detected on redelivery");
+                    metrics::counter!("sbs.messages.duplicate_on_redelivery_total").increment(1);
+
+                    // Find existing message ID by natural key
+                    use crate::schema::raw_messages::dsl::*;
+                    let query = if let Some(recv_id) = receiver {
+                        raw_messages
+                            .filter(receiver_id.eq(recv_id))
+                            .filter(received_at.eq(timestamp))
+                            .filter(raw_message_hash.eq(&hash))
+                            .select(id)
+                            .into_boxed()
+                    } else {
+                        raw_messages
+                            .filter(receiver_id.is_null())
+                            .filter(received_at.eq(timestamp))
+                            .filter(raw_message_hash.eq(&hash))
+                            .select(id)
+                            .into_boxed()
+                    };
+
+                    let existing = query.first::<Uuid>(&mut conn)?;
+                    Ok(existing)
+                }
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await??;
+
+        Ok(result)
     }
 
     /// Get paginated raw messages for a receiver from the last 24 hours
