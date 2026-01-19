@@ -28,9 +28,15 @@
 	// Internal state for enriched flight details
 	let flightDetails: FlightDetails[] = $state([]);
 
-	// Fetch aircraft data whenever flights change
+	// Fetch aircraft data whenever flights change (only if showAircraft is true)
 	$effect(() => {
 		async function fetchAircraftData() {
+			// Skip fetching aircraft data if we're not showing the aircraft column
+			if (!showAircraft) {
+				flightDetails = flights.map((flight) => ({ flight, aircraft: null }));
+				return;
+			}
+
 			// Debug: Log flight IDs and aircraft IDs
 			logger.debug('Flights received: {count} firstFlight: {firstFlight}', {
 				count: flights.length,

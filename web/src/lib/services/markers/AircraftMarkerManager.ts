@@ -28,6 +28,7 @@ export class AircraftMarkerManager {
 	private map: google.maps.Map | null = null;
 	private markers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	private currentFixes = new SvelteMap<string, Fix>();
+	private previousRotations = new SvelteMap<string, number>();
 	private options: AircraftMarkerManagerOptions;
 
 	constructor(options: AircraftMarkerManagerOptions = {}) {
@@ -152,6 +153,7 @@ export class AircraftMarkerManager {
 		});
 		this.markers.clear();
 		this.currentFixes.clear();
+		this.previousRotations.clear();
 		logger.debug('[MARKER] All aircraft markers cleared');
 	}
 
@@ -196,9 +198,11 @@ export class AircraftMarkerManager {
 			</svg>
 		`;
 
-		// Rotate icon based on track degrees (default to 0 if not available)
-		const track = fix.trackDegrees || 0;
+		// Rotate icon based on track degrees (use shortest path calculation)
+		const aircraftKey = aircraft.id;
+		const track = this.calculateShortestRotation(aircraftKey, fix.trackDegrees);
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
+		aircraftIcon.style.transition = 'transform 0.3s ease-out';
 		logger.debug('[MARKER] Set icon rotation to: {track} degrees', { track });
 
 		// Info label below the icon - show proper aircraft information
@@ -322,8 +326,11 @@ export class AircraftMarkerManager {
 			const markerColor = getMarkerColor(fix.active, fix.altitudeMslFeet);
 
 			if (aircraftIcon) {
-				const track = fix.trackDegrees || 0;
+				// Use shortest path rotation calculation
+				const aircraftKey = aircraft.id;
+				const track = this.calculateShortestRotation(aircraftKey, fix.trackDegrees);
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
+				aircraftIcon.style.transition = 'transform 0.3s ease-out';
 				// Update icon color to match label
 				const svgElement = aircraftIcon.querySelector('svg');
 				if (svgElement) {
@@ -386,6 +393,43 @@ export class AircraftMarkerManager {
 
 		marker.title = title;
 		logger.debug('[MARKER] Updated marker title: {title}', { title });
+	}
+
+	/**
+	 * Calculate the rotation that takes the shortest path from current to target
+	 * Returns the target rotation adjusted to take the shortest path
+	 */
+	private calculateShortestRotation(
+		aircraftKey: string,
+		targetRotation: number | null | undefined
+	): number {
+		const previousRotation = this.previousRotations.get(aircraftKey) ?? 0;
+
+		// If target rotation is null/undefined, keep the previous rotation
+		if (targetRotation === null || targetRotation === undefined) {
+			return previousRotation;
+		}
+
+		// Normalize target to 0-360 range
+		const normalizedTarget = ((targetRotation % 360) + 360) % 360;
+
+		// Calculate the difference
+		let delta = normalizedTarget - (previousRotation % 360);
+
+		// Adjust delta to take the shortest path (-180 to 180)
+		if (delta > 180) {
+			delta -= 360;
+		} else if (delta < -180) {
+			delta += 360;
+		}
+
+		// Calculate the new rotation (may be outside 0-360 to enable smooth transition)
+		const newRotation = previousRotation + delta;
+
+		// Store for next update
+		this.previousRotations.set(aircraftKey, newRotation);
+
+		return newRotation;
 	}
 
 	/**
