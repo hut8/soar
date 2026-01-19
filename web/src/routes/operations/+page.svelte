@@ -26,7 +26,7 @@
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
-	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
+	import { GOOGLE_MAPS_API_KEY, isStaging } from '$lib/config';
 	import { getLogger } from '$lib/logging';
 	import {
 		saveMapState,
@@ -46,6 +46,20 @@
 
 	// Aircraft rendering limit to prevent browser crashes
 	const MAX_AIRCRAFT_DISPLAY = 50;
+
+	// Threshold for hiding aircraft labels (in square miles)
+	// Based on bounding box: north=44.208404, south=40.529051, west=-76.502017, east=-65.955142
+	// which is approximately 136,000 sq miles, rounded down to 100,000
+	const LABEL_HIDE_THRESHOLD_SQ_MILES = 100000;
+
+	// Debug info state (for staging)
+	let debugBounds = $state<{ north: number; south: number; east: number; west: number } | null>(
+		null
+	);
+	let debugSquareMiles = $state(0);
+	let debugAircraftCount = $state(0);
+	let debugZoomLevel = $state(0);
+	let hideLabels = $state(false);
 
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
@@ -206,6 +220,17 @@
 		if (map) {
 			const area = calculateViewportArea();
 			runwayOverlayManager.checkAndUpdate(area, currentSettings.showRunwayOverlays);
+		}
+	});
+
+	// Effect to toggle label visibility based on viewport size
+	$effect(() => {
+		if (mapContainer) {
+			if (hideLabels) {
+				mapContainer.classList.add('hide-aircraft-labels');
+			} else {
+				mapContainer.classList.remove('hide-aircraft-labels');
+			}
 		}
 	});
 
@@ -657,6 +682,14 @@
 		const ne = bounds.getNorthEast();
 		const sw = bounds.getSouthWest();
 
+		// Update debug bounds
+		debugBounds = {
+			north: ne.lat(),
+			south: sw.lat(),
+			east: ne.lng(),
+			west: sw.lng()
+		};
+
 		// Calculate area using spherical geometry
 		// This gives us area in square meters, convert to square miles
 		const areaSquareMeters = google.maps.geometry.spherical.computeArea([
@@ -668,6 +701,15 @@
 
 		// Convert square meters to square miles (1 square mile = 2,589,988 square meters)
 		const areaSquareMiles = areaSquareMeters / 2589988;
+		debugSquareMiles = areaSquareMiles;
+		debugZoomLevel = map.getZoom() || 0;
+
+		// Update aircraft count from markers
+		debugAircraftCount = aircraftMarkerManager.getMarkers().size;
+
+		// Determine if labels should be hidden based on viewport size
+		hideLabels = areaSquareMiles > LABEL_HIDE_THRESHOLD_SQ_MILES;
+
 		logger.debug('Viewport area: {area} square miles', {
 			area: areaSquareMiles.toFixed(2)
 		});
@@ -976,6 +1018,48 @@
 			<CompassRose rotation={compassHeading} {displayHeading} />
 		</div>
 	{/if}
+
+	<!-- Debug Info Panel (staging only) -->
+	{#if isStaging() && debugBounds}
+		<div class="debug-panel">
+			<div class="debug-title">Debug Info</div>
+			<div class="debug-row">
+				<span class="debug-label">Zoom:</span>
+				<span class="debug-value">{debugZoomLevel.toFixed(1)}</span>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">Aircraft:</span>
+				<span class="debug-value">{debugAircraftCount}</span>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">Area:</span>
+				<span class="debug-value"
+					>{debugSquareMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq mi</span
+				>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">N:</span>
+				<span class="debug-value">{debugBounds.north.toFixed(4)}</span>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">S:</span>
+				<span class="debug-value">{debugBounds.south.toFixed(4)}</span>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">E:</span>
+				<span class="debug-value">{debugBounds.east.toFixed(4)}</span>
+			</div>
+			<div class="debug-row">
+				<span class="debug-label">W:</span>
+				<span class="debug-value">{debugBounds.west.toFixed(4)}</span>
+			</div>
+			{#if hideLabels}
+				<div class="debug-row debug-warning">
+					<span>Labels hidden (>{LABEL_HIDE_THRESHOLD_SQ_MILES.toLocaleString()} sq mi)</span>
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <!-- Settings Modal -->
@@ -1111,40 +1195,39 @@
 	}
 
 	:global(.aircraft-marker:hover) {
-		/* Note: This may be overridden by inline styles from JS. The translateY(53px)
+		/* Note: This may be overridden by inline styles from JS. The translateY(77px)
 		   offset must match the JS value to maintain icon-to-fix alignment on hover. */
-		transform: scale(1.15) translateY(53px);
+		transform: scale(1.15) translateY(77px);
 	}
 
 	:global(.aircraft-icon) {
-		width: 24px;
-		height: 24px;
+		width: 48px;
+		height: 48px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: #1e293b;
 		transition: all 0.2s ease;
 		position: relative;
 		/* Negative margin allows the icon to overlap with content above (if any) and
 		   reduces the marker's total height for a more compact appearance. */
-		margin-top: -12px;
+		margin-top: -24px;
 	}
 
 	:global(.aircraft-icon svg) {
-		width: 24px;
-		height: 24px;
-		filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.9))
-			drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+		width: 48px;
+		height: 48px;
+		filter: drop-shadow(0 2px 2px rgba(255, 255, 255, 0.95))
+			drop-shadow(0 0 4px rgba(255, 255, 255, 0.9)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
 	}
 
 	:global(.aircraft-label) {
 		background: rgba(255, 255, 255, 0.95); /* White background with 95% opacity */
 		border: 2px solid;
 		border-radius: 6px;
-		padding: 4px 8px;
-		margin-top: 6px;
+		padding: 6px 10px;
+		margin-top: 8px;
 		box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
-		min-width: 60px;
+		min-width: 80px;
 		text-align: center;
 		transition: all 0.2s ease;
 	}
@@ -1155,7 +1238,7 @@
 	}
 
 	:global(.aircraft-tail) {
-		font-size: 12px;
+		font-size: 16px;
 		font-weight: 700;
 		line-height: 1.2;
 		color: #1f2937;
@@ -1163,12 +1246,12 @@
 	}
 
 	:global(.aircraft-altitude) {
-		font-size: 10px;
+		font-size: 14px;
 		font-weight: 600;
 		line-height: 1.1;
 		color: #374151;
 		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
-		margin-top: 1px;
+		margin-top: 2px;
 	}
 
 	/* Receiver marker styling */
@@ -1251,5 +1334,57 @@
 	:global(.receiver-marker:hover .receiver-label) {
 		opacity: 1;
 		visibility: visible;
+	}
+
+	/* Debug panel styling (staging only) */
+	.debug-panel {
+		position: absolute;
+		top: 4rem;
+		right: 1rem;
+		z-index: 10;
+		background: rgba(0, 0, 0, 0.85);
+		color: #10b981;
+		font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+		font-size: 11px;
+		padding: 8px 12px;
+		border-radius: 6px;
+		min-width: 180px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
+
+	.debug-title {
+		color: #f59e0b;
+		font-weight: 700;
+		font-size: 12px;
+		margin-bottom: 6px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.debug-row {
+		display: flex;
+		justify-content: space-between;
+		margin: 2px 0;
+	}
+
+	.debug-label {
+		color: #9ca3af;
+	}
+
+	.debug-value {
+		color: #10b981;
+		font-weight: 600;
+	}
+
+	.debug-warning {
+		color: #f59e0b;
+		font-weight: 600;
+		margin-top: 4px;
+		justify-content: center;
+	}
+
+	/* Hide aircraft labels when viewport is too large */
+	:global(.hide-aircraft-labels .aircraft-label) {
+		display: none !important;
 	}
 </style>

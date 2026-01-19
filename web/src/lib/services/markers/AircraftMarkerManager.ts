@@ -185,12 +185,13 @@ export class AircraftMarkerManager {
 		const aircraftIcon = document.createElement('div');
 		aircraftIcon.className = 'aircraft-icon';
 
-		// Calculate color based on active status and altitude (used for label)
+		// Calculate color based on active status and altitude (used for icon and label)
 		const markerColor = getMarkerColor(fix.active, fix.altitudeMslFeet);
 
 		// Create SVG airplane icon that's more visible and oriented correctly
+		// Icon is doubled in size (48x48) and colored to match the label
 		aircraftIcon.innerHTML = `
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+			<svg width="48" height="48" viewBox="0 0 24 24" fill="${markerColor}">
 				<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
 			</svg>
 		`;
@@ -323,6 +324,11 @@ export class AircraftMarkerManager {
 			if (aircraftIcon) {
 				const track = fix.trackDegrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
+				// Update icon color to match label
+				const svgElement = aircraftIcon.querySelector('svg');
+				if (svgElement) {
+					svgElement.setAttribute('fill', markerColor);
+				}
 				logger.debug('[MARKER] Updated icon rotation to: {track} degrees', { track });
 			}
 
@@ -410,11 +416,11 @@ export class AircraftMarkerManager {
 		// Apply transform to the entire marker content.
 		// The AdvancedMarkerElement positions markers with the bottom-center of the content
 		// at the geographic point. To align the aircraft ICON center with the fix point,
-		// we translate down by the distance from icon center to marker bottom (~53px).
+		// we translate down by the distance from icon center to marker bottom (~77px).
 		// Using scale() first means translateY is in scaled coordinates, which automatically
 		// adjusts the offset proportionally at different zoom levels.
 		// Transform origin 'center top' ensures scaling keeps the icon horizontally centered.
-		markerContent.style.transform = `scale(${scale}) translateY(53px)`;
+		markerContent.style.transform = `scale(${scale}) translateY(77px)`;
 		markerContent.style.transformOrigin = 'center top';
 	}
 }
