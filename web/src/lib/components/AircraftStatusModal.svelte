@@ -1,5 +1,16 @@
 <script lang="ts">
-	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation, Star } from '@lucide/svelte';
+	import {
+		X,
+		Plane,
+		MapPin,
+		RotateCcw,
+		ExternalLink,
+		Navigation,
+		Star,
+		FileText,
+		Cog,
+		PlaneTakeoff
+	} from '@lucide/svelte';
 	import type {
 		Aircraft,
 		Fix,
@@ -15,7 +26,8 @@
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
-		formatTransponderCode
+		formatTransponderCode,
+		getFlagPath
 	} from '$lib/formatters';
 	import {
 		calculateDistance,
@@ -339,9 +351,9 @@
 			aria-labelledby="aircraft-status-title"
 			tabindex="-1"
 		>
-			<!-- Header -->
+			<!-- Sticky Header -->
 			<div
-				class="flex items-center justify-between border-b border-surface-300 p-6 dark:border-surface-600"
+				class="sticky top-0 z-10 flex items-center justify-between border-b border-surface-300 bg-surface-50 p-6 dark:border-surface-600 dark:bg-surface-900"
 			>
 				<div class="flex items-center gap-3">
 					{#if isCompassActive && userLocation}
@@ -415,7 +427,7 @@
 
 			<div class="p-6">
 				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-					<!-- Aircraft Information -->
+					<!-- 1. Aircraft Information -->
 					<div class="space-y-4">
 						<h3 class="flex items-center gap-2 text-lg font-semibold">
 							<Plane size={20} />
@@ -550,18 +562,415 @@
 								{/if}
 							</div>
 						</div>
+					</div>
 
-						<!-- Aircraft Registration Details -->
+					<!-- 2. Current Position -->
+					<div class="space-y-4">
+						<h3 class="flex items-center gap-2 text-lg font-semibold">
+							<Navigation size={20} />
+							Current Position
+						</h3>
+
+						{#if !selectedAircraft.currentFix}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="py-8 text-center text-surface-500 dark:text-surface-500">
+									<MapPin size={48} class="mx-auto mb-2 opacity-50" />
+									<p>No recent position data available</p>
+								</div>
+							</div>
+						{:else}
+							{@const positionFix = selectedAircraft.currentFix as Fix}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<dl class="grid grid-cols-2 gap-4 text-sm">
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">
+											Altitude (ft)
+										</dt>
+										<dd>
+											{#if positionFix.altitudeMslFeet !== undefined && positionFix.altitudeMslFeet !== null}
+												{positionFix.altitudeMslFeet.toLocaleString()} MSL
+												{#if positionFix.altitudeAglFeet !== undefined && positionFix.altitudeAglFeet !== null}
+													/ {positionFix.altitudeAglFeet.toLocaleString()} AGL
+												{/if}
+											{:else}
+												Unknown
+											{/if}
+										</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
+										<dd>{formatSpeed(positionFix.groundSpeedKnots ?? undefined)}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
+										<dd>{formatTrack(positionFix.trackDegrees ?? undefined)}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
+										<dd>
+											<span
+												class="{positionFix.climbFpm !== undefined &&
+												positionFix.climbFpm !== null &&
+												positionFix.climbFpm < 0
+													? 'text-red-600 dark:text-red-400'
+													: 'text-green-600 dark:text-green-400'} font-semibold"
+											>
+												{formatClimbRate(positionFix.climbFpm ?? undefined)}
+											</span>
+										</dd>
+									</div>
+
+									<!-- Bearing and Distance to Aircraft -->
+									{#if userLocation}
+										{@const distanceNm = calculateDistance(
+											userLocation.lat,
+											userLocation.lng,
+											positionFix.latitude,
+											positionFix.longitude,
+											'nm'
+										)}
+										{@const bearing = calculateBearing(
+											userLocation.lat,
+											userLocation.lng,
+											positionFix.latitude,
+											positionFix.longitude
+										)}
+										{@const distances = formatDistance(distanceNm)}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Distance from me
+											</dt>
+											<dd>{distances.nm} nm / {distances.mi} mi</dd>
+										</div>
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Bearing</dt>
+											<dd>{formatBearing(bearing)}</dd>
+										</div>
+									{:else}
+										<div class="col-span-2">
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Distance & Bearing
+											</dt>
+											<dd>
+												<button
+													onclick={requestLocationPermission}
+													class="btn preset-filled-primary-500 btn-sm"
+													disabled={!locationPermissionDenied && userLocation === null}
+												>
+													<Navigation size={14} />
+													Permit Location Access
+												</button>
+											</dd>
+										</div>
+									{/if}
+
+									<div class="col-span-2">
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Coordinates</dt>
+										<dd class="font-mono">
+											{formatCoordinates(positionFix.latitude, positionFix.longitude)}
+										</dd>
+									</div>
+									<div class="col-span-2">
+										<dd>
+											Last seen {formatTimestamp(positionFix.timestamp).relative}
+											<div class="text-xs text-surface-500 dark:text-surface-500">
+												{formatTimestamp(positionFix.timestamp).absolute}
+											</div>
+										</dd>
+									</div>
+								</dl>
+							</div>
+						{/if}
+					</div>
+
+					<!-- 3. Current Flight -->
+					<div class="space-y-4">
+						<h3 class="flex items-center gap-2 text-lg font-semibold">
+							<PlaneTakeoff size={20} />
+							Current Flight
+						</h3>
+
+						{#if loadingFlight}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+									<RotateCcw class="animate-spin" size={16} />
+									Loading flight information...
+								</div>
+							</div>
+						{:else if currentFlight}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="mb-4 flex items-center justify-between">
+									<span
+										class="badge preset-filled-{currentFlight.state === 'active'
+											? 'success-500'
+											: currentFlight.state === 'complete'
+												? 'primary-500'
+												: 'warning-500'} text-sm"
+									>
+										{currentFlight.state === 'active'
+											? 'In Flight'
+											: currentFlight.state === 'complete'
+												? 'Completed'
+												: 'Timed Out'}
+									</span>
+									<a
+										href="/flights/{currentFlight.id}"
+										target="_blank"
+										rel="noopener noreferrer"
+										class="btn preset-filled-success-500 btn-sm"
+										title="View full flight details"
+									>
+										<Plane size={14} />
+										View Flight
+										<ExternalLink size={12} />
+									</a>
+								</div>
+
+								<dl class="grid grid-cols-2 gap-4 text-sm">
+									<!-- Callsign -->
+									{#if currentFlight.callsign}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Callsign</dt>
+											<dd class="font-mono font-semibold">{currentFlight.callsign}</dd>
+										</div>
+									{/if}
+
+									<!-- Detection Method -->
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Detection</dt>
+										<dd>
+											{#if currentFlight.takeoffTime}
+												<span class="badge preset-filled-success-500 text-xs">From Takeoff</span>
+											{:else}
+												<span class="badge preset-filled-warning-500 text-xs"
+													>Detected Airborne</span
+												>
+											{/if}
+										</dd>
+									</div>
+
+									<!-- Start Location with Flag -->
+									{#if currentFlight.startLocationCity || currentFlight.startLocationCountry || currentFlight.departureAirport}
+										<div class="col-span-2">
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Start Location
+											</dt>
+											<dd class="flex items-center gap-2">
+												{#if currentFlight.startLocationCountry}
+													{@const flagPath = getFlagPath(currentFlight.startLocationCountry)}
+													{#if flagPath}
+														<img
+															src={flagPath}
+															alt={currentFlight.startLocationCountry}
+															class="h-4 w-6 rounded-sm object-cover"
+														/>
+													{/if}
+												{:else if currentFlight.departureAirportCountry}
+													{@const flagPath = getFlagPath(currentFlight.departureAirportCountry)}
+													{#if flagPath}
+														<img
+															src={flagPath}
+															alt={currentFlight.departureAirportCountry}
+															class="h-4 w-6 rounded-sm object-cover"
+														/>
+													{/if}
+												{/if}
+												<span>
+													{#if currentFlight.departureAirport}
+														<span class="font-semibold">{currentFlight.departureAirport}</span>
+														{#if currentFlight.startLocationCity}
+															<span class="text-surface-500">
+																- {currentFlight.startLocationCity}{#if currentFlight.startLocationState},
+																	{currentFlight.startLocationState}{/if}
+															</span>
+														{/if}
+													{:else if currentFlight.startLocationCity}
+														{currentFlight.startLocationCity}{#if currentFlight.startLocationState}, {currentFlight.startLocationState}{/if}{#if currentFlight.startLocationCountry},
+															{currentFlight.startLocationCountry}{/if}
+													{:else if currentFlight.startLocationCountry}
+														{currentFlight.startLocationCountry}
+													{/if}
+												</span>
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Arrival Airport -->
+									{#if currentFlight.arrivalAirport}
+										<div class="col-span-2">
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Destination
+											</dt>
+											<dd class="flex items-center gap-2">
+												{#if currentFlight.arrivalAirportCountry}
+													{@const flagPath = getFlagPath(currentFlight.arrivalAirportCountry)}
+													{#if flagPath}
+														<img
+															src={flagPath}
+															alt={currentFlight.arrivalAirportCountry}
+															class="h-4 w-6 rounded-sm object-cover"
+														/>
+													{/if}
+												{/if}
+												<span class="font-semibold">{currentFlight.arrivalAirport}</span>
+												{#if currentFlight.endLocationCity}
+													<span class="text-surface-500">
+														- {currentFlight.endLocationCity}{#if currentFlight.endLocationState}, {currentFlight.endLocationState}{/if}
+													</span>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Takeoff/Detection Time -->
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">
+											{currentFlight.takeoffTime ? 'Takeoff' : 'First Seen'}
+										</dt>
+										<dd>
+											{formatTimestamp(currentFlight.takeoffTime || currentFlight.createdAt)
+												.relative}
+											<div class="text-xs text-surface-500">
+												{formatTimestamp(currentFlight.takeoffTime || currentFlight.createdAt)
+													.absolute}
+											</div>
+										</dd>
+									</div>
+
+									<!-- Landing Time -->
+									{#if currentFlight.landingTime}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Landing</dt>
+											<dd>
+												{formatTimestamp(currentFlight.landingTime).relative}
+												<div class="text-xs text-surface-500">
+													{formatTimestamp(currentFlight.landingTime).absolute}
+												</div>
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Takeoff Runway -->
+									{#if currentFlight.takeoffRunwayIdent}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Takeoff Runway
+											</dt>
+											<dd class="font-semibold">
+												RWY {currentFlight.takeoffRunwayIdent}
+												{#if currentFlight.runwaysInferred}
+													<span class="text-xs text-surface-500">(inferred)</span>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Landing Runway -->
+									{#if currentFlight.landingRunwayIdent}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Landing Runway
+											</dt>
+											<dd class="font-semibold">
+												RWY {currentFlight.landingRunwayIdent}
+												{#if currentFlight.runwaysInferred}
+													<span class="text-xs text-surface-500">(inferred)</span>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Flight Duration -->
+									{#if currentFlight.durationSeconds}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Duration</dt>
+											<dd class="font-semibold">
+												{Math.floor(currentFlight.durationSeconds / 3600)}h
+												{Math.floor((currentFlight.durationSeconds % 3600) / 60)}m
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Current Altitude -->
+									{#if currentFlight.latestAltitudeMslFeet}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Current Altitude
+											</dt>
+											<dd class="font-semibold">
+												{currentFlight.latestAltitudeMslFeet.toLocaleString()} ft MSL
+												{#if currentFlight.latestAltitudeAglFeet}
+													<span class="text-surface-500">
+														/ {currentFlight.latestAltitudeAglFeet.toLocaleString()} AGL
+													</span>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Distance Traveled -->
+									{#if currentFlight.totalDistanceMeters}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Distance</dt>
+											<dd class="font-semibold">
+												{(currentFlight.totalDistanceMeters / 1852).toFixed(1)} nm
+											</dd>
+										</div>
+									{/if}
+
+									<!-- Maximum Displacement -->
+									{#if currentFlight.maximumDisplacementMeters}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Max Displacement
+											</dt>
+											<dd class="font-semibold">
+												{(currentFlight.maximumDisplacementMeters / 1852).toFixed(1)} nm
+											</dd>
+										</div>
+									{/if}
+								</dl>
+							</div>
+						{:else}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="py-8 text-center text-surface-500 dark:text-surface-500">
+									<PlaneTakeoff size={48} class="mx-auto mb-2 opacity-50" />
+									<p>No current flight data available</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<!-- 4. FAA Registration Details -->
+					<div class="space-y-4">
+						<h3 class="flex items-center gap-2 text-lg font-semibold">
+							<FileText size={20} />
+							FAA Registration Details
+						</h3>
+
 						{#if loadingRegistration}
-							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
-								<RotateCcw class="animate-spin" size={16} />
-								Loading aircraft registration...
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+									<RotateCcw class="animate-spin" size={16} />
+									Loading aircraft registration...
+								</div>
 							</div>
 						{:else if aircraftRegistration}
-							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
-								<h4 class="font-medium text-surface-900 dark:text-surface-100">
-									FAA Registration Details
-								</h4>
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Owner</dt>
@@ -630,19 +1039,38 @@
 									{/if}
 								</dl>
 							</div>
+						{:else}
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="py-8 text-center text-surface-500 dark:text-surface-500">
+									<FileText size={48} class="mx-auto mb-2 opacity-50" />
+									<p>No FAA registration data available</p>
+								</div>
+							</div>
 						{/if}
+					</div>
 
-						<!-- Aircraft Model Details -->
+					<!-- 5. Aircraft Model Details -->
+					<div class="space-y-4">
+						<h3 class="flex items-center gap-2 text-lg font-semibold">
+							<Cog size={20} />
+							Aircraft Model Details
+						</h3>
+
 						{#if loadingModel}
-							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
-								<RotateCcw class="animate-spin" size={16} />
-								Loading aircraft model details...
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
+								<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+									<RotateCcw class="animate-spin" size={16} />
+									Loading aircraft model details...
+								</div>
 							</div>
 						{:else if aircraftModel}
-							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
-								<h4 class="font-medium text-surface-900 dark:text-surface-100">
-									Aircraft Model Details
-								</h4>
+							<div
+								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Manufacturer</dt>
@@ -696,254 +1124,14 @@
 									</div>
 								</dl>
 							</div>
-						{/if}
-
-						<!-- Current Flight -->
-						{#if loadingFlight}
-							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
-								<RotateCcw class="animate-spin" size={16} />
-								Loading flight information...
-							</div>
-						{:else if currentFlight}
-							<div
-								class="space-y-4 rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
-							>
-								<div class="flex items-center justify-between">
-									<h4 class="font-medium text-surface-900 dark:text-surface-100">Current Flight</h4>
-									<a
-										href="/flights/{currentFlight.id}"
-										target="_blank"
-										rel="noopener noreferrer"
-										class="btn preset-filled-success-500 btn-sm"
-										title="View full flight details"
-									>
-										<Plane size={14} />
-										View Flight
-										<ExternalLink size={12} />
-									</a>
-								</div>
-
-								<dl class="grid grid-cols-2 gap-4 text-sm">
-									<!-- Flight State -->
-									<div class="col-span-2">
-										<dt class="font-medium text-surface-600 dark:text-surface-400">State</dt>
-										<dd>
-											<span class="badge preset-filled-primary-500 text-sm">
-												{currentFlight.state}
-											</span>
-										</dd>
-									</div>
-
-									<!-- Departure Airport -->
-									{#if currentFlight.departureAirport}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
-											<dd class="font-semibold">{currentFlight.departureAirport}</dd>
-										</div>
-									{/if}
-
-									<!-- Arrival Airport -->
-									{#if currentFlight.arrivalAirport}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
-											<dd class="font-semibold">{currentFlight.arrivalAirport}</dd>
-										</div>
-									{/if}
-
-									<!-- Takeoff Time -->
-									{#if currentFlight.takeoffTime}
-										<div class="col-span-2">
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Takeoff Time
-											</dt>
-											<dd>
-												{formatTimestamp(currentFlight.takeoffTime).relative}
-												<div class="text-xs text-surface-500">
-													{formatTimestamp(currentFlight.takeoffTime).absolute}
-												</div>
-											</dd>
-										</div>
-									{/if}
-
-									<!-- Landing Time -->
-									{#if currentFlight.landingTime}
-										<div class="col-span-2">
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Landing Time
-											</dt>
-											<dd>
-												{formatTimestamp(currentFlight.landingTime).relative}
-												<div class="text-xs text-surface-500">
-													{formatTimestamp(currentFlight.landingTime).absolute}
-												</div>
-											</dd>
-										</div>
-									{/if}
-
-									<!-- Flight Duration -->
-									{#if currentFlight.durationSeconds}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Duration</dt>
-											<dd class="font-semibold">
-												{Math.floor(currentFlight.durationSeconds / 3600)}h
-												{Math.floor((currentFlight.durationSeconds % 3600) / 60)}m
-											</dd>
-										</div>
-									{/if}
-
-									<!-- Current Altitude -->
-									{#if currentFlight.latestAltitudeMslFeet}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Current Altitude
-											</dt>
-											<dd class="font-semibold">
-												{currentFlight.latestAltitudeMslFeet.toLocaleString()} ft MSL
-											</dd>
-										</div>
-									{/if}
-
-									<!-- Distance Traveled -->
-									{#if currentFlight.totalDistanceMeters}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Distance</dt>
-											<dd class="font-semibold">
-												{(currentFlight.totalDistanceMeters / 1852).toFixed(1)} nm
-											</dd>
-										</div>
-									{/if}
-
-									<!-- Maximum Displacement -->
-									{#if currentFlight.maximumDisplacementMeters}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Max Displacement
-											</dt>
-											<dd class="font-semibold">
-												{(currentFlight.maximumDisplacementMeters / 1852).toFixed(1)} nm
-											</dd>
-										</div>
-									{/if}
-								</dl>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Current Fix -->
-					<div class="space-y-4">
-						<h3 class="flex items-center gap-2 text-lg font-semibold">
-							<Navigation size={20} />
-							Current Position
-						</h3>
-
-						{#if !selectedAircraft.currentFix}
-							<div class="py-8 text-center text-surface-500 dark:text-surface-500">
-								<MapPin size={48} class="mx-auto mb-2 opacity-50" />
-								<p>No recent position data available</p>
-							</div>
 						{:else}
-							{@const currentFix = selectedAircraft.currentFix as Fix}
 							<div
 								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
 							>
-								<dl class="grid grid-cols-2 gap-4 text-sm">
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
-											Altitude (ft)
-										</dt>
-										<dd>
-											{#if currentFix.altitudeMslFeet !== undefined && currentFix.altitudeMslFeet !== null}
-												{currentFix.altitudeMslFeet.toLocaleString()} MSL
-												{#if currentFix.altitudeAglFeet !== undefined && currentFix.altitudeAglFeet !== null}
-													/ {currentFix.altitudeAglFeet.toLocaleString()} AGL
-												{/if}
-											{:else}
-												Unknown
-											{/if}
-										</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
-										<dd>{formatSpeed(currentFix.groundSpeedKnots ?? undefined)}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
-										<dd>{formatTrack(currentFix.trackDegrees ?? undefined)}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
-										<dd>
-											<span
-												class="{currentFix.climbFpm !== undefined &&
-												currentFix.climbFpm !== null &&
-												currentFix.climbFpm < 0
-													? 'text-red-600 dark:text-red-400'
-													: 'text-green-600 dark:text-green-400'} font-semibold"
-											>
-												{formatClimbRate(currentFix.climbFpm ?? undefined)}
-											</span>
-										</dd>
-									</div>
-
-									<!-- Bearing and Distance to Aircraft -->
-									{#if userLocation}
-										{@const distanceNm = calculateDistance(
-											userLocation.lat,
-											userLocation.lng,
-											currentFix.latitude,
-											currentFix.longitude,
-											'nm'
-										)}
-										{@const bearing = calculateBearing(
-											userLocation.lat,
-											userLocation.lng,
-											currentFix.latitude,
-											currentFix.longitude
-										)}
-										{@const distances = formatDistance(distanceNm)}
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Distance from me
-											</dt>
-											<dd>{distances.nm} nm / {distances.mi} mi</dd>
-										</div>
-										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Bearing</dt>
-											<dd>{formatBearing(bearing)}</dd>
-										</div>
-									{:else}
-										<div class="col-span-2">
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Distance & Bearing
-											</dt>
-											<dd>
-												<button
-													onclick={requestLocationPermission}
-													class="btn preset-filled-primary-500 btn-sm"
-													disabled={!locationPermissionDenied && userLocation === null}
-												>
-													<Navigation size={14} />
-													Permit Location Access
-												</button>
-											</dd>
-										</div>
-									{/if}
-
-									<div class="col-span-2">
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Coordinates</dt>
-										<dd class="font-mono">
-											{formatCoordinates(currentFix.latitude, currentFix.longitude)}
-										</dd>
-									</div>
-									<div class="col-span-2">
-										<dd>
-											Last seen {formatTimestamp(currentFix.timestamp).relative}
-											<div class="text-xs text-surface-500 dark:text-surface-500">
-												{formatTimestamp(currentFix.timestamp).absolute}
-											</div>
-										</dd>
-									</div>
-								</dl>
+								<div class="py-8 text-center text-surface-500 dark:text-surface-500">
+									<Cog size={48} class="mx-auto mb-2 opacity-50" />
+									<p>No aircraft model data available</p>
+								</div>
 							</div>
 						{/if}
 					</div>
