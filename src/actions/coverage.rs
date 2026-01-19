@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
+use crate::actions::views::receiver::ReceiverView;
 use crate::coverage::CoverageHexFeature;
 use crate::coverage_cache::CoverageCache;
 use crate::coverage_repo::CoverageRepository;
@@ -160,13 +161,15 @@ pub async fn get_coverage_hexes(
 /// Query parameters for hex fixes endpoint
 #[derive(Debug, Deserialize)]
 pub struct HexFixesQueryParams {
-    pub start_date: Option<NaiveDate>,
-    pub end_date: Option<NaiveDate>,
     pub receiver_id: Option<Uuid>,
     pub min_altitude: Option<i32>,
     pub max_altitude: Option<i32>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    /// First seen timestamp from hex aggregates (ISO 8601) - required for partition pruning
+    pub first_seen: chrono::DateTime<chrono::Utc>,
+    /// Last seen timestamp from hex aggregates (ISO 8601) - required for partition pruning
+    pub last_seen: chrono::DateTime<chrono::Utc>,
 }
 
 /// Response for fixes within an H3 hexagon
@@ -179,8 +182,88 @@ pub struct FixesInHexResponse {
     pub resolution: i16,
 }
 
+/// Response for receivers that contributed to an H3 hexagon
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HexReceiversResponse {
+    pub data: Vec<ReceiverView>,
+    pub h3_index: String,
+}
+
+/// Query parameters for hex receivers endpoint
+#[derive(Debug, Deserialize)]
+pub struct HexReceiversQueryParams {
+    pub start_date: Option<NaiveDate>,
+    pub end_date: Option<NaiveDate>,
+}
+
+/// GET /data/coverage/hexes/{h3_index}/receivers
+/// Get the list of receivers that have contributed coverage to an H3 hexagon
+pub async fn get_hex_receivers(
+    Path(h3_index_str): Path<String>,
+    Query(params): Query<HexReceiversQueryParams>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    metrics::counter!("coverage.api.hex_receivers.requests_total").increment(1);
+
+    // Parse and validate H3 index
+    let h3_index_u64 = match u64::from_str_radix(&h3_index_str, 16) {
+        Ok(idx) => idx,
+        Err(_) => {
+            return json_error(StatusCode::BAD_REQUEST, "Invalid H3 index format").into_response();
+        }
+    };
+
+    // Validate it's a valid H3 index
+    let cell = match h3o::CellIndex::try_from(h3_index_u64) {
+        Ok(c) => c,
+        Err(_) => {
+            return json_error(StatusCode::BAD_REQUEST, "Invalid H3 index").into_response();
+        }
+    };
+
+    let resolution = cell.resolution() as i16;
+    let h3_index_i64 = h3_index_u64 as i64;
+
+    // Apply date defaults
+    let end_date = params
+        .end_date
+        .unwrap_or_else(|| chrono::Utc::now().date_naive());
+    let start_date = params
+        .start_date
+        .unwrap_or_else(|| end_date - chrono::Duration::days(30));
+
+    // Query receivers
+    let repo = CoverageRepository::new(state.pool.clone());
+    match repo
+        .get_receivers_for_hex(h3_index_i64, resolution, start_date, end_date)
+        .await
+    {
+        Ok(receivers) => {
+            metrics::counter!("coverage.api.hex_receivers.success_total").increment(1);
+            (
+                StatusCode::OK,
+                Json(HexReceiversResponse {
+                    data: receivers,
+                    h3_index: h3_index_str,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            metrics::counter!("coverage.api.hex_receivers.errors_total").increment(1);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get hex receivers: {}", e),
+            )
+            .into_response()
+        }
+    }
+}
+
 /// GET /data/coverage/hexes/{h3_index}/fixes
 /// Get individual position fixes within an H3 hexagon
+/// Requires first_seen and last_seen timestamps from hex aggregates for efficient partition pruning
 pub async fn get_hex_fixes(
     Path(h3_index_str): Path<String>,
     Query(params): Query<HexFixesQueryParams>,
@@ -208,30 +291,22 @@ pub async fn get_hex_fixes(
     let resolution = cell.resolution() as i16;
     let h3_index_i64 = h3_index_u64 as i64;
 
-    // Apply date defaults (same as main coverage endpoint)
-    let end_date = params
-        .end_date
-        .unwrap_or_else(|| chrono::Utc::now().date_naive());
-    let start_date = params
-        .start_date
-        .unwrap_or_else(|| end_date - chrono::Duration::days(30));
-
     // Validate and cap limit
     let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    // Query fixes
+    // Query fixes using first_seen and last_seen for partition pruning
     let fixes_repo = FixesRepository::new(state.pool.clone());
     match fixes_repo
         .get_fixes_in_h3_cell(
             h3_index_i64,
-            start_date,
-            end_date,
             params.receiver_id,
             params.min_altitude,
             params.max_altitude,
             limit,
             offset,
+            params.first_seen,
+            params.last_seen,
         )
         .await
     {

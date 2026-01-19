@@ -1201,18 +1201,21 @@ impl FixesRepository {
 
     /// Get position fixes within an H3 hexagon cell
     /// Returns fixes that fall within the spatial boundary of the H3 cell,
-    /// filtered by date range and optional receiver/altitude filters
+    /// filtered by timestamp range and optional receiver/altitude filters
+    ///
+    /// Uses `first_seen` and `last_seen` timestamps (from hex aggregates) for
+    /// efficient PostgreSQL partition pruning.
     #[allow(clippy::too_many_arguments)]
     pub async fn get_fixes_in_h3_cell(
         &self,
         h3_index: i64,
-        start_date: chrono::NaiveDate,
-        end_date: chrono::NaiveDate,
         receiver_id_filter: Option<Uuid>,
         min_altitude: Option<i32>,
         max_altitude: Option<i32>,
         limit: i64,
         offset: i64,
+        first_seen: chrono::DateTime<chrono::Utc>,
+        last_seen: chrono::DateTime<chrono::Utc>,
     ) -> Result<(Vec<Fix>, i64)> {
         use diesel::sql_types;
 
@@ -1236,25 +1239,34 @@ impl FixesRepository {
                 .collect();
 
             // Close the polygon by adding first point again
-            let first = boundary.iter().next().unwrap();
-            coords.push(format!("{} {}", first.lng(), first.lat()));
+            let first_coord = boundary.iter().next().unwrap();
+            coords.push(format!("{} {}", first_coord.lng(), first_coord.lat()));
 
             let polygon_wkt = format!("POLYGON(({}))", coords.join(", "));
 
+            // Use exact timestamps from hex aggregates for efficient partition pruning
+            let time_filter = format!(
+                "received_at >= '{}' AND received_at <= '{}'",
+                first_seen.format("%Y-%m-%d %H:%M:%S%:z"),
+                last_seen.format("%Y-%m-%d %H:%M:%S%:z")
+            );
+
             // Build base query for counting
+            // Only include OGN/APRS fixes (those with receiver_id) - exclude ADS-B/Beast/SBS
             let mut count_sql = format!(
                 r#"
                 SELECT COUNT(*)
                 FROM fixes
                 WHERE ST_Within(location_geom, ST_GeomFromText('{}', 4326))
-                  AND received_at >= '{}'::date
-                  AND received_at < '{}'::date + INTERVAL '1 day'
+                  AND {}
+                  AND receiver_id IS NOT NULL
                 "#,
-                polygon_wkt, start_date, end_date
+                polygon_wkt, time_filter
             );
 
             // Build base query for selecting fixes
             // Note: aprs_type and via are now in source_metadata, not separate columns
+            // Only include OGN/APRS fixes (those with receiver_id) - exclude ADS-B/Beast/SBS
             let mut select_sql = format!(
                 r#"
                 SELECT id, source, timestamp, latitude, longitude,
@@ -1264,10 +1276,10 @@ impl FixesRepository {
                        receiver_id, raw_message_id, altitude_agl_valid, time_gap_seconds
                 FROM fixes
                 WHERE ST_Within(location_geom, ST_GeomFromText('{}', 4326))
-                  AND received_at >= '{}'::date
-                  AND received_at < '{}'::date + INTERVAL '1 day'
+                  AND {}
+                  AND receiver_id IS NOT NULL
                 "#,
-                polygon_wkt, start_date, end_date
+                polygon_wkt, time_filter
             );
 
             // Add optional filters

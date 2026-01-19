@@ -36,7 +36,7 @@ use crate::actions::views::Aircraft;
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     #[serde(rename = "fix")]
-    Fix(Box<crate::fixes::FixWithFlightInfo>),
+    Fix(Box<crate::fixes::Fix>),
 
     #[serde(rename = "aircraft")]
     Aircraft(Box<Aircraft>),
@@ -282,41 +282,39 @@ impl LiveFixService {
     async fn process_fix_message(
         msg: async_nats::Message,
         expected_device_id: &str,
-    ) -> Result<crate::fixes::FixWithFlightInfo> {
-        // Parse the full FixWithFlightInfo data from NATS
-        let fix_with_flight: crate::fixes::FixWithFlightInfo =
-            serde_json::from_slice(&msg.payload)?;
+    ) -> Result<crate::fixes::Fix> {
+        // Parse the Fix data from NATS
+        let fix: crate::fixes::Fix = serde_json::from_slice(&msg.payload)?;
 
         info!(
             "Processing live fix for device {} at ({}, {}) alt={}ft",
             expected_device_id,
-            fix_with_flight.latitude,
-            fix_with_flight.longitude,
-            fix_with_flight.altitude_msl_feet.unwrap_or(0)
+            fix.latitude,
+            fix.longitude,
+            fix.altitude_msl_feet.unwrap_or(0)
         );
 
-        Ok(fix_with_flight)
+        Ok(fix)
     }
 
     // Process a single fix message from area subscription
     async fn process_area_fix_message(
         msg: async_nats::Message,
         area_key: &str,
-    ) -> Result<crate::fixes::FixWithFlightInfo> {
-        // Parse the full FixWithFlightInfo data from NATS
-        let fix_with_flight: crate::fixes::FixWithFlightInfo =
-            serde_json::from_slice(&msg.payload)?;
+    ) -> Result<crate::fixes::Fix> {
+        // Parse the Fix data from NATS
+        let fix: crate::fixes::Fix = serde_json::from_slice(&msg.payload)?;
 
         info!(
             "Processing live fix from area {} for device {} at ({}, {}) alt={}ft",
             area_key,
-            fix_with_flight.aircraft_id,
-            fix_with_flight.latitude,
-            fix_with_flight.longitude,
-            fix_with_flight.altitude_msl_feet.unwrap_or(0)
+            fix.aircraft_id,
+            fix.latitude,
+            fix.longitude,
+            fix.altitude_msl_feet.unwrap_or(0)
         );
 
-        Ok(fix_with_flight)
+        Ok(fix)
     }
 
     // Unsubscribe from an aircraft - removes NATS subscription when no more clients

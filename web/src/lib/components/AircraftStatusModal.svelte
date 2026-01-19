@@ -115,7 +115,7 @@
 
 			aircraftRegistration = registrationResponse?.data || null;
 			aircraftModel = modelResponse?.data || null;
-			currentFlight = selectedAircraft.currentFix?.flight || flightResponse?.data || null;
+			currentFlight = flightResponse?.data || null;
 		} catch (error) {
 			logger.warn('Failed to load aircraft data: {error}', { error });
 			aircraftRegistration = null;

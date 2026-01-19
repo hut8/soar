@@ -1,6 +1,6 @@
 use num_traits::AsPrimitive;
 use tracing::Instrument;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::Fix;
@@ -449,40 +449,12 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 4: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 4: Publish to NATS with updated fix (includes flight_id for clients to fetch if needed)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
-            // Look up flight information if this fix is part of a flight
-            let flight = if let Some(flight_id) = updated_fix.flight_id {
-                match self
-                    .flight_detection_processor
-                    .get_flight_by_id(flight_id)
-                    .await
-                {
-                    Ok(Some(flight)) => Some(flight),
-                    Ok(None) => {
-                        warn!(
-                            "Fix {} has flight_id {} but flight not found",
-                            updated_fix.id, flight_id
-                        );
-                        None
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to fetch flight {} for fix {}: {}",
-                            flight_id, updated_fix.id, e
-                        );
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
             metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_nats").increment(1);
             nats_publisher
-                .process_fix(fix_with_flight, raw_message)
+                .process_fix(updated_fix.clone(), raw_message)
                 .await;
             metrics::histogram!("aprs.aircraft.nats_publish_ms")
                 .record(nats_publish_start.elapsed().as_micros() as f64 / 1000.0);

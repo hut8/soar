@@ -203,7 +203,6 @@ export interface FixWithExtras extends Fix {
 	deviceAddressHex?: string; // Legacy field, prefer aircraftId with proper join
 	registration?: string; // Aircraft registration (joined, not in Rust Fix)
 	model?: string; // Aircraft model (joined, not in Rust Fix)
-	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 	aprsType?: string; // APRS message type (from sourceMetadata, used in WebSocket)
 	via?: string[]; // APRS via path (from sourceMetadata, used in WebSocket)
 }
@@ -419,6 +418,12 @@ export interface FixesInHexResponse {
 	total: number;
 	h3Index: string;
 	resolution: number;
+}
+
+// Hex receivers response - receivers that contributed to a coverage hex
+export interface HexReceiversResponse {
+	data: Receiver[];
+	h3Index: string;
 }
 
 // Browser API Extensions

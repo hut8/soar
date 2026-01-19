@@ -301,6 +301,9 @@ export class FixFeed {
 			return; // Already subscribed
 		}
 
+		// Add to set immediately to prevent duplicate subscriptions from concurrent calls
+		this.subscribedAircraft.add(aircraftId);
+
 		// Connect if not already connected
 		if (!this.websocket || this.websocket.readyState === WebSocket.CLOSED) {
 			this.connect();
@@ -311,7 +314,6 @@ export class FixFeed {
 
 		if (isConnected && this.websocket?.readyState === WebSocket.OPEN) {
 			this.sendSubscriptionMessage('subscribe', aircraftId);
-			this.subscribedAircraft.add(aircraftId);
 
 			this.notifySubscribers({
 				type: 'subscription_added',
@@ -321,6 +323,8 @@ export class FixFeed {
 			// Fetch aircraft info from API (currentFix will be included)
 			await this.aircraftRegistry.updateAircraftFromAPI(aircraftId);
 		} else {
+			// Remove from set if subscription failed
+			this.subscribedAircraft.delete(aircraftId);
 			logger.error('Failed to subscribe to aircraft {aircraftId}: WebSocket not connected', {
 				aircraftId
 			});

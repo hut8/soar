@@ -5,6 +5,7 @@ use diesel::sql_types;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::actions::views::receiver::ReceiverView;
 use crate::coverage::{CoverageHexFeature, NewReceiverCoverageH3, ReceiverCoverageH3};
 use crate::web::PgPool;
 
@@ -269,6 +270,116 @@ impl CoverageRepository {
                 .collect();
 
             Ok(existing)
+        })
+        .await?
+    }
+
+    /// Get the list of receivers that have contributed coverage to a specific H3 hex
+    pub async fn get_receivers_for_hex(
+        &self,
+        h3_index: i64,
+        resolution: i16,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<Vec<ReceiverView>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Query receiver data for this hex
+            #[derive(QueryableByName)]
+            struct ReceiverRow {
+                #[diesel(sql_type = sql_types::Uuid)]
+                id: Uuid,
+                #[diesel(sql_type = sql_types::Text)]
+                callsign: String,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                description: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                contact: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                email: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                ogn_db_country: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Double>)]
+                latitude: Option<f64>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Double>)]
+                longitude: Option<f64>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                street_address: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                city: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                region: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                country: Option<String>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                postal_code: Option<String>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                created_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                updated_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Timestamptz>)]
+                latest_packet_at: Option<DateTime<Utc>>,
+                #[diesel(sql_type = sql_types::Bool)]
+                from_ogn_db: bool,
+            }
+
+            let rows: Vec<ReceiverRow> = diesel::sql_query(
+                r#"
+                SELECT DISTINCT r.id, r.callsign, r.description, r.contact, r.email,
+                       r.ogn_db_country,
+                       ST_Y(r.location::geometry) as latitude,
+                       ST_X(r.location::geometry) as longitude,
+                       r.street_address, r.city, r.region, r.country, r.postal_code,
+                       r.created_at, r.updated_at, r.latest_packet_at, r.from_ogn_db
+                FROM receivers r
+                INNER JOIN receiver_coverage_h3 c ON r.id = c.receiver_id
+                WHERE c.h3_index = $1
+                  AND c.resolution = $2
+                  AND c.date >= $3
+                  AND c.date <= $4
+                ORDER BY r.callsign
+                "#,
+            )
+            .bind::<sql_types::BigInt, _>(h3_index)
+            .bind::<sql_types::SmallInt, _>(resolution)
+            .bind::<sql_types::Date, _>(start_date)
+            .bind::<sql_types::Date, _>(end_date)
+            .load(&mut conn)?;
+
+            let receivers: Vec<ReceiverView> = rows
+                .into_iter()
+                .map(|r| ReceiverView {
+                    id: r.id,
+                    callsign: r.callsign,
+                    description: r.description,
+                    contact: r.contact,
+                    email: r.email,
+                    ogn_db_country: r.ogn_db_country,
+                    latitude: r.latitude,
+                    longitude: r.longitude,
+                    street_address: r.street_address,
+                    city: r.city,
+                    region: r.region,
+                    country: r.country,
+                    postal_code: r.postal_code,
+                    created_at: r.created_at,
+                    updated_at: r.updated_at,
+                    latest_packet_at: r.latest_packet_at,
+                    from_ogn_db: r.from_ogn_db,
+                })
+                .collect();
+
+            info!(
+                "Found {} receivers for hex {} at resolution {}",
+                receivers.len(),
+                h3_index,
+                resolution
+            );
+
+            Ok(receivers)
         })
         .await?
     }

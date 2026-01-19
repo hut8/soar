@@ -38,7 +38,7 @@ export interface LoadedMapState {
 	bounds?: MapBounds;
 }
 
-export type MapType = 'satellite' | 'roadmap';
+export type MapType = 'satellite' | 'roadmap' | 'terrain' | 'hybrid';
 
 /**
  * Save map state (center and zoom) to localStorage
@@ -233,7 +233,7 @@ export function loadMapType(): MapType {
 
 	try {
 		const saved = localStorage.getItem(MAP_TYPE_KEY);
-		if (saved === 'satellite' || saved === 'roadmap') {
+		if (saved === 'satellite' || saved === 'roadmap' || saved === 'terrain' || saved === 'hybrid') {
 			logger.debug('[MAP TYPE] Loaded saved map type: {saved}', { saved });
 			return saved;
 		}
@@ -244,3 +244,13 @@ export function loadMapType(): MapType {
 	logger.debug('[MAP TYPE] Using default: satellite');
 	return 'satellite';
 }
+
+/**
+ * Map type labels for UI display
+ */
+export const MAP_TYPE_LABELS: Record<MapType, string> = {
+	roadmap: 'Map',
+	satellite: 'Satellite',
+	terrain: 'Terrain',
+	hybrid: 'Hybrid'
+};

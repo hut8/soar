@@ -598,7 +598,7 @@
 			{@render children?.()}
 		</main>
 
-		{#if !page.route.id?.includes('operations') && !page.route.id?.includes('/flights/[id]/map')}
+		{#if !page.route.id?.includes('operations') && !page.route.id?.includes('/flights/[id]/map') && !page.route.id?.includes('receivers/coverage')}
 			<footer class="bg-surface-100-800-token p-4 text-center text-sm">
 				<p>&copy; 2025 Liam Bowen</p>
 			</footer>
