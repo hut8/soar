@@ -1,32 +1,66 @@
 # Prometheus configuration for SOAR metrics scraping
+# Uses static_configs (Prometheus 2.31 compatible)
 #
-# This file uses scrape_config_files to load complete scrape job configurations.
-# This allows you to manage SOAR service scrape jobs in separate files.
-#
-# To use this configuration:
-# 1. Copy infrastructure/prometheus-jobs/*.yml to /etc/prometheus/jobs/
-# 2. That's it! Prometheus will automatically load all .yml files from that directory
+# NOTE: scrape_config_files requires Prometheus 2.43+
+# When the server is upgraded, we can use infrastructure/prometheus-jobs/*.yml instead
 
 global:
-  scrape_interval: 15s      # Default scrape interval (can be overridden per job)
-  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  scrape_interval: 15s
+  evaluation_interval: 15s
 
-  # Attach these labels to all metrics scraped by this Prometheus instance
-  external_labels:
-    environment: 'production'
-    service: 'soar'
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9090']
 
-# Load all scrape job configurations from separate files
-scrape_config_files:
-  - '/etc/prometheus/jobs/*.yml'
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
 
-# Alerting configuration (optional)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets:
-#             - 'localhost:9093'
+  - job_name: 'nats-jetstream'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:7777']
+        labels:
+          instance: 'soar'
+          component: 'nats-jetstream'
 
-# Rule files for alerting (optional)
-# rule_files:
-#   - 'rules/*.yml'
+  # SOAR Ingest (Staging) - NO metric_relabel_configs to preserve source labels
+  - job_name: 'soar-ingest-staging'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9197']
+        labels:
+          instance: 'soar-staging'
+          component: 'ingest'
+          environment: 'staging'
+
+  # SOAR Run (Staging)
+  - job_name: 'soar-run-staging'
+    metrics_path: '/metrics'
+    scrape_interval: 1s
+    static_configs:
+      - targets: ['localhost:9192']
+        labels:
+          instance: 'soar-staging'
+          component: 'run'
+          environment: 'staging'
+
+  # SOAR Web (Staging)
+  - job_name: 'soar-web-staging'
+    metrics_path: '/data/metrics'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:61226']
+        labels:
+          instance: 'soar-web-staging'
+          component: 'web'
+          environment: 'staging'
+
+  # Production jobs (add when deploying to production)
+  # - job_name: 'soar-ingest'
+  # - job_name: 'soar-run'
+  # - job_name: 'soar-web'

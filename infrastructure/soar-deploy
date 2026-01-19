@@ -165,8 +165,15 @@ ACTIVE_SERVICES=(
 
 # Manually-deployed services (installed but not automatically started)
 # These services change infrequently and are deployed via the regular deployment process
-MANUAL_SERVICES=(
-)
+# The firehose service is staging-only and uses a fixed name (not ${SERVICE_SUFFIX})
+if [ "$ENVIRONMENT" = "staging" ]; then
+    MANUAL_SERVICES=(
+        "soar-ingest-firehose-staging.service"
+    )
+else
+    MANUAL_SERVICES=(
+    )
+fi
 
 # Timer-invoked services (only installed, not enabled or started)
 # Skip backup services for staging environment
