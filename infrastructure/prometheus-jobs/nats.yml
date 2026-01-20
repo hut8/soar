@@ -1,11 +1,9 @@
-# NATS JetStream Metrics (prometheus-nats-exporter)
-# This file defines a complete scrape job configuration for NATS JetStream monitoring.
+# NATS Metrics (prometheus-nats-exporter)
 # The prometheus-nats-exporter service scrapes NATS HTTP endpoint (localhost:8222)
 # and exposes JetStream metrics in Prometheus format on port 7777.
-# Prometheus will automatically load this file when using scrape_config_files.
 
 scrape_configs:
-  - job_name: 'nats-jetstream'
+  - job_name: 'nats'
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 10s
@@ -14,5 +12,4 @@ scrape_configs:
           - 'localhost:7777'
         labels:
           instance: 'soar'
-          component: 'nats-jetstream'
-          environment: 'production'
+          component: 'nats'

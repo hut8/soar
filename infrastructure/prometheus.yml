@@ -1,13 +1,16 @@
-# Prometheus configuration for SOAR metrics scraping
-# Uses static_configs (Prometheus 2.31 compatible)
-#
-# NOTE: scrape_config_files requires Prometheus 2.43+
-# When the server is upgraded, we can use infrastructure/prometheus-jobs/*.yml instead
+# Prometheus configuration
+# SOAR-specific jobs are loaded from /etc/prometheus/jobs/*.yml via scrape_config_files
+# This allows multiple projects to add their own job files without conflicts
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Load SOAR and other service scrape jobs from separate files
+scrape_config_files:
+  - '/etc/prometheus/jobs/*.yml'
+
+# Basic infrastructure scrape configs
 scrape_configs:
   - job_name: 'prometheus'
     scrape_interval: 5s
@@ -17,50 +20,3 @@ scrape_configs:
   - job_name: 'node'
     static_configs:
       - targets: ['localhost:9100']
-
-  - job_name: 'nats-jetstream'
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['localhost:7777']
-        labels:
-          instance: 'soar'
-          component: 'nats-jetstream'
-
-  # SOAR Ingest (Staging) - NO metric_relabel_configs to preserve source labels
-  - job_name: 'soar-ingest-staging'
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    static_configs:
-      - targets: ['localhost:9197']
-        labels:
-          instance: 'soar-staging'
-          component: 'ingest'
-          environment: 'staging'
-
-  # SOAR Run (Staging)
-  - job_name: 'soar-run-staging'
-    metrics_path: '/metrics'
-    scrape_interval: 1s
-    static_configs:
-      - targets: ['localhost:9192']
-        labels:
-          instance: 'soar-staging'
-          component: 'run'
-          environment: 'staging'
-
-  # SOAR Web (Staging)
-  - job_name: 'soar-web-staging'
-    metrics_path: '/data/metrics'
-    scrape_interval: 10s
-    static_configs:
-      - targets: ['localhost:61226']
-        labels:
-          instance: 'soar-web-staging'
-          component: 'web'
-          environment: 'staging'
-
-  # Production jobs (add when deploying to production)
-  # - job_name: 'soar-ingest'
-  # - job_name: 'soar-run'
-  # - job_name: 'soar-web'
