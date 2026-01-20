@@ -320,16 +320,16 @@
 						['linear'],
 						['get', 'fixCount'],
 						0,
-						'#3b82f6', // Blue (low coverage)
+						'#93c5fd', // Light blue (low coverage)
 						maxFixCount * 0.33,
-						'#22c55e', // Green
+						'#86efac', // Light green
 						maxFixCount * 0.66,
-						'#eab308', // Yellow
+						'#fde047', // Light yellow
 						maxFixCount,
-						'#f97316' // Orange (high coverage)
+						'#fdba74' // Light orange (high coverage)
 					],
-					'fill-opacity': 0.35,
-					'fill-outline-color': 'rgba(0, 0, 0, 0.3)'
+					'fill-opacity': 0.25,
+					'fill-outline-color': 'rgba(0, 0, 0, 0.2)'
 				}
 			});
 
@@ -699,19 +699,19 @@
 		<div class="flex flex-wrap items-center gap-4">
 			<span class="text-sm font-medium text-gray-300">Density:</span>
 			<div class="flex items-center gap-1">
-				<div class="h-3 w-6 rounded-sm" style="background-color: #3b82f6;"></div>
+				<div class="h-3 w-6 rounded-sm" style="background-color: #93c5fd;"></div>
 				<span class="text-xs text-gray-400">Low</span>
 			</div>
 			<div class="flex items-center gap-1">
-				<div class="h-3 w-6 rounded-sm" style="background-color: #22c55e;"></div>
+				<div class="h-3 w-6 rounded-sm" style="background-color: #86efac;"></div>
 				<span class="text-xs text-gray-400">Medium</span>
 			</div>
 			<div class="flex items-center gap-1">
-				<div class="h-3 w-6 rounded-sm" style="background-color: #eab308;"></div>
+				<div class="h-3 w-6 rounded-sm" style="background-color: #fde047;"></div>
 				<span class="text-xs text-gray-400">High</span>
 			</div>
 			<div class="flex items-center gap-1">
-				<div class="h-3 w-6 rounded-sm" style="background-color: #f97316;"></div>
+				<div class="h-3 w-6 rounded-sm" style="background-color: #fdba74;"></div>
 				<span class="text-xs text-gray-400">Very High</span>
 			</div>
 		</div>
