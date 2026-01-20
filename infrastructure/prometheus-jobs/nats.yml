@@ -13,3 +13,4 @@ scrape_configs:
         labels:
           instance: 'soar'
           component: 'nats'
+          environment: 'production'

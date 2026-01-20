@@ -1,8 +1,0 @@
-- job_name: 'soar-ingest-staging'
-  scrape_interval: 15s
-  static_configs:
-    - targets: ['localhost:9197']
-      labels:
-        environment: 'staging'
-        service: 'soar-ingest-staging'
-        component: 'ingest'

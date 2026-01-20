@@ -59,17 +59,17 @@ sudo systemctl status prometheus-nats-exporter
 
 ### 3. Deploy Prometheus scrape job
 
-The Prometheus configuration already includes `scrape_config_files` directive, so the job file will be loaded automatically:
+The Prometheus configuration uses `scrape_config_files` directive, so the job file will be loaded automatically:
 
 ```bash
 # Copy job configuration (if not already in repository)
-sudo cp infrastructure/prometheus-jobs/nats-jetstream.yml /etc/prometheus/jobs/
+sudo cp infrastructure/prometheus-jobs/nats.yml /etc/prometheus/jobs/
 
 # Reload Prometheus configuration
 sudo systemctl reload prometheus
 
 # Verify the target is being scraped
-# Open http://localhost:9090/targets and look for 'nats-jetstream' job
+# Open http://localhost:9090/targets and look for 'nats' job
 ```
 
 ### 4. Import Grafana dashboard
@@ -78,14 +78,14 @@ sudo systemctl reload prometheus
 1. Open Grafana (http://localhost:3000)
 2. Go to Dashboards → Import
 3. Click "Upload JSON file"
-4. Select `infrastructure/grafana-dashboard-nats-jetstream.json`
+4. Select `infrastructure/grafana-dashboard-nats.json`
 5. Click "Import"
 
 **Option B: Via API**
 ```bash
 curl -X POST http://admin:admin@localhost:3000/api/dashboards/db \
   -H "Content-Type: application/json" \
-  -d @infrastructure/grafana-dashboard-nats-jetstream.json
+  -d @infrastructure/grafana-dashboard-nats.json
 ```
 
 ## Verification
@@ -108,7 +108,7 @@ curl http://localhost:7777/metrics | head -20
 
 1. Open Prometheus UI: http://localhost:9090
 2. Go to Status → Targets
-3. Look for the `nats-jetstream` job - it should show state "UP"
+3. Look for the `nats` job - it should show state "UP"
 4. Try a test query in the Graph tab:
    ```promql
    jetstream_stream_total_messages{stream="APRS_RAW"}
@@ -167,7 +167,7 @@ curl http://localhost:7777/metrics
 
 # Check Prometheus targets
 # http://localhost:9090/targets
-# Look for nats-jetstream job and check for errors
+# Look for nats job and check for errors
 
 # Reload Prometheus config
 sudo systemctl reload prometheus
@@ -213,11 +213,11 @@ Consider setting up alerts for:
    rate(aprs_jetstream_consumed[5m]) * 1.2  # 20% higher publish rate
    ```
 
-## Files Created
+## Files
 
 - `infrastructure/prometheus-nats-exporter.service` - Systemd service definition
-- `infrastructure/prometheus-jobs/nats-jetstream.yml` - Prometheus scrape configuration
-- `infrastructure/grafana-dashboard-nats-jetstream.json` - Grafana dashboard definition
+- `infrastructure/prometheus-jobs/nats.yml` - Prometheus scrape configuration
+- `infrastructure/grafana-dashboard-nats.json` - Grafana dashboard definition
 - `infrastructure/NATS-JETSTREAM-MONITORING.md` - This documentation file
 
 ## References
