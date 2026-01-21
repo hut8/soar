@@ -26,6 +26,14 @@ use crate::elevation::ElevationDB;
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
+/// Buffer before takeoff_time when querying fixes for a flight.
+/// Accounts for fixes that may have been recorded slightly before the detected takeoff.
+const FIXES_TIME_RANGE_START_BUFFER_MINUTES: i64 = 5;
+
+/// Buffer after landing fix timestamp when clearing flight_id from fixes.
+/// Ensures we capture any fixes that arrived slightly after the landing fix.
+const FIXES_TIME_RANGE_END_BUFFER_MINUTES: i64 = 1;
+
 /// Create a new flight FAST without blocking on slow operations (runway detection, geocoding)
 /// Returns flight_id immediately and spawns background task to enrich the flight record
 ///
@@ -468,7 +476,7 @@ async fn complete_flight_in_background(
     // fails if processing old queued messages from soar-ingest)
     let fixes_start_time = flight
         .takeoff_time
-        .map(|t| t - chrono::Duration::minutes(5))
+        .map(|t| t - chrono::Duration::minutes(FIXES_TIME_RANGE_START_BUFFER_MINUTES))
         .unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::hours(24));
 
     // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
@@ -593,8 +601,10 @@ async fn complete_flight_in_background(
             // fails if processing old queued messages from soar-ingest)
             // This is safe now because the landing fix has already been inserted into the database
             // (we spawn this background task AFTER the fix is inserted to avoid race conditions)
-            let clear_start = takeoff_time - chrono::Duration::minutes(5);
-            let clear_end = fix.timestamp + chrono::Duration::minutes(1);
+            let clear_start =
+                takeoff_time - chrono::Duration::minutes(FIXES_TIME_RANGE_START_BUFFER_MINUTES);
+            let clear_end =
+                fix.timestamp + chrono::Duration::minutes(FIXES_TIME_RANGE_END_BUFFER_MINUTES);
             if let Err(e) = fixes_repo
                 .clear_flight_id(flight_id, clear_start, clear_end)
                 .await
