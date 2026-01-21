@@ -69,6 +69,7 @@ pub struct AircraftState {
 
 impl AircraftState {
     /// Create a new AircraftState with an initial fix
+    /// Uses the fix's timestamp for last_update_time to support processing of old queued messages
     pub fn new(fix: &Fix, is_active: bool) -> Self {
         let mut recent_fixes = VecDeque::with_capacity(10);
         recent_fixes.push_back(CompactFix::from_fix(fix, is_active));
@@ -80,7 +81,7 @@ impl AircraftState {
             last_timed_out_flight_id: None,
             last_timed_out_callsign: None,
             last_timed_out_at: None,
-            last_update_time: Utc::now(),
+            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
         }
@@ -106,8 +107,11 @@ impl AircraftState {
     }
 
     /// Add a new fix to the recent history
+    /// Uses the fix's timestamp for last_update_time to support processing of old queued messages
     pub fn add_fix(&mut self, fix: &Fix, is_active: bool) {
-        self.last_update_time = Utc::now();
+        // Use fix timestamp, not wall clock time
+        // This is critical for timeout detection when processing old queued messages from soar-ingest
+        self.last_update_time = fix.timestamp;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {

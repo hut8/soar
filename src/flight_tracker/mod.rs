@@ -22,10 +22,12 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -83,6 +85,10 @@ pub struct FlightTracker {
     aircraft_states: AircraftStatesMap,
     // Per-device mutexes to ensure sequential processing per device
     device_locks: AircraftLocksMap,
+    // Latest processed fix timestamp (milliseconds since epoch)
+    // Used for timeout detection instead of wall-clock time, so processing old
+    // queued messages doesn't cause spurious timeouts
+    latest_fix_timestamp_ms: Arc<AtomicI64>,
 }
 
 impl Clone for FlightTracker {
@@ -99,6 +105,7 @@ impl Clone for FlightTracker {
             magnetic_service: self.magnetic_service.clone(),
             aircraft_states: Arc::clone(&self.aircraft_states),
             device_locks: Arc::clone(&self.device_locks),
+            latest_fix_timestamp_ms: Arc::clone(&self.latest_fix_timestamp_ms),
         }
     }
 }
@@ -119,7 +126,26 @@ impl FlightTracker {
             magnetic_service,
             aircraft_states: Arc::new(DashMap::new()),
             device_locks: Arc::new(DashMap::new()),
+            // Initialize to 0 (epoch), will be updated when first fix is processed
+            latest_fix_timestamp_ms: Arc::new(AtomicI64::new(0)),
         }
+    }
+
+    /// Update the latest fix timestamp if the given timestamp is later than the current one
+    /// This is used for timeout detection - we compare aircraft states against this timestamp
+    /// instead of wall clock time, so processing old queued messages doesn't cause spurious timeouts
+    fn update_latest_fix_timestamp(&self, timestamp: DateTime<Utc>) {
+        let timestamp_ms = timestamp.timestamp_millis();
+        // Only update if the new timestamp is later (atomic max)
+        self.latest_fix_timestamp_ms
+            .fetch_max(timestamp_ms, Ordering::Relaxed);
+    }
+
+    /// Get the latest fix timestamp as a DateTime
+    /// Returns Unix epoch if no fixes have been processed yet
+    fn get_latest_fix_timestamp(&self) -> DateTime<Utc> {
+        let timestamp_ms = self.latest_fix_timestamp_ms.load(Ordering::Relaxed);
+        DateTime::from_timestamp_millis(timestamp_ms).unwrap_or(DateTime::UNIX_EPOCH)
     }
 
     /// Get a context reference for flight processing operations
@@ -300,18 +326,29 @@ impl FlightTracker {
     }
 
     /// Clean up aircraft states that haven't been updated in 18+ hours
+    /// Uses the latest processed fix timestamp instead of wall clock time, so processing old
+    /// queued messages from soar-ingest doesn't cause spurious state cleanup
     async fn cleanup_stale_aircraft_states(&self) {
         let cleanup_threshold = chrono::Duration::hours(18);
-        let now = chrono::Utc::now();
+
+        // Use latest fix timestamp instead of wall clock time
+        let reference_time = self.get_latest_fix_timestamp();
+
+        // If no fixes have been processed yet, skip cleanup
+        if reference_time == DateTime::UNIX_EPOCH {
+            trace!("No fixes processed yet, skipping state cleanup");
+            return;
+        }
 
         let mut removed_count = 0;
         self.aircraft_states.retain(|aircraft_id, state| {
-            let elapsed = now.signed_duration_since(state.last_update_time);
+            let elapsed = reference_time.signed_duration_since(state.last_update_time);
             if elapsed > cleanup_threshold {
                 debug!(
-                    "Removing stale aircraft state for {} (last update {} hours ago)",
+                    "Removing stale aircraft state for {} (last update {} hours ago, reference time: {})",
                     aircraft_id,
-                    elapsed.num_hours()
+                    elapsed.num_hours(),
+                    reference_time
                 );
                 removed_count += 1;
                 false // Remove this entry
@@ -350,10 +387,21 @@ impl FlightTracker {
     }
 
     /// Check all aircraft with active flights and timeout any that haven't received fixes for 1+ hours
+    /// Uses the latest processed fix timestamp instead of wall clock time, so processing old
+    /// queued messages from soar-ingest doesn't cause spurious timeouts
     #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
         let timeout_threshold = chrono::Duration::hours(1);
-        let now = chrono::Utc::now();
+
+        // Use latest fix timestamp instead of wall clock time
+        // This is critical for processing old queued messages without spurious timeouts
+        let reference_time = self.get_latest_fix_timestamp();
+
+        // If no fixes have been processed yet, skip timeout checking
+        if reference_time == DateTime::UNIX_EPOCH {
+            trace!("No fixes processed yet, skipping timeout check");
+            return;
+        }
 
         // Collect flights that need to be timed out
         let flights_to_timeout: Vec<(Uuid, Uuid)> = self
@@ -366,13 +414,14 @@ impl FlightTracker {
                 // Only check aircraft with active flights
                 let flight_id = state.current_flight_id?;
 
-                let elapsed = now.signed_duration_since(state.last_update_time);
+                let elapsed = reference_time.signed_duration_since(state.last_update_time);
                 if elapsed > timeout_threshold {
                     debug!(
-                        "Flight {} for aircraft {} is stale (last update {} seconds ago)",
+                        "Flight {} for aircraft {} is stale (last update {} seconds ago, reference time: {})",
                         flight_id,
                         aircraft_id,
-                        elapsed.num_seconds()
+                        elapsed.num_seconds(),
+                        reference_time
                     );
                     return Some((flight_id, aircraft_id));
                 }
@@ -502,9 +551,12 @@ impl FlightTracker {
         metrics::histogram!("aprs.aircraft.fix_db_insert_ms")
             .record(fix_insert_start.elapsed().as_micros() as f64 / 1000.0);
 
-        // Increment counter for stats logging
-        if result.is_some() {
+        // Increment counter for stats logging and update latest timestamp
+        if let Some(ref fix) = result {
             metrics::counter!("flight_tracker.fixes_processed_total").increment(1);
+            // Update the latest fix timestamp for timeout detection
+            // This ensures timeout checks use packet time, not wall clock time
+            self.update_latest_fix_timestamp(fix.timestamp);
         }
 
         result
