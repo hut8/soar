@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -76,6 +76,13 @@ where
     /// Track whether we've logged the overflow warning (to avoid spamming logs)
     /// Set to true on first overflow, reset to false after drain completes
     overflow_warned: Arc<AtomicBool>,
+    /// Cached data size for is_at_capacity() - avoids expensive recalculation on every call
+    /// Value is the data size in bytes
+    cached_data_size: Arc<AtomicU64>,
+    /// Timestamp (millis since queue creation) when cached_data_size was last updated
+    cached_data_size_time_ms: Arc<AtomicU64>,
+    /// Instant when the queue was created (for calculating cache age)
+    created_at: Instant,
 }
 
 impl<T> PersistentQueue<T>
@@ -124,6 +131,7 @@ where
 
         let (memory_tx, memory_rx) = flume::bounded(memory_capacity);
 
+        let created_at = Instant::now();
         let queue = Self {
             name: name.clone(),
             dir_path,
@@ -138,6 +146,9 @@ where
             memory_rx,
             pending_commit: Arc::new(RwLock::new(None)),
             overflow_warned: Arc::new(AtomicBool::new(false)),
+            cached_data_size: Arc::new(AtomicU64::new(0)),
+            cached_data_size_time_ms: Arc::new(AtomicU64::new(0)),
+            created_at,
         };
 
         // Initialize metrics
@@ -304,8 +315,21 @@ where
 
     /// Receive a message from the queue
     ///
-    /// In Draining mode, reads from disk backlog first, then switches to memory
+    /// Auto-connects on first call if disconnected. This ensures messages are
+    /// buffered to disk until a consumer actually starts receiving, preventing
+    /// message loss if the process restarts before consumption begins.
+    ///
+    /// In Draining mode, reads from disk backlog first, then switches to memory.
     pub async fn recv(&self) -> Result<T> {
+        // Auto-connect on first recv if disconnected
+        {
+            let state = self.state.read().await;
+            if matches!(*state, QueueState::Disconnected { .. }) {
+                drop(state); // Release read lock before acquiring write lock
+                self.auto_connect().await?;
+            }
+        }
+
         let state = { self.state.read().await.clone() };
 
         match state {
@@ -360,6 +384,7 @@ where
                 }
             }
             QueueState::Disconnected { .. } => {
+                // This shouldn't happen after auto_connect, but handle gracefully
                 anyhow::bail!("Cannot receive from disconnected queue");
             }
         }
@@ -437,7 +462,24 @@ where
     }
 
     /// Connect a consumer (transition to Connected or Draining state)
+    ///
+    /// Note: Prefer letting `recv()` auto-connect rather than calling this directly.
+    /// This ensures messages are buffered to disk until consumption actually begins.
     pub async fn connect_consumer(&self, consumer_id: String) -> Result<()> {
+        self.do_connect(consumer_id).await
+    }
+
+    /// Auto-connect when first recv() is called
+    ///
+    /// This is called internally by recv() to transition from Disconnected state.
+    /// By deferring connection until recv(), we ensure all messages are persisted
+    /// to disk until a consumer is actually ready to process them.
+    async fn auto_connect(&self) -> Result<()> {
+        self.do_connect("auto".to_string()).await
+    }
+
+    /// Internal connection logic shared by connect_consumer and auto_connect
+    async fn do_connect(&self, consumer_id: String) -> Result<()> {
         let mut state = self.state.write().await;
 
         // Check if there's a disk backlog
@@ -523,12 +565,37 @@ where
         total
     }
 
+    /// Get data size with caching to avoid expensive filesystem operations
+    /// Cache is refreshed at most every 250ms
+    fn cached_data_size_bytes(&self) -> u64 {
+        const CACHE_TTL_MS: u64 = 250; // Refresh at most every 250ms
+
+        let now_ms = self.created_at.elapsed().as_millis() as u64;
+        let cached_time = self.cached_data_size_time_ms.load(Ordering::Relaxed);
+
+        // Check if cache is still valid
+        if now_ms.saturating_sub(cached_time) < CACHE_TTL_MS {
+            return self.cached_data_size.load(Ordering::Relaxed);
+        }
+
+        // Cache expired, recalculate
+        let data_size = self.data_size_bytes();
+
+        // Update cache (relaxed ordering is fine - we don't need strict consistency)
+        self.cached_data_size.store(data_size, Ordering::Relaxed);
+        self.cached_data_size_time_ms
+            .store(now_ms, Ordering::Relaxed);
+
+        data_size
+    }
+
     /// Check if the disk queue is at or near capacity
     /// Returns true if sending would likely fail due to size limit
     /// Uses 95% threshold on actual data size to trigger backpressure
+    /// Uses cached data size to avoid expensive filesystem operations on every call
     pub fn is_at_capacity(&self) -> bool {
         if let Some(max_size) = self.max_total_size_bytes {
-            let data_size = self.data_size_bytes();
+            let data_size = self.cached_data_size_bytes();
             // Backpressure when actual data is >= 95% of max
             if data_size >= (max_size * 95 / 100) {
                 return true;
@@ -539,9 +606,10 @@ where
 
     /// Check if the queue is ready to accept new connections
     /// Returns true if below 75% capacity (allows reconnection after backpressure)
+    /// Uses cached data size to avoid expensive filesystem operations
     pub fn is_ready_for_connection(&self) -> bool {
         if let Some(max_size) = self.max_total_size_bytes {
-            let data_size = self.data_size_bytes();
+            let data_size = self.cached_data_size_bytes();
 
             // Allow reconnection when actual data is below 75% of max
             if data_size < (max_size * 75 / 100) {
@@ -1310,5 +1378,141 @@ mod tests {
         let msg2 = queue.recv().await.unwrap();
         assert_eq!(msg2, "message2");
         queue.commit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_auto_connect_on_recv() {
+        // Verify that recv() auto-connects when queue is in Disconnected state.
+        // This ensures messages are buffered to disk until consumption begins,
+        // preventing message loss if process restarts before recv() is called.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue =
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap();
+
+        // Initial state: Disconnected
+        let state = queue.state.read().await.clone();
+        assert!(matches!(state, QueueState::Disconnected { .. }));
+
+        // Send messages while disconnected - they go to disk
+        queue.send("msg1".to_string()).await.unwrap();
+        queue.send("msg2".to_string()).await.unwrap();
+
+        // Verify still disconnected and messages are on disk
+        let state = queue.state.read().await.clone();
+        assert!(matches!(state, QueueState::Disconnected { .. }));
+        assert!(queue.data_size_bytes() > 0, "Messages should be on disk");
+
+        // recv() should auto-connect and drain from disk
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "msg1");
+        queue.commit().await.unwrap();
+
+        // Should now be in Draining state (since there was a disk backlog)
+        let state = queue.state.read().await.clone();
+        assert!(
+            matches!(
+                state,
+                QueueState::Draining { .. } | QueueState::Connected { .. }
+            ),
+            "Should be Draining or Connected after recv, got {:?}",
+            state
+        );
+
+        // Continue draining
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "msg2");
+        queue.commit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_auto_connect_no_backlog() {
+        // Verify that recv() auto-connects to Connected state when no disk backlog
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue = Arc::new(
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                .unwrap(),
+        );
+
+        // Initial state: Disconnected
+        let state = queue.state.read().await.clone();
+        assert!(matches!(state, QueueState::Disconnected { .. }));
+
+        // No messages sent yet, so no disk backlog
+
+        // Spawn a task to send a message after a short delay
+        let queue_sender = queue.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            // By now, recv() should have auto-connected to Connected state
+            queue_sender.send("hello".to_string()).await.unwrap();
+        });
+
+        // recv() should auto-connect to Connected (no backlog) and wait for message
+        let msg = queue.recv().await.unwrap();
+        assert_eq!(msg, "hello");
+
+        // Should be in Connected state
+        let state = queue.state.read().await.clone();
+        assert!(
+            matches!(state, QueueState::Connected { .. }),
+            "Should be Connected after recv with no backlog, got {:?}",
+            state
+        );
+    }
+
+    #[tokio::test]
+    async fn test_messages_not_lost_on_restart_simulation() {
+        // Simulate the scenario where process restarts before consumption begins.
+        // Messages should be persisted to disk and recoverable.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        // First "process" - sends messages but never calls recv()
+        {
+            let queue =
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                    .unwrap();
+
+            // Send messages while disconnected - they go to disk
+            queue.send("persistent1".to_string()).await.unwrap();
+            queue.send("persistent2".to_string()).await.unwrap();
+            queue.send("persistent3".to_string()).await.unwrap();
+
+            // Verify messages are on disk
+            assert!(queue.data_size_bytes() > 0);
+
+            // Queue is dropped here (simulating process restart)
+        }
+
+        // Second "process" - should recover messages
+        {
+            let queue =
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
+                    .unwrap();
+
+            // Verify still disconnected initially
+            let state = queue.state.read().await.clone();
+            assert!(matches!(state, QueueState::Disconnected { .. }));
+
+            // Now recv() - should auto-connect and drain persisted messages
+            let msg1 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+            let msg2 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+            let msg3 = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+
+            assert_eq!(msg1, "persistent1");
+            assert_eq!(msg2, "persistent2");
+            assert_eq!(msg3, "persistent3");
+        }
     }
 }

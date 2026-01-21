@@ -283,19 +283,9 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             || sbs_socket_client.is_connected();
     }
 
-    // Connect consumers to queues
-    ogn_queue
-        .connect_consumer("ogn-publisher".to_string())
-        .await
-        .expect("Failed to connect OGN consumer to queue");
-    beast_queue
-        .connect_consumer("beast-publisher".to_string())
-        .await
-        .expect("Failed to connect Beast consumer to queue");
-    sbs_queue
-        .connect_consumer("sbs-publisher".to_string())
-        .await
-        .expect("Failed to connect SBS consumer to queue");
+    // Queues start in Disconnected state and auto-connect on first recv().
+    // This ensures all messages are persisted to disk until a consumer
+    // is actually ready to process them, preventing message loss on restart.
 
     // Spawn OGN publisher task: reads from queue → sends to socket
     if ogn_enabled {

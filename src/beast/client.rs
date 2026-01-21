@@ -351,6 +351,8 @@ impl BeastClient {
         let stats_counter_clone = stats_counter.clone();
         let queue_handle = tokio::spawn(async move {
             let mut at_capacity_logged = false;
+            let mut last_metrics_update = std::time::Instant::now();
+
             loop {
                 // Check if disk queue is at capacity before consuming from channel
                 // This provides backpressure - channel will fill up, causing TCP reader to block
@@ -382,6 +384,24 @@ impl BeastClient {
                             metrics::counter!("beast.queue.send_error_total").increment(1);
                         } else if let Some(ref counter) = stats_counter_clone {
                             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+
+                        // Update channel depth metric every second (avoid per-message overhead)
+                        if last_metrics_update.elapsed().as_secs() >= 1 {
+                            // Report how full the internal channel is (0-10000)
+                            // High values indicate we're not draining the channel fast enough
+                            let channel_depth = raw_message_rx.len();
+                            metrics::gauge!("beast.raw_channel.depth").set(channel_depth as f64);
+                            metrics::gauge!("beast.raw_channel.capacity")
+                                .set(RAW_MESSAGE_QUEUE_SIZE as f64);
+
+                            // Also report channel utilization as a percentage
+                            let utilization =
+                                (channel_depth as f64 / RAW_MESSAGE_QUEUE_SIZE as f64) * 100.0;
+                            metrics::gauge!("beast.raw_channel.utilization_percent")
+                                .set(utilization);
+
+                            last_metrics_update = std::time::Instant::now();
                         }
                     }
                     Err(_) => {
@@ -475,20 +495,38 @@ impl BeastClient {
         let server_address = format!("{}:{}", config.server, config.port);
         let socket_addrs = match tokio::net::lookup_host(&server_address).await {
             Ok(addrs) => {
-                let addrs_vec: Vec<_> = addrs.collect();
-                if addrs_vec.is_empty() {
+                let all_addrs: Vec<_> = addrs.collect();
+                if all_addrs.is_empty() {
                     return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
                         "DNS resolution returned no addresses for {}",
                         server_address
                     ));
                 }
-                info!(
-                    "DNS resolved {} to {} address(es): {:?}",
-                    server_address,
-                    addrs_vec.len(),
-                    addrs_vec
-                );
-                addrs_vec
+
+                // Filter to IPv4 only for consistency
+                let ipv4_addrs: Vec<_> = all_addrs
+                    .iter()
+                    .filter(|addr| addr.is_ipv4())
+                    .cloned()
+                    .collect();
+
+                if ipv4_addrs.is_empty() {
+                    warn!(
+                        "No IPv4 addresses found for {}, falling back to all {} addresses",
+                        server_address,
+                        all_addrs.len()
+                    );
+                    all_addrs
+                } else {
+                    info!(
+                        "DNS resolved {} to {} IPv4 address(es) (filtered from {} total): {:?}",
+                        server_address,
+                        ipv4_addrs.len(),
+                        all_addrs.len(),
+                        ipv4_addrs
+                    );
+                    ipv4_addrs
+                }
             }
             Err(e) => {
                 return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
@@ -499,9 +537,18 @@ impl BeastClient {
             }
         };
 
+        // Randomly shuffle addresses for load balancing
+        let mut shuffled_addrs = socket_addrs;
+        {
+            use rand::seq::SliceRandom;
+            let mut rng = rand::rng();
+            shuffled_addrs.shuffle(&mut rng);
+        }
+        info!("Trying addresses in randomized order: {:?}", shuffled_addrs);
+
         // Try each resolved address until one succeeds
         let mut last_error = None;
-        for addr in &socket_addrs {
+        for addr in &shuffled_addrs {
             match TcpStream::connect(addr).await {
                 Ok(stream) => {
                     info!("Connected to Beast server at {}", addr);
@@ -570,7 +617,7 @@ impl BeastClient {
             let read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)).await;
             match read_result {
                 Ok(Ok(0)) => {
-                    // Connection closed
+                    // Server closed the connection (sent EOF)
                     let duration = connection_start.elapsed();
                     let total_messages = {
                         let health = health_state.read().await;
@@ -582,6 +629,9 @@ impl BeastClient {
                         duration.as_secs_f64(),
                         total_messages
                     );
+                    metrics::counter!("beast.connection.server_closed_total").increment(1);
+                    metrics::histogram!("beast.connection.duration_seconds")
+                        .record(duration.as_secs_f64());
                     metrics::gauge!("beast.connection.connected").set(0.0);
 
                     // Mark as disconnected in health state
