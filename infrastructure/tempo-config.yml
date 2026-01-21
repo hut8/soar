@@ -4,6 +4,12 @@ server:
   grpc_listen_address: 127.0.0.1
   grpc_listen_port: 9096
 
+# Explicitly bind memberlist to localhost for single-node setup
+# This prevents the "no private IP address found" error on servers with only public IPs
+memberlist:
+  bind_addr:
+    - 127.0.0.1
+
 distributor:
   receivers:
     otlp:
