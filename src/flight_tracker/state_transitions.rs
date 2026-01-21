@@ -1,4 +1,5 @@
 use crate::Fix;
+use crate::aircraft::Aircraft;
 use crate::flights_repo::FlightsRepository;
 use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
@@ -7,10 +8,31 @@ use tracing::{error, info, trace};
 use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
-use super::flight_lifecycle::{create_flight_fast, spawn_complete_flight};
+use super::flight_lifecycle::create_flight_fast;
 use super::geometry::haversine_distance;
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
+
+/// Pending background work to be executed after fix insertion
+#[derive(Debug, Clone)]
+pub enum PendingBackgroundWork {
+    /// No background work needed
+    None,
+    /// Complete a flight (landing, callsign change, or gap detected)
+    CompleteFlight {
+        flight_id: Uuid,
+        aircraft: Box<Aircraft>,
+        fix: Box<Fix>,
+    },
+}
+
+/// Result of processing a state transition
+pub struct StateTransitionResult {
+    /// The updated fix with flight_id assigned
+    pub fix: Fix,
+    /// Background work to spawn after the fix is inserted
+    pub pending_work: PendingBackgroundWork,
+}
 
 /// Helper function to update last_fix_at timestamp in database
 async fn update_flight_timestamp(
@@ -59,11 +81,14 @@ pub fn should_be_active(fix: &Fix) -> bool {
 }
 
 /// Process state transition for an aircraft and return updated fix with flight_id
+/// Returns StateTransitionResult containing the fix and any pending background work
+/// that should be spawned AFTER the fix is inserted into the database.
 pub(crate) async fn process_state_transition(
     ctx: &FlightProcessorContext<'_>,
     mut fix: Fix,
-) -> Result<Fix> {
+) -> Result<StateTransitionResult> {
     let is_active = should_be_active(&fix);
+    let mut pending_work = PendingBackgroundWork::None;
 
     // Fetch aircraft
     let aircraft_lookup_start = std::time::Instant::now();
@@ -114,8 +139,12 @@ pub(crate) async fn process_state_transition(
             };
 
             if should_end_flight {
-                // End current flight (non-blocking), start new one
-                spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
+                // End current flight - defer background work until after fix insertion
+                pending_work = PendingBackgroundWork::CompleteFlight {
+                    flight_id,
+                    aircraft: Box::new(aircraft.clone()),
+                    fix: Box::new(fix.clone()),
+                };
 
                 let new_flight_id = Uuid::now_v7();
                 match create_flight_fast(ctx, &fix, new_flight_id, false).await {
@@ -193,8 +222,12 @@ pub(crate) async fn process_state_transition(
                 };
 
                 if should_end_due_to_gap {
-                    // End current flight, start new one
-                    spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
+                    // End current flight - defer background work until after fix insertion
+                    pending_work = PendingBackgroundWork::CompleteFlight {
+                        flight_id,
+                        aircraft: Box::new(aircraft.clone()),
+                        fix: Box::new(fix.clone()),
+                    };
 
                     let new_flight_id = Uuid::now_v7();
                     match create_flight_fast(ctx, &fix, new_flight_id, false).await {
@@ -414,7 +447,10 @@ pub(crate) async fn process_state_transition(
                         metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
                             .record(dist_km);
                     }
-                    return Ok(fix);
+                    return Ok(StateTransitionResult {
+                        fix,
+                        pending_work: PendingBackgroundWork::None,
+                    });
                 } else if gap_hours >= 8.0 {
                     // Too long - create new flight
                     metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_total")
@@ -533,10 +569,14 @@ pub(crate) async fn process_state_transition(
                     };
 
                     if should_land {
-                        // Landing confirmed - complete flight (non-blocking)
+                        // Landing confirmed - defer background work until after fix insertion
                         fix.flight_id = Some(flight_id);
 
-                        spawn_complete_flight(ctx, &aircraft, flight_id, &fix);
+                        pending_work = PendingBackgroundWork::CompleteFlight {
+                            flight_id,
+                            aircraft: Box::new(aircraft.clone()),
+                            fix: Box::new(fix.clone()),
+                        };
 
                         // Clear current_flight_id
                         if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
@@ -563,5 +603,5 @@ pub(crate) async fn process_state_transition(
         }
     }
 
-    Ok(fix)
+    Ok(StateTransitionResult { fix, pending_work })
 }

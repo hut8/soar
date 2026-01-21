@@ -1067,10 +1067,15 @@ impl FixesRepository {
 
     /// Clear flight_id from all fixes associated with a flight
     /// Used when deleting spurious flights
-    /// Only clears fixes received within the last 24 hours (for pruning)
-    pub async fn clear_flight_id(&self, flight_id_param: Uuid) -> Result<usize> {
+    /// Uses a time range based on flight start/end times for partition pruning
+    /// (rather than "now - 24h" which fails if processing old queued messages)
+    pub async fn clear_flight_id(
+        &self,
+        flight_id_param: Uuid,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> Result<usize> {
         let pool = self.pool.clone();
-        let cutoff_time = Utc::now() - Duration::hours(24);
 
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
@@ -1078,7 +1083,8 @@ impl FixesRepository {
 
             let updated_count = diesel::update(fixes)
                 .filter(flight_id.eq(flight_id_param))
-                .filter(received_at.ge(cutoff_time))
+                .filter(received_at.ge(start_time))
+                .filter(received_at.le(end_time))
                 .set(flight_id.eq(None::<Uuid>))
                 .execute(&mut conn)?;
 
@@ -1087,8 +1093,8 @@ impl FixesRepository {
         .await??;
 
         debug!(
-            "Cleared flight_id from {} fixes for flight {} (last 24h only)",
-            result, flight_id_param
+            "Cleared flight_id from {} fixes for flight {} (time range: {} to {})",
+            result, flight_id_param, start_time, end_time
         );
 
         Ok(result)

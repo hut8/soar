@@ -451,19 +451,7 @@ async fn complete_flight_in_background(
 ) -> Result<bool> {
     let start = std::time::Instant::now();
 
-    // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
-    let start_time = chrono::Utc::now() - chrono::Duration::hours(24);
-    let flight_fixes = fixes_repo
-        .get_fixes_for_flight(flight_id, None, start_time, None)
-        .await?;
-
-    // Quick airport lookup (fast - spatial index)
-    let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
-
-    // Calculate altitude offset (fast - elevation db)
-    let landing_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
-
-    // Fetch the flight to compute distance metrics
+    // Fetch the flight first to get takeoff_time for proper time-range queries
     let flight = match flights_repo.get_flight_by_id(flight_id).await {
         Ok(Some(f)) => f,
         Ok(None) => {
@@ -475,6 +463,24 @@ async fn complete_flight_in_background(
             return Err(e);
         }
     };
+
+    // Use flight's actual time range for partition pruning (not "now - 24h" which
+    // fails if processing old queued messages from soar-ingest)
+    let fixes_start_time = flight
+        .takeoff_time
+        .map(|t| t - chrono::Duration::minutes(5))
+        .unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::hours(24));
+
+    // OPTIMIZATION: Fetch ALL fixes for this flight ONCE (needed for spurious detection & distance calcs)
+    let flight_fixes = fixes_repo
+        .get_fixes_for_flight(flight_id, None, fixes_start_time, None)
+        .await?;
+
+    // Quick airport lookup (fast - spatial index)
+    let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+
+    // Calculate altitude offset (fast - elevation db)
+    let landing_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
 
     // Check if this is a spurious flight
     if let Some(takeoff_time) = flight.takeoff_time {
@@ -582,8 +588,17 @@ async fn complete_flight_in_background(
             // NOTE: current_flight_id is already cleared by the caller (in state_transitions.rs)
             // before spawning this background task, so we don't need to touch aircraft_states here
 
-            // Clear flight_id from all associated fixes
-            if let Err(e) = fixes_repo.clear_flight_id(flight_id).await {
+            // Clear flight_id from all associated fixes before deleting the flight
+            // Use flight's actual time range for partition pruning (not "now - 24h" which
+            // fails if processing old queued messages from soar-ingest)
+            // This is safe now because the landing fix has already been inserted into the database
+            // (we spawn this background task AFTER the fix is inserted to avoid race conditions)
+            let clear_start = takeoff_time - chrono::Duration::minutes(5);
+            let clear_end = fix.timestamp + chrono::Duration::minutes(1);
+            if let Err(e) = fixes_repo
+                .clear_flight_id(flight_id, clear_start, clear_end)
+                .await
+            {
                 error!("Failed to clear flight_id from fixes: {}", e);
             }
 

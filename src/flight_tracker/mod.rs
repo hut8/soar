@@ -11,6 +11,8 @@ pub(crate) mod utils;
 
 // Re-export should_be_active for use in fix_processor
 pub use aircraft_state::{AircraftState, CompactFix};
+use flight_lifecycle::spawn_complete_flight;
+use state_transitions::PendingBackgroundWork;
 pub use state_transitions::should_be_active;
 
 use crate::Fix;
@@ -515,14 +517,16 @@ impl FlightTracker {
 
         // Process state transition
         let state_transition_start = std::time::Instant::now();
-        let updated_fix =
+        let transition_result =
             match state_transitions::process_state_transition(&self.context(), fix).await {
-                Ok(updated_fix) => updated_fix,
+                Ok(result) => result,
                 Err(e) => {
                     error!("Failed to process state transition: {}", e);
                     return None;
                 }
             };
+        let updated_fix = transition_result.fix;
+        let pending_work = transition_result.pending_work;
         metrics::histogram!("aprs.aircraft.state_transition_ms")
             .record(state_transition_start.elapsed().as_micros() as f64 / 1000.0);
 
@@ -550,6 +554,20 @@ impl FlightTracker {
         };
         metrics::histogram!("aprs.aircraft.fix_db_insert_ms")
             .record(fix_insert_start.elapsed().as_micros() as f64 / 1000.0);
+
+        // Spawn background work AFTER fix is inserted (fixes race condition with spurious detection)
+        if result.is_some() {
+            match pending_work {
+                PendingBackgroundWork::CompleteFlight {
+                    flight_id,
+                    aircraft,
+                    fix,
+                } => {
+                    spawn_complete_flight(&self.context(), &aircraft, flight_id, &fix);
+                }
+                PendingBackgroundWork::None => {}
+            }
+        }
 
         // Increment counter for stats logging and update latest timestamp
         if let Some(ref fix) = result {
