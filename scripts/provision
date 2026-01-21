@@ -344,6 +344,11 @@ echo -e "${BLUE}Installing Prometheus...${NC}"
 sudo apt-get install -y prometheus
 echo -e "${GREEN}Prometheus installed successfully${NC}"
 
+# Install Prometheus Node Exporter
+echo -e "${BLUE}Installing Prometheus Node Exporter...${NC}"
+sudo apt-get install -y prometheus-node-exporter
+echo -e "${GREEN}Prometheus Node Exporter installed successfully${NC}"
+
 # Install Grafana
 echo -e "${BLUE}Installing Grafana...${NC}"
 sudo apt-get install -y grafana
@@ -655,6 +660,7 @@ echo -e "${BLUE}Enabling infrastructure services...${NC}"
 sudo systemctl enable nats-server.service
 sudo systemctl enable prometheus-nats-exporter.service
 sudo systemctl enable prometheus
+sudo systemctl enable prometheus-node-exporter
 sudo systemctl enable grafana-server
 sudo systemctl enable caddy
 sudo systemctl enable pyroscope
@@ -673,6 +679,19 @@ if ! systemctl is-active --quiet prometheus; then
     fi
 else
     echo -e "${BLUE}Prometheus is already running${NC}"
+fi
+
+# Start Prometheus Node Exporter if not already running
+if ! systemctl is-active --quiet prometheus-node-exporter; then
+    echo -e "${BLUE}Starting Prometheus Node Exporter...${NC}"
+    sudo systemctl start prometheus-node-exporter
+    if systemctl is-active --quiet prometheus-node-exporter; then
+        echo -e "${GREEN}Prometheus Node Exporter started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Prometheus Node Exporter. Check logs with: journalctl -u prometheus-node-exporter -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Prometheus Node Exporter is already running${NC}"
 fi
 
 # Start Grafana if not already running
