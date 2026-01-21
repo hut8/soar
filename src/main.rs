@@ -801,36 +801,36 @@ async fn main() -> Result<()> {
     // Create separate filter for fmt_layer (console output)
     // Use RUST_LOG if set, otherwise default based on environment
     // Note: async_nats is set to warn to suppress "slow consumers" INFO logs during high load
-    // Note: log=warn,pprof=warn suppresses pprof library's INFO logs during CPU profiling
+    // Note: pprof=off suppresses pprof library's "starting/stopping cpu profiler" logs
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
-            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn,log=warn,pprof=warn")
+            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn,pprof=off")
         } else if is_staging {
-            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn,log=warn,pprof=warn")
+            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn,pprof=off")
         } else {
             // Development: debug by default, but suppress noisy OpenTelemetry internals
             EnvFilter::new(
-                "debug,hyper_util=info,rustls=info,async_nats=warn,log=warn,pprof=warn,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
+                "debug,hyper_util=info,rustls=info,async_nats=warn,pprof=off,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
             )
         }
     });
 
     // Create filter for tokio-console layer (needs tokio=trace,runtime=trace for task visibility)
-    let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace,log=warn,pprof=warn");
+    let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace,pprof=off");
 
     // Create filter for OpenTelemetry layer - exclude tokio runtime internals to prevent
     // trace bloat from waker.clone/waker.drop events being attached to every span
-    let otel_filter = EnvFilter::new("info,tokio=off,runtime=off,log=warn,pprof=warn");
+    let otel_filter = EnvFilter::new("info,tokio=off,runtime=off,pprof=off");
 
     // Create filter for OpenTelemetry logs layer (Loki export)
     // - Production: info level only (no debug logs to Loki)
     // - Staging/Dev: debug for soar::* packages, info for external packages
     // This filters at the source to avoid sending logs that would be dropped anyway
     let logs_filter = if is_production {
-        EnvFilter::new("info,tokio=off,runtime=off,log=warn,pprof=warn")
+        EnvFilter::new("info,tokio=off,runtime=off,pprof=off")
     } else {
         // Allow debug from soar crate, info from everything else
-        EnvFilter::new("info,soar=debug,tokio=off,runtime=off,log=warn,pprof=warn")
+        EnvFilter::new("info,soar=debug,tokio=off,runtime=off,pprof=off")
     };
 
     // Helper to create logs layer - bridges tracing events to OpenTelemetry logs for Loki export
