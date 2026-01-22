@@ -150,47 +150,29 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         .context("Failed to acquire instance lock - is another ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
-    // Create persistent queues for buffering messages (separate queues per source)
+    // Create a single unified persistent queue for all sources
+    // Messages are stored as pre-serialized protobuf Envelopes containing:
+    // - source type (OGN, Beast, SBS)
+    // - timestamp (captured at receive time)
+    // - raw payload data
     // Queue directory is environment-aware: /var/lib/soar/queues in prod/staging,
     // ~/.local/share/soar/queues in development (XDG spec)
     let queue_dir = soar::queue_dir();
     std::fs::create_dir_all(&queue_dir)
         .with_context(|| format!("Failed to create queue directory: {:?}", queue_dir))?;
 
-    let ogn_queue_path = queue_dir.join("ogn.queue");
-    let ogn_queue = Arc::new(
-        soar::persistent_queue::PersistentQueue::<String>::new(
-            "ogn".to_string(),
-            ogn_queue_path,
-            Some(10 * 1024 * 1024 * 1024), // 10 GB max
-            1000,                          // Memory capacity
-        )
-        .expect("Failed to create OGN persistent queue"),
-    );
-
-    let beast_queue_path = queue_dir.join("adsb-beast.queue");
-    let beast_queue = Arc::new(
+    let queue_path = queue_dir.join("ingest.queue");
+    let queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
-            "adsb-beast".to_string(),
-            beast_queue_path,
+            "ingest".to_string(),
+            queue_path,
             Some(10 * 1024 * 1024 * 1024), // 10 GB max
-            1000,                          // Memory capacity
+            3000,                          // Memory capacity (combined for all sources)
         )
-        .expect("Failed to create Beast persistent queue"),
+        .expect("Failed to create unified ingest queue"),
     );
 
-    let sbs_queue_path = queue_dir.join("adsb-sbs.queue");
-    let sbs_queue = Arc::new(
-        soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
-            "adsb-sbs".to_string(),
-            sbs_queue_path,
-            Some(10 * 1024 * 1024 * 1024), // 10 GB max
-            1000,                          // Memory capacity
-        )
-        .expect("Failed to create SBS persistent queue"),
-    );
-
-    info!("Created persistent queues at {:?}", queue_dir);
+    info!("Created unified ingest queue at {:?}", queue_dir);
 
     // Create shared counters for stats tracking (aggregate across all sources)
     let stats_frames_received = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -214,95 +196,55 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         soar::metrics::BeastIngestHealth::default(),
     ));
 
-    // Create socket clients for sending to soar-run
-    let mut ogn_socket_client = match soar::socket_client::SocketClient::connect(
+    // Create a single socket client for sending to soar-run
+    // The source type is already encoded in each envelope, so we don't need per-source clients
+    // We use Ogn as a dummy source since send_serialized() doesn't use it
+    let mut socket_client = match soar::socket_client::SocketClient::connect(
         &socket_path,
-        soar::protocol::IngestSource::Ogn,
+        soar::protocol::IngestSource::Ogn, // Dummy - not used with send_serialized
     )
     .await
     {
         Ok(client) => {
-            info!("OGN socket connected to soar-run at {:?}", socket_path);
+            info!("Socket connected to soar-run at {:?}", socket_path);
             client
         }
         Err(e) => {
             warn!(
-                "Failed to connect OGN socket to soar-run (will buffer to queue): {}",
+                "Failed to connect socket to soar-run (will buffer to queue): {}",
                 e
             );
             soar::socket_client::SocketClient::new(&socket_path, soar::protocol::IngestSource::Ogn)
         }
     };
 
-    let mut beast_socket_client = match soar::socket_client::SocketClient::connect(
-        &socket_path,
-        soar::protocol::IngestSource::Beast,
-    )
-    .await
-    {
-        Ok(client) => {
-            info!("Beast socket connected to soar-run at {:?}", socket_path);
-            client
-        }
-        Err(e) => {
-            warn!(
-                "Failed to connect Beast socket to soar-run (will buffer to queue): {}",
-                e
-            );
-            soar::socket_client::SocketClient::new(
-                &socket_path,
-                soar::protocol::IngestSource::Beast,
-            )
-        }
-    };
-
-    let mut sbs_socket_client = match soar::socket_client::SocketClient::connect(
-        &socket_path,
-        soar::protocol::IngestSource::Sbs,
-    )
-    .await
-    {
-        Ok(client) => {
-            info!("SBS socket connected to soar-run at {:?}", socket_path);
-            client
-        }
-        Err(e) => {
-            warn!(
-                "Failed to connect SBS socket to soar-run (will buffer to queue): {}",
-                e
-            );
-            soar::socket_client::SocketClient::new(&socket_path, soar::protocol::IngestSource::Sbs)
-        }
-    };
-
     // Update health state with socket connection status
     {
         let mut health = health_state.write().await;
-        health.socket_connected = ogn_socket_client.is_connected()
-            || beast_socket_client.is_connected()
-            || sbs_socket_client.is_connected();
+        health.socket_connected = socket_client.is_connected();
     }
 
-    // Queues start in Disconnected state and auto-connect on first recv().
+    // Queue starts in Disconnected state and auto-connects on first recv().
     // This ensures all messages are persisted to disk until a consumer
     // is actually ready to process them, preventing message loss on restart.
 
-    // Spawn OGN publisher task: reads from queue → sends to socket
-    if ogn_enabled {
-        let queue_for_publisher = ogn_queue.clone();
+    // Spawn unified publisher task: reads from queue → sends to socket
+    // Messages are pre-serialized protobuf Envelopes containing source type and timestamp
+    {
+        let queue_for_publisher = queue.clone();
         let stats_sent_clone = stats_messages_sent.clone();
         let stats_time_clone = stats_send_time_total_ms.clone();
         let stats_slow_clone = stats_slow_sends.clone();
         tokio::spawn(async move {
-            info!("OGN publisher task started");
+            info!("Unified publisher task started");
             loop {
                 match queue_for_publisher.recv().await {
-                    Ok(message) => {
+                    Ok(serialized_envelope) => {
                         // Track send timing
                         let send_start = std::time::Instant::now();
 
-                        // Send to socket
-                        match ogn_socket_client.send(message.into_bytes()).await {
+                        // Send pre-serialized envelope directly to socket
+                        match socket_client.send_serialized(serialized_envelope).await {
                             Ok(_) => {
                                 // Track stats
                                 let send_duration_ms = send_start.elapsed().as_millis() as u64;
@@ -316,161 +258,38 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 }
 
-                                // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "OGN")
+                                // Update metric (no per-source breakdown since envelope is opaque here)
+                                metrics::histogram!("ingest.socket_send_duration_ms")
                                     .record(send_duration_ms as f64);
 
                                 // Successfully delivered - commit the message
                                 if let Err(e) = queue_for_publisher.commit().await {
-                                    error!("Failed to commit OGN message offset: {}", e);
+                                    error!("Failed to commit message offset: {}", e);
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to send OGN message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "OGN")
-                                    .increment(1);
+                                error!("Failed to send message to socket: {}", e);
+                                metrics::counter!("ingest.socket_send_error_total").increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
-                                if let Err(e) = ogn_socket_client.reconnect().await {
-                                    error!("Failed to reconnect OGN socket: {}", e);
+                                if let Err(e) = socket_client.reconnect().await {
+                                    error!("Failed to reconnect socket: {}", e);
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to receive from OGN queue: {}", e);
+                        error!("Failed to receive from queue: {}", e);
                         break;
                     }
                 }
             }
-            info!("OGN publisher task stopped");
-        });
-    }
-
-    // Spawn Beast publisher task: reads from queue → sends to socket
-    if beast_enabled {
-        let queue_for_publisher = beast_queue.clone();
-        let stats_sent_clone = stats_messages_sent.clone();
-        let stats_time_clone = stats_send_time_total_ms.clone();
-        let stats_slow_clone = stats_slow_sends.clone();
-        tokio::spawn(async move {
-            info!("Beast publisher task started");
-            loop {
-                match queue_for_publisher.recv().await {
-                    Ok(message) => {
-                        // Track send timing
-                        let send_start = std::time::Instant::now();
-
-                        // Send to socket
-                        match beast_socket_client.send(message).await {
-                            Ok(_) => {
-                                // Track stats
-                                let send_duration_ms = send_start.elapsed().as_millis() as u64;
-                                stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                stats_time_clone.fetch_add(
-                                    send_duration_ms,
-                                    std::sync::atomic::Ordering::Relaxed,
-                                );
-                                if send_duration_ms > 100 {
-                                    stats_slow_clone
-                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                }
-
-                                // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "Beast")
-                                    .record(send_duration_ms as f64);
-
-                                // Successfully delivered - commit the message
-                                if let Err(e) = queue_for_publisher.commit().await {
-                                    error!("Failed to commit Beast message offset: {}", e);
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to send Beast message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "Beast")
-                                    .increment(1);
-
-                                // DON'T commit - message will be replayed on next recv()
-                                if let Err(e) = beast_socket_client.reconnect().await {
-                                    error!("Failed to reconnect Beast socket: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to receive from Beast queue: {}", e);
-                        break;
-                    }
-                }
-            }
-            info!("Beast publisher task stopped");
-        });
-    }
-
-    // Spawn SBS publisher task: reads from queue → sends to socket
-    if sbs_enabled {
-        let queue_for_publisher = sbs_queue.clone();
-        let stats_sent_clone = stats_messages_sent.clone();
-        let stats_time_clone = stats_send_time_total_ms.clone();
-        let stats_slow_clone = stats_slow_sends.clone();
-        tokio::spawn(async move {
-            info!("SBS publisher task started");
-            loop {
-                match queue_for_publisher.recv().await {
-                    Ok(message) => {
-                        // Track send timing
-                        let send_start = std::time::Instant::now();
-
-                        // Send to socket
-                        match sbs_socket_client.send(message).await {
-                            Ok(_) => {
-                                // Track stats
-                                let send_duration_ms = send_start.elapsed().as_millis() as u64;
-                                stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                stats_time_clone.fetch_add(
-                                    send_duration_ms,
-                                    std::sync::atomic::Ordering::Relaxed,
-                                );
-                                if send_duration_ms > 100 {
-                                    stats_slow_clone
-                                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                }
-
-                                // Update per-source metric
-                                metrics::histogram!("ingest.socket_send_duration_ms", "source" => "SBS")
-                                    .record(send_duration_ms as f64);
-
-                                // Successfully delivered - commit the message
-                                if let Err(e) = queue_for_publisher.commit().await {
-                                    error!("Failed to commit SBS message offset: {}", e);
-                                }
-                            }
-                            Err(e) => {
-                                error!("Failed to send SBS message to socket: {}", e);
-                                metrics::counter!("ingest.socket_send_error_total", "source" => "SBS")
-                                    .increment(1);
-
-                                // DON'T commit - message will be replayed on next recv()
-                                if let Err(e) = sbs_socket_client.reconnect().await {
-                                    error!("Failed to reconnect SBS socket: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to receive from SBS queue: {}", e);
-                        break;
-                    }
-                }
-            }
-            info!("SBS publisher task stopped");
+            info!("Unified publisher task stopped");
         });
     }
 
     // Spawn periodic stats reporting task
-    let ogn_queue_for_stats = ogn_queue.clone();
-    let beast_queue_for_stats = beast_queue.clone();
-    let sbs_queue_for_stats = sbs_queue.clone();
+    let queue_for_stats = queue.clone();
     let stats_frames_rx = stats_frames_received.clone();
     let stats_msgs_sent = stats_messages_sent.clone();
     let stats_send_time = stats_send_time_total_ms.clone();
@@ -538,39 +357,21 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 format!("{{rate:{:.1}/s}}", sent_per_sec)
             };
 
-            // Get queue depths
-            let ogn_depth = ogn_queue_for_stats.depth().await;
-            let beast_depth = beast_queue_for_stats.depth().await;
-            let sbs_depth = sbs_queue_for_stats.depth().await;
+            // Get unified queue depth
+            let queue_depth = queue_for_stats.depth().await;
 
-            // Calculate total data remaining to drain
-            let total_data_remaining =
-                ogn_depth.disk_data_bytes + beast_depth.disk_data_bytes + sbs_depth.disk_data_bytes;
-
-            // Update queue depth metrics (using actual data bytes, not file size)
-            metrics::gauge!("ingest.queue_depth", "source" => "OGN", "type" => "memory")
-                .set(ogn_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "OGN", "type" => "data")
-                .set(ogn_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "OGN", "type" => "file")
-                .set(ogn_depth.disk_file_bytes as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "Beast", "type" => "memory")
-                .set(beast_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "Beast", "type" => "data")
-                .set(beast_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "Beast", "type" => "file")
-                .set(beast_depth.disk_file_bytes as f64);
-            metrics::gauge!("ingest.queue_depth", "source" => "SBS", "type" => "memory")
-                .set(sbs_depth.memory as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "SBS", "type" => "data")
-                .set(sbs_depth.disk_data_bytes as f64);
-            metrics::gauge!("ingest.queue_depth_bytes", "source" => "SBS", "type" => "file")
-                .set(sbs_depth.disk_file_bytes as f64);
+            // Update queue depth metrics
+            metrics::gauge!("ingest.queue_depth", "type" => "memory")
+                .set(queue_depth.memory as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "type" => "data")
+                .set(queue_depth.disk_data_bytes as f64);
+            metrics::gauge!("ingest.queue_depth_bytes", "type" => "file")
+                .set(queue_depth.disk_file_bytes as f64);
 
             // Calculate estimated drain time based on send rate
-            let drain_time_estimate = if sent_per_sec > 0.0 && total_data_remaining > 0 {
-                // Estimate ~100 bytes per message (rough average)
-                let est_messages_remaining = total_data_remaining / 100;
+            let drain_time_estimate = if sent_per_sec > 0.0 && queue_depth.disk_data_bytes > 0 {
+                // Estimate ~150 bytes per envelope (rough average including protobuf overhead)
+                let est_messages_remaining = queue_depth.disk_data_bytes / 150;
                 let est_seconds = est_messages_remaining as f64 / sent_per_sec;
                 if est_seconds > 3600.0 {
                     format!("{:.1}h", est_seconds / 3600.0)
@@ -579,25 +380,27 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 } else {
                     format!("{:.0}s", est_seconds)
                 }
-            } else if total_data_remaining > 0 {
+            } else if queue_depth.disk_data_bytes > 0 {
                 "stalled".to_string()
             } else {
                 "done".to_string()
             };
 
             // Format queue info with data size (not file size)
-            let format_queue = |depth: &soar::persistent_queue::QueueDepth| -> String {
-                if depth.disk_data_bytes == 0 && depth.disk_file_bytes == 0 {
-                    format!("mem:{}", depth.memory)
-                } else if depth.disk_data_bytes == depth.disk_file_bytes {
-                    format!("mem:{} data:{}B", depth.memory, depth.disk_data_bytes)
-                } else {
-                    // Show both data and file size when different (indicates need for compaction)
-                    format!(
-                        "mem:{} data:{}B file:{}B",
-                        depth.memory, depth.disk_data_bytes, depth.disk_file_bytes
-                    )
-                }
+            let queue_info = if queue_depth.disk_data_bytes == 0 && queue_depth.disk_file_bytes == 0
+            {
+                format!("mem:{}", queue_depth.memory)
+            } else if queue_depth.disk_data_bytes == queue_depth.disk_file_bytes {
+                format!(
+                    "mem:{} data:{}B",
+                    queue_depth.memory, queue_depth.disk_data_bytes
+                )
+            } else {
+                // Show both data and file size when different (indicates need for compaction)
+                format!(
+                    "mem:{} data:{}B file:{}B",
+                    queue_depth.memory, queue_depth.disk_data_bytes, queue_depth.disk_file_bytes
+                )
             };
 
             // Build read stats section for enabled sources
@@ -663,13 +466,8 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
             // Log comprehensive stats
             info!(
-                "stats: sent={} | drain_eta={} | queues: ogn={{{}}} beast={{{}}} sbs={{{}}}{}",
-                sent_stats,
-                drain_time_estimate,
-                format_queue(&ogn_depth),
-                format_queue(&beast_depth),
-                format_queue(&sbs_depth),
-                read_section
+                "stats: sent={} | drain_eta={} | queue={{{}}}{}",
+                sent_stats, drain_time_estimate, queue_info, read_section
             );
         }
     });
@@ -699,16 +497,17 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             .retry_delay_seconds(retry_delay)
             .build();
 
-        let queue = ogn_queue.clone();
+        let queue_for_ogn = queue.clone();
         let aprs_health = aprs_health_shared.clone();
 
         tokio::spawn(async move {
             let mut client = AprsClient::new(config);
 
-            // The AprsClient's start_with_queue method will handle stats internally
+            // The AprsClient's start_with_envelope_queue method creates protobuf envelopes
+            // with timestamps captured at receive time
             loop {
                 match client
-                    .start_with_queue(queue.clone(), aprs_health.clone())
+                    .start_with_envelope_queue(queue_for_ogn.clone(), aprs_health.clone())
                     .await
                 {
                     Ok(_) => {
@@ -735,7 +534,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             max_retry_delay_seconds: 60,
         };
 
-        let queue = beast_queue.clone();
+        let queue_for_beast = queue.clone();
         let stats_rx = stats_beast_received.clone();
         let beast_health = beast_health_shared.clone();
 
@@ -744,9 +543,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         tokio::spawn(async move {
             let mut client = BeastClient::new(config);
 
-            // The Beast client's start_with_queue tracks stats
+            // The Beast client's start_with_envelope_queue creates protobuf envelopes
+            // with timestamps captured at receive time
             match client
-                .start_with_queue(queue, beast_health, Some(stats_rx))
+                .start_with_envelope_queue(queue_for_beast, beast_health, Some(stats_rx))
                 .await
             {
                 Ok(_) => {
@@ -768,7 +568,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             max_retry_delay_seconds: 60,
         };
 
-        let queue = sbs_queue.clone();
+        let queue_for_sbs = queue.clone();
         let stats_rx = stats_sbs_received.clone();
         let sbs_health = sbs_health_shared.clone();
 
@@ -777,9 +577,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         tokio::spawn(async move {
             let mut client = SbsClient::new(config);
 
-            // The SBS client's start_with_queue tracks stats
+            // The SBS client's start_with_envelope_queue creates protobuf envelopes
+            // with timestamps captured at receive time
             match client
-                .start_with_queue(queue, sbs_health, Some(stats_rx))
+                .start_with_envelope_queue(queue_for_sbs, sbs_health, Some(stats_rx))
                 .await
             {
                 Ok(_) => {
@@ -810,23 +611,21 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.messages_per_second").set(0.0);
     metrics::counter!("ingest.messages_received_total").absolute(0);
     metrics::counter!("ingest.messages_sent_total").absolute(0);
+    metrics::counter!("ingest.socket_send_error_total").absolute(0);
 
-    // Per-source metrics (OGN, Beast, SBS)
+    // Socket send duration histogram
+    metrics::histogram!("ingest.socket_send_duration_ms").record(0.0);
+
+    // Per-source receive rate metrics
     for source in &["OGN", "Beast", "SBS"] {
         metrics::gauge!("ingest.messages_per_second", "source" => *source).set(0.0);
         metrics::counter!("ingest.messages_received_total", "source" => *source).absolute(0);
-        metrics::counter!("ingest.messages_sent_total", "source" => *source).absolute(0);
-        metrics::counter!("ingest.socket_send_error_total", "source" => *source).absolute(0);
-
-        // Socket send duration histogram
-        metrics::histogram!("ingest.socket_send_duration_ms", "source" => *source).record(0.0);
-
-        // Queue depth metrics
-        for queue_type in &["memory", "disk"] {
-            metrics::gauge!("ingest.queue_depth", "source" => *source, "type" => *queue_type)
-                .set(0.0);
-        }
     }
+
+    // Unified queue depth metrics
+    metrics::gauge!("ingest.queue_depth", "type" => "memory").set(0.0);
+    metrics::gauge!("ingest.queue_depth_bytes", "type" => "data").set(0.0);
+    metrics::gauge!("ingest.queue_depth_bytes", "type" => "file").set(0.0);
 
     // Connection health metrics
     metrics::gauge!("ingest.health.ogn_connected").set(0.0);
@@ -835,7 +634,5 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.health.socket_connected").set(0.0);
 
     // Queue capacity pause metrics (backpressure events)
-    metrics::counter!("queue.capacity_pause_total", "queue" => "OGN").absolute(0);
-    metrics::counter!("queue.capacity_pause_total", "queue" => "Beast").absolute(0);
-    metrics::counter!("queue.capacity_pause_total", "queue" => "SBS").absolute(0);
+    metrics::counter!("queue.capacity_pause_total", "queue" => "ingest").absolute(0);
 }

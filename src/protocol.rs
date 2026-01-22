@@ -29,13 +29,42 @@ pub fn deserialize_envelope(data: &[u8]) -> Result<Envelope> {
     Envelope::decode(data).context("Failed to deserialize envelope")
 }
 
-/// Create a new envelope from source and data
+/// Create a new envelope from source and data, timestamped NOW
+///
+/// Use this when creating an envelope at the moment of message receipt.
+/// For queued messages, use `new_envelope_with_timestamp` to preserve
+/// the original receive time.
 pub fn new_envelope(source: IngestSource, data: Vec<u8>) -> Envelope {
     Envelope {
         source: source as i32,
         timestamp_micros: chrono::Utc::now().timestamp_micros(),
         data,
     }
+}
+
+/// Create a new envelope with a specific timestamp
+///
+/// Use this when you have a pre-recorded receive time (e.g., from a queue).
+pub fn new_envelope_with_timestamp(
+    source: IngestSource,
+    data: Vec<u8>,
+    timestamp_micros: i64,
+) -> Envelope {
+    Envelope {
+        source: source as i32,
+        timestamp_micros,
+        data,
+    }
+}
+
+/// Create and serialize an envelope in one step, timestamped NOW
+///
+/// This is the preferred method for ingest clients that want to store
+/// serialized envelopes in a queue. The timestamp is captured at the
+/// moment this function is called, preserving the true receive time.
+pub fn create_serialized_envelope(source: IngestSource, data: Vec<u8>) -> Result<Vec<u8>> {
+    let envelope = new_envelope(source, data);
+    serialize_envelope(&envelope)
 }
 
 #[cfg(test)]
