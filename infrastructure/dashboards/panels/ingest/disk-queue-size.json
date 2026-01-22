@@ -77,11 +77,11 @@
       },
       "editorMode": "code",
       "expr": "ingest_queue_depth_bytes{type=\"data\",component=\"ingest\",environment=~\"$environment\"}",
-      "legendFormat": "{{source}}",
+      "legendFormat": "data bytes",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Disk Queue Size (by Source)",
+  "title": "Disk Queue Size",
   "type": "timeseries"
 }
