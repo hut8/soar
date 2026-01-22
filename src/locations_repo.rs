@@ -86,10 +86,7 @@ impl LocationsRepository {
             let mut conn = pool.get()?;
 
             let rows = diesel::update(locations.filter(id.eq(location_id)))
-                .set((
-                    geocode_attempted_at.eq(Some(Utc::now())),
-                    updated_at.eq(Utc::now()),
-                ))
+                .set(geocode_attempted_at.eq(Some(Utc::now())))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
