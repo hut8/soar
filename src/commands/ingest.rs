@@ -279,12 +279,15 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         }
                     }
                     Err(e) => {
-                        error!("Failed to receive from queue: {}", e);
-                        break;
+                        // Don't die on queue errors - they may be transient (e.g., race
+                        // between overflow writes and drain reads, corrupted segment that
+                        // gets cleaned up). Log and retry after a delay.
+                        error!("Failed to receive from queue: {} (will retry)", e);
+                        metrics::counter!("ingest.queue_recv_error_total").increment(1);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     }
                 }
             }
-            info!("Unified publisher task stopped");
         });
     }
 

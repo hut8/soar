@@ -2170,12 +2170,12 @@
           },
           "editorMode": "code",
           "expr": "ingest_queue_depth{type=\"memory\",environment=~\"$environment\"}",
-          "legendFormat": "{{source}} memory",
+          "legendFormat": "memory",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Memory Queue Depth (by Source)",
+      "title": "Memory Queue Depth",
       "type": "timeseries",
       "id": 27,
       "gridPos": {
@@ -2264,12 +2264,12 @@
           },
           "editorMode": "code",
           "expr": "ingest_queue_depth_bytes{type=\"data\",component=\"ingest\",environment=~\"$environment\"}",
-          "legendFormat": "{{source}}",
+          "legendFormat": "data bytes",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Disk Queue Size (by Source)",
+      "title": "Disk Queue Size",
       "type": "timeseries",
       "id": 28,
       "gridPos": {

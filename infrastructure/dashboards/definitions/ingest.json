@@ -58,8 +58,8 @@
     {
       "row": "Queue Depths"
     },
-    "memory-queue-depth-by-source",
-    "disk-queue-size-by-source",
+    "memory-queue-depth",
+    "disk-queue-size",
     {
       "row": "Queue Segments"
     },

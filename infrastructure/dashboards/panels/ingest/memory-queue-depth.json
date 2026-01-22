@@ -77,11 +77,11 @@
       },
       "editorMode": "code",
       "expr": "ingest_queue_depth{type=\"memory\",environment=~\"$environment\"}",
-      "legendFormat": "{{source}} memory",
+      "legendFormat": "memory",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Memory Queue Depth (by Source)",
+  "title": "Memory Queue Depth",
   "type": "timeseries"
 }

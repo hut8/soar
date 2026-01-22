@@ -263,6 +263,28 @@ where
         Ok(())
     }
 
+    /// Mark a segment as fully read by setting read_offset = write_offset
+    /// Used to skip corrupted/truncated segments
+    fn mark_segment_as_read(&self, segment_name: &str, write_offset: u64) -> Result<()> {
+        use std::io::{Seek, Write};
+
+        let path = self.segment_path(segment_name);
+        if !path.exists() {
+            return Ok(());
+        }
+
+        let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+        file.seek(std::io::SeekFrom::Start(16))?;
+        file.write_all(&write_offset.to_le_bytes())?;
+        file.sync_all()?;
+
+        debug!(
+            "Marked segment {} as fully read (skipping corrupted data)",
+            segment_name
+        );
+        Ok(())
+    }
+
     /// Send a message to the queue
     ///
     /// Behavior depends on state:
@@ -804,16 +826,59 @@ where
 
         // Read message length
         let mut len_bytes = [0u8; 4];
-        file.read_exact(&mut len_bytes)?;
+        if let Err(e) = file.read_exact(&mut len_bytes) {
+            // Truncated file - can happen during race between write and read
+            // Skip this segment and try the next one
+            warn!(
+                "Truncated read in segment {} at offset {} (length header): {}",
+                segment_name, read_offset, e
+            );
+            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+            drop(file);
+            // Mark this segment as fully read to skip it
+            self.mark_segment_as_read(&segment_name, write_offset)?;
+            return Box::pin(self.read_from_disk()).await;
+        }
         let data_len = u32::from_le_bytes(len_bytes) as usize;
+
+        // Sanity check: data_len should be reasonable (< 100MB)
+        if data_len > 100 * 1024 * 1024 {
+            warn!(
+                "Unreasonable data_len {} in segment {}, likely corruption",
+                data_len, segment_name
+            );
+            metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
+            drop(file);
+            self.mark_segment_as_read(&segment_name, write_offset)?;
+            return Box::pin(self.read_from_disk()).await;
+        }
 
         // Read message data
         let mut data = vec![0u8; data_len];
-        file.read_exact(&mut data)?;
+        if let Err(e) = file.read_exact(&mut data) {
+            // Truncated file - data was not fully written
+            warn!(
+                "Truncated read in segment {} at offset {} (data, expected {} bytes): {}",
+                segment_name, read_offset, data_len, e
+            );
+            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+            drop(file);
+            self.mark_segment_as_read(&segment_name, write_offset)?;
+            return Box::pin(self.read_from_disk()).await;
+        }
 
         // Read checksum
         let mut checksum_bytes = [0u8; 4];
-        file.read_exact(&mut checksum_bytes)?;
+        if let Err(e) = file.read_exact(&mut checksum_bytes) {
+            warn!(
+                "Truncated read in segment {} at offset {} (checksum): {}",
+                segment_name, read_offset, e
+            );
+            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+            drop(file);
+            self.mark_segment_as_read(&segment_name, write_offset)?;
+            return Box::pin(self.read_from_disk()).await;
+        }
         let expected_checksum = u32::from_le_bytes(checksum_bytes);
 
         // Verify checksum
