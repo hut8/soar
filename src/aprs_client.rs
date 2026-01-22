@@ -5,6 +5,8 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 use tracing::{error, info, trace, warn};
 
+use crate::protocol::{IngestSource, create_serialized_envelope};
+
 // Queue size for raw APRS messages
 const RAW_MESSAGE_QUEUE_SIZE: usize = 1000;
 
@@ -248,12 +250,480 @@ impl AprsClient {
         Ok(())
     }
 
+    /// Start the APRS client with envelope queue (NEW: unified queue with protobuf envelopes)
+    /// This connects to APRS-IS and sends all messages to the queue as serialized protobuf Envelopes
+    /// Each envelope contains: source type (OGN), timestamp (captured at receive time), and raw payload
+    #[tracing::instrument(skip(self, queue, health_state))]
+    pub async fn start_with_envelope_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+    ) -> Result<()> {
+        let config = self.config.clone();
+
+        // Create bounded channel for serialized envelope bytes from TCP socket to queue
+        let (envelope_tx, envelope_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
+        info!(
+            "Created envelope queue channel with capacity {} for unified queue",
+            RAW_MESSAGE_QUEUE_SIZE
+        );
+
+        // Spawn queue feeding task - reads from channel, sends to persistent queue
+        let queue_clone = queue.clone();
+        let queue_handle = tokio::spawn(async move {
+            let mut at_capacity_logged = false;
+            let mut last_metrics_update = std::time::Instant::now();
+
+            loop {
+                // Check if disk queue is at capacity before consuming from channel
+                while queue_clone.is_at_capacity() {
+                    if !at_capacity_logged {
+                        warn!(
+                            "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
+                            queue_clone.name()
+                        );
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "ingest")
+                            .increment(1);
+                        at_capacity_logged = true;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
+                if at_capacity_logged {
+                    info!(
+                        "Queue '{}' has space, resuming consumption",
+                        queue_clone.name()
+                    );
+                    at_capacity_logged = false;
+                }
+
+                match envelope_rx.recv_async().await {
+                    Ok(envelope_bytes) => {
+                        if let Err(e) = queue_clone.send(envelope_bytes).await {
+                            warn!("Failed to send to persistent queue (will retry): {}", e);
+                            metrics::counter!("aprs.queue.send_error_total").increment(1);
+                        }
+
+                        // Update channel depth metric every second
+                        if last_metrics_update.elapsed().as_secs() >= 1 {
+                            let channel_depth = envelope_rx.len();
+                            metrics::gauge!("aprs.envelope_channel.depth")
+                                .set(channel_depth as f64);
+                            last_metrics_update = std::time::Instant::now();
+                        }
+                    }
+                    Err(_) => {
+                        info!("Envelope channel closed, queue feeder exiting");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Spawn connection management task
+        let health_for_connection = health_state.clone();
+        let queue_for_connection = queue.clone();
+        let connection_handle = tokio::spawn(async move {
+            let mut retry_count = 0;
+            let mut current_delay = config.retry_delay_seconds;
+
+            loop {
+                // Before connecting/reconnecting, wait for queue to be ready
+                if !queue_for_connection.is_ready_for_connection() {
+                    let capacity = queue_for_connection.capacity_percent();
+                    info!(
+                        "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
+                        capacity
+                    );
+                    metrics::counter!("aprs.connection_deferred_total").increment(1);
+
+                    while !queue_for_connection.is_ready_for_connection() {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    }
+
+                    let new_capacity = queue_for_connection.capacity_percent();
+                    info!(
+                        "Queue drained to {}% capacity, proceeding with reconnection",
+                        new_capacity
+                    );
+                }
+
+                if retry_count == 0 {
+                    info!(
+                        "Connecting to APRS server at {}:{}",
+                        config.server, config.port
+                    );
+                } else {
+                    info!(
+                        "Reconnecting to APRS server at {}:{} (retry attempt {})",
+                        config.server, config.port, retry_count
+                    );
+                }
+
+                let connect_result = Self::connect_and_run_envelope(
+                    &config,
+                    envelope_tx.clone(),
+                    health_for_connection.clone(),
+                )
+                .await;
+
+                match connect_result {
+                    ConnectionResult::Success => {
+                        info!("APRS connection completed normally");
+                        retry_count = 0;
+                        current_delay = config.retry_delay_seconds;
+                    }
+                    ConnectionResult::ConnectionFailed(e) => {
+                        error!("APRS connection failed: {}", e);
+                        retry_count += 1;
+                        metrics::counter!("aprs.connection_failed_total").increment(1);
+                    }
+                    ConnectionResult::OperationFailed(e) => {
+                        error!("APRS operation failed: {}", e);
+                        retry_count = 0;
+                        metrics::counter!("aprs.connection.operation_failed_total").increment(1);
+                    }
+                }
+
+                // Sleep before retrying
+                if current_delay > 0 {
+                    info!("Waiting {} seconds before retry", current_delay);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(current_delay)).await;
+                    current_delay =
+                        std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                }
+            }
+        });
+
+        let (queue_result, connection_result) = tokio::join!(queue_handle, connection_handle);
+
+        queue_result.context("Queue feeder task panicked")?;
+        connection_result.context("Connection management task panicked or stopped")?;
+
+        Ok(())
+    }
+
     /// Stop the APRS client
     #[tracing::instrument(skip(self))]
     pub async fn stop(&mut self) {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(());
         }
+    }
+
+    /// Connect to the APRS server and run the message processing loop (envelope version)
+    /// Creates protobuf envelopes with timestamps captured at receive time
+    #[tracing::instrument(skip(config, envelope_tx, health_state), fields(server = %config.server, port = %config.port))]
+    async fn connect_and_run_envelope(
+        config: &AprsClientConfig,
+        envelope_tx: flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+    ) -> ConnectionResult {
+        info!(
+            "Connecting to APRS server {}:{} (envelope mode)",
+            config.server, config.port
+        );
+
+        let connection_start = std::time::Instant::now();
+
+        // DNS lookup (reuse the same logic as connect_and_run)
+        let server_address = format!("{}:{}", config.server, config.port);
+        let socket_addrs = match tokio::net::lookup_host(&server_address).await {
+            Ok(addrs) => {
+                let all_addrs: Vec<_> = addrs.collect();
+                if all_addrs.is_empty() {
+                    return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                        "DNS resolution returned no addresses for {}",
+                        server_address
+                    ));
+                }
+
+                let ipv4_addrs: Vec<_> = all_addrs
+                    .iter()
+                    .filter(|addr| addr.is_ipv4())
+                    .cloned()
+                    .collect();
+
+                if ipv4_addrs.is_empty() {
+                    warn!(
+                        "No IPv4 addresses found for {}, falling back to all addresses",
+                        server_address
+                    );
+                    all_addrs
+                } else {
+                    info!(
+                        "DNS resolved {} to {} IPv4 address(es)",
+                        server_address,
+                        ipv4_addrs.len()
+                    );
+                    ipv4_addrs
+                }
+            }
+            Err(e) => {
+                return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                    "DNS resolution failed for {}: {}",
+                    server_address,
+                    e
+                ));
+            }
+        };
+
+        // Shuffle and try addresses
+        let mut shuffled_addrs = socket_addrs;
+        {
+            use rand::seq::SliceRandom;
+            let mut rng = rand::rng();
+            shuffled_addrs.shuffle(&mut rng);
+        }
+
+        let mut last_error = None;
+        for addr in &shuffled_addrs {
+            match TcpStream::connect(addr).await {
+                Ok(stream) => {
+                    info!("Connected to APRS server at {}", addr);
+                    metrics::counter!("aprs.connection.established_total").increment(1);
+                    metrics::gauge!("aprs.connection.connected").set(1.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.aprs_connected = true;
+                    }
+
+                    return Self::process_connection_envelope(
+                        stream,
+                        config,
+                        envelope_tx,
+                        health_state,
+                        connection_start,
+                        addr.to_string(),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!("Failed to connect to {}: {}", addr, e);
+                    last_error = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+            "Failed to connect to any resolved address for {}: {:?}",
+            server_address,
+            last_error
+        ))
+    }
+
+    /// Process an established APRS connection (envelope version)
+    /// Creates protobuf envelopes with timestamps at the moment messages are received
+    #[tracing::instrument(skip(stream, config, envelope_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
+    async fn process_connection_envelope(
+        stream: TcpStream,
+        config: &AprsClientConfig,
+        envelope_tx: flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+        connection_start: std::time::Instant,
+        peer_addr_str: String,
+    ) -> ConnectionResult {
+        info!(
+            "Processing connection to APRS server at {} (envelope mode)",
+            peer_addr_str
+        );
+
+        let (reader, mut writer) = stream.into_split();
+        let mut buf_reader = BufReader::new(reader);
+
+        // Send login command
+        let login_cmd = Self::build_login_command(config);
+        info!("Sending login command: {}", login_cmd.trim());
+        if let Err(e) = writer.write_all(login_cmd.as_bytes()).await {
+            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                "Failed to send login command: {}",
+                e
+            ));
+        }
+        if let Err(e) = writer.flush().await {
+            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                "Failed to flush login command: {}",
+                e
+            ));
+        }
+        info!("Login command sent successfully");
+
+        let mut line_buffer = Vec::new();
+        let mut first_message = true;
+        let message_timeout = Duration::from_secs(300);
+        let keepalive_interval = Duration::from_secs(20);
+        let mut last_keepalive = tokio::time::Instant::now();
+        let mut last_stats_log = std::time::Instant::now();
+
+        loop {
+            line_buffer.clear();
+
+            // Send keepalive if needed
+            if last_keepalive.elapsed() >= keepalive_interval {
+                let keepalive_msg = "# soar keepalive\r\n";
+                if let Err(e) = writer.write_all(keepalive_msg.as_bytes()).await {
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Failed to send keepalive: {}",
+                        e
+                    ));
+                }
+                if let Err(e) = writer.flush().await {
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Failed to flush keepalive: {}",
+                        e
+                    ));
+                }
+                trace!("Sent keepalive to APRS server");
+                metrics::counter!("aprs.keepalive.sent_total").increment(1);
+                last_keepalive = tokio::time::Instant::now();
+            }
+
+            let read_result = timeout(
+                message_timeout,
+                Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
+            )
+            .await;
+
+            match read_result {
+                Ok(inner_result) => {
+                    match inner_result {
+                        Ok(0) => {
+                            let duration = connection_start.elapsed();
+                            warn!(
+                                "Connection closed by server after {:.1}s",
+                                duration.as_secs_f64()
+                            );
+                            metrics::counter!("aprs.connection.server_closed_total").increment(1);
+                            break;
+                        }
+                        Ok(_) => {
+                            let line = match String::from_utf8(line_buffer.clone()) {
+                                Ok(valid_line) => valid_line,
+                                Err(_) => {
+                                    warn!("Invalid UTF-8 in stream, skipping");
+                                    continue;
+                                }
+                            };
+
+                            let trimmed_line = line.trim();
+                            if !trimmed_line.is_empty() {
+                                let is_server_message = trimmed_line.starts_with('#');
+                                if is_server_message {
+                                    metrics::counter!("aprs.raw_message.received.server_total")
+                                        .increment(1);
+                                } else {
+                                    metrics::counter!("aprs.raw_message.received.aprs_total")
+                                        .increment(1);
+                                }
+
+                                if first_message {
+                                    info!("First message from server: {}", trimmed_line);
+                                    first_message = false;
+                                } else {
+                                    trace!("Received: {}", trimmed_line);
+                                }
+
+                                // Create protobuf envelope with timestamp captured NOW
+                                // This preserves the true receive time even if the message sits in queue
+                                let envelope_bytes = match create_serialized_envelope(
+                                    IngestSource::Ogn,
+                                    trimmed_line.as_bytes().to_vec(),
+                                ) {
+                                    Ok(bytes) => bytes,
+                                    Err(e) => {
+                                        error!("Failed to create envelope: {}", e);
+                                        continue;
+                                    }
+                                };
+
+                                // Send envelope to channel
+                                match timeout(
+                                    Duration::from_secs(10),
+                                    envelope_tx.send_async(envelope_bytes),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(())) => {
+                                        if !is_server_message {
+                                            metrics::counter!("aprs.raw_message.queued.aprs_total")
+                                                .increment(1);
+
+                                            {
+                                                let mut health = health_state.write().await;
+                                                health.last_message_time =
+                                                    Some(std::time::Instant::now());
+                                                health.total_messages += 1;
+                                                health.interval_messages += 1;
+
+                                                if health.interval_start.is_none() {
+                                                    health.interval_start =
+                                                        Some(std::time::Instant::now());
+                                                }
+                                            }
+
+                                            if last_stats_log.elapsed().as_secs() >= 10 {
+                                                let health = health_state.read().await;
+                                                if let Some(interval_start) = health.interval_start
+                                                {
+                                                    let elapsed =
+                                                        interval_start.elapsed().as_secs_f64();
+                                                    if elapsed > 0.0 {
+                                                        let rate = health.interval_messages as f64
+                                                            / elapsed;
+                                                        metrics::gauge!("aprs.message_rate")
+                                                            .set(rate);
+                                                    }
+                                                }
+                                                drop(health);
+
+                                                {
+                                                    let mut health = health_state.write().await;
+                                                    health.interval_messages = 0;
+                                                    health.interval_start =
+                                                        Some(std::time::Instant::now());
+                                                }
+                                                last_stats_log = std::time::Instant::now();
+                                            }
+                                        }
+                                    }
+                                    Ok(Err(flume::SendError(_))) => {
+                                        info!("Envelope channel closed - stopping connection");
+                                        return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                            "Envelope channel closed"
+                                        ));
+                                    }
+                                    Err(_) => {
+                                        error!(
+                                            "Queue send blocked for 10+ seconds - disconnecting"
+                                        );
+                                        metrics::counter!("aprs.queue_send_timeout_total")
+                                            .increment(1);
+                                        return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                            "Queue send timeout - will reconnect when drained"
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                "Connection error: {}",
+                                e
+                            ));
+                        }
+                    }
+                }
+                Err(_) => {
+                    error!("No message received for 5 minutes, disconnecting");
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Message timeout - no data received for 5 minutes"
+                    ));
+                }
+            }
+        }
+
+        ConnectionResult::Success
     }
 
     /// Connect to the APRS server and run the message processing loop

@@ -5,6 +5,8 @@ use tokio::net::TcpStream;
 use tokio::time::sleep;
 use tracing::{error, info, trace, warn};
 
+use crate::protocol::{IngestSource, create_serialized_envelope};
+
 // Queue size for raw SBS messages from TCP socket
 const RAW_MESSAGE_QUEUE_SIZE: usize = 10000;
 
@@ -327,6 +329,313 @@ impl SbsClient {
         info!("SBS client stopped");
 
         Ok(())
+    }
+
+    /// Start the SBS client with envelope queue (NEW: unified queue with protobuf envelopes)
+    /// This connects to the SBS server and sends all messages to the queue as serialized protobuf Envelopes
+    /// Each envelope contains: source type (SBS), timestamp (captured at receive time), and raw payload
+    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
+    pub async fn start_with_envelope_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
+    ) -> Result<()> {
+        let config = self.config.clone();
+
+        // Create bounded channel for serialized envelope bytes from TCP socket
+        let (envelope_tx, envelope_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
+
+        // Spawn queue feeding task
+        let queue_clone = queue.clone();
+        let stats_counter_clone = stats_counter.clone();
+        let queue_feeder_handle = tokio::spawn(async move {
+            info!("Starting SBS envelope queue feeding task");
+            let mut at_capacity_logged = false;
+            let mut last_metrics_update = std::time::Instant::now();
+
+            loop {
+                while queue_clone.is_at_capacity() {
+                    if !at_capacity_logged {
+                        warn!(
+                            "Queue '{}' disk at capacity, pausing consumption",
+                            queue_clone.name()
+                        );
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "ingest")
+                            .increment(1);
+                        at_capacity_logged = true;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+                if at_capacity_logged {
+                    info!(
+                        "Queue '{}' has space, resuming consumption",
+                        queue_clone.name()
+                    );
+                    at_capacity_logged = false;
+                }
+
+                match envelope_rx.recv_async().await {
+                    Ok(envelope_bytes) => {
+                        if let Err(e) = queue_clone.send(envelope_bytes).await {
+                            warn!(
+                                "Failed to send SBS envelope to persistent queue (will retry): {}",
+                                e
+                            );
+                            metrics::counter!("sbs.queue.send_error_total").increment(1);
+                        } else if let Some(ref counter) = stats_counter_clone {
+                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+
+                        // Update channel depth metric every second
+                        if last_metrics_update.elapsed().as_secs() >= 1 {
+                            let channel_depth = envelope_rx.len();
+                            metrics::gauge!("sbs.envelope_channel.depth").set(channel_depth as f64);
+                            last_metrics_update = std::time::Instant::now();
+                        }
+                    }
+                    Err(_) => {
+                        info!("SBS envelope channel closed, queue feeder exiting");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Connection loop with exponential backoff
+        let mut retry_count = 0;
+        let mut current_delay = config.retry_delay_seconds;
+
+        loop {
+            // Wait for queue to be ready before connecting
+            if !queue.is_ready_for_connection() {
+                let capacity = queue.capacity_percent();
+                info!(
+                    "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
+                    capacity
+                );
+                metrics::counter!("sbs.connection_deferred_total").increment(1);
+
+                while !queue.is_ready_for_connection() {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+
+                let new_capacity = queue.capacity_percent();
+                info!(
+                    "Queue drained to {}% capacity, proceeding with reconnection",
+                    new_capacity
+                );
+            }
+
+            let result =
+                Self::connect_and_process_envelope(&config, &envelope_tx, health_state.clone())
+                    .await;
+
+            match result {
+                ConnectionResult::Success => {
+                    info!("SBS connection completed successfully");
+                    break;
+                }
+                ConnectionResult::ConnectionFailed(e) => {
+                    retry_count += 1;
+                    if retry_count > config.max_retries {
+                        error!(
+                            "Max retries ({}) exceeded for SBS connection, giving up: {}",
+                            config.max_retries, e
+                        );
+                        break;
+                    }
+
+                    metrics::counter!("sbs.connection.failed_total").increment(1);
+                    warn!(
+                        "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
+                        config.server,
+                        config.port,
+                        retry_count,
+                        config.max_retries,
+                        e,
+                        current_delay
+                    );
+
+                    sleep(Duration::from_secs(current_delay)).await;
+                    current_delay =
+                        std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                }
+                ConnectionResult::OperationFailed(e) => {
+                    metrics::counter!("sbs.connection.operation_failed_total").increment(1);
+                    warn!(
+                        "SBS connection to {}:{} failed during operation: {} - reconnecting in 1s",
+                        config.server, config.port, e
+                    );
+                    sleep(Duration::from_secs(1)).await;
+                    retry_count = 0;
+                    current_delay = config.retry_delay_seconds;
+                }
+            }
+        }
+
+        // Wait for queue feeder task to complete
+        info!("Waiting for SBS envelope queue feeder task to complete...");
+        let _ = queue_feeder_handle.await;
+        info!("SBS client (envelope mode) stopped");
+
+        Ok(())
+    }
+
+    /// Connect to SBS server and process messages with envelope creation
+    async fn connect_and_process_envelope(
+        config: &SbsClientConfig,
+        envelope_tx: &flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) -> ConnectionResult {
+        let address = format!("{}:{}", config.server, config.port);
+        info!("Connecting to SBS server at {} (envelope mode)", address);
+
+        let stream = match TcpStream::connect(&address).await {
+            Ok(stream) => {
+                info!("Connected to SBS server at {}", address);
+                metrics::gauge!("sbs.connection.connected").set(1.0);
+
+                {
+                    let mut health = health_state.write().await;
+                    health.beast_connected = true; // Reusing Beast health struct for SBS
+                }
+
+                stream
+            }
+            Err(e) => {
+                metrics::gauge!("sbs.connection.connected").set(0.0);
+                return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                    "Failed to connect to SBS server at {}: {}",
+                    address,
+                    e
+                ));
+            }
+        };
+
+        // Process the connection
+        Self::process_stream_envelope(stream, envelope_tx, health_state).await
+    }
+
+    /// Process SBS stream and create protobuf envelopes with timestamps captured at receive time
+    async fn process_stream_envelope(
+        stream: TcpStream,
+        envelope_tx: &flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) -> ConnectionResult {
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        let mut last_stats_log = std::time::Instant::now();
+
+        // Initialize interval tracking
+        {
+            let mut health = health_state.write().await;
+            if health.interval_start.is_none() {
+                health.interval_start = Some(std::time::Instant::now());
+            }
+        }
+
+        loop {
+            line.clear();
+
+            match tokio::time::timeout(Duration::from_secs(300), reader.read_line(&mut line)).await
+            {
+                Ok(Ok(0)) => {
+                    info!("SBS connection closed by server");
+                    metrics::counter!("sbs.connection.server_closed_total").increment(1);
+                    metrics::gauge!("sbs.connection.connected").set(0.0);
+                    return ConnectionResult::Success;
+                }
+                Ok(Ok(_)) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+
+                    trace!("Received SBS message: {}", trimmed);
+                    metrics::counter!("sbs.messages.received_total").increment(1);
+
+                    // Create protobuf envelope with timestamp captured NOW
+                    let envelope_bytes = match create_serialized_envelope(
+                        IngestSource::Sbs,
+                        trimmed.as_bytes().to_vec(),
+                    ) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            error!("Failed to create SBS envelope: {}", e);
+                            metrics::counter!("sbs.envelope.creation_error_total").increment(1);
+                            continue;
+                        }
+                    };
+
+                    // Send envelope to channel
+                    match tokio::time::timeout(
+                        Duration::from_secs(10),
+                        envelope_tx.send_async(envelope_bytes),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            metrics::counter!("sbs.messages.queued_total").increment(1);
+
+                            // Update health stats
+                            {
+                                let mut health = health_state.write().await;
+                                health.total_messages += 1;
+                                health.interval_messages += 1;
+                                health.last_message_time = Some(std::time::Instant::now());
+                            }
+
+                            // Update metrics periodically
+                            if last_stats_log.elapsed().as_secs() >= 10 {
+                                let health = health_state.read().await;
+                                if let Some(interval_start) = health.interval_start {
+                                    let elapsed = interval_start.elapsed().as_secs_f64();
+                                    if elapsed > 0.0 {
+                                        let rate = health.interval_messages as f64 / elapsed;
+                                        metrics::gauge!("sbs.message_rate").set(rate);
+                                    }
+                                }
+                                drop(health);
+
+                                {
+                                    let mut health = health_state.write().await;
+                                    health.interval_messages = 0;
+                                    health.interval_start = Some(std::time::Instant::now());
+                                }
+                                last_stats_log = std::time::Instant::now();
+                            }
+                        }
+                        Ok(Err(_)) => {
+                            info!("SBS envelope channel closed - stopping connection");
+                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                "Envelope channel closed"
+                            ));
+                        }
+                        Err(_) => {
+                            error!("SBS queue send blocked for 10+ seconds - disconnecting");
+                            metrics::counter!("sbs.queue_send_timeout_total").increment(1);
+                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                "Queue send timeout - will reconnect when drained"
+                            ));
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    error!("Error reading from SBS stream: {}", e);
+                    metrics::gauge!("sbs.connection.connected").set(0.0);
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!("Read error: {}", e));
+                }
+                Err(_) => {
+                    warn!("No data received from SBS server for 5 minutes");
+                    metrics::counter!("sbs.timeout_total").increment(1);
+                    metrics::gauge!("sbs.connection.connected").set(0.0);
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Message timeout - no data received for 5 minutes"
+                    ));
+                }
+            }
+        }
     }
 
     /// Connect to SBS server and process messages

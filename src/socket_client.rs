@@ -72,14 +72,25 @@ impl SocketClient {
     ///
     /// The message is wrapped in an envelope with source and timestamp,
     /// serialized to protobuf, and sent with a length prefix.
+    ///
+    /// NOTE: This timestamps the message NOW. If you have pre-serialized
+    /// envelope data (e.g., from a queue), use `send_serialized` instead.
     pub async fn send(&mut self, data: Vec<u8>) -> Result<()> {
-        let start = std::time::Instant::now();
-
-        // Create envelope
+        // Create envelope with current timestamp
         let envelope = new_envelope(self.source, data);
 
-        // Serialize envelope
+        // Serialize and send
         let payload = serialize_envelope(&envelope)?;
+        self.send_serialized(payload).await
+    }
+
+    /// Send a pre-serialized envelope to soar-run
+    ///
+    /// Use this when you have already-serialized protobuf data (e.g., from a queue
+    /// where the envelope was created at ingest time to preserve the receive timestamp).
+    pub async fn send_serialized(&mut self, payload: Vec<u8>) -> Result<()> {
+        let start = std::time::Instant::now();
+
         let length = payload.len() as u32;
 
         // Get stream reference

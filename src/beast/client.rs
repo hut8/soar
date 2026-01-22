@@ -5,6 +5,8 @@ use tokio::net::TcpStream;
 use tokio::time::sleep;
 use tracing::{error, info, trace, warn};
 
+use crate::protocol::{IngestSource, create_serialized_envelope};
+
 // Queue size for raw Beast messages from TCP socket
 const RAW_MESSAGE_QUEUE_SIZE: usize = 10000;
 
@@ -473,6 +475,456 @@ impl BeastClient {
         let _ = queue_handle.await;
 
         Ok(())
+    }
+
+    /// Start the Beast client with envelope queue (NEW: unified queue with protobuf envelopes)
+    /// This connects to the Beast server and sends all messages to the queue as serialized protobuf Envelopes
+    /// Each envelope contains: source type (Beast), timestamp (captured at receive time), and raw payload
+    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
+    pub async fn start_with_envelope_queue(
+        &mut self,
+        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
+    ) -> Result<()> {
+        let config = self.config.clone();
+
+        // Create bounded channel for serialized envelope bytes from TCP socket
+        let (envelope_tx, envelope_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
+
+        // Spawn queue feeding task - reads from channel, sends to persistent queue
+        let queue_clone = queue.clone();
+        let stats_counter_clone = stats_counter.clone();
+        let queue_handle = tokio::spawn(async move {
+            let mut at_capacity_logged = false;
+            let mut last_metrics_update = std::time::Instant::now();
+
+            loop {
+                // Check if disk queue is at capacity before consuming from channel
+                while queue_clone.is_at_capacity() {
+                    if !at_capacity_logged {
+                        warn!(
+                            "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
+                            queue_clone.name()
+                        );
+                        metrics::counter!("queue.capacity_pause_total", "queue" => "ingest")
+                            .increment(1);
+                        at_capacity_logged = true;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+                if at_capacity_logged {
+                    info!(
+                        "Queue '{}' has space, resuming consumption",
+                        queue_clone.name()
+                    );
+                    at_capacity_logged = false;
+                }
+
+                match envelope_rx.recv_async().await {
+                    Ok(envelope_bytes) => {
+                        if let Err(e) = queue_clone.send(envelope_bytes).await {
+                            warn!("Failed to send to persistent queue (will retry): {}", e);
+                            metrics::counter!("beast.queue.send_error_total").increment(1);
+                        } else if let Some(ref counter) = stats_counter_clone {
+                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+
+                        // Update channel depth metric every second
+                        if last_metrics_update.elapsed().as_secs() >= 1 {
+                            let channel_depth = envelope_rx.len();
+                            metrics::gauge!("beast.envelope_channel.depth")
+                                .set(channel_depth as f64);
+                            metrics::gauge!("beast.envelope_channel.capacity")
+                                .set(RAW_MESSAGE_QUEUE_SIZE as f64);
+                            last_metrics_update = std::time::Instant::now();
+                        }
+                    }
+                    Err(_) => {
+                        info!("Envelope channel closed, queue feeder exiting");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Connection retry loop
+        let mut retry_count = 0;
+        let mut retry_delay = config.retry_delay_seconds;
+
+        loop {
+            // Before connecting/reconnecting, wait for queue to be ready
+            if !queue.is_ready_for_connection() {
+                let capacity = queue.capacity_percent();
+                info!(
+                    "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
+                    capacity
+                );
+                metrics::counter!("beast.connection_deferred_total").increment(1);
+
+                while !queue.is_ready_for_connection() {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+
+                let new_capacity = queue.capacity_percent();
+                info!(
+                    "Queue drained to {}% capacity, proceeding with reconnection",
+                    new_capacity
+                );
+            }
+
+            let result =
+                Self::connect_and_run_envelope(&config, envelope_tx.clone(), health_state.clone())
+                    .await;
+
+            match result {
+                ConnectionResult::Success => {
+                    info!("Beast connection completed normally");
+                    retry_count = 0;
+                    retry_delay = config.retry_delay_seconds;
+                }
+                ConnectionResult::ConnectionFailed(e) => {
+                    error!("Beast connection failed: {}", e);
+                    retry_count += 1;
+                    if retry_count >= config.max_retries {
+                        break;
+                    }
+                    retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
+                    sleep(Duration::from_secs(retry_delay)).await;
+                }
+                ConnectionResult::OperationFailed(e) => {
+                    error!("Beast operation failed: {}", e);
+                    retry_count += 1;
+                    if retry_count >= config.max_retries {
+                        break;
+                    }
+                    sleep(Duration::from_secs(std::cmp::min(retry_delay, 5))).await;
+                }
+            }
+        }
+
+        // Shutdown
+        drop(envelope_tx);
+        let _ = queue_handle.await;
+
+        Ok(())
+    }
+
+    /// Connect to the Beast server and run the message processing loop (envelope version)
+    /// Creates protobuf envelopes with timestamps captured at receive time
+    #[tracing::instrument(skip(config, envelope_tx, health_state), fields(server = %config.server, port = %config.port))]
+    async fn connect_and_run_envelope(
+        config: &BeastClientConfig,
+        envelope_tx: flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) -> ConnectionResult {
+        info!(
+            "Connecting to Beast server {}:{} (envelope mode)",
+            config.server, config.port
+        );
+
+        let connection_start = std::time::Instant::now();
+
+        // DNS lookup
+        let server_address = format!("{}:{}", config.server, config.port);
+        let socket_addrs = match tokio::net::lookup_host(&server_address).await {
+            Ok(addrs) => {
+                let all_addrs: Vec<_> = addrs.collect();
+                if all_addrs.is_empty() {
+                    return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                        "DNS resolution returned no addresses for {}",
+                        server_address
+                    ));
+                }
+
+                let ipv4_addrs: Vec<_> = all_addrs
+                    .iter()
+                    .filter(|addr| addr.is_ipv4())
+                    .cloned()
+                    .collect();
+
+                if ipv4_addrs.is_empty() {
+                    warn!(
+                        "No IPv4 addresses found for {}, falling back to all {} addresses",
+                        server_address,
+                        all_addrs.len()
+                    );
+                    all_addrs
+                } else {
+                    info!(
+                        "DNS resolved {} to {} IPv4 address(es)",
+                        server_address,
+                        ipv4_addrs.len()
+                    );
+                    ipv4_addrs
+                }
+            }
+            Err(e) => {
+                return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                    "DNS resolution failed for {}: {}",
+                    server_address,
+                    e
+                ));
+            }
+        };
+
+        // Shuffle addresses
+        let mut shuffled_addrs = socket_addrs;
+        {
+            use rand::seq::SliceRandom;
+            let mut rng = rand::rng();
+            shuffled_addrs.shuffle(&mut rng);
+        }
+        info!("Trying addresses in randomized order: {:?}", shuffled_addrs);
+
+        // Try each address
+        let mut last_error = None;
+        for addr in &shuffled_addrs {
+            match TcpStream::connect(addr).await {
+                Ok(stream) => {
+                    info!("Connected to Beast server at {}", addr);
+                    metrics::counter!("beast.connection.established_total").increment(1);
+                    metrics::gauge!("beast.connection.connected").set(1.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = true;
+                    }
+
+                    return Self::process_connection_envelope(
+                        stream,
+                        envelope_tx,
+                        health_state,
+                        connection_start,
+                        addr.to_string(),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!("Failed to connect to {}: {}", addr, e);
+                    last_error = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+            "Failed to connect to any resolved address for {}: {:?}",
+            server_address,
+            last_error
+        ))
+    }
+
+    /// Process an established Beast connection (envelope version)
+    /// Creates protobuf envelopes with timestamps at the moment frames are received
+    #[tracing::instrument(skip(stream, envelope_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
+    async fn process_connection_envelope(
+        mut stream: TcpStream,
+        envelope_tx: flume::Sender<Vec<u8>>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        connection_start: std::time::Instant,
+        peer_addr_str: String,
+    ) -> ConnectionResult {
+        info!(
+            "Processing connection to Beast server at {} (envelope mode)",
+            peer_addr_str
+        );
+
+        let message_timeout = Duration::from_secs(300);
+        let mut buffer = vec![0u8; 8192];
+        let mut frame_buffer = Vec::new();
+        let mut pending_escape = false;
+        let mut last_stats_log = std::time::Instant::now();
+
+        // Initialize interval tracking
+        {
+            let mut health = health_state.write().await;
+            if health.interval_start.is_none() {
+                health.interval_start = Some(std::time::Instant::now());
+            }
+        }
+
+        loop {
+            let read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)).await;
+            match read_result {
+                Ok(Ok(0)) => {
+                    let duration = connection_start.elapsed();
+                    let total_messages = {
+                        let health = health_state.read().await;
+                        health.total_messages
+                    };
+                    info!(
+                        "Beast connection closed by server (IP: {}) after {:.1}s, received {} messages",
+                        peer_addr_str,
+                        duration.as_secs_f64(),
+                        total_messages
+                    );
+                    metrics::counter!("beast.connection.server_closed_total").increment(1);
+                    metrics::gauge!("beast.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
+                    return ConnectionResult::Success;
+                }
+                Ok(Ok(n)) => {
+                    trace!("Received {} bytes from Beast server", n);
+                    metrics::counter!("beast.bytes.received_total").increment(n as u64);
+
+                    // Process Beast frames (same escape logic as before)
+                    let mut i = 0;
+
+                    if pending_escape && n > 0 {
+                        pending_escape = false;
+                        if buffer[0] == 0x1A {
+                            frame_buffer.push(0x1A);
+                            i = 1;
+                        } else {
+                            if frame_buffer.len() > 1 {
+                                frame_buffer.pop();
+                                if !frame_buffer.is_empty() {
+                                    Self::publish_frame_envelope(
+                                        &envelope_tx,
+                                        frame_buffer.clone(),
+                                        &health_state,
+                                    )
+                                    .await;
+                                }
+                            }
+                            frame_buffer.clear();
+                            frame_buffer.push(0x1A);
+                            frame_buffer.push(buffer[0]);
+                            i = 1;
+                        }
+                    }
+
+                    while i < n {
+                        let byte = buffer[i];
+
+                        if byte == 0x1A {
+                            if i + 1 < n {
+                                if buffer[i + 1] == 0x1A {
+                                    frame_buffer.push(0x1A);
+                                    i += 2;
+                                } else {
+                                    if !frame_buffer.is_empty() {
+                                        Self::publish_frame_envelope(
+                                            &envelope_tx,
+                                            frame_buffer.clone(),
+                                            &health_state,
+                                        )
+                                        .await;
+                                    }
+                                    frame_buffer.clear();
+                                    frame_buffer.push(0x1A);
+                                    i += 1;
+                                }
+                            } else {
+                                frame_buffer.push(0x1A);
+                                pending_escape = true;
+                                i += 1;
+                            }
+                        } else {
+                            frame_buffer.push(byte);
+                            i += 1;
+                        }
+                    }
+
+                    // Update metrics periodically
+                    if last_stats_log.elapsed().as_secs() >= 10 {
+                        let health = health_state.read().await;
+                        if let Some(interval_start) = health.interval_start {
+                            let elapsed = interval_start.elapsed().as_secs_f64();
+                            if elapsed > 0.0 {
+                                let rate = health.interval_messages as f64 / elapsed;
+                                metrics::gauge!("beast.message_rate").set(rate);
+                            }
+                        }
+                        drop(health);
+
+                        {
+                            let mut health = health_state.write().await;
+                            health.interval_messages = 0;
+                            health.interval_start = Some(std::time::Instant::now());
+                        }
+                        last_stats_log = std::time::Instant::now();
+                    }
+                }
+                Ok(Err(e)) => {
+                    let duration = connection_start.elapsed();
+                    error!(
+                        "Beast read error from {} after {:.1}s: {}",
+                        peer_addr_str,
+                        duration.as_secs_f64(),
+                        e
+                    );
+                    metrics::gauge!("beast.connection.connected").set(0.0);
+
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Beast read error: {}",
+                        e
+                    ));
+                }
+                Err(_) => {
+                    let duration = connection_start.elapsed();
+                    warn!(
+                        "No data received from Beast server {} for {} seconds (after {:.1}s connected)",
+                        peer_addr_str,
+                        message_timeout.as_secs(),
+                        duration.as_secs_f64()
+                    );
+                    metrics::counter!("beast.timeout_total").increment(1);
+                    metrics::gauge!("beast.connection.connected").set(0.0);
+
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "No data received for {} seconds",
+                        message_timeout.as_secs()
+                    ));
+                }
+            }
+        }
+    }
+
+    /// Publish a Beast frame as a protobuf envelope with timestamp captured NOW
+    async fn publish_frame_envelope(
+        envelope_tx: &flume::Sender<Vec<u8>>,
+        frame: Vec<u8>,
+        health_state: &std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+    ) {
+        if frame.is_empty() {
+            return;
+        }
+
+        // Create protobuf envelope with timestamp captured NOW
+        let envelope_bytes = match create_serialized_envelope(IngestSource::Beast, frame.clone()) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Failed to create Beast envelope: {}", e);
+                metrics::counter!("beast.envelope.creation_error_total").increment(1);
+                return;
+            }
+        };
+
+        match envelope_tx.send_async(envelope_bytes).await {
+            Ok(_) => {
+                trace!("Published Beast frame ({} bytes) as envelope", frame.len());
+                metrics::counter!("beast.frames.published_total").increment(1);
+
+                // Update health stats
+                {
+                    let mut health = health_state.write().await;
+                    health.total_messages += 1;
+                    health.interval_messages += 1;
+                    health.last_message_time = Some(std::time::Instant::now());
+                }
+            }
+            Err(e) => {
+                error!("Failed to send Beast envelope to channel: {}", e);
+                metrics::counter!("beast.frames.dropped_total").increment(1);
+            }
+        }
     }
 
     /// Connect to the Beast server and run the message processing loop
