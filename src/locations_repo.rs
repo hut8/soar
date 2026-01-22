@@ -74,6 +74,28 @@ impl LocationsRepository {
         Ok(rows_affected > 0)
     }
 
+    /// Mark a location as having had geocoding attempted (regardless of success/failure)
+    /// This prevents re-attempting geocoding on addresses that are known to fail
+    pub async fn mark_geocode_attempted(&self, location_id: Uuid) -> Result<bool> {
+        use crate::schema::locations::dsl::*;
+        use chrono::Utc;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(locations.filter(id.eq(location_id)))
+                .set(geocode_attempted_at.eq(Some(Utc::now())))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Get locations that need geocoding (have address but no geolocation)
     pub async fn get_locations_for_geocoding(&self, limit: Option<i64>) -> Result<Vec<Location>> {
         use crate::schema::clubs::dsl as clubs_dsl;
@@ -93,8 +115,14 @@ impl LocationsRepository {
                 .filter(clubs_dsl::is_soaring.eq(true));
 
             // Build the main query using Diesel's query builder
+            // Only select locations that:
+            // - Have no geolocation yet
+            // - Have never had geocoding attempted (to avoid re-trying known failures)
+            // - Have at least some address data
+            // - Are linked to a soaring club
             let location_models: Vec<LocationModel> = locations
                 .filter(geolocation.is_null())
+                .filter(geocode_attempted_at.is_null())
                 .filter(
                     street1
                         .is_not_null()
@@ -329,6 +357,7 @@ mod tests {
             geolocation: Some(Point::new(34.0522, -118.2437)),
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            geocode_attempted_at: None,
         }
     }
 

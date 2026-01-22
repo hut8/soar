@@ -51,6 +51,7 @@ fn create_location_from_fields(
         },
         created_at,
         updated_at,
+        geocode_attempted_at: None, // Not exposed in views
     })
 }
 

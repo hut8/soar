@@ -409,27 +409,29 @@ impl FixProcessor {
                 Ok(Some(flight)) => {
                     // Only update if current callsign is None (NULL -> value update)
                     // Do NOT update if callsign already has a different value (that would indicate a bug)
-                    if flight.callsign.is_none() {
-                        if let Err(e) = self
-                            .flight_detection_processor
-                            .update_flight_callsign(
-                                flight_id,
-                                updated_fix.aircraft_id,
-                                Some(flight_number.clone()),
-                            )
-                            .await
-                        {
-                            debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                    match &flight.callsign {
+                        None => {
+                            if let Err(e) = self
+                                .flight_detection_processor
+                                .update_flight_callsign(
+                                    flight_id,
+                                    updated_fix.aircraft_id,
+                                    Some(flight_number.clone()),
+                                )
+                                .await
+                            {
+                                debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                            }
                         }
-                    } else if let Some(existing_callsign) = &flight.callsign
-                        && existing_callsign != flight_number
-                    {
-                        // Callsign changed from one value to another - this should not happen
-                        // because flight tracker should have created a new flight
-                        error!(
-                            "Flight {} callsign mismatch: has '{}' but fix has '{}' - this indicates a bug in flight coalescing",
-                            flight_id, existing_callsign, flight_number
-                        );
+                        Some(existing) if existing != flight_number => {
+                            // Callsign changed from one value to another - this should not happen
+                            // because flight tracker should have created a new flight
+                            error!(
+                                "Flight {} callsign mismatch: has '{}' but fix has '{}' - this indicates a bug in flight coalescing",
+                                flight_id, existing, flight_number
+                            );
+                        }
+                        Some(_) => {} // Callsign already matches, nothing to do
                     }
                 }
                 Ok(None) => {

@@ -459,12 +459,18 @@ async fn geocode_aircraft_registration_locations(
             use soar::schema::{aircraft_registrations, locations};
             let mut conn = pool.get()?;
 
+            // Only select locations that:
+            // - Have no geolocation yet
+            // - Have never had geocoding attempted (to avoid re-trying known failures)
+            // - Have at least some address data
+            // - Are linked to an aircraft registration
             let results = locations::table
                 .inner_join(
                     aircraft_registrations::table
                         .on(aircraft_registrations::location_id.eq(locations::id.nullable())),
                 )
                 .filter(locations::geolocation.is_null())
+                .filter(locations::geocode_attempted_at.is_null())
                 .filter(
                     locations::street1
                         .is_not_null()
@@ -558,6 +564,15 @@ async fn geocode_aircraft_registration_locations(
             )
             .await;
 
+            // Mark this location as having had geocoding attempted, regardless of outcome
+            // This prevents re-attempting geocoding on addresses that are known to fail
+            if let Err(e) = locations_repo.mark_geocode_attempted(location.id).await {
+                warn!(
+                    "Failed to mark geocode_attempted_at for location {}: {}",
+                    location.id, e
+                );
+            }
+
             match geocode_result {
                 Ok(result) => {
                     // Track which service was used
@@ -642,7 +657,7 @@ async fn geocode_soaring_clubs(
 
             let mut geocoded_count = 0;
             for location in locations {
-                match geocode_components(
+                let geocode_result = geocode_components(
                     location.street1.as_deref(),
                     None, // street2
                     location.city.as_deref(),
@@ -650,8 +665,18 @@ async fn geocode_soaring_clubs(
                     location.zip_code.as_deref(),
                     None, // country
                 )
-                .await
-                {
+                .await;
+
+                // Mark this location as having had geocoding attempted, regardless of outcome
+                // This prevents re-attempting geocoding on addresses that are known to fail
+                if let Err(e) = locations_repo.mark_geocode_attempted(location.id).await {
+                    warn!(
+                        "Failed to mark geocode_attempted_at for location {}: {}",
+                        location.id, e
+                    );
+                }
+
+                match geocode_result {
                     Ok(result) => {
                         let geolocation_point =
                             Point::new(result.point.latitude, result.point.longitude);
