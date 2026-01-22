@@ -583,6 +583,7 @@ diesel::table! {
         geolocation -> Nullable<Point>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        geocode_attempted_at -> Nullable<Timestamptz>,
     }
 }
 

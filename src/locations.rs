@@ -20,6 +20,7 @@ pub struct Location {
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub geocode_attempted_at: Option<DateTime<Utc>>,
 }
 
 // Simple Point struct for WGS84 coordinates (reuse from clubs.rs)
@@ -85,6 +86,7 @@ pub struct LocationModel {
     pub geolocation: Option<Point>, // PostgreSQL point type
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub geocode_attempted_at: Option<DateTime<Utc>>,
 }
 
 /// Insert model for new locations
@@ -116,6 +118,7 @@ impl From<Location> for LocationModel {
             geolocation: location.geolocation,
             created_at: location.created_at,
             updated_at: location.updated_at,
+            geocode_attempted_at: location.geocode_attempted_at,
         }
     }
 }
@@ -150,6 +153,7 @@ impl From<LocationModel> for Location {
             geolocation: model.geolocation,
             created_at: model.created_at,
             updated_at: model.updated_at,
+            geocode_attempted_at: model.geocode_attempted_at,
         }
     }
 }
@@ -177,6 +181,7 @@ impl Location {
             geolocation,
             created_at: now,
             updated_at: now,
+            geocode_attempted_at: None,
         }
     }
 
