@@ -841,6 +841,9 @@ async fn main() -> Result<()> {
             .map(opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new)
     };
 
+    // Note: tracing-subscriber's "tracing-log" feature automatically bridges
+    // `log` crate events to tracing, so `pprof=warn` filter works for pprof's INFO logs
+
     let registry = tracing_subscriber::registry();
 
     let fmt_layer = filter::Filtered::new(
