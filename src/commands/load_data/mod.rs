@@ -433,6 +433,101 @@ pub async fn handle_load_data(
     Ok(())
 }
 
+/// Get count of aircraft registrations that have geocoded location addresses
+async fn get_geocoded_registration_locations_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> anyhow::Result<i64> {
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::{aircraft_registrations, locations};
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let count: i64 = aircraft_registrations::table
+            .inner_join(
+                locations::table
+                    .on(aircraft_registrations::location_id.eq(locations::id.nullable())),
+            )
+            .filter(locations::geolocation.is_not_null())
+            .select(count_star())
+            .first(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
+/// Get count of aircraft registrations that still need geocoding (pending/deferred)
+/// These are registrations with a location that has address data but no geolocation yet
+async fn get_pending_registration_geocoding_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> anyhow::Result<i64> {
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::{aircraft_registrations, locations};
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let count: i64 = aircraft_registrations::table
+            .inner_join(
+                locations::table
+                    .on(aircraft_registrations::location_id.eq(locations::id.nullable())),
+            )
+            .filter(locations::geolocation.is_null())
+            .filter(locations::geocode_attempted_at.is_null())
+            .filter(
+                locations::street1
+                    .is_not_null()
+                    .or(locations::city.is_not_null())
+                    .or(locations::state.is_not_null()),
+            )
+            .select(count_star())
+            .first(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
+/// Get total count of aircraft registrations that could potentially be geocoded
+/// (those with location records that have some address data)
+async fn get_total_geocodable_registrations_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> anyhow::Result<i64> {
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::{aircraft_registrations, locations};
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let count: i64 = aircraft_registrations::table
+            .inner_join(
+                locations::table
+                    .on(aircraft_registrations::location_id.eq(locations::id.nullable())),
+            )
+            .filter(
+                locations::street1
+                    .is_not_null()
+                    .or(locations::city.is_not_null())
+                    .or(locations::state.is_not_null()),
+            )
+            .select(count_star())
+            .first(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
 async fn geocode_aircraft_registration_locations(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Option<soar::email_reporter::EntityMetrics> {
@@ -512,9 +607,12 @@ async fn geocode_aircraft_registration_locations(
         "Found {} aircraft registration locations to geocode (limited to {})",
         total_locations, MAX_TOTAL_GEOCODE
     );
-    metrics.records_loaded = total_locations;
 
     if total_locations == 0 {
+        // Still need to populate records_in_db with total geocoded count
+        if let Ok(total_geocoded) = get_geocoded_registration_locations_count(&diesel_pool).await {
+            metrics.records_in_db = Some(total_geocoded);
+        }
         metrics.success = true;
         metrics.duration_secs = start.elapsed().as_secs_f64();
         return Some(metrics);
@@ -627,6 +725,24 @@ async fn geocode_aircraft_registration_locations(
         "Successfully geocoded {} out of {} aircraft registration locations",
         geocoded_count, total_locations
     );
+
+    // Set records_loaded to actual geocoded count (not total attempted)
+    metrics.records_loaded = geocoded_count;
+
+    // Get total count of geocoded registration locations for "Total in DB"
+    if let Ok(total_geocoded) = get_geocoded_registration_locations_count(&diesel_pool).await {
+        metrics.records_in_db = Some(total_geocoded);
+    }
+
+    // Calculate deferred (pending) counts for registrations still needing geocoding
+    if let Ok(pending_count) = get_pending_registration_geocoding_count(&diesel_pool).await
+        && pending_count > 0
+    {
+        metrics.deferred_count = Some(pending_count as usize);
+        if let Ok(total_geocodable) = get_total_geocodable_registrations_count(&diesel_pool).await {
+            metrics.deferred_total = Some(total_geocodable as usize);
+        }
+    }
 
     metrics.success = true;
     metrics.duration_secs = start.elapsed().as_secs_f64();

@@ -253,6 +253,48 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get the count of geocoded receivers (where geocoded = true)
+    pub async fn get_geocoded_receiver_count(&self) -> Result<i64> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<i64> {
+            let mut conn = pool.get()?;
+            let count: i64 = receivers::table
+                .filter(receivers::geocoded.eq(true))
+                .count()
+                .get_result(&mut conn)?;
+            Ok(count)
+        })
+        .await?
+    }
+
+    /// Get the count of receivers that have valid coordinates for geocoding
+    /// This is the total pool of receivers that could potentially be geocoded
+    pub async fn get_receivers_with_coordinates_count(&self) -> Result<i64> {
+        use diesel::BoolExpressionMethods;
+
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<i64> {
+            let mut conn = pool.get()?;
+            let count: i64 = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                // Exclude coordinates near (0,0) - treat as invalid/null
+                // Equivalent to: NOT (ABS(latitude) < 0.1 AND ABS(longitude) < 0.1)
+                // Using De Morgan's law: (|lat| >= 0.1) OR (|lon| >= 0.1)
+                .filter(
+                    receivers::latitude
+                        .le(-0.1_f64)
+                        .or(receivers::latitude.ge(0.1_f64))
+                        .or(receivers::longitude.le(-0.1_f64))
+                        .or(receivers::longitude.ge(0.1_f64)),
+                )
+                .count()
+                .get_result(&mut conn)?;
+            Ok(count)
+        })
+        .await?
+    }
+
     /// Get a receiver by callsign
     pub async fn get_receiver_by_callsign(&self, callsign: &str) -> Result<Option<ReceiverRecord>> {
         let pool = self.pool.clone();

@@ -13,7 +13,7 @@ type PgPool = Pool<ConnectionManager<PgConnection>>;
 /// This should be called after both aircraft and aircraft_registrations are loaded
 pub async fn link_aircraft_to_devices_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
-    let mut metrics = EntityMetrics::new("Link Aircraft to Devices");
+    let mut metrics = EntityMetrics::new("Link Registrations to Aircraft");
 
     info!("Linking aircraft registrations to aircraft by registration number...");
 
@@ -48,7 +48,7 @@ pub async fn link_aircraft_to_devices_with_metrics(pool: PgPool) -> EntityMetric
 /// This should be called after aircraft have been linked to aircraft
 pub async fn link_devices_to_clubs_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
-    let mut metrics = EntityMetrics::new("Link Devices to Clubs");
+    let mut metrics = EntityMetrics::new("Link Aircraft to Clubs");
 
     info!("Linking aircraft to clubs from aircraft registrations...");
 

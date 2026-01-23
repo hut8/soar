@@ -345,7 +345,7 @@ pub async fn load_adsb_exchange_with_metrics(
 ) -> Option<EntityMetrics> {
     if let Some(path) = adsb_path {
         let start = Instant::now();
-        let mut metrics = EntityMetrics::new("ADS-B Exchange Data");
+        let mut metrics = EntityMetrics::new("ADS-B Exchange Aircraft");
 
         match load_adsb_exchange_data(diesel_pool, &path).await {
             Ok((loaded, _updated)) => {
