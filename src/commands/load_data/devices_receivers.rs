@@ -89,7 +89,7 @@ pub async fn load_devices_with_metrics(
 ) -> Option<EntityMetrics> {
     if let Some(path) = devices_path {
         let start = Instant::now();
-        let mut metrics = EntityMetrics::new("Devices");
+        let mut metrics = EntityMetrics::new("Aircraft (from Unified DDB)");
 
         match load_devices(diesel_pool, &path).await {
             Ok((loaded, total)) => {

@@ -71,6 +71,8 @@ pub struct EntityMetrics {
     pub success: bool,
     pub error_message: Option<String>,
     pub failed_items: Option<Vec<String>>, // For tracking specific items that failed (e.g., receiver callsigns)
+    pub deferred_count: Option<usize>,     // Number of pending/deferred items (e.g., geocoding)
+    pub deferred_total: Option<usize>,     // Total items for percentage calculation
 }
 
 impl EntityMetrics {
@@ -83,6 +85,8 @@ impl EntityMetrics {
             success: true,
             error_message: None,
             failed_items: None,
+            deferred_count: None,
+            deferred_total: None,
         }
     }
 
@@ -95,6 +99,8 @@ impl EntityMetrics {
             success: false,
             error_message: Some(error),
             failed_items: None,
+            deferred_count: None,
+            deferred_total: None,
         }
     }
 }
@@ -190,6 +196,7 @@ impl DataLoadReport {
                 <th>Duration</th>
                 <th>Records Loaded</th>
                 <th>Total in DB</th>
+                <th>Deferred</th>
             </tr>"#,
             status_color,
             environment,
@@ -208,11 +215,22 @@ impl DataLoadReport {
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "-".to_string());
 
+            // Format deferred column: "count (percentage%)" or "-"
+            let deferred_display = match (entity.deferred_count, entity.deferred_total) {
+                (Some(count), Some(total)) if total > 0 => {
+                    let percentage = (count as f64 / total as f64 * 100.0).round() as usize;
+                    format!("{} ({}%)", count, percentage)
+                }
+                (Some(count), _) => count.to_string(),
+                _ => "-".to_string(),
+            };
+
             html.push_str(&format!(
                 r#"
             <tr>
                 <td>{}</td>
                 <td class="{}">{}</td>
+                <td>{}</td>
                 <td>{}</td>
                 <td>{}</td>
                 <td>{}</td>
@@ -222,14 +240,15 @@ impl DataLoadReport {
                 status_symbol,
                 Self::format_duration(entity.duration_secs),
                 entity.records_loaded,
-                db_count
+                db_count,
+                deferred_display
             ));
 
             if let Some(error) = &entity.error_message {
                 html.push_str(&format!(
                     r#"
             <tr>
-                <td colspan="5">
+                <td colspan="6">
                     <div class="error-box">
                         <strong>Error:</strong> {}
                     </div>
@@ -267,7 +286,7 @@ impl DataLoadReport {
                 html.push_str(&format!(
                     r#"
             <tr>
-                <td colspan="5">
+                <td colspan="6">
                     <div class="error-box">
                         <strong>Failed Items ({}):</strong> {}
                     </div>

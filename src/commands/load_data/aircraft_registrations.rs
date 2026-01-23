@@ -119,16 +119,48 @@ pub async fn copy_owners_to_aircraft(
     .await?
 }
 
+/// Get the count of aircraft that have an owner_operator set (not null and not empty)
+async fn get_aircraft_with_owner_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> Result<i64> {
+    use diesel::dsl::count_star;
+    use soar::schema::aircraft;
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let count: i64 = aircraft::table
+            .filter(aircraft::owner_operator.is_not_null())
+            .filter(aircraft::owner_operator.ne(""))
+            .select(count_star())
+            .first(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
 pub async fn copy_owners_to_aircraft_with_metrics(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> EntityMetrics {
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Copy Owners to Aircraft");
 
-    match copy_owners_to_aircraft(diesel_pool).await {
+    match copy_owners_to_aircraft(diesel_pool.clone()).await {
         Ok(updated) => {
             metrics.records_loaded = updated;
             metrics.success = true;
+
+            // Get the total count of aircraft with owner_operator set
+            match get_aircraft_with_owner_count(&diesel_pool).await {
+                Ok(count) => metrics.records_in_db = Some(count),
+                Err(e) => {
+                    tracing::warn!("Failed to get aircraft with owner count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
         }
         Err(e) => {
             error!("Failed to copy owners to aircraft: {}", e);

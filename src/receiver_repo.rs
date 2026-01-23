@@ -253,6 +253,42 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get the count of geocoded receivers (where geocoded = true)
+    pub async fn get_geocoded_receiver_count(&self) -> Result<i64> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<i64> {
+            let mut conn = pool.get()?;
+            let count: i64 = receivers::table
+                .filter(receivers::geocoded.eq(true))
+                .count()
+                .get_result(&mut conn)?;
+            Ok(count)
+        })
+        .await?
+    }
+
+    /// Get the count of receivers that have valid coordinates for geocoding
+    /// This is the total pool of receivers that could potentially be geocoded
+    pub async fn get_receivers_with_coordinates_count(&self) -> Result<i64> {
+        use diesel::dsl::sql;
+
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<i64> {
+            let mut conn = pool.get()?;
+            let count: i64 = receivers::table
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                // Exclude coordinates near (0,0) - treat as invalid/null
+                .filter(sql::<diesel::sql_types::Bool>(
+                    "NOT (ABS(latitude) < 0.1 AND ABS(longitude) < 0.1)",
+                ))
+                .count()
+                .get_result(&mut conn)?;
+            Ok(count)
+        })
+        .await?
+    }
+
     /// Get a receiver by callsign
     pub async fn get_receiver_by_callsign(&self, callsign: &str) -> Result<Option<ReceiverRecord>> {
         let pool = self.pool.clone();

@@ -135,10 +135,43 @@ pub async fn geocode_receivers_with_metrics(
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Receiver Geocoding");
 
+    let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
+
     match geocode_receivers(diesel_pool).await {
-        Ok((total_processed, success, failures, failed_callsigns)) => {
+        Ok((_total_processed, success, failures, failed_callsigns)) => {
             metrics.records_loaded = success;
-            metrics.records_in_db = Some(total_processed as i64);
+
+            // Get the actual count of geocoded receivers in the database (not just those processed this run)
+            match receiver_repo.get_geocoded_receiver_count().await {
+                Ok(count) => metrics.records_in_db = Some(count),
+                Err(e) => {
+                    warn!("Failed to get geocoded receiver count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
+
+            // Calculate deferred (pending) geocoding counts
+            match receiver_repo
+                .get_receivers_needing_geocoding(i64::MAX)
+                .await
+            {
+                Ok(pending_receivers) => {
+                    let pending_count = pending_receivers.len();
+                    if pending_count > 0 {
+                        metrics.deferred_count = Some(pending_count);
+                        // Get total receivers with valid coordinates for percentage calculation
+                        if let Ok(total_with_coords) =
+                            receiver_repo.get_receivers_with_coordinates_count().await
+                        {
+                            metrics.deferred_total = Some(total_with_coords as usize);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to get pending geocoding count: {}", e);
+                }
+            }
+
             // Don't mark the stage as failed - geocoding failures are normal
             metrics.success = true;
 
