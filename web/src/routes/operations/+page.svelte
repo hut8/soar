@@ -13,7 +13,8 @@
 		Satellite,
 		Map,
 		Mountain,
-		Layers
+		Layers,
+		LocateFixed
 	} from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -1034,7 +1035,7 @@
 					class="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"
 				></div>
 			{:else}
-				<span class="text-xl">📍</span>
+				<LocateFixed size={20} />
 			{/if}
 		</button>
 
@@ -1168,7 +1169,7 @@
 		color: #374151; /* Gray-700 for good contrast against white */
 		border: none;
 		border-radius: 0.375rem;
-		padding: 0.75rem;
+		padding: 0.5rem;
 		cursor: pointer;
 		transition: all 200ms;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
