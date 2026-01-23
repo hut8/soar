@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 const MAGIC_BYTES: &[u8; 8] = b"SOARQUE1";
@@ -73,8 +73,8 @@ where
     /// This ensures at-most-once delivery: offset only advances after successful send
     /// Format: (segment_name, new_read_offset)
     pending_commit: Arc<RwLock<Option<(String, u64)>>>,
-    /// Track whether we've logged the overflow warning (to avoid spamming logs)
-    /// Set to true on first overflow, reset to false after drain completes
+    /// Track whether we've logged the spillover warning (to avoid spamming logs)
+    /// Set to true on first spillover to disk, reset to false after drain completes
     overflow_warned: Arc<AtomicBool>,
     /// Cached data size for is_at_capacity() - avoids expensive recalculation on every call
     /// Value is the data size in bytes
@@ -83,6 +83,9 @@ where
     cached_data_size_time_ms: Arc<AtomicU64>,
     /// Instant when the queue was created (for calculating cache age)
     created_at: Instant,
+    /// Mutex to serialize all file operations (append/read)
+    /// Prevents data corruption from concurrent writes to the same segment file
+    file_lock: Arc<Mutex<()>>,
 }
 
 impl<T> PersistentQueue<T>
@@ -149,6 +152,7 @@ where
             cached_data_size: Arc::new(AtomicU64::new(0)),
             cached_data_size_time_ms: Arc::new(AtomicU64::new(0)),
             created_at,
+            file_lock: Arc::new(Mutex::new(())),
         };
 
         // Initialize metrics
@@ -306,14 +310,14 @@ where
                     Err(flume::TrySendError::Full(message)) => {
                         // Memory channel is full (publisher is slow/blocked)
                         // Overflow to disk to prevent blocking the entire pipeline
-                        // Only log warning once per overflow episode (not on every send)
+                        // Only log warning once per spillover episode (not on every send)
                         if !self.overflow_warned.swap(true, Ordering::Relaxed) {
                             warn!(
-                                "Queue {} memory channel full, overflowing to disk (publisher is slow)",
+                                "Queue {} memory channel full, spilling to disk (consumer is slow)",
                                 self.name
                             );
                         }
-                        metrics::counter!(format!("queue.{}.overflow_to_disk_total", self.name))
+                        metrics::counter!(format!("queue.{}.spill_to_disk_total", self.name))
                             .increment(1);
                         self.append_to_disk(message).await?;
                         metrics::counter!(format!("queue.{}.messages.buffered_total", self.name))
@@ -356,12 +360,12 @@ where
 
         match state {
             QueueState::Connected { .. } => {
-                // Check if there's disk overflow (memory was full and messages went to disk)
+                // Check if there are messages spilled to disk (memory was full)
                 // This can happen when the publisher is slow/blocked
                 if self.has_segments() {
-                    // We have disk overflow - transition to Draining mode to process it
+                    // Messages spilled to disk - transition to Draining mode to process them
                     info!(
-                        "Queue '{}' detected disk overflow in Connected state, switching to Draining",
+                        "Queue '{}' has messages spilled to disk, switching to Draining mode",
                         self.name
                     );
                     {
@@ -667,9 +671,13 @@ where
     async fn append_to_disk(&self, message: T) -> Result<()> {
         use std::io::{Seek, Write};
 
-        // Serialize message
+        // Serialize message BEFORE acquiring the lock (to minimize lock hold time)
         let data = bincode::serialize(&message)?;
         let data_len = data.len() as u32;
+
+        // Acquire file lock to prevent concurrent writes corrupting the segment file
+        // Multiple producers can call append_to_disk concurrently when memory overflows
+        let _lock = self.file_lock.lock().await;
 
         // Calculate CRC32
         let checksum = crc32fast::hash(&data);
@@ -769,150 +777,163 @@ where
     }
 
     /// Read a message from the disk file (from oldest segment)
+    ///
+    /// Uses a loop instead of recursion to handle corruption/empty segments
+    /// so we can hold the file lock without deadlocking.
     async fn read_from_disk(&self) -> Result<Option<T>> {
         use std::io::{Read, Seek, Write};
 
-        // Get the oldest segment
-        let segment_name = match self.get_read_segment() {
-            Some(name) => name,
-            None => return Ok(None),
-        };
+        // Acquire file lock to prevent races with concurrent writes
+        let _lock = self.file_lock.lock().await;
 
-        let path = self.segment_path(&segment_name);
-        if !path.exists() {
-            return Ok(None);
-        }
+        // Loop to handle segment transitions and corruption recovery
+        loop {
+            // Get the oldest segment
+            let segment_name = match self.get_read_segment() {
+                Some(name) => name,
+                None => return Ok(None),
+            };
 
-        let mut file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&path)?;
-
-        // Read header
-        let mut header = [0u8; HEADER_SIZE];
-        file.read_exact(&mut header)?;
-
-        // Verify magic bytes
-        if &header[0..8] != MAGIC_BYTES {
-            anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
-        }
-
-        // Read offsets
-        let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
-        let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
-
-        // Check if we've read everything in this segment
-        if read_offset >= write_offset {
-            // Segment is drained - only delete if it's NOT the write segment
-            // to avoid race with concurrent appends (same fix as in commit())
-            drop(file);
-            let segments = self.list_segments();
-            let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
-
-            if !is_write_segment {
-                // Safe to delete - not the write segment
-                self.delete_segment(&segment_name)?;
-                // Try to read from the next segment
-                return Box::pin(self.read_from_disk()).await;
-            } else {
-                // This is the write segment - don't delete, just return None
-                // to indicate no messages available from disk
+            let path = self.segment_path(&segment_name);
+            if !path.exists() {
                 return Ok(None);
             }
-        }
 
-        // Seek to read position
-        file.seek(std::io::SeekFrom::Start(read_offset))?;
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&path)?;
 
-        // Read message length
-        let mut len_bytes = [0u8; 4];
-        if let Err(e) = file.read_exact(&mut len_bytes) {
-            // Truncated file - can happen during race between write and read
-            // Skip this segment and try the next one
-            warn!(
-                "Truncated read in segment {} at offset {} (length header): {}",
-                segment_name, read_offset, e
-            );
-            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
-            drop(file);
-            // Mark this segment as fully read to skip it
-            self.mark_segment_as_read(&segment_name, write_offset)?;
-            return Box::pin(self.read_from_disk()).await;
-        }
-        let data_len = u32::from_le_bytes(len_bytes) as usize;
+            // Read header
+            let mut header = [0u8; HEADER_SIZE];
+            file.read_exact(&mut header)?;
 
-        // Sanity check: data_len should be reasonable (< 100MB)
-        if data_len > 100 * 1024 * 1024 {
-            warn!(
-                "Unreasonable data_len {} in segment {}, likely corruption",
-                data_len, segment_name
-            );
-            metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
-            drop(file);
-            self.mark_segment_as_read(&segment_name, write_offset)?;
-            return Box::pin(self.read_from_disk()).await;
-        }
+            // Verify magic bytes
+            if &header[0..8] != MAGIC_BYTES {
+                anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
+            }
 
-        // Read message data
-        let mut data = vec![0u8; data_len];
-        if let Err(e) = file.read_exact(&mut data) {
-            // Truncated file - data was not fully written
-            warn!(
-                "Truncated read in segment {} at offset {} (data, expected {} bytes): {}",
-                segment_name, read_offset, data_len, e
-            );
-            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
-            drop(file);
-            self.mark_segment_as_read(&segment_name, write_offset)?;
-            return Box::pin(self.read_from_disk()).await;
-        }
+            // Read offsets
+            let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
+            let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
 
-        // Read checksum
-        let mut checksum_bytes = [0u8; 4];
-        if let Err(e) = file.read_exact(&mut checksum_bytes) {
-            warn!(
-                "Truncated read in segment {} at offset {} (checksum): {}",
-                segment_name, read_offset, e
-            );
-            metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
-            drop(file);
-            self.mark_segment_as_read(&segment_name, write_offset)?;
-            return Box::pin(self.read_from_disk()).await;
-        }
-        let expected_checksum = u32::from_le_bytes(checksum_bytes);
+            // Check if we've read everything in this segment
+            if read_offset >= write_offset {
+                // Segment is drained - only delete if it's NOT the write segment
+                // to avoid race with concurrent appends (same fix as in commit())
+                drop(file);
+                let segments = self.list_segments();
+                let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
 
-        // Verify checksum
-        let actual_checksum = crc32fast::hash(&data);
-        if actual_checksum != expected_checksum {
-            warn!(
-                "Checksum mismatch in segment {}, skipping corrupted message",
-                segment_name
-            );
-            metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
-            // Skip to next message
+                if !is_write_segment {
+                    // Safe to delete - not the write segment
+                    self.delete_segment(&segment_name)?;
+                    // Loop to try the next segment
+                    continue;
+                } else {
+                    // This is the write segment - don't delete, just return None
+                    // to indicate no messages available from disk
+                    return Ok(None);
+                }
+            }
+
+            // Seek to read position
+            file.seek(std::io::SeekFrom::Start(read_offset))?;
+
+            // Read message length
+            let mut len_bytes = [0u8; 4];
+            if let Err(e) = file.read_exact(&mut len_bytes) {
+                // Truncated file - can happen if process crashed during write
+                warn!(
+                    "Truncated read in segment {} at offset {} (length header): {}",
+                    segment_name, read_offset, e
+                );
+                metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+                drop(file);
+                // Mark this segment as fully read to skip it
+                self.mark_segment_as_read(&segment_name, write_offset)?;
+                // Loop to try the next segment
+                continue;
+            }
+            let data_len = u32::from_le_bytes(len_bytes) as usize;
+
+            // Sanity check: data_len should be reasonable (< 100MB)
+            if data_len > 100 * 1024 * 1024 {
+                warn!(
+                    "Unreasonable data_len {} in segment {}, likely corruption",
+                    data_len, segment_name
+                );
+                metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
+                drop(file);
+                self.mark_segment_as_read(&segment_name, write_offset)?;
+                // Loop to try the next segment
+                continue;
+            }
+
+            // Read message data
+            let mut data = vec![0u8; data_len];
+            if let Err(e) = file.read_exact(&mut data) {
+                // Truncated file - data was not fully written
+                warn!(
+                    "Truncated read in segment {} at offset {} (data, expected {} bytes): {}",
+                    segment_name, read_offset, data_len, e
+                );
+                metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+                drop(file);
+                self.mark_segment_as_read(&segment_name, write_offset)?;
+                // Loop to try the next segment
+                continue;
+            }
+
+            // Read checksum
+            let mut checksum_bytes = [0u8; 4];
+            if let Err(e) = file.read_exact(&mut checksum_bytes) {
+                warn!(
+                    "Truncated read in segment {} at offset {} (checksum): {}",
+                    segment_name, read_offset, e
+                );
+                metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
+                drop(file);
+                self.mark_segment_as_read(&segment_name, write_offset)?;
+                // Loop to try the next segment
+                continue;
+            }
+            let expected_checksum = u32::from_le_bytes(checksum_bytes);
+
+            // Verify checksum
+            let actual_checksum = crc32fast::hash(&data);
+            if actual_checksum != expected_checksum {
+                warn!(
+                    "Checksum mismatch in segment {}, skipping corrupted message",
+                    segment_name
+                );
+                metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
+                // Skip to next message by updating read offset
+                let new_read_offset = read_offset + 4 + data_len as u64 + 4;
+                file.seek(std::io::SeekFrom::Start(16))?;
+                file.write_all(&new_read_offset.to_le_bytes())?;
+                file.flush()?;
+                drop(file);
+                // Loop to try reading the next message
+                continue;
+            }
+
+            // Deserialize message
+            let message: T = bincode::deserialize(&data)?;
+
+            // Calculate new read offset but DON'T write it yet
+            // This ensures at-most-once delivery: message is only marked as consumed
+            // after successful delivery (when commit() is called)
             let new_read_offset = read_offset + 4 + data_len as u64 + 4;
-            file.seek(std::io::SeekFrom::Start(16))?;
-            file.write_all(&new_read_offset.to_le_bytes())?;
-            file.flush()?;
-            drop(file);
-            return Box::pin(self.read_from_disk()).await;
+
+            // Store pending commit info - will be committed after successful delivery
+            {
+                let mut pending = self.pending_commit.write().await;
+                *pending = Some((segment_name, new_read_offset));
+            }
+
+            return Ok(Some(message));
         }
-
-        // Deserialize message
-        let message: T = bincode::deserialize(&data)?;
-
-        // Calculate new read offset but DON'T write it yet
-        // This ensures at-most-once delivery: message is only marked as consumed
-        // after successful delivery (when commit() is called)
-        let new_read_offset = read_offset + 4 + data_len as u64 + 4;
-
-        // Store pending commit info - will be committed after successful delivery
-        {
-            let mut pending = self.pending_commit.write().await;
-            *pending = Some((segment_name, new_read_offset));
-        }
-
-        Ok(Some(message))
     }
 
     /// Finish draining (transition from Draining to Connected)
@@ -950,10 +971,10 @@ where
         metrics::histogram!(format!("queue.{}.drain_duration_seconds", name))
             .record(drain_duration);
 
-        // Log recovery if we were in overflow mode, and reset the warning flag
+        // Log recovery if we were in spillover mode, and reset the warning flag
         if self.overflow_warned.swap(false, Ordering::Relaxed) {
             info!(
-                "Queue {} recovered from disk overflow, back to memory channel (drained {} messages in {:.2}s)",
+                "Queue {} drained disk spillover, back to memory-only (drained {} messages in {:.2}s)",
                 name, drained, drain_duration
             );
         } else {
