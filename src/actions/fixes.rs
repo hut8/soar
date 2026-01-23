@@ -423,6 +423,19 @@ async fn handle_subscriptions(
     let mut current_bulk_bounds: Option<GeoBounds> = None;
     let mut receivers: HashMap<String, broadcast::Receiver<WebSocketMessage>> = HashMap::new();
 
+    // Get status receiver for connection status updates
+    let mut status_rx = live_fix_service.status_receiver();
+
+    // Send initial connection status to client
+    let initial_status = live_fix_service.current_status();
+    if fix_tx
+        .send(WebSocketMessage::ConnectionStatus(initial_status))
+        .is_err()
+    {
+        error!("Failed to send initial connection status");
+        return;
+    }
+
     loop {
         tokio::select! {
             // Handle subscription messages from WebSocket
@@ -544,6 +557,17 @@ async fn handle_subscriptions(
                         error!("Failed to send WebSocket message to writer");
                         return;
                     }
+            }
+
+            // Handle connection status updates
+            status_result = status_rx.changed() => {
+                if status_result.is_ok() {
+                    let status = status_rx.borrow().clone();
+                    if fix_tx.send(WebSocketMessage::ConnectionStatus(status)).is_err() {
+                        error!("Failed to send connection status to writer");
+                        return;
+                    }
+                }
             }
         }
     }

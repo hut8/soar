@@ -202,14 +202,23 @@
 					<!-- WebSocket Status Indicator -->
 					<div class="hidden lg:flex">
 						{#if $websocketStatus.connected}
+							{@const sources = $websocketStatus.connectionSources}
+							{@const label =
+								sources.ogn && sources.adsb
+									? 'Live - ADSB+OGN'
+									: sources.adsb
+										? 'Live - ADSB'
+										: sources.ogn
+											? 'Live - OGN'
+											: 'Live'}
 							<div
 								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-								title="Live - WebSocket connected{$debugStatus.operationsPageActive
+								title="{label} - WebSocket connected{$debugStatus.operationsPageActive
 									? ', Operations page active'
 									: ''}"
 							>
 								<Wifi size={16} />
-								<span class="text-xs font-medium">Live</span>
+								<span class="text-xs font-medium">{label}</span>
 								<RadarLoader />
 							</div>
 						{:else if $websocketStatus.reconnecting}

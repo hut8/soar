@@ -2,10 +2,16 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { FixFeed } from '$lib/services/FixFeed';
 
+interface ConnectionSources {
+	ogn: boolean;
+	adsb: boolean;
+}
+
 interface WebSocketStatus {
 	connected: boolean;
 	reconnecting: boolean;
 	error: string | null;
+	connectionSources: ConnectionSources;
 }
 
 interface DebugStatus {
@@ -18,7 +24,11 @@ interface DebugStatus {
 const initialWebSocketStatus: WebSocketStatus = {
 	connected: false,
 	reconnecting: false,
-	error: null
+	error: null,
+	connectionSources: {
+		ogn: false,
+		adsb: false
+	}
 };
 
 const initialDebugStatus: DebugStatus = {
@@ -39,11 +49,12 @@ if (browser) {
 	fixFeed.subscribe((event) => {
 		switch (event.type) {
 			case 'connection_opened':
-				websocketStatus.set({
+				websocketStatus.update((status) => ({
+					...status,
 					connected: true,
 					reconnecting: false,
 					error: null
-				});
+				}));
 				updateDebugStatus();
 				break;
 
@@ -51,8 +62,16 @@ if (browser) {
 				websocketStatus.set({
 					connected: false,
 					reconnecting: false,
-					error: null
+					error: null,
+					connectionSources: { ogn: false, adsb: false }
 				});
+				break;
+
+			case 'connection_status':
+				websocketStatus.update((status) => ({
+					...status,
+					connectionSources: event.status
+				}));
 				break;
 
 			case 'connection_error':
