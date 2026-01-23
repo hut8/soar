@@ -34,9 +34,9 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import durationPlugin from 'dayjs/plugin/duration';
 	import {
-		getAircraftTypeOgnDescription,
+		getAircraftCategoryDescription,
 		formatAircraftAddress,
-		getAircraftTypeColor,
+		getAircraftCategoryColor,
 		getFlagPath,
 		getCountryName
 	} from '$lib/formatters';
@@ -1477,11 +1477,13 @@
 							<span class="font-semibold">{aircraft.aircraftModel}</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if aircraft.aircraftTypeOgn}
+						{#if aircraft.aircraftCategory}
 							<span
-								class="chip {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs font-semibold"
+								class="chip {getAircraftCategoryColor(
+									aircraft.aircraftCategory
+								)} text-xs font-semibold"
 							>
-								{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
+								{getAircraftCategoryDescription(aircraft.aircraftCategory)}
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
@@ -1871,13 +1873,15 @@
 						<div class="font-semibold">{aircraft.aircraftModel}</div>
 					</div>
 				{/if}
-				{#if aircraft.aircraftTypeOgn}
+				{#if aircraft.aircraftCategory}
 					<div>
-						<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
+						<div class="text-surface-600-300-token text-sm">Aircraft Category</div>
 						<span
-							class="chip {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-sm font-semibold"
+							class="chip {getAircraftCategoryColor(
+								aircraft.aircraftCategory
+							)} text-sm font-semibold"
 						>
-							{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
+							{getAircraftCategoryDescription(aircraft.aircraftCategory)}
 						</span>
 					</div>
 				{/if}

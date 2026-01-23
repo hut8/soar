@@ -2,8 +2,8 @@
 	import { Radio, Plane, Antenna, Check, Activity, Map, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import {
-		getAircraftTypeOgnDescription,
-		getAircraftTypeColor,
+		getAircraftCategoryDescription,
+		getAircraftCategoryColor,
 		getAircraftTitle,
 		formatAircraftAddress,
 		getFlagPath
@@ -115,9 +115,9 @@
 					OGN DB
 				</span>
 			{/if}
-			{#if aircraft.aircraftTypeOgn}
-				<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
-					{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
+			{#if aircraft.aircraftCategory}
+				<span class="badge {getAircraftCategoryColor(aircraft.aircraftCategory)} text-xs">
+					{getAircraftCategoryDescription(aircraft.aircraftCategory)}
 				</span>
 			{/if}
 		</div>

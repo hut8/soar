@@ -259,7 +259,7 @@
 					frequencyMhz: null,
 					pilotName: null,
 					homeBaseAirportIdent: null,
-					aircraftTypeOgn: null,
+					aircraftCategory: null,
 					lastFixAt: null,
 					trackerDeviceType: null,
 					icaoModelCode: null,

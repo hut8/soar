@@ -129,58 +129,130 @@ export function getStatusCodeDescription(statusCode: string | undefined): string
 }
 
 /**
- * Get human-readable description for OGN aircraft type codes
+ * Get human-readable description for aircraft category codes
+ * Handles both PascalCase (from TypeScript) and snake_case (legacy) formats
  */
-export function getAircraftTypeOgnDescription(aircraftType: string | undefined | null): string {
-	if (!aircraftType) return 'Unknown';
+export function getAircraftCategoryDescription(category: string | undefined | null): string {
+	if (!category) return 'Unknown';
 
-	const typeMap: Record<string, string> = {
-		reserved: 'Reserved',
+	const categoryMap: Record<string, string> = {
+		// PascalCase (from TypeScript/Rust)
+		Landplane: 'Fixed Wing',
+		Helicopter: 'Helicopter',
+		Balloon: 'Balloon',
+		Amphibian: 'Amphibian',
+		Gyroplane: 'Gyroplane',
+		Drone: 'Drone/UAV',
+		PoweredParachute: 'Powered Parachute',
+		Rotorcraft: 'Rotorcraft',
+		Seaplane: 'Seaplane',
+		Tiltrotor: 'Tiltrotor',
+		Vtol: 'VTOL',
+		Electric: 'Electric',
+		Glider: 'Glider',
+		TowTug: 'Tow/Tug',
+		Paraglider: 'Paraglider',
+		HangGlider: 'Hang Glider',
+		Airship: 'Airship',
+		SkydiverParachute: 'Skydiver/Parachute',
+		StaticObstacle: 'Static Obstacle',
+		Unknown: 'Unknown',
+		// Legacy snake_case support
+		landplane: 'Fixed Wing',
+		helicopter: 'Helicopter',
+		balloon: 'Balloon',
+		amphibian: 'Amphibian',
+		gyroplane: 'Gyroplane',
+		drone: 'Drone/UAV',
+		powered_parachute: 'Powered Parachute',
+		rotorcraft: 'Rotorcraft',
+		seaplane: 'Seaplane',
+		tiltrotor: 'Tiltrotor',
+		vtol: 'VTOL',
+		electric: 'Electric',
 		glider: 'Glider',
 		tow_tug: 'Tow/Tug',
-		helicopter_gyro: 'Helicopter/Gyro',
-		skydiver_parachute: 'Skydiver/Parachute',
-		drop_plane: 'Drop Plane',
-		hang_glider: 'Hang Glider',
 		paraglider: 'Paraglider',
-		recip_engine: 'Piston',
-		jet_turboprop: 'Jet/Turboprop',
-		unknown: 'Unknown',
-		balloon: 'Balloon',
+		hang_glider: 'Hang Glider',
 		airship: 'Airship',
-		uav: 'UAV',
-		static_obstacle: 'Static Obstacle'
+		skydiver_parachute: 'Skydiver/Parachute',
+		static_obstacle: 'Static Obstacle',
+		unknown: 'Unknown'
 	};
 
-	return typeMap[aircraftType] || aircraftType;
+	return categoryMap[category] || category;
 }
 
 /**
- * Get color class for OGN aircraft type badges
- * Returns a Skeleton UI preset color class for consistent color-coding
+ * @deprecated Use getAircraftCategoryDescription instead
+ * Get human-readable description for OGN aircraft type codes (legacy alias)
  */
-export function getAircraftTypeColor(aircraftType: string | undefined | null): string {
-	if (!aircraftType) return 'preset-filled-surface-500';
+export function getAircraftTypeOgnDescription(aircraftType: string | undefined | null): string {
+	return getAircraftCategoryDescription(aircraftType);
+}
+
+/**
+ * Get color class for aircraft category badges
+ * Returns a Skeleton UI preset color class for consistent color-coding
+ * Handles both PascalCase (from TypeScript) and snake_case (legacy) formats
+ */
+export function getAircraftCategoryColor(category: string | undefined | null): string {
+	if (!category) return 'preset-filled-surface-500';
 
 	const colorMap: Record<string, string> = {
-		glider: 'preset-filled-primary-500', // Blue for gliders
-		tow_tug: 'preset-filled-error-500', // Red for tow tugs
-		helicopter_gyro: 'preset-filled-secondary-500', // Purple for helicopters
-		skydiver_parachute: 'preset-filled-success-500', // Green for skydivers
-		drop_plane: 'preset-filled-warning-500', // Orange for drop planes
-		hang_glider: 'preset-filled-tertiary-500', // Cyan for hang gliders
-		paraglider: 'preset-filled-tertiary-500', // Cyan for paragliders
-		recip_engine: 'preset-filled-warning-500', // Orange for reciprocating engines
-		jet_turboprop: 'preset-filled-error-500', // Red for jets/turboprops
-		balloon: 'preset-filled-secondary-500', // Purple for balloons
-		airship: 'preset-filled-secondary-500', // Purple for airships
-		uav: 'preset-filled-surface-500', // Gray for UAVs
-		static_obstacle: 'preset-filled-surface-500', // Gray for obstacles
-		unknown: 'preset-filled-surface-500', // Gray for unknown
-		reserved: 'preset-filled-surface-500' // Gray for reserved
+		// PascalCase
+		Glider: 'preset-filled-primary-500', // Blue for gliders
+		TowTug: 'preset-filled-error-500', // Red for tow tugs
+		Helicopter: 'preset-filled-secondary-500', // Purple for helicopters
+		Gyroplane: 'preset-filled-secondary-500', // Purple for gyroplanes
+		SkydiverParachute: 'preset-filled-success-500', // Green for skydivers
+		HangGlider: 'preset-filled-tertiary-500', // Cyan for hang gliders
+		Paraglider: 'preset-filled-tertiary-500', // Cyan for paragliders
+		Landplane: 'preset-filled-warning-500', // Orange for fixed-wing
+		Balloon: 'preset-filled-secondary-500', // Purple for balloons
+		Airship: 'preset-filled-secondary-500', // Purple for airships
+		Drone: 'preset-filled-surface-500', // Gray for drones
+		StaticObstacle: 'preset-filled-surface-500', // Gray for obstacles
+		Unknown: 'preset-filled-surface-500', // Gray for unknown
+		Seaplane: 'preset-filled-primary-500', // Blue for seaplanes
+		Amphibian: 'preset-filled-primary-500', // Blue for amphibians
+		Rotorcraft: 'preset-filled-secondary-500', // Purple for rotorcraft
+		Tiltrotor: 'preset-filled-secondary-500', // Purple for tiltrotor
+		Vtol: 'preset-filled-secondary-500', // Purple for VTOL
+		Electric: 'preset-filled-success-500', // Green for electric
+		PoweredParachute: 'preset-filled-tertiary-500', // Cyan for powered parachutes
+		// Legacy snake_case
+		glider: 'preset-filled-primary-500',
+		tow_tug: 'preset-filled-error-500',
+		helicopter: 'preset-filled-secondary-500',
+		gyroplane: 'preset-filled-secondary-500',
+		skydiver_parachute: 'preset-filled-success-500',
+		hang_glider: 'preset-filled-tertiary-500',
+		paraglider: 'preset-filled-tertiary-500',
+		landplane: 'preset-filled-warning-500',
+		balloon: 'preset-filled-secondary-500',
+		airship: 'preset-filled-secondary-500',
+		drone: 'preset-filled-surface-500',
+		static_obstacle: 'preset-filled-surface-500',
+		unknown: 'preset-filled-surface-500',
+		seaplane: 'preset-filled-primary-500',
+		amphibian: 'preset-filled-primary-500',
+		rotorcraft: 'preset-filled-secondary-500',
+		tiltrotor: 'preset-filled-secondary-500',
+		vtol: 'preset-filled-secondary-500',
+		electric: 'preset-filled-success-500',
+		powered_parachute: 'preset-filled-tertiary-500'
 	};
 
-	return colorMap[aircraftType] || 'preset-filled-surface-500';
+	return colorMap[category] || 'preset-filled-surface-500';
+}
+
+/**
+ * @deprecated Use getAircraftCategoryColor instead
+ * Get color class for OGN aircraft type badges (legacy alias)
+ */
+export function getAircraftTypeColor(aircraftType: string | undefined | null): string {
+	return getAircraftCategoryColor(aircraftType);
 }
 
 /**
@@ -199,13 +271,13 @@ export function formatTransponderCode(transponderCode: number | null | undefined
  * Priority:
  * 1. If both registration and aircraftModel: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
- * 3. If OGN aircraft type is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
+ * 3. If aircraft category is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
  * 4. Otherwise: formatted address (e.g., "FLARM-A0B380")
  */
 export function getAircraftTitle(
 	aircraft: Pick<
 		Aircraft,
-		'registration' | 'aircraftModel' | 'addressType' | 'address' | 'aircraftTypeOgn'
+		'registration' | 'aircraftModel' | 'addressType' | 'address' | 'aircraftCategory'
 	>
 ): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
@@ -221,9 +293,13 @@ export function getAircraftTitle(
 		return aircraft.registration!;
 	}
 
-	// If OGN aircraft type is available (but no registration/model), show type with hex code
-	if (aircraft.aircraftTypeOgn && aircraft.aircraftTypeOgn.trim() !== '') {
-		const typeName = getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn);
+	// If aircraft category is available (but no registration/model), show type with hex code
+	if (
+		aircraft.aircraftCategory &&
+		aircraft.aircraftCategory.trim() !== '' &&
+		aircraft.aircraftCategory !== 'Unknown'
+	) {
+		const typeName = getAircraftCategoryDescription(aircraft.aircraftCategory);
 		const hexCode = aircraft.address.toUpperCase();
 		return `${typeName} (${hexCode})`;
 	}

@@ -3,8 +3,8 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
-		getAircraftTypeOgnDescription,
-		getAircraftTypeColor,
+		getAircraftCategoryDescription,
+		getAircraftCategoryColor,
 		getFlagPath
 	} from '$lib/formatters';
 	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
@@ -223,9 +223,9 @@
 								</div>
 							</td>
 							<td>
-								{#if flight.aircraftTypeOgn}
-									<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
-										{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+								{#if flight.aircraftCategory}
+									<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+										{getAircraftCategoryDescription(flight.aircraftCategory)}
 									</span>
 								{:else}
 									<span class="text-surface-500">—</span>
@@ -421,9 +421,9 @@
 							>
 						{/if}
 					{/if}
-					{#if flight.aircraftTypeOgn}
-						<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
-							{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+					{#if flight.aircraftCategory}
+						<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+							{getAircraftCategoryDescription(flight.aircraftCategory)}
 						</span>
 					{/if}
 					{#if flight.towedByAircraftId}

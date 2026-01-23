@@ -84,7 +84,7 @@ pub async fn get_aircraft_registrations_by_club(
             aircraft_registration.clone().into();
         let mut view = AircraftRegistrationView::from(aircraft_domain);
         view.club_id = Some(club_id);
-        view.aircraft_type_ogn = aircraft.aircraft_type_ogn;
+        view.aircraft_category = aircraft.aircraft_category;
 
         // Get aircraft model if available
         match aircraft_model_repo

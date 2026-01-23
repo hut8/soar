@@ -6,7 +6,8 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::aircraft::{AddressType, Aircraft, AircraftModel, NewAircraft};
-use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
+use crate::aircraft_types::AircraftCategory;
+use crate::ogn_aprs_aircraft::AdsbEmitterCategory;
 use crate::schema::aircraft;
 use chrono::{DateTime, Utc};
 
@@ -16,7 +17,7 @@ pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 /// Fields extracted from packet for device creation/update
 #[derive(Debug, Clone)]
 pub struct AircraftPacketFields {
-    pub aircraft_type: Option<AircraftType>,
+    pub aircraft_category: Option<AircraftCategory>,
     pub aircraft_model: Option<String>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
@@ -88,7 +89,7 @@ impl AircraftRepository {
                     )),
                     aircraft::updated_at.eq(diesel::dsl::now),
                     // NOTE: We do NOT update the following fields because they come from real-time packets:
-                    // - aircraft_type_ogn (from OGN packets)
+                    // - aircraft_category (from OGN packets)
                     // - icao_model_code (from ADSB packets)
                     // - adsb_emitter_category (from ADSB packets)
                     // - tracker_device_type (from tracker packets)
@@ -179,7 +180,6 @@ impl AircraftRepository {
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
-            aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
             icao_model_code: None,
@@ -218,7 +218,7 @@ impl AircraftRepository {
     /// This method is optimized for the high-frequency fix processing path:
     /// - If aircraft doesn't exist, creates it with all available fields from the packet
     /// - If aircraft exists, atomically updates APRS-specific metadata fields:
-    ///   - aircraft_type_ogn, icao_model_code, adsb_emitter_category, tracker_device_type, registration
+    ///   - aircraft_category, icao_model_code, adsb_emitter_category, tracker_device_type, registration
     /// - Always returns the aircraft in one atomic operation
     ///
     /// Note: latitude, longitude, and last_fix_at are updated in fixes_repo.insert()
@@ -262,7 +262,6 @@ impl AircraftRepository {
                 frequency_mhz: None,
                 pilot_name: None,
                 home_base_airport_ident: None,
-                aircraft_type_ogn: packet_fields.aircraft_type,
                 last_fix_at: None, // Updated in fixes_repo.insert()
                 club_id: None,
                 icao_model_code: packet_fields.icao_model_code.clone(),
@@ -272,7 +271,7 @@ impl AircraftRepository {
                 latitude: None,
                 longitude: None,
                 owner_operator: None,
-                aircraft_category: None,
+                aircraft_category: packet_fields.aircraft_category,
                 engine_count: None,
                 engine_type: None,
                 faa_pia: None,
@@ -302,7 +301,7 @@ impl AircraftRepository {
                 .on_conflict((aircraft::address_type, aircraft::address))
                 .do_update()
                 .set((
-                    aircraft::aircraft_type_ogn.eq(packet_fields.aircraft_type),
+                    aircraft::aircraft_category.eq(packet_fields.aircraft_category),
                     // Only update icao_model_code if current value is NULL (preserve data from authoritative sources)
                     aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(aircraft.icao_model_code, excluded.icao_model_code)")),
                     // Only update adsb_emitter_category if current value is NULL (preserve data from authoritative sources)
@@ -390,35 +389,40 @@ impl AircraftRepository {
             .filter(aircraft::last_fix_at.is_not_null())
             .into_boxed();
 
-        // Apply aircraft type filter if provided
+        // Apply aircraft category filter if provided
         if let Some(types) = aircraft_types
             && !types.is_empty()
         {
-            // Convert string aircraft types to AircraftType enum values
-            let aircraft_type_enums: Vec<crate::ogn_aprs_aircraft::AircraftType> = types
+            // Convert string aircraft types to AircraftCategory enum values
+            let aircraft_category_enums: Vec<AircraftCategory> = types
                 .iter()
                 .filter_map(|t| match t.as_str() {
-                    "glider" => Some(AircraftType::Glider),
-                    "tow_tug" => Some(AircraftType::TowTug),
-                    "helicopter_gyro" => Some(AircraftType::HelicopterGyro),
-                    "skydiver_parachute" => Some(AircraftType::SkydiverParachute),
-                    "drop_plane" => Some(AircraftType::DropPlane),
-                    "hang_glider" => Some(AircraftType::HangGlider),
-                    "paraglider" => Some(AircraftType::Paraglider),
-                    "recip_engine" => Some(AircraftType::RecipEngine),
-                    "jet_turboprop" => Some(AircraftType::JetTurboprop),
-                    "unknown" => Some(AircraftType::Unknown),
-                    "balloon" => Some(AircraftType::Balloon),
-                    "airship" => Some(AircraftType::Airship),
-                    "uav" => Some(AircraftType::Uav),
-                    "static_obstacle" => Some(AircraftType::StaticObstacle),
-                    "reserved" => Some(AircraftType::Reserved),
+                    "glider" => Some(AircraftCategory::Glider),
+                    "tow_tug" => Some(AircraftCategory::TowTug),
+                    "gyroplane" => Some(AircraftCategory::Gyroplane),
+                    "skydiver_parachute" => Some(AircraftCategory::SkydiverParachute),
+                    "hang_glider" => Some(AircraftCategory::HangGlider),
+                    "paraglider" => Some(AircraftCategory::Paraglider),
+                    "landplane" => Some(AircraftCategory::Landplane),
+                    "unknown" => Some(AircraftCategory::Unknown),
+                    "balloon" => Some(AircraftCategory::Balloon),
+                    "airship" => Some(AircraftCategory::Airship),
+                    "drone" => Some(AircraftCategory::Drone),
+                    "static_obstacle" => Some(AircraftCategory::StaticObstacle),
+                    "helicopter" => Some(AircraftCategory::Helicopter),
+                    "amphibian" => Some(AircraftCategory::Amphibian),
+                    "powered_parachute" => Some(AircraftCategory::PoweredParachute),
+                    "rotorcraft" => Some(AircraftCategory::Rotorcraft),
+                    "seaplane" => Some(AircraftCategory::Seaplane),
+                    "tiltrotor" => Some(AircraftCategory::Tiltrotor),
+                    "vtol" => Some(AircraftCategory::Vtol),
+                    "electric" => Some(AircraftCategory::Electric),
                     _ => None,
                 })
                 .collect();
 
-            if !aircraft_type_enums.is_empty() {
-                query = query.filter(aircraft::aircraft_type_ogn.eq_any(aircraft_type_enums));
+            if !aircraft_category_enums.is_empty() {
+                query = query.filter(aircraft::aircraft_category.eq_any(aircraft_category_enums));
             }
         }
 

@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::aircraft::{AddressType, address_type_from_str, address_type_to_str};
+use crate::aircraft_types::AircraftCategory;
 use crate::flights::{Flight, FlightState};
-use crate::ogn_aprs_aircraft::AircraftType;
 
 /// Helper struct for airport information when constructing FlightView
 #[derive(Debug, Clone, Default)]
@@ -26,7 +26,7 @@ pub struct LocationInfo {
 pub struct AircraftInfo {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
-    pub aircraft_type_ogn: Option<AircraftType>,
+    pub aircraft_category: Option<AircraftCategory>,
     pub country_code: Option<String>,
 }
 
@@ -83,7 +83,7 @@ pub struct FlightView {
     // Aircraft information
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
-    pub aircraft_type_ogn: Option<AircraftType>,
+    pub aircraft_category: Option<AircraftCategory>,
     pub aircraft_country_code: Option<String>,
 
     // Latest altitude information (for active flights)
@@ -184,7 +184,7 @@ impl FlightView {
             updated_at: flight.updated_at,
             aircraft_model: device_info.aircraft_model,
             registration: device_info.registration,
-            aircraft_type_ogn: device_info.aircraft_type_ogn,
+            aircraft_category: device_info.aircraft_category,
             aircraft_country_code: device_info.country_code,
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,

@@ -29,7 +29,7 @@
 		DataResponse,
 		DataListResponse
 	} from '$lib/types';
-	import { getStatusCodeDescription, getAircraftTypeOgnDescription } from '$lib/formatters';
+	import { getStatusCodeDescription, getAircraftCategoryDescription } from '$lib/formatters';
 
 	const logger = getLogger(['soar', 'ClubDetailsPage']);
 
@@ -355,7 +355,7 @@
 							<div class="card p-4">
 								<div class="mb-3 flex flex-wrap items-center gap-2">
 									<h3 class="h3 font-semibold">{plane.registration}</h3>
-									{#if plane.aircraftTypeOgn === 'tow_tug'}
+									{#if plane.aircraftCategory === 'TowTug'}
 										<span
 											class="btn preset-filled-warning-500 btn-sm"
 											title="This aircraft is a tow plane"
@@ -442,13 +442,11 @@
 											>
 										</div>
 									{/if}
-									{#if plane.aircraftTypeOgn}
+									{#if plane.aircraftCategory}
 										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium"
-												>Aircraft Type (OGN):</span
-											>
+											<span class="text-surface-600-300-token font-medium">Aircraft Category:</span>
 											<span class="ml-2"
-												>{getAircraftTypeOgnDescription(plane.aircraftTypeOgn)}</span
+												>{getAircraftCategoryDescription(plane.aircraftCategory)}</span
 											>
 										</div>
 									{/if}

@@ -6,8 +6,8 @@ mod tests {
 
     use crate::actions::club_tow_fees::TowFeeView;
     use crate::actions::views::{Aircraft, AircraftView, ClubView};
+    use crate::aircraft_types::AircraftCategory;
     use crate::fixes::Fix;
-    use crate::ogn_aprs_aircraft::AircraftType;
 
     #[test]
     fn export_types() {
@@ -15,7 +15,7 @@ mod tests {
         Fix::export().expect("Failed to export Fix type");
         AircraftView::export().expect("Failed to export AircraftView type");
         Aircraft::export().expect("Failed to export Aircraft type");
-        AircraftType::export().expect("Failed to export AircraftType type");
+        AircraftCategory::export().expect("Failed to export AircraftCategory type");
         ClubView::export().expect("Failed to export ClubView type");
         TowFeeView::export().expect("Failed to export TowFeeView type");
     }
