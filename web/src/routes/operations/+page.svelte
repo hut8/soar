@@ -4,7 +4,17 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { page } from '$app/stores';
-	import { Settings, ListChecks, MapPlus, MapMinus, Bug } from '@lucide/svelte';
+	import {
+		Settings,
+		ListChecks,
+		MapPlus,
+		MapMinus,
+		Bug,
+		Satellite,
+		Map,
+		Mountain,
+		Layers
+	} from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
@@ -37,9 +47,16 @@
 		saveMapType,
 		loadMapType,
 		CONUS_CENTER,
-		MAP_TYPE_LABELS,
 		type MapType
 	} from '$lib/utils/mapStatePersistence';
+
+	// Map type icons mapping
+	const MAP_TYPE_ICONS = {
+		satellite: Satellite,
+		roadmap: Map,
+		terrain: Mountain,
+		hybrid: Layers
+	} as const;
 
 	const logger = getLogger(['soar', 'Operations']);
 
@@ -258,8 +275,10 @@
 		if (mapContainer) {
 			if (hideLabels) {
 				mapContainer.classList.add('hide-aircraft-labels');
+				mapContainer.classList.add('hide-receiver-labels');
 			} else {
 				mapContainer.classList.remove('hide-aircraft-labels');
+				mapContainer.classList.remove('hide-receiver-labels');
 			}
 		}
 	});
@@ -1048,17 +1067,18 @@
 		<!-- Map Type Dropdown -->
 		<div class="map-type-dropdown-container relative">
 			<button class="location-btn" onclick={toggleMapTypeDropdown} title="Change Map Type">
-				<span class="text-sm font-medium">{MAP_TYPE_LABELS[mapType]}</span>
+				<svelte:component this={MAP_TYPE_ICONS[mapType]} size={20} />
 			</button>
 			{#if showMapTypeDropdown}
 				<div class="map-type-dropdown">
-					{#each Object.entries(MAP_TYPE_LABELS) as [type, label] (type)}
+					{#each Object.entries(MAP_TYPE_ICONS) as [type, Icon] (type)}
 						<button
 							class="map-type-option"
 							class:selected={mapType === type}
 							onclick={() => setMapType(type as MapType)}
 						>
-							{label}
+							<svelte:component this={Icon} size={16} />
+							<span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
 						</button>
 					{/each}
 				</div>
@@ -1380,8 +1400,9 @@
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
-		opacity: 0;
-		visibility: hidden;
+		/* Labels visible by default when zoomed in */
+		opacity: 1;
+		visibility: visible;
 		transition:
 			opacity 0.2s ease-in-out,
 			visibility 0.2s ease-in-out;
@@ -1395,9 +1416,16 @@
 		}
 	}
 
-	:global(.receiver-marker:hover .receiver-label) {
-		opacity: 1;
-		visibility: visible;
+	/* Hide receiver labels when zoomed out (same threshold as aircraft labels) */
+	:global(.hide-receiver-labels .receiver-label) {
+		opacity: 0 !important;
+		visibility: hidden !important;
+	}
+
+	/* Still show on hover even when zoomed out */
+	:global(.hide-receiver-labels .receiver-marker:hover .receiver-label) {
+		opacity: 1 !important;
+		visibility: visible !important;
 	}
 
 	/* Debug button active state */
@@ -1473,7 +1501,9 @@
 	}
 
 	.map-type-option {
-		display: block;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		width: 100%;
 		padding: 0.625rem 0.875rem;
 		text-align: left;
