@@ -5943,7 +5943,6 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
- "tracing-log",
  "tracing-opentelemetry",
  "tracing-subscriber",
  "ts-rs",

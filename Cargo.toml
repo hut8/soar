@@ -80,8 +80,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 ts-rs = { version = "11.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl", "format"] }
 tracing = { version = "0.1" }
-tracing-log = "0.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
 uuid = { version = "1.19", features = ["v4", "v7", "serde"] }
 zstd = "0.13"
 axum-tungstenite = "0.3.0"

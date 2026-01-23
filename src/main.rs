@@ -841,9 +841,8 @@ async fn main() -> Result<()> {
             .map(opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new)
     };
 
-    // Bridge `log` crate events to tracing so they respect our EnvFilter
-    // This makes `pprof=warn` filter work for the pprof crate's INFO logs
-    tracing_log::LogTracer::init().expect("Failed to initialize LogTracer");
+    // Note: tracing-subscriber's "tracing-log" feature automatically bridges
+    // `log` crate events to tracing, so `pprof=warn` filter works for pprof's INFO logs
 
     let registry = tracing_subscriber::registry();
 
