@@ -914,11 +914,19 @@ pub async fn handle_run(
                 }
                 soar::protocol::IngestSource::Beast => {
                     if let Some(beast_tx) = &beast_intake_tx_for_router {
-                        // Beast messages are binary (timestamp + Beast frame)
+                        // Reconstruct expected format: 8-byte timestamp + Beast frame
+                        // The envelope stores timestamp separately, but process_beast_message
+                        // expects the old format with timestamp prefix
+                        let mut message_with_timestamp =
+                            Vec::with_capacity(8 + envelope.data.len());
+                        message_with_timestamp
+                            .extend_from_slice(&envelope.timestamp_micros.to_be_bytes());
+                        message_with_timestamp.extend_from_slice(&envelope.data);
+
                         if beast_tx.is_full() {
                             metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").increment(1);
                         }
-                        if let Err(e) = beast_tx.send_async(envelope.data).await {
+                        if let Err(e) = beast_tx.send_async(message_with_timestamp).await {
                             error!("Failed to send Beast message to intake queue: {}", e);
                             metrics::counter!("socket.router.beast_send_error_total").increment(1);
                         } else {
@@ -928,12 +936,20 @@ pub async fn handle_run(
                 }
                 soar::protocol::IngestSource::Sbs => {
                     if let Some(sbs_tx) = &sbs_intake_tx_for_router {
-                        // SBS messages are text CSV (timestamp + CSV line bytes)
+                        // Reconstruct expected format: 8-byte timestamp + CSV line bytes
+                        // The envelope stores timestamp separately, but process_sbs_message
+                        // expects the old format with timestamp prefix
+                        let mut message_with_timestamp =
+                            Vec::with_capacity(8 + envelope.data.len());
+                        message_with_timestamp
+                            .extend_from_slice(&envelope.timestamp_micros.to_be_bytes());
+                        message_with_timestamp.extend_from_slice(&envelope.data);
+
                         if sbs_tx.is_full() {
                             metrics::counter!("queue.send_blocked_total", "queue" => "sbs_intake")
                                 .increment(1);
                         }
-                        if let Err(e) = sbs_tx.send_async(envelope.data).await {
+                        if let Err(e) = sbs_tx.send_async(message_with_timestamp).await {
                             error!("Failed to send SBS message to intake queue: {}", e);
                             metrics::counter!("socket.router.sbs_send_error_total").increment(1);
                         } else {
