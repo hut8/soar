@@ -576,15 +576,16 @@
 			zoom: loadedState.state.zoom
 		});
 
-		// Set projection after map is created
-		map.setProjection({ type: currentProjection });
-
 		// Add navigation controls
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 		// Handle map load
 		map.on('load', () => {
 			mapLoading = false;
+
+			// Set projection after style is loaded
+			map!.setProjection({ type: currentProjection });
+
 			logger.info('MapLibre map loaded with {projection} projection', {
 				projection: currentProjection
 			});
