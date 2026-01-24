@@ -1,0 +1,837 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import maplibregl from 'maplibre-gl';
+	import 'maplibre-gl/dist/maplibre-gl.css';
+	import { page } from '$app/stores';
+	import { Settings, ListChecks, LocateFixed, Globe, Map, Satellite, Loader } from '@lucide/svelte';
+	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
+	import SettingsModal from '$lib/components/SettingsModal.svelte';
+	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
+	import AirportModal from '$lib/components/AirportModal.svelte';
+	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
+	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
+	import { FixFeed } from '$lib/services/FixFeed';
+	import type { Aircraft, Airport, Airspace, Fix } from '$lib/types';
+	import { toaster } from '$lib/toaster';
+	import { MAPTILER_API_KEY, isStaging } from '$lib/config';
+	import { getLogger } from '$lib/logging';
+	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
+	import { serverCall } from '$lib/api/server';
+	import { altitudeToColor } from '$lib/utils/mapColors';
+	import {
+		AirspaceLayerManager,
+		AirportLayerManager,
+		ReceiverLayerManager
+	} from '$lib/services/maplibre';
+
+	const logger = getLogger(['soar', 'Live']);
+
+	// Map projection type
+	type MapProjection = 'globe' | 'mercator';
+
+	// Map style type
+	type MapStyle = 'satellite' | 'streets' | 'terrain';
+
+	// Aircraft rendering limit to prevent performance issues
+	const MAX_AIRCRAFT_DISPLAY = 200;
+
+	// Map state
+	let mapContainer: HTMLDivElement;
+	let map: maplibregl.Map | null = null;
+	let isLocating = $state(false);
+	let userMarker: maplibregl.Marker | null = null;
+
+	// Projection and style state
+	let currentProjection: MapProjection = $state('globe');
+	let currentStyle: MapStyle = $state('satellite');
+
+	// Debug state
+	let debugSquareMiles = $state(0);
+	let debugAircraftCount = $state(0);
+	let debugZoomLevel = $state(0);
+	let showDebugPanel = $state(false);
+
+	// Modal state
+	let showSettingsModal = $state(false);
+	let showWatchlistModal = $state(false);
+	let showAircraftStatusModal = $state(false);
+	let selectedAircraft: Aircraft | null = $state(null);
+	let showAirportModal = $state(false);
+	let selectedAirport: Airport | null = $state(null);
+	let showAirspaceModal = $state(false);
+	let selectedAirspace: Airspace | null = $state(null);
+
+	// Settings state (received from SettingsModal via callback)
+	let currentSettings = $state({
+		showCompassRose: true,
+		showAirportMarkers: true,
+		showReceiverMarkers: true,
+		showAirspaceMarkers: true,
+		showRunwayOverlays: false
+	});
+
+	// Loading states
+	let mapLoading = $state(true);
+	let aircraftLoading = $state(false);
+
+	// Debounce timers
+	let viewportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Aircraft data - using SvelteMap for reactivity (SvelteMap is already reactive)
+	const aircraftMap = new SvelteMap<string, { aircraft: Aircraft; fix: Fix }>();
+
+	// Services
+	const fixFeed = FixFeed.getInstance();
+	const aircraftRegistry = AircraftRegistry.getInstance();
+
+	// Layer managers
+	const airspaceLayerManager = new AirspaceLayerManager({
+		onAirspaceClick: (airspace) => {
+			selectedAirspace = airspace;
+			showAirspaceModal = true;
+		}
+	});
+
+	const airportLayerManager = new AirportLayerManager({
+		onAirportClick: (airport) => {
+			selectedAirport = airport;
+			showAirportModal = true;
+		}
+	});
+
+	const receiverLayerManager = new ReceiverLayerManager();
+
+	// Get MapTiler style URL
+	function getStyleUrl(style: MapStyle): string {
+		if (!MAPTILER_API_KEY) {
+			// Fallback to OSM if no API key
+			return '';
+		}
+		switch (style) {
+			case 'satellite':
+				return `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_API_KEY}`;
+			case 'streets':
+				return `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`;
+			case 'terrain':
+				return `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${MAPTILER_API_KEY}`;
+		}
+	}
+
+	// Get fallback style for when no API key is available
+	function getFallbackStyle(): maplibregl.StyleSpecification {
+		return {
+			version: 8,
+			sources: {
+				osm: {
+					type: 'raster',
+					tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+					tileSize: 256,
+					attribution:
+						'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+				}
+			},
+			layers: [
+				{
+					id: 'osm',
+					type: 'raster',
+					source: 'osm',
+					minzoom: 0,
+					maxzoom: 19
+				}
+			]
+		};
+	}
+
+	// Calculate viewport area in square miles
+	function calculateViewportArea(): number {
+		if (!map) return 0;
+
+		const bounds = map.getBounds();
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Calculate area using spherical approximation
+		const latDiff = Math.abs(ne.lat - sw.lat);
+		const lngDiff = Math.abs(ne.lng - sw.lng);
+		const avgLat = (ne.lat + sw.lat) / 2;
+
+		// Approximate miles per degree
+		const milesPerDegLat = 69.0;
+		const milesPerDegLng = 69.0 * Math.cos((avgLat * Math.PI) / 180);
+
+		const heightMiles = latDiff * milesPerDegLat;
+		const widthMiles = lngDiff * milesPerDegLng;
+
+		return heightMiles * widthMiles;
+	}
+
+	// Convert aircraft to GeoJSON feature
+	function aircraftToFeature(aircraft: Aircraft, fix: Fix): GeoJSON.Feature<GeoJSON.Point> {
+		return {
+			type: 'Feature',
+			geometry: {
+				type: 'Point',
+				coordinates: [fix.longitude, fix.latitude]
+			},
+			properties: {
+				id: aircraft.id,
+				registration: aircraft.registration || aircraft.address,
+				altitude: fix.altitudeMslFeet || 0,
+				track: fix.trackDegrees || 0,
+				isActive: fix.active,
+				timestamp: fix.timestamp,
+				aircraftModel: aircraft.aircraftModel || '',
+				color: altitudeToColor(fix.altitudeMslFeet || 0)
+			}
+		};
+	}
+
+	// Create aircraft GeoJSON FeatureCollection
+	function createAircraftGeoJson(): GeoJSON.FeatureCollection<GeoJSON.Point> {
+		const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+
+		for (const [, data] of aircraftMap) {
+			features.push(aircraftToFeature(data.aircraft, data.fix));
+		}
+
+		return {
+			type: 'FeatureCollection',
+			features
+		};
+	}
+
+	// Update aircraft source
+	function updateAircraftSource() {
+		if (!map) return;
+
+		const source = map.getSource('aircraft') as maplibregl.GeoJSONSource;
+		if (source) {
+			source.setData(createAircraftGeoJson());
+			debugAircraftCount = aircraftMap.size;
+		}
+	}
+
+	// Add aircraft layers to map
+	function addAircraftLayers() {
+		if (!map) return;
+
+		// Add aircraft source
+		map.addSource('aircraft', {
+			type: 'geojson',
+			data: createAircraftGeoJson(),
+			cluster: true,
+			clusterMaxZoom: 10,
+			clusterRadius: 50
+		});
+
+		// Add cluster circles
+		map.addLayer({
+			id: 'aircraft-clusters',
+			type: 'circle',
+			source: 'aircraft',
+			filter: ['has', 'point_count'],
+			paint: {
+				'circle-color': [
+					'step',
+					['get', 'point_count'],
+					'#3b82f6', // blue for small clusters
+					10,
+					'#f59e0b', // amber for medium
+					50,
+					'#ef4444' // red for large
+				],
+				'circle-radius': [
+					'step',
+					['get', 'point_count'],
+					20, // radius for small clusters
+					10,
+					25,
+					50,
+					35
+				],
+				'circle-stroke-width': 2,
+				'circle-stroke-color': '#ffffff'
+			}
+		});
+
+		// Add cluster count labels
+		map.addLayer({
+			id: 'aircraft-cluster-count',
+			type: 'symbol',
+			source: 'aircraft',
+			filter: ['has', 'point_count'],
+			layout: {
+				'text-field': '{point_count_abbreviated}',
+				'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+				'text-size': 12
+			},
+			paint: {
+				'text-color': '#ffffff'
+			}
+		});
+
+		// Add unclustered aircraft markers
+		map.addLayer({
+			id: 'aircraft-markers',
+			type: 'circle',
+			source: 'aircraft',
+			filter: ['!', ['has', 'point_count']],
+			paint: {
+				'circle-color': ['get', 'color'],
+				'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 8, 6, 12, 10],
+				'circle-stroke-width': 2,
+				'circle-stroke-color': '#ffffff'
+			}
+		});
+
+		// Add aircraft labels (hidden at low zoom)
+		map.addLayer({
+			id: 'aircraft-labels',
+			type: 'symbol',
+			source: 'aircraft',
+			filter: ['!', ['has', 'point_count']],
+			minzoom: 8,
+			layout: {
+				'text-field': ['get', 'registration'],
+				'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+				'text-size': 11,
+				'text-offset': [0, 1.5],
+				'text-anchor': 'top'
+			},
+			paint: {
+				'text-color': '#374151',
+				'text-halo-color': '#ffffff',
+				'text-halo-width': 1
+			}
+		});
+
+		// Add click handler for aircraft markers
+		map.on('click', 'aircraft-markers', async (e) => {
+			if (!e.features || e.features.length === 0) return;
+
+			const feature = e.features[0];
+			const aircraftId = feature.properties?.id;
+
+			if (aircraftId) {
+				const data = aircraftMap.get(aircraftId);
+				if (data) {
+					selectedAircraft = data.aircraft;
+					showAircraftStatusModal = true;
+				}
+			}
+		});
+
+		// Add click handler for clusters
+		map.on('click', 'aircraft-clusters', async (e) => {
+			if (!e.features || e.features.length === 0) return;
+
+			const feature = e.features[0];
+			const clusterId = feature.properties?.cluster_id;
+			const source = map!.getSource('aircraft') as maplibregl.GeoJSONSource;
+
+			// Get cluster expansion zoom
+			const zoom = await source.getClusterExpansionZoom(clusterId);
+			const geometry = feature.geometry as GeoJSON.Point;
+
+			map!.easeTo({
+				center: geometry.coordinates as [number, number],
+				zoom: zoom
+			});
+		});
+
+		// Change cursor on hover
+		map.on('mouseenter', 'aircraft-markers', () => {
+			if (map) map.getCanvas().style.cursor = 'pointer';
+		});
+		map.on('mouseleave', 'aircraft-markers', () => {
+			if (map) map.getCanvas().style.cursor = '';
+		});
+		map.on('mouseenter', 'aircraft-clusters', () => {
+			if (map) map.getCanvas().style.cursor = 'pointer';
+		});
+		map.on('mouseleave', 'aircraft-clusters', () => {
+			if (map) map.getCanvas().style.cursor = '';
+		});
+	}
+
+	// Fetch aircraft in current viewport
+	async function fetchAircraftInViewport() {
+		if (!map) return;
+
+		aircraftLoading = true;
+
+		try {
+			const bounds = map.getBounds();
+			const params = new URLSearchParams({
+				north: bounds.getNorth().toFixed(6),
+				south: bounds.getSouth().toFixed(6),
+				east: bounds.getEast().toFixed(6),
+				west: bounds.getWest().toFixed(6),
+				limit: MAX_AIRCRAFT_DISPLAY.toString()
+			});
+
+			const response = await serverCall<{ data: Aircraft[] }>(`/aircraft?${params.toString()}`);
+			const aircraft = response.data || [];
+
+			// Update aircraft map with fetched data
+			aircraftMap.clear();
+			for (const ac of aircraft) {
+				if (ac.latitude && ac.longitude) {
+					const fix: Fix = {
+						id: ac.id,
+						aircraftId: ac.id,
+						latitude: ac.latitude,
+						longitude: ac.longitude,
+						altitudeMslFeet: null,
+						altitudeAglFeet: null,
+						trackDegrees: null,
+						groundSpeedKnots: null,
+						climbFpm: null,
+						turnRateRot: null,
+						timestamp: ac.lastFixAt || new Date().toISOString(),
+						active: true,
+						source: 'api',
+						receivedAt: new Date().toISOString(),
+						altitudeAglValid: false,
+						rawMessageId: '',
+						flightId: null,
+						receiverId: null,
+						flightNumber: null,
+						squawk: null,
+						sourceMetadata: null,
+						timeGapSeconds: null
+					};
+					aircraftMap.set(ac.id, { aircraft: ac, fix });
+				}
+			}
+
+			updateAircraftSource();
+			logger.debug('Fetched {count} aircraft in viewport', { count: aircraft.length });
+		} catch (err) {
+			logger.error('Failed to fetch aircraft: {error}', { error: err });
+			toaster.error({ title: 'Failed to load aircraft' });
+		} finally {
+			aircraftLoading = false;
+		}
+	}
+
+	// Handle viewport change
+	function handleViewportChange() {
+		if (viewportDebounceTimer) {
+			clearTimeout(viewportDebounceTimer);
+		}
+
+		viewportDebounceTimer = setTimeout(() => {
+			const viewportArea = calculateViewportArea();
+			debugSquareMiles = viewportArea;
+			debugZoomLevel = map?.getZoom() || 0;
+
+			// Save map state
+			if (map) {
+				const center = map.getCenter();
+				saveMapState({ lat: center.lat, lng: center.lng }, map.getZoom());
+			}
+
+			// Update layer managers
+			airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
+			airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
+			receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
+
+			fetchAircraftInViewport();
+		}, 1000);
+	}
+
+	// Set map projection
+	function setProjection(projection: MapProjection) {
+		if (!map) return;
+		currentProjection = projection;
+		map.setProjection({ type: projection });
+	}
+
+	// Set map style
+	async function setStyle(style: MapStyle) {
+		if (!map) return;
+
+		currentStyle = style;
+		const styleUrl = getStyleUrl(style);
+
+		if (styleUrl) {
+			// Clear layer managers before style change (they need to re-add layers)
+			airspaceLayerManager.clear();
+			airportLayerManager.clear();
+			receiverLayerManager.clear();
+
+			map.setStyle(styleUrl);
+			// Re-add layers after style change
+			map.once('style.load', () => {
+				map!.setProjection({ type: currentProjection });
+				addAircraftLayers();
+
+				// Re-initialize layer managers
+				airspaceLayerManager.setMap(map!);
+				airportLayerManager.setMap(map!);
+				receiverLayerManager.setMap(map!);
+
+				const viewportArea = calculateViewportArea();
+				airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
+				airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
+				receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
+
+				fetchAircraftInViewport();
+			});
+		}
+	}
+
+	// Handle user location request
+	async function handleLocationRequest() {
+		if (!map || isLocating) return;
+
+		isLocating = true;
+
+		try {
+			const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+				navigator.geolocation.getCurrentPosition(resolve, reject, {
+					enableHighAccuracy: true,
+					timeout: 10000
+				});
+			});
+
+			const { latitude, longitude } = position.coords;
+
+			// Add or update user marker
+			if (userMarker) {
+				userMarker.setLngLat([longitude, latitude]);
+			} else {
+				const el = document.createElement('div');
+				el.className = 'user-location-marker';
+				el.innerHTML = `
+					<div class="pulse"></div>
+					<div class="dot"></div>
+				`;
+				userMarker = new maplibregl.Marker({ element: el })
+					.setLngLat([longitude, latitude])
+					.addTo(map);
+			}
+
+			// Fly to user location
+			map.flyTo({
+				center: [longitude, latitude],
+				zoom: 10,
+				duration: 2000
+			});
+
+			logger.debug('User location: {lat}, {lng}', { lat: latitude, lng: longitude });
+		} catch (err) {
+			logger.error('Failed to get location: {error}', { error: err });
+			toaster.error({ title: 'Failed to get your location' });
+		} finally {
+			isLocating = false;
+		}
+	}
+
+	// Handle settings changes from SettingsModal
+	function handleSettingsChange(newSettings: typeof currentSettings) {
+		currentSettings = { ...newSettings };
+
+		// Update layer managers with new settings
+		if (map) {
+			const viewportArea = calculateViewportArea();
+			airspaceLayerManager.checkAndUpdate(viewportArea, newSettings.showAirspaceMarkers);
+			airportLayerManager.checkAndUpdate(viewportArea, newSettings.showAirportMarkers);
+			receiverLayerManager.checkAndUpdate(viewportArea, newSettings.showReceiverMarkers);
+		}
+	}
+
+	// Subscribe to aircraft registry updates
+	function subscribeToAircraftUpdates() {
+		aircraftRegistry.subscribe((event) => {
+			if (event.type === 'fix_received' && event.fix) {
+				const existing = aircraftMap.get(event.fix.aircraftId);
+				if (existing) {
+					aircraftMap.set(event.fix.aircraftId, {
+						aircraft: existing.aircraft,
+						fix: event.fix
+					});
+					updateAircraftSource();
+				}
+			}
+		});
+	}
+
+	onMount(() => {
+		// Load initial map state
+		const urlParams = new URLSearchParams($page.url.search);
+		const loadedState = loadMapState(urlParams);
+
+		// Determine initial style
+		const styleUrl = getStyleUrl(currentStyle);
+		const initialStyle = styleUrl ? styleUrl : getFallbackStyle();
+
+		// Initialize map
+		map = new maplibregl.Map({
+			container: mapContainer,
+			style: initialStyle,
+			center: [loadedState.state.center.lng, loadedState.state.center.lat],
+			zoom: loadedState.state.zoom
+		});
+
+		// Set projection after map is created
+		map.setProjection({ type: currentProjection });
+
+		// Add navigation controls
+		map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+		// Handle map load
+		map.on('load', () => {
+			mapLoading = false;
+			logger.info('MapLibre map loaded with {projection} projection', {
+				projection: currentProjection
+			});
+
+			// Add aircraft layers
+			addAircraftLayers();
+
+			// Set up layer managers
+			airspaceLayerManager.setMap(map!);
+			airportLayerManager.setMap(map!);
+			receiverLayerManager.setMap(map!);
+
+			// Fit to bounds if provided in URL
+			if (loadedState.bounds) {
+				map!.fitBounds([
+					[loadedState.bounds.west, loadedState.bounds.south],
+					[loadedState.bounds.east, loadedState.bounds.north]
+				]);
+			}
+
+			// Initial aircraft fetch
+			fetchAircraftInViewport();
+
+			// Initial layer manager updates
+			const initialArea = calculateViewportArea();
+			airspaceLayerManager.checkAndUpdate(initialArea, currentSettings.showAirspaceMarkers);
+			airportLayerManager.checkAndUpdate(initialArea, currentSettings.showAirportMarkers);
+			receiverLayerManager.checkAndUpdate(initialArea, currentSettings.showReceiverMarkers);
+
+			// Start live feed
+			fixFeed.startLiveFixesFeed();
+			subscribeToAircraftUpdates();
+		});
+
+		// Handle viewport changes
+		map.on('moveend', handleViewportChange);
+		map.on('zoomend', handleViewportChange);
+
+		// Cleanup
+		return () => {
+			fixFeed.stopLiveFixesFeed();
+			airspaceLayerManager.dispose();
+			airportLayerManager.dispose();
+			receiverLayerManager.dispose();
+			map?.remove();
+		};
+	});
+</script>
+
+<div class="fixed inset-x-0 top-[42px] bottom-0 flex w-full flex-col">
+	<!-- Map container -->
+	<div bind:this={mapContainer} class="relative flex-1">
+		{#if mapLoading}
+			<div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-900/50">
+				<Loader class="h-8 w-8 animate-spin text-white" />
+			</div>
+		{/if}
+
+		<!-- Controls overlay -->
+		<div class="absolute top-4 left-4 z-10 flex flex-col gap-2">
+			<!-- Location button -->
+			<button
+				onclick={handleLocationRequest}
+				disabled={isLocating}
+				class="btn h-10 w-10 rounded-full preset-filled-surface-500 p-0 shadow-lg"
+				title="Go to my location"
+			>
+				{#if isLocating}
+					<Loader class="h-5 w-5 animate-spin" />
+				{:else}
+					<LocateFixed class="h-5 w-5" />
+				{/if}
+			</button>
+
+			<!-- Watchlist button -->
+			<button
+				onclick={() => (showWatchlistModal = true)}
+				class="btn h-10 w-10 rounded-full preset-filled-surface-500 p-0 shadow-lg"
+				title="Watchlist"
+			>
+				<ListChecks class="h-5 w-5" />
+			</button>
+
+			<!-- Settings button -->
+			<button
+				onclick={() => (showSettingsModal = true)}
+				class="btn h-10 w-10 rounded-full preset-filled-surface-500 p-0 shadow-lg"
+				title="Settings"
+			>
+				<Settings class="h-5 w-5" />
+			</button>
+		</div>
+
+		<!-- Projection and style controls -->
+		<div class="absolute top-4 right-16 z-10 flex flex-col gap-2">
+			<!-- Projection toggle -->
+			<div class="flex rounded-lg bg-surface-800/90 shadow-lg">
+				<button
+					onclick={() => setProjection('globe')}
+					class="btn rounded-r-none px-3 py-2"
+					class:preset-filled-primary-500={currentProjection === 'globe'}
+					class:preset-tonal-surface={currentProjection !== 'globe'}
+					title="Globe view"
+				>
+					<Globe class="h-4 w-4" />
+				</button>
+				<button
+					onclick={() => setProjection('mercator')}
+					class="btn rounded-l-none px-3 py-2"
+					class:preset-filled-primary-500={currentProjection === 'mercator'}
+					class:preset-tonal-surface={currentProjection !== 'mercator'}
+					title="Flat map"
+				>
+					<Map class="h-4 w-4" />
+				</button>
+			</div>
+
+			<!-- Style selector -->
+			<div class="flex rounded-lg bg-surface-800/90 shadow-lg">
+				<button
+					onclick={() => setStyle('satellite')}
+					class="btn rounded-r-none px-3 py-2"
+					class:preset-filled-primary-500={currentStyle === 'satellite'}
+					class:preset-tonal-surface={currentStyle !== 'satellite'}
+					title="Satellite"
+				>
+					<Satellite class="h-4 w-4" />
+				</button>
+				<button
+					onclick={() => setStyle('streets')}
+					class="btn px-3 py-2"
+					class:preset-filled-primary-500={currentStyle === 'streets'}
+					class:preset-tonal-surface={currentStyle !== 'streets'}
+					title="Streets"
+				>
+					<Map class="h-4 w-4" />
+				</button>
+				<button
+					onclick={() => setStyle('terrain')}
+					class="btn rounded-l-none px-3 py-2"
+					class:preset-filled-primary-500={currentStyle === 'terrain'}
+					class:preset-tonal-surface={currentStyle !== 'terrain'}
+					title="Terrain"
+				>
+					<svg
+						class="h-4 w-4"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						<path d="M8 21l4-10 4 10M12 3l8 18H4L12 3z" />
+					</svg>
+				</button>
+			</div>
+		</div>
+
+		<!-- Debug panel (staging only) -->
+		{#if isStaging()}
+			<div class="absolute bottom-4 left-4 z-10">
+				<button
+					onclick={() => (showDebugPanel = !showDebugPanel)}
+					class="btn preset-filled-surface-500 text-xs shadow-lg"
+				>
+					Debug
+				</button>
+				{#if showDebugPanel}
+					<div class="mt-2 rounded-lg bg-surface-800/90 p-3 text-xs text-white shadow-lg">
+						<div>Zoom: {debugZoomLevel.toFixed(1)}</div>
+						<div>Area: {debugSquareMiles.toLocaleString()} sq mi</div>
+						<div>Aircraft: {debugAircraftCount}</div>
+						<div>Projection: {currentProjection}</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Aircraft loading indicator -->
+		{#if aircraftLoading}
+			<div
+				class="absolute right-4 bottom-4 z-10 flex items-center gap-2 rounded-lg bg-surface-800/90 px-3 py-2 text-sm text-white shadow-lg"
+			>
+				<Loader class="h-4 w-4 animate-spin" />
+				Loading aircraft...
+			</div>
+		{/if}
+	</div>
+</div>
+
+<!-- Modals -->
+<WatchlistModal bind:showModal={showWatchlistModal} />
+
+<SettingsModal bind:showModal={showSettingsModal} onSettingsChange={handleSettingsChange} />
+
+{#if selectedAircraft}
+	<AircraftStatusModal bind:showModal={showAircraftStatusModal} bind:selectedAircraft />
+{/if}
+
+{#if selectedAirport}
+	<AirportModal bind:showModal={showAirportModal} bind:selectedAirport />
+{/if}
+
+{#if selectedAirspace}
+	<AirspaceModal bind:showModal={showAirspaceModal} bind:selectedAirspace />
+{/if}
+
+<style>
+	/* User location marker */
+	:global(.user-location-marker) {
+		position: relative;
+		width: 20px;
+		height: 20px;
+	}
+
+	:global(.user-location-marker .dot) {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 12px;
+		height: 12px;
+		background: #3b82f6;
+		border: 2px solid white;
+		border-radius: 50%;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+	}
+
+	:global(.user-location-marker .pulse) {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 40px;
+		height: 40px;
+		background: rgba(59, 130, 246, 0.3);
+		border-radius: 50%;
+		animation: pulse 2s ease-out infinite;
+	}
+
+	@keyframes pulse {
+		0% {
+			transform: translate(-50%, -50%) scale(0.5);
+			opacity: 1;
+		}
+		100% {
+			transform: translate(-50%, -50%) scale(1.5);
+			opacity: 0;
+		}
+	}
+</style>
