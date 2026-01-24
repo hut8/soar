@@ -18,10 +18,6 @@ pub mod sql_types {
     pub struct AircraftType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "aircraft_type_ogn"))]
-    pub struct AircraftTypeOgn;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "airspace_class"))]
     pub struct AirspaceClass;
 
@@ -74,7 +70,6 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
     use super::sql_types::AddressType;
-    use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
     use super::sql_types::AircraftCategory;
     use super::sql_types::EngineType;
@@ -94,7 +89,6 @@ diesel::table! {
         frequency_mhz -> Nullable<Numeric>,
         pilot_name -> Nullable<Text>,
         home_base_airport_ident -> Nullable<Text>,
-        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         last_fix_at -> Nullable<Timestamptz>,
         club_id -> Nullable<Uuid>,
         #[max_length = 4]

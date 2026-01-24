@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::beast::{BeastClient, BeastClientConfig};
+use soar::connection_status::ConnectionStatusPublisher;
 use soar::instance_lock::InstanceLock;
 use soar::sbs::{SbsClient, SbsClientConfig};
 use std::env;
@@ -195,6 +196,98 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let sbs_health_shared = Arc::new(tokio::sync::RwLock::new(
         soar::metrics::BeastIngestHealth::default(),
     ));
+
+    // Create connection status publisher for broadcasting to NATS
+    let status_publisher: Option<Arc<ConnectionStatusPublisher>> = match env::var("NATS_URL") {
+        Ok(nats_url) => match ConnectionStatusPublisher::new(&nats_url).await {
+            Ok(publisher) => {
+                let publisher = Arc::new(publisher);
+                // Start periodic 60-second publishing
+                publisher.clone().start_periodic_publish();
+                info!("Connection status publisher initialized for NATS");
+                Some(publisher)
+            }
+            Err(e) => {
+                warn!("Failed to create connection status publisher: {}", e);
+                None
+            }
+        },
+        Err(_) => {
+            info!("NATS_URL not set, connection status publishing disabled");
+            None
+        }
+    };
+
+    // Spawn connection status monitoring task
+    if let Some(publisher) = status_publisher.clone() {
+        let aprs_health_for_status = aprs_health_shared.clone();
+        let beast_health_for_status = beast_health_shared.clone();
+        let sbs_health_for_status = sbs_health_shared.clone();
+        let ogn_endpoint = if ogn_enabled {
+            Some(format!(
+                "{}:{}",
+                ogn_server.as_ref().unwrap(),
+                ogn_port.unwrap_or(14580)
+            ))
+        } else {
+            None
+        };
+        let beast_endpoints: Vec<String> = beast_servers.clone();
+        let sbs_endpoints: Vec<String> = sbs_servers.clone();
+
+        tokio::spawn(async move {
+            let mut last_ogn_connected = false;
+            let mut last_adsb_connected = false;
+
+            // Check status every second for fast change detection
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                interval.tick().await;
+
+                // Check OGN status
+                let ogn_connected = {
+                    let health = aprs_health_for_status.read().await;
+                    health.aprs_connected
+                };
+
+                // Check ADS-B status (Beast or SBS connected)
+                let beast_connected = {
+                    let health = beast_health_for_status.read().await;
+                    health.beast_connected
+                };
+                let sbs_connected = {
+                    let health = sbs_health_for_status.read().await;
+                    health.beast_connected // SBS uses BeastIngestHealth too
+                };
+                let adsb_connected = beast_connected || sbs_connected;
+
+                // Update OGN status if changed
+                if ogn_connected != last_ogn_connected {
+                    publisher
+                        .set_ogn_status(ogn_connected, ogn_endpoint.clone())
+                        .await;
+                    last_ogn_connected = ogn_connected;
+                }
+
+                // Update ADS-B status if changed
+                if adsb_connected != last_adsb_connected {
+                    let endpoints: Vec<String> = if adsb_connected {
+                        beast_endpoints
+                            .iter()
+                            .chain(sbs_endpoints.iter())
+                            .cloned()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    publisher.set_adsb_status(adsb_connected, endpoints).await;
+                    last_adsb_connected = adsb_connected;
+                }
+            }
+        });
+    }
 
     // Create a single socket client for sending to soar-run
     // The source type is already encoded in each envelope, so we don't need per-source clients

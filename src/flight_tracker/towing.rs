@@ -1,8 +1,8 @@
 use crate::Fix;
 use crate::aircraft_repo::AircraftRepository;
+use crate::aircraft_types::AircraftCategory;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
-use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, sleep};
@@ -208,14 +208,14 @@ async fn find_nearby_gliders(
             None => continue,
         };
 
-        // Check if this is a glider (aircraft_type_ogn is now on aircraft, not fix)
+        // Check if this is a glider (aircraft_category is on aircraft, not fix)
         let is_glider = aircraft_repo
             .get_aircraft_by_id(aircraft_id)
             .await
             .ok()
             .flatten()
-            .and_then(|a| a.aircraft_type_ogn)
-            == Some(AircraftType::Glider);
+            .and_then(|a| a.aircraft_category)
+            == Some(AircraftCategory::Glider);
 
         if !is_glider {
             continue;

@@ -4,15 +4,25 @@ use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, broadcast, watch};
 use tracing::Instrument;
 use tracing::{error, info, warn};
+
+use crate::connection_status::{BrowserConnectionStatus, ConnectionStatus};
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
     match std::env::var("SOAR_ENV") {
         Ok(env) if env == "production" => "aircraft",
         _ => "staging.aircraft",
+    }
+}
+
+/// Get the status topic based on the environment
+fn get_status_topic() -> &'static str {
+    match std::env::var("SOAR_ENV") {
+        Ok(env) if env == "production" => "status.connections",
+        _ => "staging.status.connections",
     }
 }
 
@@ -40,6 +50,9 @@ pub enum WebSocketMessage {
 
     #[serde(rename = "aircraft")]
     Aircraft(Box<Aircraft>),
+
+    #[serde(rename = "connection_status")]
+    ConnectionStatus(BrowserConnectionStatus),
 }
 
 // Subscription management structure (used for both aircraft and area subscriptions)
@@ -54,6 +67,9 @@ struct Subscription {
 pub struct LiveFixService {
     nats_client: Arc<Client>,
     subscriptions: Arc<Mutex<HashMap<String, Subscription>>>,
+    /// Watch channel for connection status updates
+    status_tx: watch::Sender<BrowserConnectionStatus>,
+    status_rx: watch::Receiver<BrowserConnectionStatus>,
 }
 
 impl LiveFixService {
@@ -64,10 +80,67 @@ impl LiveFixService {
             .connect(nats_url)
             .await?;
 
-        Ok(Self {
+        // Create watch channel for connection status
+        let (status_tx, status_rx) = watch::channel(BrowserConnectionStatus::default());
+
+        let service = Self {
             nats_client: Arc::new(nats_client),
             subscriptions: Arc::new(Mutex::new(HashMap::new())),
-        })
+            status_tx,
+            status_rx,
+        };
+
+        // Start status subscription
+        service.start_status_subscription().await;
+
+        Ok(service)
+    }
+
+    /// Subscribe to connection status updates from ingest
+    async fn start_status_subscription(&self) {
+        let topic = get_status_topic();
+        let status_tx = self.status_tx.clone();
+
+        match self.nats_client.subscribe(topic).await {
+            Ok(mut subscriber) => {
+                info!("Subscribed to connection status on {}", topic);
+
+                tokio::spawn(async move {
+                    while let Some(msg) = subscriber.next().await {
+                        match serde_json::from_slice::<ConnectionStatus>(&msg.payload) {
+                            Ok(full_status) => {
+                                let browser_status = BrowserConnectionStatus::from(&full_status);
+                                if status_tx.send(browser_status).is_err() {
+                                    // All receivers dropped, stop the task
+                                    warn!("Status receivers dropped, stopping status subscription");
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to parse connection status message: {}", e);
+                            }
+                        }
+                    }
+                    warn!("Connection status subscription ended");
+                });
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to subscribe to connection status (status updates disabled): {}",
+                    e
+                );
+            }
+        }
+    }
+
+    /// Get a receiver for status updates
+    pub fn status_receiver(&self) -> watch::Receiver<BrowserConnectionStatus> {
+        self.status_rx.clone()
+    }
+
+    /// Get current connection status
+    pub fn current_status(&self) -> BrowserConnectionStatus {
+        self.status_rx.borrow().clone()
     }
 
     // Subscribe to a specific aircraft - creates NATS subscription on-demand

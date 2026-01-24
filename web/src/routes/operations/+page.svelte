@@ -243,31 +243,37 @@
 	}
 
 	// Reactive effects for settings changes
+	// Read reactive settings unconditionally to ensure proper dependency tracking
+	// before checking the non-reactive `map` variable
 	$effect(() => {
+		const showAirports = currentSettings.showAirportMarkers;
 		if (map) {
 			const area = calculateViewportArea();
-			airportMarkerManager.checkAndUpdate(area, currentSettings.showAirportMarkers);
+			airportMarkerManager.checkAndUpdate(area, showAirports);
 		}
 	});
 
 	$effect(() => {
+		const showReceivers = currentSettings.showReceiverMarkers;
 		if (map) {
 			const area = calculateViewportArea();
-			receiverMarkerManager.checkAndUpdate(area, currentSettings.showReceiverMarkers);
+			receiverMarkerManager.checkAndUpdate(area, showReceivers);
 		}
 	});
 
 	$effect(() => {
+		const showAirspaces = currentSettings.showAirspaceMarkers;
 		if (map) {
 			const area = calculateViewportArea();
-			airspaceOverlayManager.checkAndUpdate(area, currentSettings.showAirspaceMarkers);
+			airspaceOverlayManager.checkAndUpdate(area, showAirspaces);
 		}
 	});
 
 	$effect(() => {
+		const showRunways = currentSettings.showRunwayOverlays;
 		if (map) {
 			const area = calculateViewportArea();
-			runwayOverlayManager.checkAndUpdate(area, currentSettings.showRunwayOverlays);
+			runwayOverlayManager.checkAndUpdate(area, showRunways);
 		}
 	});
 

@@ -19,7 +19,7 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
@@ -388,11 +388,13 @@
 												</div>
 											</td>
 											<td>
-												{#if flight.aircraftTypeOgn}
+												{#if flight.aircraftCategory}
 													<span
-														class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs"
+														class="badge {getAircraftCategoryColor(
+															flight.aircraftCategory
+														)} text-xs"
 													>
-														{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+														{getAircraftCategoryDescription(flight.aircraftCategory)}
 													</span>
 												{:else}
 													<span class="text-surface-500">—</span>
@@ -459,9 +461,9 @@
 											</div>
 										{/if}
 									</div>
-									{#if flight.aircraftTypeOgn}
-										<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
-											{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+									{#if flight.aircraftCategory}
+										<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+											{getAircraftCategoryDescription(flight.aircraftCategory)}
 										</span>
 									{/if}
 								</div>
@@ -583,9 +585,11 @@
 											</div>
 										</td>
 										<td>
-											{#if flight.aircraftTypeOgn}
-												<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
-													{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+											{#if flight.aircraftCategory}
+												<span
+													class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs"
+												>
+													{getAircraftCategoryDescription(flight.aircraftCategory)}
 												</span>
 											{:else}
 												<span class="text-surface-500">—</span>
@@ -697,9 +701,9 @@
 									{/if}
 								</div>
 								<div>
-									{#if flight.aircraftTypeOgn}
-										<span class="badge {getAircraftTypeColor(flight.aircraftTypeOgn)} text-xs">
-											{getAircraftTypeOgnDescription(flight.aircraftTypeOgn)}
+									{#if flight.aircraftCategory}
+										<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+											{getAircraftCategoryDescription(flight.aircraftCategory)}
 										</span>
 									{/if}
 								</div>

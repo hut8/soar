@@ -36,7 +36,7 @@
 		DataResponse,
 		RawMessageResponse
 	} from '$lib/types';
-	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	dayjs.extend(relativeTime);
@@ -988,14 +988,14 @@
 																		{:else}
 																			<span class="font-semibold">{aircraftCount.aircraftId}</span>
 																		{/if}
-																		{#if aircraftCount.aircraft?.aircraftTypeOgn}
+																		{#if aircraftCount.aircraft?.aircraftCategory}
 																			<span
-																				class="badge {getAircraftTypeColor(
-																					aircraftCount.aircraft.aircraftTypeOgn
+																				class="badge {getAircraftCategoryColor(
+																					aircraftCount.aircraft.aircraftCategory
 																				)} text-xs"
 																			>
-																				{getAircraftTypeOgnDescription(
-																					aircraftCount.aircraft.aircraftTypeOgn
+																				{getAircraftCategoryDescription(
+																					aircraftCount.aircraft.aircraftCategory
 																				)}
 																			</span>
 																		{/if}
@@ -1024,14 +1024,14 @@
 																	<span>{aircraftCount.aircraftId}</span>
 																{/if}
 															</div>
-															{#if aircraftCount.aircraft?.aircraftTypeOgn}
+															{#if aircraftCount.aircraft?.aircraftCategory}
 																<span
-																	class="badge {getAircraftTypeColor(
-																		aircraftCount.aircraft.aircraftTypeOgn
+																	class="badge {getAircraftCategoryColor(
+																		aircraftCount.aircraft.aircraftCategory
 																	)} mt-1 text-xs"
 																>
-																	{getAircraftTypeOgnDescription(
-																		aircraftCount.aircraft.aircraftTypeOgn
+																	{getAircraftCategoryDescription(
+																		aircraftCount.aircraft.aircraftCategory
 																	)}
 																</span>
 															{/if}

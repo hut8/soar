@@ -12,50 +12,8 @@ pub enum AddressType {
     OgnTracker,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Serialize, Deserialize, TS)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../web/src/lib/types/generated/")]
-pub enum AircraftType {
-    Reserved,
-    Glider,
-    TowTug,
-    HelicopterGyro,
-    SkydiverParachute,
-    DropPlane,
-    HangGlider,
-    Paraglider,
-    RecipEngine,
-    JetTurboprop,
-    Unknown,
-    Balloon,
-    Airship,
-    Uav,
-    StaticObstacle,
-}
-
-impl From<u8> for AircraftType {
-    fn from(v: u8) -> Self {
-        match v & 0x0F {
-            0x0 => AircraftType::Reserved,
-            0x1 => AircraftType::Glider,
-            0x2 => AircraftType::TowTug,
-            0x3 => AircraftType::HelicopterGyro,
-            0x4 => AircraftType::SkydiverParachute,
-            0x5 => AircraftType::DropPlane,
-            0x6 => AircraftType::HangGlider,
-            0x7 => AircraftType::Paraglider,
-            0x8 => AircraftType::RecipEngine,
-            0x9 => AircraftType::JetTurboprop,
-            0xA => AircraftType::Unknown,
-            0xB => AircraftType::Balloon,
-            0xC => AircraftType::Airship,
-            0xD => AircraftType::Uav,
-            0xE => AircraftType::Reserved,
-            _ => AircraftType::StaticObstacle,
-        }
-    }
-}
+// Note: AircraftType enum has been removed and consolidated into
+// crate::aircraft_types::AircraftCategory with the from_ogn_byte() method
 
 impl From<u8> for AddressType {
     fn from(v: u8) -> Self {
@@ -64,54 +22,6 @@ impl From<u8> for AddressType {
             0b01 => AddressType::Icao,
             0b10 => AddressType::Flarm,
             _ => AddressType::OgnTracker,
-        }
-    }
-}
-
-impl fmt::Display for AircraftType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            AircraftType::Reserved => "Reserved",
-            AircraftType::Glider => "Glider",
-            AircraftType::TowTug => "TowTug",
-            AircraftType::HelicopterGyro => "HelicopterGyro",
-            AircraftType::SkydiverParachute => "SkydiverParachute",
-            AircraftType::DropPlane => "DropPlane",
-            AircraftType::HangGlider => "HangGlider",
-            AircraftType::Paraglider => "Paraglider",
-            AircraftType::RecipEngine => "RecipEngine",
-            AircraftType::JetTurboprop => "JetTurboprop",
-            AircraftType::Unknown => "Unknown",
-            AircraftType::Balloon => "Balloon",
-            AircraftType::Airship => "Airship",
-            AircraftType::Uav => "Uav",
-            AircraftType::StaticObstacle => "StaticObstacle",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-impl FromStr for AircraftType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Reserved" => Ok(AircraftType::Reserved),
-            "Glider" => Ok(AircraftType::Glider),
-            "TowTug" => Ok(AircraftType::TowTug),
-            "HelicopterGyro" => Ok(AircraftType::HelicopterGyro),
-            "SkydiverParachute" => Ok(AircraftType::SkydiverParachute),
-            "DropPlane" => Ok(AircraftType::DropPlane),
-            "HangGlider" => Ok(AircraftType::HangGlider),
-            "Paraglider" => Ok(AircraftType::Paraglider),
-            "RecipEngine" => Ok(AircraftType::RecipEngine),
-            "JetTurboprop" => Ok(AircraftType::JetTurboprop),
-            "Unknown" => Ok(AircraftType::Unknown),
-            "Balloon" => Ok(AircraftType::Balloon),
-            "Airship" => Ok(AircraftType::Airship),
-            "Uav" => Ok(AircraftType::Uav),
-            "StaticObstacle" => Ok(AircraftType::StaticObstacle),
-            _ => Err(format!("Invalid OGN aircraft type: {}", s)),
         }
     }
 }

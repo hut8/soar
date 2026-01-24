@@ -39,8 +39,8 @@
 	});
 </script>
 
-{#if showRadar}
-	<div class="radar-scope">
+<div class="radar-scope">
+	{#if showRadar}
 		<svg viewBox="0 0 24 24" class="radar-svg">
 			<!-- Radar circles -->
 			<circle cx="12" cy="12" r="10" class="radar-ring" />
@@ -51,13 +51,15 @@
 			<!-- Sweeping line -->
 			<line x1="12" y1="12" x2="12" y2="2" class="radar-sweep" />
 		</svg>
-	</div>
-{/if}
+	{/if}
+</div>
 
 <style>
 	.radar-scope {
 		width: 20px;
 		height: 20px;
+		min-width: 20px;
+		min-height: 20px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;

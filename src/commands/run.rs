@@ -5,11 +5,11 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use soar::adsb_accumulator::AdsbAccumulator;
 use soar::aircraft::AddressType;
 use soar::aircraft_repo::AircraftRepository;
+use soar::aircraft_types::AircraftCategory;
 use soar::beast::decode_beast_frame;
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
-use soar::ogn_aprs_aircraft::AircraftType;
 use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
@@ -675,25 +675,25 @@ pub async fn handle_run(
         );
     }
 
-    // Parse and validate OGN aircraft types to skip
-    let parsed_aircraft_types: Vec<AircraftType> = skip_ogn_aircraft_types
+    // Parse and validate aircraft categories to skip
+    let parsed_aircraft_categories: Vec<AircraftCategory> = skip_ogn_aircraft_types
         .iter()
         .filter_map(|type_str| {
             type_str
-                .parse::<AircraftType>()
+                .parse::<AircraftCategory>()
                 .map_err(|e| {
-                    warn!("Invalid OGN aircraft type '{}': {}", type_str, e);
+                    warn!("Invalid aircraft category '{}': {}", type_str, e);
                     e
                 })
                 .ok()
         })
         .collect();
 
-    // Log skipped OGN aircraft types if any
-    if !parsed_aircraft_types.is_empty() {
+    // Log skipped aircraft categories if any
+    if !parsed_aircraft_categories.is_empty() {
         info!(
-            "Skipping OGN aircraft types from processing: {:?}",
-            parsed_aircraft_types
+            "Skipping aircraft categories from processing: {:?}",
+            parsed_aircraft_categories
         );
     }
 
@@ -710,7 +710,7 @@ pub async fn handle_run(
             info!("Created FixProcessor with NATS publisher");
             processor_with_nats
                 .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
-                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone())
+                .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
                 .with_sync_elevation(flight_tracker.elevation_db().clone())
         }
         Err(e) => {
@@ -720,7 +720,7 @@ pub async fn handle_run(
             );
             FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
                 .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
-                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone())
+                .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
                 .with_sync_elevation(flight_tracker.elevation_db().clone())
         }
     };

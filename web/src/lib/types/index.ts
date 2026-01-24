@@ -10,6 +10,7 @@ import type { ClusterBounds } from './generated/ClusterBounds';
 import type { Fix } from './generated/Fix';
 import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
 import type { AircraftType } from './generated/AircraftType';
+import type { AircraftCategory } from './generated/AircraftCategory';
 
 // Re-export them for external use
 export type {
@@ -21,7 +22,8 @@ export type {
 	ClusterBounds,
 	Fix,
 	AdsbEmitterCategory,
-	AircraftType
+	AircraftType,
+	AircraftCategory
 };
 
 // API Response Wrapper Types
@@ -149,7 +151,7 @@ export interface AircraftRegistration {
 	lightSportType?: string;
 	aircraftId?: string;
 	model?: AircraftModel; // Embedded model data if available
-	aircraftTypeOgn?: string; // OGN aircraft type if available
+	aircraftCategory?: string; // Aircraft category if available
 }
 
 // Aircraft model information
@@ -279,7 +281,7 @@ export interface Flight {
 	// Aircraft information (merged into FlightView from AircraftInfo)
 	aircraftModel?: string;
 	registration?: string;
-	aircraftTypeOgn?: string;
+	aircraftCategory?: string;
 	aircraftCountryCode?: string;
 	// Latest fix information (for active flights)
 	latestAltitudeMslFeet: number | null;

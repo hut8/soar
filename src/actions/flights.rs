@@ -580,7 +580,7 @@ pub async fn search_flights(
                             Ok(Some(aircraft)) => Some(AircraftInfo {
                                 aircraft_model: Some(aircraft.aircraft_model),
                                 registration: aircraft.registration,
-                                aircraft_type_ogn: aircraft.aircraft_type_ogn,
+                                aircraft_category: aircraft.aircraft_category,
                                 country_code: aircraft.country_code,
                             }),
                             _ => None,
@@ -631,7 +631,7 @@ pub async fn search_flights(
                             Ok(Some(aircraft)) => Some(AircraftInfo {
                                 aircraft_model: Some(aircraft.aircraft_model),
                                 registration: aircraft.registration,
-                                aircraft_type_ogn: aircraft.aircraft_type_ogn,
+                                aircraft_category: aircraft.aircraft_category,
                                 country_code: aircraft.country_code,
                             }),
                             _ => None,
@@ -747,7 +747,7 @@ pub async fn get_airport_flights(
                         Ok(Some(aircraft)) => Some(AircraftInfo {
                             aircraft_model: Some(aircraft.aircraft_model),
                             registration: aircraft.registration,
-                            aircraft_type_ogn: aircraft.aircraft_type_ogn,
+                            aircraft_category: aircraft.aircraft_category,
                             country_code: aircraft.country_code,
                         }),
                         _ => None,
@@ -802,7 +802,7 @@ pub async fn get_nearby_flights(
                         Ok(Some(aircraft)) => Some(AircraftInfo {
                             aircraft_model: Some(aircraft.aircraft_model),
                             registration: aircraft.registration,
-                            aircraft_type_ogn: aircraft.aircraft_type_ogn,
+                            aircraft_category: aircraft.aircraft_category,
                             country_code: aircraft.country_code,
                         }),
                         _ => None,

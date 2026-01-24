@@ -1,38 +1,15 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
-use diesel_derive_enum::DbEnum;
 use tracing::{debug, info, instrument, trace};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
-use crate::ogn_aprs_aircraft::{
-    AddressType as ForeignAddressType, AircraftType as ForeignAircraftType,
-};
+use crate::ogn_aprs_aircraft::AddressType as ForeignAddressType;
 use crate::web::PgPool;
 
 // Import the main AddressType from aircraft module
 use crate::aircraft::AddressType;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
-pub enum AircraftTypeOgn {
-    Reserved,
-    Glider,
-    TowTug,
-    HelicopterGyro,
-    SkydiverParachute,
-    DropPlane,
-    HangGlider,
-    Paraglider,
-    RecipEngine,
-    JetTurboprop,
-    Unknown,
-    Balloon,
-    Airship,
-    Uav,
-    StaticObstacle,
-}
 
 // Conversions between foreign types and wrapper types
 impl From<ForeignAddressType> for AddressType {
@@ -53,50 +30,6 @@ impl From<AddressType> for ForeignAddressType {
             AddressType::Icao => ForeignAddressType::Icao,
             AddressType::Flarm => ForeignAddressType::Flarm,
             AddressType::Ogn => ForeignAddressType::OgnTracker,
-        }
-    }
-}
-
-impl From<ForeignAircraftType> for AircraftTypeOgn {
-    fn from(foreign_type: ForeignAircraftType) -> Self {
-        match foreign_type {
-            ForeignAircraftType::Reserved => AircraftTypeOgn::Reserved,
-            ForeignAircraftType::Glider => AircraftTypeOgn::Glider,
-            ForeignAircraftType::TowTug => AircraftTypeOgn::TowTug,
-            ForeignAircraftType::HelicopterGyro => AircraftTypeOgn::HelicopterGyro,
-            ForeignAircraftType::SkydiverParachute => AircraftTypeOgn::SkydiverParachute,
-            ForeignAircraftType::DropPlane => AircraftTypeOgn::DropPlane,
-            ForeignAircraftType::HangGlider => AircraftTypeOgn::HangGlider,
-            ForeignAircraftType::Paraglider => AircraftTypeOgn::Paraglider,
-            ForeignAircraftType::RecipEngine => AircraftTypeOgn::RecipEngine,
-            ForeignAircraftType::JetTurboprop => AircraftTypeOgn::JetTurboprop,
-            ForeignAircraftType::Unknown => AircraftTypeOgn::Unknown,
-            ForeignAircraftType::Balloon => AircraftTypeOgn::Balloon,
-            ForeignAircraftType::Airship => AircraftTypeOgn::Airship,
-            ForeignAircraftType::Uav => AircraftTypeOgn::Uav,
-            ForeignAircraftType::StaticObstacle => AircraftTypeOgn::StaticObstacle,
-        }
-    }
-}
-
-impl From<AircraftTypeOgn> for ForeignAircraftType {
-    fn from(wrapper_type: AircraftTypeOgn) -> Self {
-        match wrapper_type {
-            AircraftTypeOgn::Reserved => ForeignAircraftType::Reserved,
-            AircraftTypeOgn::Glider => ForeignAircraftType::Glider,
-            AircraftTypeOgn::TowTug => ForeignAircraftType::TowTug,
-            AircraftTypeOgn::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
-            AircraftTypeOgn::SkydiverParachute => ForeignAircraftType::SkydiverParachute,
-            AircraftTypeOgn::DropPlane => ForeignAircraftType::DropPlane,
-            AircraftTypeOgn::HangGlider => ForeignAircraftType::HangGlider,
-            AircraftTypeOgn::Paraglider => ForeignAircraftType::Paraglider,
-            AircraftTypeOgn::RecipEngine => ForeignAircraftType::RecipEngine,
-            AircraftTypeOgn::JetTurboprop => ForeignAircraftType::JetTurboprop,
-            AircraftTypeOgn::Unknown => ForeignAircraftType::Unknown,
-            AircraftTypeOgn::Balloon => ForeignAircraftType::Balloon,
-            AircraftTypeOgn::Airship => ForeignAircraftType::Airship,
-            AircraftTypeOgn::Uav => ForeignAircraftType::Uav,
-            AircraftTypeOgn::StaticObstacle => ForeignAircraftType::StaticObstacle,
         }
     }
 }
@@ -878,8 +811,8 @@ impl FixesRepository {
                 pilot_name: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 home_base_airport_ident: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
-                aircraft_type_ogn: Option<AircraftTypeOgn>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AircraftCategory>)]
+                aircraft_category: Option<crate::aircraft_types::AircraftCategory>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
                 last_fix_at: Option<DateTime<Utc>>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
@@ -933,7 +866,7 @@ impl FixesRepository {
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
-                    aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
+                    aircraft_category: row.aircraft_category,
                     last_fix_at: row.last_fix_at,
                     club_id: row.club_id,
                     icao_model_code: row.icao_model_code,
@@ -943,7 +876,6 @@ impl FixesRepository {
                     latitude: row.latitude,
                     longitude: row.longitude,
                     owner_operator: None,           // Not selected in this query
-                    aircraft_category: None,   // Not selected in this query
                     engine_count: None,              // Not selected in this query
                     engine_type: None,         // Not selected in this query
                     faa_pia: None,                  // Not selected in this query

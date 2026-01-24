@@ -43,8 +43,8 @@
 		formatTitleCase,
 		formatAircraftAddress,
 		getStatusCodeDescription,
-		getAircraftTypeOgnDescription,
-		getAircraftTypeColor,
+		getAircraftCategoryDescription,
+		getAircraftCategoryColor,
 		formatTransponderCode,
 		getCountryName,
 		getFlagPath
@@ -414,9 +414,9 @@
 							>
 								{aircraft.fromAdsbxDdb ? 'In ADSB Exchange DB' : 'Not in ADSB Exchange DB'}
 							</span>
-							{#if aircraft.aircraftTypeOgn}
-								<span class="badge {getAircraftTypeColor(aircraft.aircraftTypeOgn)} text-xs">
-									{getAircraftTypeOgnDescription(aircraft.aircraftTypeOgn)}
+							{#if aircraft.aircraftCategory}
+								<span class="badge {getAircraftCategoryColor(aircraft.aircraftCategory)} text-xs">
+									{getAircraftCategoryDescription(aircraft.aircraftCategory)}
 								</span>
 							{/if}
 							{#if aircraft.trackerDeviceType}

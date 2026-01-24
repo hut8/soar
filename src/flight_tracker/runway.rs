@@ -24,27 +24,32 @@ pub(crate) fn magnetic_heading_to_runway_identifier(magnetic_heading: f64) -> St
     format!("{:02}", runway_number)
 }
 
-/// Check if an aircraft type uses runways
-pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftType) -> bool {
-    use crate::ogn_aprs_aircraft::AircraftType;
-    match aircraft_type {
+/// Check if an aircraft category uses runways
+pub(crate) fn uses_runways(category: &crate::aircraft_types::AircraftCategory) -> bool {
+    use crate::aircraft_types::AircraftCategory;
+    match category {
         // Aircraft that use runways
-        AircraftType::Glider => true,
-        AircraftType::TowTug => true,
-        AircraftType::RecipEngine => true,
-        AircraftType::JetTurboprop => true,
-        AircraftType::DropPlane => true,
+        AircraftCategory::Glider => true,
+        AircraftCategory::TowTug => true,
+        AircraftCategory::Landplane => true, // Includes recip_engine, jet_turboprop, drop_plane
+        AircraftCategory::Seaplane => true,
+        AircraftCategory::Amphibian => true,
+        AircraftCategory::Electric => true, // Electric aircraft typically use runways
         // Aircraft that don't use runways
-        AircraftType::Paraglider => false,
-        AircraftType::HangGlider => false,
-        AircraftType::HelicopterGyro => false,
-        AircraftType::Balloon => false,
-        AircraftType::Airship => false,
-        AircraftType::SkydiverParachute => false, // The parachute itself, not the plane
-        AircraftType::Uav => false,
-        AircraftType::StaticObstacle => false,
-        AircraftType::Reserved => false,
-        AircraftType::Unknown => true, // Default to true for unknown types
+        AircraftCategory::Paraglider => false,
+        AircraftCategory::HangGlider => false,
+        AircraftCategory::Helicopter => false,
+        AircraftCategory::Gyroplane => false,
+        AircraftCategory::Rotorcraft => false,
+        AircraftCategory::Balloon => false,
+        AircraftCategory::Airship => false,
+        AircraftCategory::SkydiverParachute => false,
+        AircraftCategory::Drone => false,
+        AircraftCategory::PoweredParachute => false,
+        AircraftCategory::Tiltrotor => false, // Can take off vertically
+        AircraftCategory::Vtol => false,
+        AircraftCategory::StaticObstacle => false,
+        AircraftCategory::Unknown => true, // Default to true for unknown types
     }
 }
 
@@ -78,13 +83,13 @@ pub(crate) async fn determine_runway_identifier(
     let start_time = event_time - chrono::Duration::seconds(20);
     let end_time = event_time + chrono::Duration::seconds(20);
 
-    // Check if this aircraft type uses runways (skip detection for helicopters, paragliders, etc.)
-    if let Some(aircraft_type) = device.aircraft_type_ogn
-        && !uses_runways(&aircraft_type)
+    // Check if this aircraft category uses runways (skip detection for helicopters, paragliders, etc.)
+    if let Some(category) = device.aircraft_category
+        && !uses_runways(&category)
     {
         debug!(
-            "Aircraft {} is type {:?} which doesn't use runways, skipping runway detection",
-            device_id, aircraft_type
+            "Aircraft {} is category {:?} which doesn't use runways, skipping runway detection",
+            device_id, category
         );
         return None;
     }

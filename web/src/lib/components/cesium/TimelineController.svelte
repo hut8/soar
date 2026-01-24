@@ -11,7 +11,7 @@
 	import { Play, Pause, RotateCcw, Camera } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { createAircraftEntity } from '$lib/cesium/entities';
-	import type { Flight, Fix, DataListResponse, AircraftType } from '$lib/types';
+	import type { Flight, Fix, DataListResponse, AircraftCategory } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'cesium', 'TimelineController']);
@@ -184,7 +184,7 @@
 				frequencyMhz: null,
 				pilotName: null,
 				homeBaseAirportIdent: null,
-				aircraftTypeOgn: (flight.aircraftTypeOgn as AircraftType | null) || null,
+				aircraftCategory: (flight.aircraftCategory as AircraftCategory | null) || null,
 				lastFixAt: flight.latestFixTimestamp || null,
 				trackerDeviceType: null,
 				icaoModelCode: null,

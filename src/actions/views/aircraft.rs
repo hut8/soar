@@ -7,7 +7,7 @@ use super::club::AircraftModelView;
 use crate::aircraft_registrations::{
     Aircraft as AircraftDomain, AirworthinessClass, LightSportType, RegistrantType,
 };
-use crate::ogn_aprs_aircraft::AircraftType;
+use crate::aircraft_types::AircraftCategory;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,7 +40,7 @@ pub struct AircraftRegistrationView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<AircraftModelView>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub aircraft_type_ogn: Option<AircraftType>,
+    pub aircraft_category: Option<AircraftCategory>,
 }
 
 impl From<AircraftDomain> for AircraftRegistrationView {
@@ -72,7 +72,7 @@ impl From<AircraftDomain> for AircraftRegistrationView {
             light_sport_type: aircraft.light_sport_type,
             aircraft_id: aircraft.aircraft_id,
             model: None,             // Will be set when fetching with model data
-            aircraft_type_ogn: None, // Will be set when fetching with device data
+            aircraft_category: None, // Will be set when fetching with device data
         }
     }
 }
@@ -108,7 +108,7 @@ impl From<crate::aircraft_registrations::AircraftRegistrationModel> for Aircraft
             light_sport_type: model.light_sport_type,
             aircraft_id: model.aircraft_id,
             model: None,
-            aircraft_type_ogn: None,
+            aircraft_category: None,
         }
     }
 }
@@ -134,7 +134,7 @@ pub struct AircraftView {
     pub frequency_mhz: Option<f64>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
-    pub aircraft_type_ogn: Option<crate::ogn_aprs_aircraft::AircraftType>,
+    pub aircraft_category: Option<crate::aircraft_types::AircraftCategory>,
     pub last_fix_at: Option<String>,
     pub tracker_device_type: Option<String>,
     pub icao_model_code: Option<String>,
@@ -203,7 +203,7 @@ impl AircraftView {
             frequency_mhz: device.frequency_mhz,
             pilot_name: device.pilot_name,
             home_base_airport_ident: device.home_base_airport_ident,
-            aircraft_type_ogn: device.aircraft_type_ogn,
+            aircraft_category: device.aircraft_category,
             last_fix_at: device.last_fix_at.map(|dt| dt.to_rfc3339()),
             tracker_device_type: device.tracker_device_type,
             icao_model_code: device.icao_model_code,
@@ -260,7 +260,7 @@ impl AircraftView {
                 .and_then(|bd| bd.to_string().parse().ok()),
             pilot_name: device_model.pilot_name,
             home_base_airport_ident: device_model.home_base_airport_ident,
-            aircraft_type_ogn: device_model.aircraft_type_ogn,
+            aircraft_category: device_model.aircraft_category,
             last_fix_at: device_model.last_fix_at.map(|dt| dt.to_rfc3339()),
             tracker_device_type: device_model.tracker_device_type,
             icao_model_code: device_model.icao_model_code,

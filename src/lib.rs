@@ -30,6 +30,7 @@ pub mod club_tow_fees;
 pub mod club_tow_fees_repo;
 pub mod clubs;
 pub mod clubs_repo;
+pub mod connection_status;
 pub mod coverage;
 pub mod coverage_cache;
 pub mod coverage_repo;

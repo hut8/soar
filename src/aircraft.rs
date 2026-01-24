@@ -10,9 +10,9 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
-// Import AircraftType and AdsbEmitterCategory for the cached fields
+// Import AdsbEmitterCategory and AircraftCategory for the cached fields
 use crate::aircraft_types::{AircraftCategory, EngineType};
-use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
+use crate::ogn_aprs_aircraft::AdsbEmitterCategory;
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
 const DDB_URL_GLIDERNET_WORKERS: &str =
@@ -150,8 +150,6 @@ pub struct Aircraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_base_airport_ident: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub aircraft_type_ogn: Option<AircraftType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_fix_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub club_id: Option<uuid::Uuid>,
@@ -232,7 +230,6 @@ pub struct AircraftModel {
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
-    pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
     pub club_id: Option<uuid::Uuid>,
     pub icao_model_code: Option<String>,
@@ -276,7 +273,6 @@ pub struct NewAircraft {
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
-    pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
     pub club_id: Option<uuid::Uuid>,
     pub icao_model_code: Option<String>,
@@ -329,7 +325,6 @@ impl From<Aircraft> for NewAircraft {
                 .and_then(|f| f.to_string().parse().ok()),
             pilot_name: device.pilot_name,
             home_base_airport_ident: device.home_base_airport_ident,
-            aircraft_type_ogn: device.aircraft_type_ogn,
             last_fix_at: device.last_fix_at,
             club_id: device.club_id,
             icao_model_code: device.icao_model_code,
@@ -368,7 +363,6 @@ impl From<AircraftModel> for Aircraft {
                 .and_then(|bd| bd.to_string().parse().ok()),
             pilot_name: model.pilot_name,
             home_base_airport_ident: model.home_base_airport_ident,
-            aircraft_type_ogn: model.aircraft_type_ogn,
             last_fix_at: model.last_fix_at,
             club_id: model.club_id,
             icao_model_code: model.icao_model_code,
@@ -652,7 +646,6 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 } else {
                                     Some(record.airfield)
                                 },
-                                aircraft_type_ogn: None, // Not provided in FlarmNet
                                 last_fix_at: None,
                                 club_id: None,
                                 icao_model_code: None,
@@ -871,7 +864,6 @@ impl AircraftFetcher {
                                     } else {
                                         Some(record.airfield)
                                     },
-                                    aircraft_type_ogn: None, // Not provided in FlarmNet
                                     last_fix_at: None,
                                     club_id: None,
                                     icao_model_code: None,
@@ -1042,7 +1034,6 @@ impl AircraftFetcher {
                         frequency_mhz: None,
                         pilot_name: None,
                         home_base_airport_ident: None,
-                        aircraft_type_ogn: None,
                         last_fix_at: None,
                         club_id: None,
                         icao_model_code: None,
@@ -1146,7 +1137,6 @@ mod tests {
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
-            aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
             icao_model_code: None,
@@ -1491,7 +1481,6 @@ mod tests {
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
-            aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
             icao_model_code: None,

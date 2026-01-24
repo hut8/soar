@@ -1,7 +1,7 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
+use crate::aircraft_types::AircraftCategory;
 use crate::flights_repo::FlightsRepository;
-use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, trace};
@@ -100,7 +100,7 @@ pub(crate) async fn process_state_transition(
     metrics::histogram!("aprs.aircraft.aircraft_lookup_ms")
         .record(aircraft_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
-    let is_towtug = aircraft.aircraft_type_ogn == Some(AircraftType::TowTug);
+    let is_towtug = aircraft.aircraft_category == Some(AircraftCategory::TowTug);
 
     // Get or create aircraft state, add this fix to history
     let current_flight_id = {

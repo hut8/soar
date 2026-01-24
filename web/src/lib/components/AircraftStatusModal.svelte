@@ -24,8 +24,8 @@
 		formatTitleCase,
 		formatAircraftAddress,
 		getStatusCodeDescription,
-		getAircraftTypeOgnDescription,
-		getAircraftTypeColor,
+		getAircraftCategoryDescription,
+		getAircraftCategoryColor,
 		formatTransponderCode,
 		getFlagPath
 	} from '$lib/formatters';
@@ -542,19 +542,19 @@
 									</div>
 								</div>
 
-								{#if selectedAircraft.aircraftTypeOgn}
+								{#if selectedAircraft.aircraftCategory}
 									<div class="grid grid-cols-1 gap-4">
 										<div>
 											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
-												Aircraft Type
+												Aircraft Category
 											</dt>
 											<dd class="text-sm">
 												<span
-													class="badge {getAircraftTypeColor(
-														selectedAircraft.aircraftTypeOgn
+													class="badge {getAircraftCategoryColor(
+														selectedAircraft.aircraftCategory
 													)} text-xs"
 												>
-													{getAircraftTypeOgnDescription(selectedAircraft.aircraftTypeOgn)}
+													{getAircraftCategoryDescription(selectedAircraft.aircraftCategory)}
 												</span>
 											</dd>
 										</div>

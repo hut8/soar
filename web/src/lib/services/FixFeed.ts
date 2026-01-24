@@ -7,6 +7,12 @@ import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'FixFeed']);
 
+// Connection sources status from backend
+export interface ConnectionSources {
+	ogn: boolean;
+	adsb: boolean;
+}
+
 // Event types for subscribers
 export type FixFeedEvent =
 	| { type: 'connection_opened' }
@@ -14,6 +20,7 @@ export type FixFeedEvent =
 	| { type: 'connection_error'; error: Event }
 	| { type: 'fix_received'; fix: FixWithExtras }
 	| { type: 'aircraft_received'; aircraft: Aircraft }
+	| { type: 'connection_status'; status: ConnectionSources }
 	| { type: 'subscription_added'; aircraftId: string }
 	| { type: 'subscription_removed'; aircraftId: string }
 	| { type: 'reconnecting'; attempt: number };
@@ -194,6 +201,15 @@ export class FixFeed {
 						this.notifySubscribers({
 							type: 'aircraft_received',
 							aircraft: aircraft
+						});
+					} else if (rawMessage.type === 'connection_status') {
+						// Handle connection status update from backend
+						this.notifySubscribers({
+							type: 'connection_status',
+							status: {
+								ogn: rawMessage.ogn ?? false,
+								adsb: rawMessage.adsb ?? false
+							}
 						});
 					} else {
 						logger.warn('Unknown WebSocket message type: {type}', { type: rawMessage.type });

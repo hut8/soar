@@ -34,8 +34,8 @@ pub struct FixProcessor {
     elevation_mode: Option<ElevationMode>,
     /// APRS types to suppress from processing (e.g., OGADSB, OGFLR)
     suppressed_aprs_types: Vec<String>,
-    /// OGN aircraft types to skip from processing (e.g., JetTurboprop)
-    suppressed_ogn_aircraft_types: Vec<crate::ogn_aprs_aircraft::AircraftType>,
+    /// Aircraft categories to skip from processing (e.g., Landplane for jets)
+    suppressed_aircraft_categories: Vec<crate::aircraft_types::AircraftCategory>,
 }
 
 impl FixProcessor {
@@ -48,7 +48,7 @@ impl FixProcessor {
             nats_publisher: None,
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
-            suppressed_ogn_aircraft_types: Vec::new(),
+            suppressed_aircraft_categories: Vec::new(),
         }
     }
 
@@ -66,12 +66,12 @@ impl FixProcessor {
         self
     }
 
-    /// Set OGN aircraft types to skip from processing
-    pub fn with_suppressed_ogn_aircraft_types(
+    /// Set aircraft categories to skip from processing
+    pub fn with_suppressed_aircraft_categories(
         mut self,
-        types: Vec<crate::ogn_aprs_aircraft::AircraftType>,
+        categories: Vec<crate::aircraft_types::AircraftCategory>,
     ) -> Self {
-        self.suppressed_ogn_aircraft_types = types;
+        self.suppressed_aircraft_categories = categories;
         self
     }
 
@@ -90,7 +90,7 @@ impl FixProcessor {
             nats_publisher: Some(nats_publisher),
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
-            suppressed_ogn_aircraft_types: Vec::new(),
+            suppressed_aircraft_categories: Vec::new(),
         })
     }
 
@@ -107,7 +107,7 @@ impl FixProcessor {
             nats_publisher: None,
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
-            suppressed_ogn_aircraft_types: Vec::new(),
+            suppressed_aircraft_categories: Vec::new(),
         }
     }
 
@@ -127,7 +127,7 @@ impl FixProcessor {
             nats_publisher: Some(nats_publisher),
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
-            suppressed_ogn_aircraft_types: Vec::new(),
+            suppressed_aircraft_categories: Vec::new(),
         })
     }
 
@@ -169,7 +169,7 @@ impl FixProcessor {
             ogn_parser::AprsData::Position(ref pos_packet) => {
                 let mut device_address = 0i32;
                 let mut address_type = crate::aircraft::AddressType::Unknown;
-                let mut aircraft_type = None;
+                let mut aircraft_category = None;
 
                 // Extract device info from OGN parameters
                 // Note: The ID field supports two formats:
@@ -186,10 +186,10 @@ impl FixProcessor {
                         3 => crate::aircraft::AddressType::Ogn,
                         _ => crate::aircraft::AddressType::Unknown,
                     };
-                    // Extract aircraft type from OGN parameters
-                    aircraft_type = Some(crate::ogn_aprs_aircraft::AircraftType::from(
-                        id.aircraft_type,
-                    ));
+                    // Extract aircraft category from OGN parameters
+                    aircraft_category = Some(
+                        crate::aircraft_types::AircraftCategory::from_ogn_byte(id.aircraft_type),
+                    );
                 }
 
                 // When creating devices spontaneously (not from DDB), determine address_type from tracker_device_type
@@ -211,15 +211,15 @@ impl FixProcessor {
                     return;
                 }
 
-                // Check if this OGN aircraft type should be skipped
-                if let Some(ref ac_type) = aircraft_type
+                // Check if this aircraft category should be skipped
+                if let Some(ref ac_category) = aircraft_category
                     && self
-                        .suppressed_ogn_aircraft_types
+                        .suppressed_aircraft_categories
                         .iter()
-                        .any(|t| t == ac_type)
+                        .any(|c| c == ac_category)
                 {
-                    trace!("Skipping fix from OGN aircraft type: {:?}", ac_type);
-                    metrics::counter!("aprs.fixes.skipped_aircraft_type_total", "aircraft_type" => ac_type.to_string())
+                    trace!("Skipping fix from aircraft category: {:?}", ac_category);
+                    metrics::counter!("aprs.fixes.skipped_aircraft_category_total", "category" => format!("{:?}", ac_category))
                         .increment(1);
                     return;
                 }
@@ -254,7 +254,7 @@ impl FixProcessor {
                     .map(|reg| reg.to_string());
 
                 let packet_fields = AircraftPacketFields {
-                    aircraft_type,
+                    aircraft_category,
                     aircraft_model,
                     icao_model_code,
                     adsb_emitter_category,
