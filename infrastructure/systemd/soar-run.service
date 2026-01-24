@@ -13,7 +13,7 @@ User=soar
 Group=soar
 WorkingDirectory=/var/lib/soar
 SyslogIdentifier=soar-run
-ExecStart=/usr/local/bin/soar run --archive --no-adsb
+ExecStart=/usr/local/bin/soar run --archive
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
