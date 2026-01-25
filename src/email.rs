@@ -785,8 +785,7 @@ The SOAR Team"#,
     ) -> Result<Response> {
         // Get the admin notification email (same as data load reports)
         let to_email = std::env::var("EMAIL_TO")
-            .or_else(|_| std::env::var("TO_EMAIL"))
-            .map_err(|_| anyhow::anyhow!("EMAIL_TO or TO_EMAIL not set for admin notifications"))?;
+            .map_err(|_| anyhow::anyhow!("EMAIL_TO not set for admin notifications"))?;
 
         let environment = get_environment_name();
         let base_url =

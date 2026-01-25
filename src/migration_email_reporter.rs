@@ -34,9 +34,8 @@ impl MigrationEmailConfig {
     /// Load email configuration from environment variables
     /// Uses MIGRATION_ALERT_EMAIL if set, otherwise falls back to FROM_EMAIL
     pub fn from_env() -> Result<Self> {
-        let from_email = env::var("FROM_EMAIL")
-            .or_else(|_| env::var("EMAIL_FROM"))
-            .map_err(|_| anyhow::anyhow!("FROM_EMAIL or EMAIL_FROM not set"))?;
+        let from_email =
+            env::var("FROM_EMAIL").map_err(|_| anyhow::anyhow!("FROM_EMAIL not set"))?;
 
         // Use MIGRATION_ALERT_EMAIL if set, otherwise use FROM_EMAIL as recipient
         let to_email = env::var("MIGRATION_ALERT_EMAIL").unwrap_or_else(|_| from_email.clone());

@@ -53,11 +53,9 @@ impl EmailConfig {
             smtp_password: std::env::var("SMTP_PASSWORD")
                 .map_err(|_| anyhow::anyhow!("SMTP_PASSWORD not set"))?,
             from_address: std::env::var("FROM_EMAIL")
-                .or_else(|_| std::env::var("EMAIL_FROM"))
-                .map_err(|_| anyhow::anyhow!("FROM_EMAIL or EMAIL_FROM not set"))?,
+                .map_err(|_| anyhow::anyhow!("FROM_EMAIL not set"))?,
             to_address: std::env::var("EMAIL_TO")
-                .or_else(|_| std::env::var("TO_EMAIL"))
-                .map_err(|_| anyhow::anyhow!("EMAIL_TO or TO_EMAIL not set"))?,
+                .map_err(|_| anyhow::anyhow!("EMAIL_TO not set"))?,
         })
     }
 }
