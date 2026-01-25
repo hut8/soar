@@ -742,21 +742,27 @@
 		<!-- Projection and style controls -->
 		<div class="absolute top-4 right-16 z-10 flex flex-col gap-2">
 			<!-- Projection toggle -->
-			<div class="flex rounded-lg bg-surface-800/90 shadow-lg">
+			<div class="flex overflow-hidden rounded-lg shadow-lg">
 				<button
 					onclick={() => setProjection('globe')}
-					class="btn rounded-r-none px-3 py-2"
-					class:preset-filled-primary-500={currentProjection === 'globe'}
-					class:preset-tonal-surface={currentProjection !== 'globe'}
+					class="px-3 py-2 transition-colors"
+					class:bg-primary-500={currentProjection === 'globe'}
+					class:text-white={currentProjection === 'globe'}
+					class:bg-surface-700={currentProjection !== 'globe'}
+					class:text-surface-200={currentProjection !== 'globe'}
+					class:hover:bg-surface-600={currentProjection !== 'globe'}
 					title="Globe view"
 				>
 					<Globe class="h-4 w-4" />
 				</button>
 				<button
 					onclick={() => setProjection('mercator')}
-					class="btn rounded-l-none px-3 py-2"
-					class:preset-filled-primary-500={currentProjection === 'mercator'}
-					class:preset-tonal-surface={currentProjection !== 'mercator'}
+					class="px-3 py-2 transition-colors"
+					class:bg-primary-500={currentProjection === 'mercator'}
+					class:text-white={currentProjection === 'mercator'}
+					class:bg-surface-700={currentProjection !== 'mercator'}
+					class:text-surface-200={currentProjection !== 'mercator'}
+					class:hover:bg-surface-600={currentProjection !== 'mercator'}
 					title="Flat map"
 				>
 					<Map class="h-4 w-4" />
@@ -764,30 +770,39 @@
 			</div>
 
 			<!-- Style selector -->
-			<div class="flex rounded-lg bg-surface-800/90 shadow-lg">
+			<div class="flex overflow-hidden rounded-lg shadow-lg">
 				<button
 					onclick={() => setStyle('satellite')}
-					class="btn rounded-r-none px-3 py-2"
-					class:preset-filled-primary-500={currentStyle === 'satellite'}
-					class:preset-tonal-surface={currentStyle !== 'satellite'}
+					class="px-3 py-2 transition-colors"
+					class:bg-primary-500={currentStyle === 'satellite'}
+					class:text-white={currentStyle === 'satellite'}
+					class:bg-surface-700={currentStyle !== 'satellite'}
+					class:text-surface-200={currentStyle !== 'satellite'}
+					class:hover:bg-surface-600={currentStyle !== 'satellite'}
 					title="Satellite"
 				>
 					<Satellite class="h-4 w-4" />
 				</button>
 				<button
 					onclick={() => setStyle('streets')}
-					class="btn px-3 py-2"
-					class:preset-filled-primary-500={currentStyle === 'streets'}
-					class:preset-tonal-surface={currentStyle !== 'streets'}
+					class="px-3 py-2 transition-colors"
+					class:bg-primary-500={currentStyle === 'streets'}
+					class:text-white={currentStyle === 'streets'}
+					class:bg-surface-700={currentStyle !== 'streets'}
+					class:text-surface-200={currentStyle !== 'streets'}
+					class:hover:bg-surface-600={currentStyle !== 'streets'}
 					title="Streets"
 				>
 					<Map class="h-4 w-4" />
 				</button>
 				<button
 					onclick={() => setStyle('terrain')}
-					class="btn rounded-l-none px-3 py-2"
-					class:preset-filled-primary-500={currentStyle === 'terrain'}
-					class:preset-tonal-surface={currentStyle !== 'terrain'}
+					class="px-3 py-2 transition-colors"
+					class:bg-primary-500={currentStyle === 'terrain'}
+					class:text-white={currentStyle === 'terrain'}
+					class:bg-surface-700={currentStyle !== 'terrain'}
+					class:text-surface-200={currentStyle !== 'terrain'}
+					class:hover:bg-surface-600={currentStyle !== 'terrain'}
 					title="Terrain"
 				>
 					<svg
