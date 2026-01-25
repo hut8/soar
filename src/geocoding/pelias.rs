@@ -90,7 +90,7 @@ impl PeliasClient {
     ///
     /// * `Ok(Point)` - The geographic coordinates of the address
     /// * `Err(...)` - If the address cannot be geocoded or the service is unavailable
-    pub async fn geocode(&self, address: &str) -> Result<Point> {
+    pub async fn forward_geocode(&self, address: &str) -> Result<Point> {
         debug!("Forward geocoding address with Pelias: {}", address);
 
         let url = format!("{}/v1/search", self.base_url);
@@ -262,7 +262,7 @@ impl PeliasClient {
 #[async_trait]
 impl ForwardGeocoder for PeliasClient {
     async fn geocode(&self, address: &str) -> Result<Point> {
-        self.geocode(address).await
+        self.forward_geocode(address).await
     }
 }
 

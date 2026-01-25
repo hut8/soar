@@ -5,6 +5,10 @@
 -- with the && operator for fast bounding box operations.
 --
 -- Dropping these columns saves storage space and index maintenance overhead.
+--
+-- NOTE: DROP INDEX acquires an ACCESS EXCLUSIVE lock on the table. For large tables
+-- with active traffic, consider running during a maintenance window. The locks are
+-- brief since we're only dropping indexes, not rebuilding them.
 
 -- Drop indexes first
 DROP INDEX IF EXISTS idx_aircraft_location_geog;
