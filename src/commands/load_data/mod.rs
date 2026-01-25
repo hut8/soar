@@ -61,7 +61,7 @@ pub async fn handle_load_data(
     let email_config = EmailConfig::from_env().ok();
     if email_config.is_none() {
         warn!("Email configuration not found in environment - skipping email reports");
-        warn!("Set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM, EMAIL_TO");
+        warn!("Set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL, EMAIL_TO");
     }
 
     // Load each entity type with metrics tracking

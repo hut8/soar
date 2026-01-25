@@ -64,6 +64,30 @@ pub async fn register_user(
                                 )
                                 .into_response();
                             }
+
+                            // Send admin notification about new user signup (non-blocking)
+                            let first_name = user.first_name.clone();
+                            let last_name = user.last_name.clone();
+                            let user_email = email.clone();
+                            let club_id = user.club_id;
+                            tokio::spawn(async move {
+                                if let Ok(admin_email_service) = EmailService::new()
+                                    && let Err(e) = admin_email_service
+                                        .send_user_signup_notification(
+                                            &first_name,
+                                            &last_name,
+                                            &user_email,
+                                            club_id,
+                                        )
+                                        .await
+                                {
+                                    // Log but don't fail - admin notification is not critical
+                                    tracing::warn!(
+                                        "Failed to send admin signup notification: {}",
+                                        e
+                                    );
+                                }
+                            });
                         }
                         Err(e) => {
                             error!("Email service initialization failed: {}", e);

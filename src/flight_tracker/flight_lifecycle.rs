@@ -714,6 +714,8 @@ async fn complete_flight_in_background(
                     let fixes_repo = FixesRepository::new(pool_clone.clone());
                     let flight_repo = FlightsRepository::new(pool_clone.clone());
                     let aircraft_repo = AircraftRepository::new(pool_clone.clone());
+                    let airports_repo =
+                        crate::airports_repo::AirportsRepository::new(pool_clone.clone());
                     let users_repo = UsersRepository::new(pool_clone.clone());
 
                     let aircraft = match aircraft_repo.get_aircraft_by_address(device_address).await
@@ -753,14 +755,59 @@ async fn complete_flight_in_background(
                         }
                     };
 
+                    // Get airport information for email
+                    let departure_airport = match flight.departure_airport_id {
+                        Some(id) => airports_repo.get_airport_by_id(id).await.ok().flatten(),
+                        None => None,
+                    };
+                    let arrival_airport = match flight.arrival_airport_id {
+                        Some(id) => airports_repo.get_airport_by_id(id).await.ok().flatten(),
+                        None => None,
+                    };
+
+                    // Build aircraft email data
+                    let aircraft_email_data = crate::email::AircraftEmailData {
+                        id: aircraft.id.unwrap_or(uuid::Uuid::nil()),
+                        registration: aircraft.registration.clone(),
+                        aircraft_model: aircraft.aircraft_model.clone(),
+                        hex_address: aircraft.aircraft_address_hex(),
+                    };
+
+                    // Build flight email data
+                    let flight_email_data = crate::email::FlightEmailData {
+                        flight_id,
+                        aircraft: aircraft_email_data.clone(),
+                        takeoff_time: flight.takeoff_time,
+                        landing_time: flight.landing_time,
+                        departure_airport: departure_airport.as_ref().map(|a| a.ident.clone()),
+                        departure_airport_name: departure_airport.as_ref().map(|a| a.name.clone()),
+                        arrival_airport: arrival_airport.as_ref().map(|a| a.ident.clone()),
+                        arrival_airport_name: arrival_airport.as_ref().map(|a| a.name.clone()),
+                        duration_seconds: flight.duration().map(|d| d.num_seconds()),
+                        total_distance_meters: flight.total_distance_meters,
+                        max_displacement_meters: flight.maximum_displacement_meters,
+                        takeoff_runway: flight.takeoff_runway_ident.clone(),
+                        landing_runway: flight.landing_runway_ident.clone(),
+                        detected_airborne: flight.takeoff_time.is_none(),
+                        timed_out: flight.timed_out_at.is_some(),
+                    };
+
+                    // Build filename with format: flight-YYYYMMDD-HHMMSS-REGISTRATION-HEXADDR.ext
+                    // If no registration, just: flight-YYYYMMDD-HHMMSS-HEXADDR.ext
                     let takeoff_time_str = flight
                         .takeoff_time
                         .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
                         .unwrap_or_else(|| "unknown".to_string());
-                    let kml_filename =
-                        format!("flight-{}-{}.kml", takeoff_time_str, device_address);
-                    let igc_filename =
-                        format!("flight-{}-{}.igc", takeoff_time_str, device_address);
+                    let registration_part = aircraft_email_data.filename_component();
+                    let hex_addr = aircraft.aircraft_address_hex();
+                    let kml_filename = format!(
+                        "flight-{}{}-{}.kml",
+                        takeoff_time_str, registration_part, hex_addr
+                    );
+                    let igc_filename = format!(
+                        "flight-{}{}-{}.igc",
+                        takeoff_time_str, registration_part, hex_addr
+                    );
 
                     let email_service = match crate::email::EmailService::new() {
                         Ok(service) => service,
@@ -780,8 +827,7 @@ async fn complete_flight_in_background(
                                         .send_flight_completion_email(
                                             email,
                                             &to_name,
-                                            flight_id,
-                                            &device_address.to_string(),
+                                            &flight_email_data,
                                             kml_content.clone(),
                                             &kml_filename,
                                             igc_content.clone(),
