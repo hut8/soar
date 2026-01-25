@@ -6,6 +6,11 @@
 -- 4. Nulls all registrations (will be repopulated by next data load with validation)
 -- 5. Adds unique partial index on registration
 
+-- CRITICAL: Disable TimescaleDB decompression limit for this migration
+-- The fixes table has compressed chunks, and updating aircraft_id across 16M+ rows
+-- would exceed the default 100K tuple decompression limit. Setting to 0 = unlimited.
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
+
 -- Step 1: Create merge mapping table (FLARM records to merge into ICAO records)
 -- Must be done BEFORE nulling registrations
 CREATE TEMP TABLE aircraft_merge AS
@@ -60,8 +65,9 @@ FROM aircraft_merge m WHERE watchlist.aircraft_id = m.flarm_id;
 UPDATE aircraft_registrations SET aircraft_id = m.icao_id
 FROM aircraft_merge m WHERE aircraft_registrations.aircraft_id = m.flarm_id;
 
--- 3e: Fixes - BATCHED by day to avoid TimescaleDB issues with large updates
--- The fixes table is a hypertable and updating millions of rows at once can cause issues
+-- 3e: Fixes - BATCHED by hour on received_at (the hypertable partition column)
+-- The fixes table is a hypertable partitioned by received_at with compressed chunks.
+-- Batching by received_at aligns with chunk boundaries for efficient updates.
 DO $$
 DECLARE
     batch_start TIMESTAMP WITH TIME ZONE;
@@ -70,9 +76,11 @@ DECLARE
     max_ts TIMESTAMP WITH TIME ZONE;
     updated_count INTEGER;
     total_updated INTEGER := 0;
+    current_day DATE := NULL;
+    day_count INTEGER := 0;
 BEGIN
-    -- Get time range of fixes that need updating
-    SELECT MIN(fx.timestamp), MAX(fx.timestamp)
+    -- Get time range of fixes that need updating (using received_at, the partition column)
+    SELECT MIN(fx.received_at), MAX(fx.received_at)
     INTO min_ts, max_ts
     FROM fixes fx
     JOIN aircraft_merge m ON fx.aircraft_id = m.flarm_id;
@@ -82,29 +90,40 @@ BEGIN
         RETURN;
     END IF;
 
-    RAISE NOTICE 'Updating fixes from % to %', min_ts, max_ts;
+    RAISE NOTICE 'Updating fixes from % to % (hourly batches by received_at)', min_ts, max_ts;
 
-    -- Process in daily batches
-    batch_start := DATE_TRUNC('day', min_ts);
+    -- Process in hourly batches aligned with chunk boundaries
+    batch_start := DATE_TRUNC('hour', min_ts);
     WHILE batch_start <= max_ts LOOP
-        batch_end := batch_start + INTERVAL '1 day';
+        batch_end := batch_start + INTERVAL '1 hour';
+
+        -- Check for day change BEFORE updating (to log previous day's total)
+        IF batch_start::date != current_day THEN
+            IF current_day IS NOT NULL AND day_count > 0 THEN
+                RAISE NOTICE 'Updated % fixes for %', day_count, current_day;
+            END IF;
+            current_day := batch_start::date;
+            day_count := 0;
+        END IF;
 
         UPDATE fixes fx
         SET aircraft_id = m.icao_id
         FROM aircraft_merge m
         WHERE fx.aircraft_id = m.flarm_id
-          AND fx.timestamp >= batch_start
-          AND fx.timestamp < batch_end;
+          AND fx.received_at >= batch_start
+          AND fx.received_at < batch_end;
 
         GET DIAGNOSTICS updated_count = ROW_COUNT;
         total_updated := total_updated + updated_count;
-
-        IF updated_count > 0 THEN
-            RAISE NOTICE 'Updated % fixes for %', updated_count, batch_start::date;
-        END IF;
+        day_count := day_count + updated_count;
 
         batch_start := batch_end;
     END LOOP;
+
+    -- Log final day
+    IF day_count > 0 THEN
+        RAISE NOTICE 'Updated % fixes for %', day_count, current_day;
+    END IF;
 
     RAISE NOTICE 'Total fixes updated: %', total_updated;
 END $$;
