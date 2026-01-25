@@ -105,7 +105,7 @@
 	// Get MapTiler style URL
 	function getStyleUrl(style: MapStyle): string {
 		if (!MAPTILER_API_KEY) {
-			// Fallback to OSM if no API key
+			logger.warn('No MapTiler API key configured, using OSM fallback');
 			return '';
 		}
 		switch (style) {
@@ -207,8 +207,19 @@
 
 		const source = map.getSource('aircraft') as maplibregl.GeoJSONSource;
 		if (source) {
-			source.setData(createAircraftGeoJson());
+			const geojson = createAircraftGeoJson();
+			logger.debug('[AIRCRAFT] Updating source with {count} features', {
+				count: geojson.features.length
+			});
+			if (geojson.features.length > 0) {
+				logger.debug('[AIRCRAFT] First feature: {feature}', {
+					feature: JSON.stringify(geojson.features[0])
+				});
+			}
+			source.setData(geojson);
 			debugAircraftCount = aircraftMap.size;
+		} else {
+			logger.warn('[AIRCRAFT] Source not found when trying to update');
 		}
 	}
 
@@ -374,10 +385,13 @@
 			const response = await serverCall<{ data: Aircraft[] }>(`/aircraft?${params.toString()}`);
 			const aircraft = response.data || [];
 
+			logger.debug('[AIRCRAFT] Fetched {total} aircraft from API', { total: aircraft.length });
+
 			// Update aircraft map with fetched data
 			aircraftMap.clear();
+			let skipped = 0;
 			for (const ac of aircraft) {
-				if (ac.latitude && ac.longitude) {
+				if (ac.latitude != null && ac.longitude != null) {
 					const fix: Fix = {
 						id: ac.id,
 						aircraftId: ac.id,
@@ -403,11 +417,16 @@
 						timeGapSeconds: null
 					};
 					aircraftMap.set(ac.id, { aircraft: ac, fix });
+				} else {
+					skipped++;
 				}
 			}
 
+			logger.debug('[AIRCRAFT] Added {added} aircraft to map, skipped {skipped} without coords', {
+				added: aircraftMap.size,
+				skipped
+			});
 			updateAircraftSource();
-			logger.debug('Fetched {count} aircraft in viewport', { count: aircraft.length });
 		} catch (err) {
 			logger.error('Failed to fetch aircraft: {error}', { error: err });
 			toaster.error({ title: 'Failed to load aircraft' });
@@ -455,6 +474,10 @@
 
 		currentStyle = style;
 		const styleUrl = getStyleUrl(style);
+		logger.debug('[MAP] Setting style to {style}, URL: {url}', {
+			style,
+			url: styleUrl || '(none)'
+		});
 
 		if (styleUrl) {
 			// Clear layer managers before style change (they need to re-add layers)
