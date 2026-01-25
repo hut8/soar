@@ -65,9 +65,9 @@ FROM aircraft_merge m WHERE watchlist.aircraft_id = m.flarm_id;
 UPDATE aircraft_registrations SET aircraft_id = m.icao_id
 FROM aircraft_merge m WHERE aircraft_registrations.aircraft_id = m.flarm_id;
 
--- 3e: Fixes - BATCHED by hour to manage memory usage during decompression
--- The fixes table is a hypertable with compressed chunks. Even with unlimited
--- decompression, hourly batches keep memory usage reasonable (~40-50K fixes/hour).
+-- 3e: Fixes - BATCHED by hour on received_at (the hypertable partition column)
+-- The fixes table is a hypertable partitioned by received_at with compressed chunks.
+-- Batching by received_at aligns with chunk boundaries for efficient updates.
 DO $$
 DECLARE
     batch_start TIMESTAMP WITH TIME ZONE;
@@ -79,8 +79,8 @@ DECLARE
     current_day DATE := NULL;
     day_count INTEGER := 0;
 BEGIN
-    -- Get time range of fixes that need updating
-    SELECT MIN(fx.timestamp), MAX(fx.timestamp)
+    -- Get time range of fixes that need updating (using received_at, the partition column)
+    SELECT MIN(fx.received_at), MAX(fx.received_at)
     INTO min_ts, max_ts
     FROM fixes fx
     JOIN aircraft_merge m ON fx.aircraft_id = m.flarm_id;
@@ -90,9 +90,9 @@ BEGIN
         RETURN;
     END IF;
 
-    RAISE NOTICE 'Updating fixes from % to % (hourly batches)', min_ts, max_ts;
+    RAISE NOTICE 'Updating fixes from % to % (hourly batches by received_at)', min_ts, max_ts;
 
-    -- Process in hourly batches
+    -- Process in hourly batches aligned with chunk boundaries
     batch_start := DATE_TRUNC('hour', min_ts);
     WHILE batch_start <= max_ts LOOP
         batch_end := batch_start + INTERVAL '1 hour';
@@ -110,8 +110,8 @@ BEGIN
         SET aircraft_id = m.icao_id
         FROM aircraft_merge m
         WHERE fx.aircraft_id = m.flarm_id
-          AND fx.timestamp >= batch_start
-          AND fx.timestamp < batch_end;
+          AND fx.received_at >= batch_start
+          AND fx.received_at < batch_end;
 
         GET DIAGNOSTICS updated_count = ROW_COUNT;
         total_updated := total_updated + updated_count;
