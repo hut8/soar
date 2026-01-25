@@ -91,7 +91,6 @@
 	let loadingFixes = false;
 	let loadingFlights = false;
 	let error = '';
-	let aircraftId = '';
 	let fixesPage = 1;
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
@@ -104,13 +103,13 @@
 	let loadingImages = true;
 	let isFixesCollapsed = true;
 
-	$: aircraftId = $page.params.id || '';
-	$: isAdmin = $auth.user?.isAdmin === true;
-	$: userClubId = $auth.user?.clubId;
-	$: isInWatchlist = watchlist.has(aircraftId);
+	let aircraftId = $derived($page.params.id || '');
+	let isAdmin = $derived($auth.user?.isAdmin === true);
+	let userClubId = $derived($auth.user?.clubId);
+	let isInWatchlist = $derived(watchlist.has(aircraftId));
 
 	// Generate JSON-LD structured data for SEO (reactive to aircraft and aircraftId changes)
-	$: jsonLdScript = (() => {
+	let jsonLdScript = $derived.by(() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'WebPage',
@@ -132,7 +131,7 @@
 				: undefined
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	})();
+	});
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {
