@@ -345,15 +345,15 @@
 			minzoom: 8,
 			layout: {
 				'text-field': ['get', 'registration'],
-				'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-				'text-size': 11,
+				'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+				'text-size': 12,
 				'text-offset': [0, 1.5],
 				'text-anchor': 'top'
 			},
 			paint: {
-				'text-color': '#374151',
-				'text-halo-color': '#ffffff',
-				'text-halo-width': 1
+				'text-color': '#ffffff',
+				'text-halo-color': 'rgba(0, 0, 0, 0.8)',
+				'text-halo-width': 1.5
 			}
 		});
 
