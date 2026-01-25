@@ -48,13 +48,14 @@
 	let error = '';
 	let aircraftError = '';
 	let airportError = '';
+	let clubId = '';
 	let settingClub = false;
 
-	let clubId = $derived($page.params.id || '');
-	let isCurrentClub = $derived($auth.user?.clubId === clubId);
+	$: clubId = $page.params.id || '';
+	$: isCurrentClub = $auth.user?.clubId === clubId;
 
 	// Generate JSON-LD structured data for SEO (reactive to club changes)
-	let jsonLdScript = $derived.by(() => {
+	$: jsonLdScript = (() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'SportsClub',
@@ -69,7 +70,7 @@
 			})
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	});
+	})();
 
 	onMount(async () => {
 		if (clubId) {
@@ -78,11 +79,9 @@
 		}
 	});
 
-	$effect(() => {
-		if (club?.homeBaseAirportId) {
-			loadAirport(club.homeBaseAirportId);
-		}
-	});
+	$: if (club?.homeBaseAirportId) {
+		loadAirport(club.homeBaseAirportId);
+	}
 
 	async function loadClub() {
 		loading = true;

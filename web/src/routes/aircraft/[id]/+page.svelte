@@ -103,13 +103,13 @@
 	let loadingImages = true;
 	let isFixesCollapsed = true;
 
-	let aircraftId = $derived($page.params.id || '');
-	let isAdmin = $derived($auth.user?.isAdmin === true);
-	let userClubId = $derived($auth.user?.clubId);
-	let isInWatchlist = $derived(watchlist.has(aircraftId));
+	$: aircraftId = $page.params.id || '';
+	$: isAdmin = $auth.user?.isAdmin === true;
+	$: userClubId = $auth.user?.clubId;
+	$: isInWatchlist = watchlist.has(aircraftId);
 
 	// Generate JSON-LD structured data for SEO (reactive to aircraft and aircraftId changes)
-	let jsonLdScript = $derived.by(() => {
+	$: jsonLdScript = (() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'WebPage',
@@ -131,7 +131,7 @@
 				: undefined
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	});
+	})();
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {

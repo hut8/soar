@@ -30,11 +30,12 @@
 	let error = '';
 	let flightsError = '';
 	let clubsError = '';
+	let airportId = '';
 
-	let airportId = $derived($page.params.id || '');
+	$: airportId = $page.params.id || '';
 
 	// Generate JSON-LD structured data for SEO (reactive to airport changes)
-	let jsonLdScript = $derived.by(() => {
+	$: jsonLdScript = (() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'Airport',
@@ -55,7 +56,7 @@
 				})
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	});
+	})();
 
 	onMount(async () => {
 		if (airportId) {
