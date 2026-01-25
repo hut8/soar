@@ -17,7 +17,7 @@ mod migration_email_reporter;
 mod telemetry;
 
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest, handle_load_data,
+    handle_archive, handle_dump_aircraft_dbs, handle_ingest, handle_load_data,
     handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
     handle_sitemap_generation,
 };
@@ -314,18 +314,22 @@ enum Commands {
         #[arg(long, default_value = "3,4,5,6,7,8", value_delimiter = ',')]
         resolutions: Vec<i16>,
     },
-    /// Dump unified FlarmNet device database to JSONL file
+    /// Dump aircraft databases (FlarmNet and ADS-B Exchange) to JSONL file
     ///
     /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
-    /// and exports all device records to a JSONL (JSON Lines) file for debugging.
-    /// Each line contains one complete device record with all fields.
-    DumpUnifiedDdb {
+    /// and the ADS-B Exchange database from <https://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz>,
+    /// then exports all aircraft records to a JSONL (JSON Lines) file.
+    /// Each line contains one complete aircraft record with all fields.
+    DumpAircraftDbs {
         /// Output file path for JSONL export
         #[arg(value_name = "OUTPUT_FILE")]
         output: String,
-        /// Optional local source file (if not specified, downloads from remote)
+        /// Optional local FlarmNet source file (if not specified, downloads from remote)
         #[arg(long)]
-        source: Option<String>,
+        flarmnet_source: Option<String>,
+        /// Optional local ADS-B Exchange source file (if not specified, downloads from remote)
+        #[arg(long)]
+        adsb_source: Option<String>,
     },
 }
 
@@ -749,7 +753,7 @@ async fn main() -> Result<()> {
         Commands::Archive { .. } => "archive",
         Commands::Resurrect { .. } => "resurrect",
         Commands::VerifyRuntime { .. } => "verify-runtime",
-        Commands::DumpUnifiedDdb { .. } => "dump-unified-ddb",
+        Commands::DumpAircraftDbs { .. } => "dump-aircraft-dbs",
         Commands::SeedTestData { .. } => "seed-test-data",
         Commands::RunAggregates { .. } => "run-aggregates",
     };
@@ -1087,9 +1091,18 @@ async fn main() -> Result<()> {
             })
             .await;
         }
-        Commands::DumpUnifiedDdb { output, source } => {
-            // DumpUnifiedDdb only downloads and exports data, doesn't need database
-            return handle_dump_unified_ddb(output.clone(), source.clone()).await;
+        Commands::DumpAircraftDbs {
+            output,
+            flarmnet_source,
+            adsb_source,
+        } => {
+            // DumpAircraftDbs only downloads and exports data, doesn't need database
+            return handle_dump_aircraft_dbs(
+                output.clone(),
+                flarmnet_source.clone(),
+                adsb_source.clone(),
+            )
+            .await;
         }
         _ => {
             // All other commands need database access
@@ -1167,7 +1180,7 @@ async fn main() -> Result<()> {
         // These should not reach here due to early returns
         Commands::Ingest { .. } => unreachable!(),
         Commands::VerifyRuntime { .. } => unreachable!(),
-        Commands::DumpUnifiedDdb { .. } => unreachable!(),
+        Commands::DumpAircraftDbs { .. } => unreachable!(),
     };
 
     // For Migrate command, handle errors specially to send notifications
@@ -1391,9 +1404,9 @@ async fn main() -> Result<()> {
             resolutions,
         } => commands::run_aggregates(diesel_pool, start_date, end_date, resolutions.clone()).await,
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
-        Commands::DumpUnifiedDdb { .. } => {
+        Commands::DumpAircraftDbs { .. } => {
             // This should never be reached due to early return above
-            unreachable!("DumpUnifiedDdb should be handled before database setup")
+            unreachable!("DumpAircraftDbs should be handled before database setup")
         }
     }
 }
