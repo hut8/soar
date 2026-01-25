@@ -43,7 +43,7 @@
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
-	// const globePath = resolve('/globe'); // temporarily disabled
+	const livePath = resolve('/live');
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
@@ -274,6 +274,13 @@
 									>
 										<div class="space-y-1">
 											<a
+												href={livePath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<Globe size={16} /> Live Map
+											</a>
+											<a
 												href={clubsPath}
 												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
 												onclick={() => (showDesktopMenu = false)}
@@ -461,6 +468,13 @@
 							<Radar size={16} /> Club Ops
 						</a>
 					{/if}
+					<a
+						href={livePath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Globe size={16} /> Live Map
+					</a>
 					<a
 						href={clubsPath}
 						class="btn w-full justify-start preset-filled-primary-500"
