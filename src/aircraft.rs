@@ -137,6 +137,8 @@ pub struct Aircraft {
     pub address: u32,
     pub aircraft_model: String,
     pub registration: Option<String>,
+    /// Competition number (glider contest ID). Serializes as "competition_number".
+    /// The "cn" alias allows deserializing older data that used the abbreviated field name.
     #[serde(alias = "cn")]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
@@ -1165,8 +1167,8 @@ mod tests {
         let deserialized: Aircraft = serde_json::from_str(&json).unwrap();
         assert_eq!(device, deserialized);
 
-        // Also test that it includes the competition_number field (cn)
-        assert!(json.contains("\"cn\":\"J\""));
+        // Also test that it includes the competition_number field
+        assert!(json.contains("\"competition_number\":\"J\""));
     }
 
     #[test]

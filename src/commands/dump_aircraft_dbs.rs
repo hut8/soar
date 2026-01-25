@@ -13,6 +13,9 @@ const DDB_URL_UNIFIED_FLARMNET: &str = "https://turbo87.github.io/united-flarmne
 const DDB_URL_ADSB_EXCHANGE: &str =
     "https://downloads.adsbexchange.com/downloads/basic-ac-db.json.gz";
 
+/// Progress logging interval for writing aircraft to output file
+const PROGRESS_LOG_INTERVAL: usize = 10000;
+
 /// ADS-B Exchange record structure (mirrors load_data/adsb_exchange.rs)
 #[derive(Debug, Deserialize)]
 struct AdsbExchangeRecord {
@@ -367,7 +370,7 @@ pub async fn handle_dump_aircraft_dbs(
         writeln!(output_file, "{}", json_line)?;
         written += 1;
 
-        if written % 10000 == 0 {
+        if written % PROGRESS_LOG_INTERVAL == 0 {
             info!("Written {} / {} aircraft", written, total_count);
         }
     }
@@ -378,7 +381,7 @@ pub async fn handle_dump_aircraft_dbs(
         writeln!(output_file, "{}", json_line)?;
         written += 1;
 
-        if written % 10000 == 0 {
+        if written % PROGRESS_LOG_INTERVAL == 0 {
             info!("Written {} / {} aircraft", written, total_count);
         }
     }
