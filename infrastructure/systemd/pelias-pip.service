@@ -1,0 +1,28 @@
+[Unit]
+Description=Pelias PIP (Point in Polygon) Service
+Documentation=https://github.com/pelias/pip-service
+After=network.target elasticsearch.service
+Requires=elasticsearch.service
+
+[Service]
+Type=simple
+User=pelias
+Group=pelias
+WorkingDirectory=/opt/pelias/pip
+Environment="NODE_ENV=production"
+Environment="HOST=127.0.0.1"
+Environment="PORT=4200"
+Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
+ExecStart=/usr/bin/node --max-old-space-size=28672 /opt/pelias/pip/index.js
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pelias-pip
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=32G
+
+[Install]
+WantedBy=multi-user.target

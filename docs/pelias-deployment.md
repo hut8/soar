@@ -1,6 +1,8 @@
 # Pelias Geocoding Server Deployment Guide
 
-This guide covers deploying [Pelias](https://github.com/pelias/pelias), an open-source geocoding platform, specifically configured for **reverse geocoding only** using city-level data from Who's on First.
+This guide covers deploying [Pelias](https://github.com/pelias/pelias), an open-source geocoding platform configured for SOAR with:
+- **Reverse geocoding** (coordinates → city, state, country) using Who's on First data
+- **Forward geocoding** (address → coordinates) using OpenAddresses data (optional)
 
 ## Quick Start (Automated)
 
@@ -11,23 +13,41 @@ This guide covers deploying [Pelias](https://github.com/pelias/pelias), an open-
 git clone https://github.com/hut8/soar.git
 cd soar
 
-# Run the provisioning script (installs OpenSearch)
+# (Optional) Enable forward geocoding by adding your OpenAddresses token
+# Register at https://openaddresses.io to get a free token
+echo "OPENADDRESSES_TOKEN=YOUR_TOKEN_HERE" | sudo tee -a /etc/soar/env-production
+
+# Run the provisioning script
 sudo ./scripts/provision-pelias
 ```
 
 The script will:
-- ✅ Install and configure OpenSearch 2.x with ICU analysis plugin
+- ✅ Install and configure Elasticsearch 8.x with ICU analysis plugin
 - ✅ Download ~70GB of Who's on First data (cities, regions, countries)
-- ✅ Import data into OpenSearch (~30-40 minutes)
-- ✅ Install Pelias API and PIP services as systemd services
+- ✅ Download ~50GB of OpenAddresses data (if token configured)
+- ✅ Import data into Elasticsearch (~2-6 hours depending on data sources)
+- ✅ Install Pelias services as systemd services:
+  - API (port 4000) - Main geocoding API
+  - PIP (port 4200) - Point-in-polygon reverse geocoding
+  - Libpostal (port 4400) - ML-based address parsing
+  - Placeholder (port 4100) - Administrative area lookups
 - ✅ Install and configure Caddy reverse proxy
 - ✅ Start all services and verify they're working
 
 After completion:
-- OpenSearch: `http://localhost:9200`
+- Elasticsearch: `http://localhost:9200`
 - Pelias API: `http://localhost:4000`
 - Public URLs (via Caddy): `https://pelias.glider.flights` and `https://pelias.staging.glider.flights`
-- Test: `curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857'`
+
+Test reverse geocoding:
+```bash
+curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857'
+```
+
+Test forward geocoding (requires OpenAddresses):
+```bash
+curl 'http://localhost:4000/v1/search?text=1600+Pennsylvania+Avenue,+Washington+DC'
+```
 
 **Note**: The PIP service may take an additional 10-20 minutes after installation to load all locality data into memory. Monitor with: `sudo journalctl -u pelias-pip -f`
 
@@ -41,9 +61,11 @@ If you prefer to install components manually or need to customize the setup, fol
 
 Pelias is a modular geocoding platform with multiple services. For SOAR, we're using:
 - **PIP Service** (Point in Polygon) for reverse geocoding
+- **Libpostal** for ML-based address parsing (forward geocoding)
+- **Placeholder** for administrative area relationship lookups
 - **Who's on First** dataset for city/locality/country-level boundaries
-- **Elasticsearch or OpenSearch** for storage and indexing
-- No street-level data (no OpenStreetMap, no OpenAddresses)
+- **OpenAddresses** dataset for street-level address data (optional, enables forward geocoding)
+- **Elasticsearch** for storage and indexing
 
 ## Architecture
 
@@ -55,28 +77,42 @@ Pelias is a modular geocoding platform with multiple services. For SOAR, we're u
          │ HTTP
          ▼
 ┌─────────────────┐
-│  Pelias API     │
-│  (Node.js)      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐        ┌──────────────────┐
-│  Pelias PIP     │◄──────►│  Elasticsearch/  │
-│  (Point in      │        │  OpenSearch      │
-│   Polygon)      │        │  (systemd)       │
-└─────────────────┘        └──────────────────┘
-         │
-         ▼
-   Who's on First
-   Dataset (WOF)
+│  Pelias API     │ ◄────────────────────────────────────┐
+│  (port 4000)    │                                      │
+└────────┬────────┘                                      │
+         │                                               │
+    ┌────┴────┬─────────────┬─────────────┐             │
+    │         │             │             │             │
+    ▼         ▼             ▼             ▼             │
+┌───────┐ ┌───────┐   ┌──────────┐  ┌───────────┐      │
+│ PIP   │ │Libpost│   │Placeholder│  │Elasticsearch│ ◄──┘
+│(4200) │ │(4400) │   │  (4100)   │  │  (9200)    │
+└───┬───┘ └───────┘   └─────┬────┘  └──────┬─────┘
+    │                       │              │
+    ▼                       ▼              ▼
+   WOF                     WOF     ┌──────────────┐
+  (SQLite)               (SQLite)  │ WOF + OA     │
+                                   │ (indexed)    │
+                                   └──────────────┘
+
+Data Sources:
+- WOF = Who's on First (cities, regions, countries)
+- OA = OpenAddresses (street-level addresses, optional)
 ```
 
 ## System Requirements
 
 ### Hardware Requirements
-- **RAM**: 16GB minimum, **32GB recommended** for production
-- **Disk**: ~20GB for Who's on First data + index storage
+
+**Reverse geocoding only (Who's on First):**
+- **RAM**: 32GB minimum
+- **Disk**: ~100GB for data + index storage
 - **CPU**: 4 cores minimum, 8+ cores recommended
+
+**With forward geocoding (+ OpenAddresses):**
+- **RAM**: 64GB recommended
+- **Disk**: ~200GB for data + index storage
+- **CPU**: 8+ cores recommended
 - **OS**: Linux (Ubuntu 22.04 LTS recommended)
 
 ### Software Requirements

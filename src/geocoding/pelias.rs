@@ -1,9 +1,12 @@
 use anyhow::{Result, anyhow};
+use async_trait::async_trait;
 use reqwest;
 use serde::Deserialize;
 use tracing::debug;
 
-use super::ReverseGeocodeResult;
+use crate::locations::Point;
+
+use super::{ForwardGeocoder, ReverseGeocodeResult, ReverseGeocoder};
 
 /// Pelias API response structure (GeoJSON format)
 #[derive(Debug, Deserialize)]
@@ -15,13 +18,12 @@ struct PeliasResponse {
 #[derive(Debug, Deserialize)]
 struct PeliasFeature {
     properties: PeliasProperties,
-    #[allow(dead_code)]
     geometry: PeliasGeometry,
 }
 
 #[derive(Debug, Deserialize)]
 struct PeliasGeometry {
-    #[allow(dead_code)]
+    /// GeoJSON coordinates [longitude, latitude]
     coordinates: Vec<f64>,
     #[allow(dead_code)]
     #[serde(rename = "type")]
@@ -73,6 +75,84 @@ pub struct PeliasClient {
 impl PeliasClient {
     pub fn new(client: reqwest::Client, base_url: String) -> Self {
         Self { client, base_url }
+    }
+
+    /// Forward geocode an address to coordinates using Pelias /v1/search endpoint
+    ///
+    /// This requires Pelias to be configured with OpenAddresses data for street-level
+    /// geocoding. With only Who's on First data, this will only resolve city/region names.
+    ///
+    /// # Arguments
+    ///
+    /// * `address` - The address to geocode (e.g., "123 Main St, Albany, NY 12207")
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Point)` - The geographic coordinates of the address
+    /// * `Err(...)` - If the address cannot be geocoded or the service is unavailable
+    pub async fn geocode(&self, address: &str) -> Result<Point> {
+        debug!("Forward geocoding address with Pelias: {}", address);
+
+        let url = format!("{}/v1/search", self.base_url);
+
+        let params = [("text", address), ("size", "1")];
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send Pelias forward geocoding request: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Pelias forward geocoding request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let result: PeliasResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Pelias forward geocoding response: {}", e))?;
+
+        if result.features.is_empty() {
+            return Err(anyhow!(
+                "No Pelias forward geocoding results found for address: {}",
+                address
+            ));
+        }
+
+        // Take the first (most confident) result
+        let feature = &result.features[0];
+        let coords = &feature.geometry.coordinates;
+
+        // GeoJSON coordinates are [longitude, latitude]
+        if coords.len() < 2 {
+            return Err(anyhow!(
+                "Invalid coordinates in Pelias response for address: {}",
+                address
+            ));
+        }
+
+        let longitude = coords[0];
+        let latitude = coords[1];
+
+        // Validate coordinates are reasonable
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(anyhow!("Invalid latitude from Pelias: {}", latitude));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(anyhow!("Invalid longitude from Pelias: {}", longitude));
+        }
+
+        debug!(
+            "Pelias forward geocoded '{}' to ({}, {}) - {:?}",
+            address, latitude, longitude, feature.properties.label
+        );
+
+        Ok(Point::new(latitude, longitude))
     }
 
     /// Reverse geocode coordinates using Pelias (city-level only)
@@ -178,11 +258,14 @@ impl PeliasClient {
 }
 
 // Trait implementations
-use super::ReverseGeocoder;
-use async_trait::async_trait;
 
-// Note: PeliasClient only implements ReverseGeocoder, not ForwardGeocoder
-// Pelias is designed for city-level reverse geocoding using Who's on First data
+#[async_trait]
+impl ForwardGeocoder for PeliasClient {
+    async fn geocode(&self, address: &str) -> Result<Point> {
+        self.geocode(address).await
+    }
+}
+
 #[async_trait]
 impl ReverseGeocoder for PeliasClient {
     async fn reverse_geocode(&self, latitude: f64, longitude: f64) -> Result<ReverseGeocodeResult> {

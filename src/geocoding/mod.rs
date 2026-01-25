@@ -322,12 +322,13 @@ impl Geocoder {
     }
 
     /// Create a Geocoder for batch geocoding operations (receivers, clubs, airports, aircraft registrations)
-    /// Uses only Nominatim → Google Maps (no Pelias)
+    /// Uses Pelias → Nominatim → Google Maps fallback chain
     ///
     /// This configuration is optimized for:
     /// - High-quality address results (detailed street-level data)
     /// - Non-time-critical batch processing
-    /// - Lower volume operations where rate limits are manageable
+    /// - Self-hosted Pelias (no rate limits) as first choice
+    /// - Nominatim and Google Maps as fallbacks
     pub fn new_batch_geocoding() -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -337,7 +338,20 @@ impl Geocoder {
         let mut forward_geocoders: Vec<(GeocodingService, Box<dyn ForwardGeocoder>)> = Vec::new();
         let mut reverse_geocoders: Vec<(GeocodingService, Box<dyn ReverseGeocoder>)> = Vec::new();
 
-        // Add Nominatim (always available)
+        // Add Pelias FIRST for forward geocoding (if configured with OpenAddresses data)
+        // Self-hosted Pelias has no rate limits, making it ideal for batch operations
+        if let Ok(url) = env::var("PELIAS_BASE_URL")
+            && !url.trim().is_empty()
+        {
+            debug!(
+                "Using Pelias for batch forward geocoding at: {}",
+                url.trim()
+            );
+            let pelias = PeliasClient::new(client.clone(), url.trim().to_string());
+            forward_geocoders.push((GeocodingService::Pelias, Box::new(pelias)));
+        }
+
+        // Add Nominatim as fallback (rate-limited to 1 req/sec)
         let nominatim = NominatimClient::new(
             client.clone(),
             "https://nominatim.openstreetmap.org".to_string(),
@@ -346,11 +360,11 @@ impl Geocoder {
         forward_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim.clone())));
         reverse_geocoders.push((GeocodingService::Nominatim, Box::new(nominatim)));
 
-        // Add Google Maps if API key is available
+        // Add Google Maps as final fallback if API key is available
         if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY")
             && !api_key.trim().is_empty()
         {
-            debug!("Initializing Google Maps client for batch geocoding");
+            debug!("Initializing Google Maps client for batch geocoding fallback");
             match GoogleMapsClient::try_new(&api_key) {
                 Ok(gmaps_client) => {
                     let google_maps = GoogleMapsGeocoderClient::new(gmaps_client);
