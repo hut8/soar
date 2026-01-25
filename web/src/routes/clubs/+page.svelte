@@ -181,7 +181,12 @@
 </script>
 
 <svelte:head>
-	<title>Soaring Clubs - Glider Flights</title>
+	<title>Soaring Clubs - Glider Flights - SOAR</title>
+	<meta
+		name="description"
+		content="Discover soaring clubs worldwide on SOAR. Browse gliding clubs, view their aircraft fleets, home base airports, and join the soaring community."
+	/>
+	<link rel="canonical" href="https://glider.flights/clubs" />
 </svelte:head>
 
 <div class="container mx-auto space-y-8 p-4">

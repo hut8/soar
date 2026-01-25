@@ -54,6 +54,24 @@
 	$: clubId = $page.params.id || '';
 	$: isCurrentClub = $auth.user?.clubId === clubId;
 
+	// Generate JSON-LD structured data for SEO (reactive to club changes)
+	$: jsonLdScript = (() => {
+		const data = {
+			'@context': 'https://schema.org',
+			'@type': 'SportsClub',
+			name: club?.name || 'Soaring Club',
+			description: club
+				? `${club.name} is a soaring club${club.homeBaseAirportIdent ? ` based at ${club.homeBaseAirportIdent}` : ''}.`
+				: 'View soaring club details including aircraft fleet, home base, and membership information.',
+			url: `https://glider.flights/clubs/${clubId}`,
+			sport: 'Gliding',
+			...(club?.homeBaseAirportIdent && {
+				location: { '@type': 'Place', name: club.homeBaseAirportIdent }
+			})
+		};
+		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
+	})();
+
 	onMount(async () => {
 		if (clubId) {
 			await loadClub();
@@ -146,7 +164,18 @@
 </script>
 
 <svelte:head>
-	<title>{club?.name || 'Club Details'} - Soaring Clubs</title>
+	<title>{club?.name || 'Club Details'} - Soaring Clubs - SOAR</title>
+	<meta
+		name="description"
+		content={club
+			? `${club.name} soaring club${club.homeBaseAirportIdent ? ` based at ${club.homeBaseAirportIdent}` : ''}. View fleet, members, and club information.`
+			: 'View soaring club details including aircraft fleet, home base airport, and membership information on SOAR.'}
+	/>
+	<link rel="canonical" href="https://glider.flights/clubs/{clubId}" />
+
+	<!-- JSON-LD structured data for SEO -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html jsonLdScript}
 </svelte:head>
 
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
@@ -164,6 +193,20 @@
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading club details...</span>
+			</div>
+
+			<!-- SEO fallback content - visible during loading for crawlers -->
+			<div class="text-surface-600-300-token mt-6 space-y-4">
+				<h1 class="h2">Soaring Club Details</h1>
+				<p>
+					This page displays detailed information about a soaring club on SOAR, including the club's
+					aircraft fleet, home base airport, and membership information.
+				</p>
+				<p>
+					SOAR connects glider pilots and soaring enthusiasts with clubs worldwide. View
+					<a href="/clubs" class="anchor">all soaring clubs</a>
+					or <a href="/aircraft" class="anchor">browse tracked aircraft</a>.
+				</p>
 			</div>
 		</div>
 	{/if}

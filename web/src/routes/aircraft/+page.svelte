@@ -218,6 +218,11 @@
 
 <svelte:head>
 	<title>Aircraft - SOAR Tracking</title>
+	<meta
+		name="description"
+		content="Search and browse tracked aircraft on SOAR. Find gliders, sailplanes, and other aircraft by registration, address, or model using Open Glider Network and ADS-B data."
+	/>
+	<link rel="canonical" href="https://glider.flights/aircraft" />
 </svelte:head>
 
 <div class="container mx-auto max-w-7xl space-y-6 p-4">

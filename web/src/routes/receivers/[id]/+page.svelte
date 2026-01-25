@@ -131,6 +131,27 @@
 
 	let receiverId = $derived($page.params.id || '');
 
+	// Generate JSON-LD structured data for SEO (reactive to receiver changes)
+	let jsonLdScript = $derived.by(() => {
+		const data = {
+			'@context': 'https://schema.org',
+			'@type': 'WebPage',
+			name: receiver?.callsign ? `${receiver.callsign} - OGN Receiver` : 'OGN Receiver Details',
+			description: receiver
+				? `${receiver.callsign} Open Glider Network receiver${receiver.country ? ` in ${receiver.country}` : ''}. View status, statistics, and received aircraft positions.`
+				: 'View OGN receiver details including status reports, statistics, and received aircraft position data.',
+			url: `https://glider.flights/receivers/${receiverId}`,
+			mainEntity: receiver
+				? {
+						'@type': 'Thing',
+						name: receiver.callsign || undefined,
+						description: 'Open Glider Network Receiver'
+					}
+				: undefined
+		};
+		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
+	});
+
 	// Cache for on-demand raw message fetching in fixes
 	let fixRawMessagesCache = new SvelteMap<
 		string,
@@ -491,7 +512,18 @@
 </script>
 
 <svelte:head>
-	<title>{receiver?.callsign || 'Receiver Details'} - Receivers</title>
+	<title>{receiver?.callsign || 'Receiver Details'} - OGN Receivers - SOAR</title>
+	<meta
+		name="description"
+		content={receiver
+			? `${receiver.callsign} Open Glider Network receiver${receiver.country ? ` in ${receiver.country}` : ''}. View status, statistics, and received fixes.`
+			: 'View OGN receiver details including status reports, performance statistics, and received aircraft position data on SOAR.'}
+	/>
+	<link rel="canonical" href="https://glider.flights/receivers/{receiverId}" />
+
+	<!-- JSON-LD structured data for SEO -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html jsonLdScript}
 </svelte:head>
 
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
@@ -509,6 +541,20 @@
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading receiver details...</span>
+			</div>
+
+			<!-- SEO fallback content - visible during loading for crawlers -->
+			<div class="text-surface-600-300-token mt-6 space-y-4">
+				<h1 class="h2">OGN Receiver Details</h1>
+				<p>
+					This page displays detailed information about an Open Glider Network (OGN) receiver,
+					including status reports, performance statistics, and received aircraft position data.
+				</p>
+				<p>
+					OGN receivers are volunteer-operated stations that track gliders and other aircraft. View
+					<a href="/receivers" class="anchor">all receivers</a>
+					or <a href="/receivers/coverage" class="anchor">coverage map</a>.
+				</p>
 			</div>
 		</div>
 	{/if}

@@ -89,7 +89,12 @@
 </script>
 
 <svelte:head>
-	<title>Airports - Airport Search</title>
+	<title>Airports - Airport Search - SOAR</title>
+	<meta
+		name="description"
+		content="Search airports worldwide on SOAR. Find airports by name, ICAO/IATA code, or location. View airport details, flight activity, and nearby soaring clubs."
+	/>
+	<link rel="canonical" href="https://glider.flights/airports" />
 </svelte:head>
 
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
