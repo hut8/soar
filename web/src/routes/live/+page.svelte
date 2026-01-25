@@ -12,8 +12,15 @@
 	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Aircraft, Airport, Airspace, Fix, AircraftSearchResponse } from '$lib/types';
-	import { isAircraftItem } from '$lib/types';
+	import type {
+		Aircraft,
+		Airport,
+		Airspace,
+		Fix,
+		AircraftSearchResponse,
+		AircraftCluster
+	} from '$lib/types';
+	import { isAircraftItem, isClusterItem } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { isStaging } from '$lib/config';
 	import { getLogger } from '$lib/logging';
@@ -81,6 +88,10 @@
 
 	// Aircraft data - using SvelteMap for reactivity (SvelteMap is already reactive)
 	const aircraftMap = new SvelteMap<string, { aircraft: Aircraft; fix: Fix }>();
+
+	// Cluster data
+	const clusterMap = new SvelteMap<string, AircraftCluster>();
+	let isClusteredMode = $state(false);
 
 	// Services
 	const fixFeed = FixFeed.getInstance();
@@ -250,6 +261,39 @@
 		};
 	}
 
+	// Convert cluster to GeoJSON feature
+	function clusterToFeature(cluster: AircraftCluster): GeoJSON.Feature<GeoJSON.Point> {
+		return {
+			type: 'Feature',
+			geometry: {
+				type: 'Point',
+				coordinates: [cluster.longitude, cluster.latitude]
+			},
+			properties: {
+				id: cluster.id,
+				count: Number(cluster.count),
+				north: cluster.bounds.north,
+				south: cluster.bounds.south,
+				east: cluster.bounds.east,
+				west: cluster.bounds.west
+			}
+		};
+	}
+
+	// Create cluster GeoJSON FeatureCollection
+	function createClusterGeoJson(): GeoJSON.FeatureCollection<GeoJSON.Point> {
+		const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+
+		for (const [, cluster] of clusterMap) {
+			features.push(clusterToFeature(cluster));
+		}
+
+		return {
+			type: 'FeatureCollection',
+			features
+		};
+	}
+
 	// Update aircraft source
 	function updateAircraftSource() {
 		if (!map) return;
@@ -269,6 +313,20 @@
 			debugAircraftCount = aircraftMap.size;
 		} else {
 			logger.warn('[AIRCRAFT] Source not found when trying to update');
+		}
+	}
+
+	// Update cluster source
+	function updateClusterSource() {
+		if (!map) return;
+
+		const source = map.getSource('clusters') as maplibregl.GeoJSONSource;
+		if (source) {
+			const geojson = createClusterGeoJson();
+			logger.debug('[CLUSTERS] Updating source with {count} clusters', {
+				count: geojson.features.length
+			});
+			source.setData(geojson);
 		}
 	}
 
@@ -402,6 +460,71 @@
 		map.on('mouseleave', 'aircraft-markers', () => {
 			if (map) map.getCanvas().style.cursor = '';
 		});
+
+		// Add cluster source
+		map.addSource('clusters', {
+			type: 'geojson',
+			data: createClusterGeoJson()
+		});
+
+		// Add cluster circle markers
+		map.addLayer({
+			id: 'cluster-circles',
+			type: 'circle',
+			source: 'clusters',
+			paint: {
+				'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 2, 20, 10, 30, 50, 45],
+				'circle-color': '#6366f1', // Indigo color for clusters
+				'circle-opacity': 0.7,
+				'circle-stroke-width': 2,
+				'circle-stroke-color': '#ffffff'
+			}
+		});
+
+		// Add cluster count labels
+		map.addLayer({
+			id: 'cluster-labels',
+			type: 'symbol',
+			source: 'clusters',
+			layout: {
+				'text-field': ['get', 'count'],
+				'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+				'text-size': 14,
+				'text-allow-overlap': true
+			},
+			paint: {
+				'text-color': '#ffffff'
+			}
+		});
+
+		// Add click handler for cluster markers - zoom to bounds
+		map.on('click', 'cluster-circles', (e) => {
+			if (!e.features || e.features.length === 0 || !map) return;
+
+			e.originalEvent.stopPropagation();
+
+			const feature = e.features[0];
+			const props = feature.properties;
+
+			if (props?.north && props?.south && props?.east && props?.west) {
+				logger.debug('[CLUSTER] Zooming to cluster bounds');
+				map.fitBounds(
+					[
+						[props.west, props.south],
+						[props.east, props.north]
+					],
+					{ padding: 50 }
+				);
+			}
+		});
+
+		// Change cursor on hover for clusters
+		map.on('mouseenter', 'cluster-circles', () => {
+			if (map) map.getCanvas().style.cursor = 'pointer';
+		});
+		map.on('mouseleave', 'cluster-circles', () => {
+			if (map) map.getCanvas().style.cursor = '';
+		});
 	}
 
 	// Fetch aircraft in current viewport
@@ -427,12 +550,14 @@
 				clustered: response.clustered
 			});
 
-			// Update aircraft map with fetched data
+			// Update aircraft and cluster maps with fetched data
 			aircraftMap.clear();
+			clusterMap.clear();
+			isClusteredMode = response.clustered;
+
 			let skipped = 0;
 			let hasTrackCount = 0;
 			for (const item of response.items) {
-				// Only process individual aircraft, not clusters
 				if (isAircraftItem(item)) {
 					const ac = item.data;
 					// currentFix is always present when latitude/longitude exist (updated together in DB)
@@ -445,18 +570,23 @@
 					} else {
 						skipped++;
 					}
+				} else if (isClusterItem(item)) {
+					const cluster = item.data;
+					clusterMap.set(cluster.id, cluster);
 				}
 			}
 
 			logger.debug(
-				'[AIRCRAFT] Added {added} aircraft to map, skipped {skipped} without coords, {hasTrack} with track data',
+				'[AIRCRAFT] Added {added} aircraft, {clusters} clusters, skipped {skipped} without coords, {hasTrack} with track data',
 				{
 					added: aircraftMap.size,
+					clusters: clusterMap.size,
 					skipped,
 					hasTrack: hasTrackCount
 				}
 			);
 			updateAircraftSource();
+			updateClusterSource();
 		} catch (err) {
 			logger.error('Failed to fetch aircraft: {error}', { error: err });
 			toaster.error({ title: 'Failed to load aircraft' });
@@ -598,6 +728,9 @@
 	// Subscribe to aircraft registry updates
 	function subscribeToAircraftUpdates() {
 		aircraftRegistry.subscribe((event) => {
+			// Ignore updates when in clustered mode - only show cluster markers
+			if (isClusteredMode) return;
+
 			if (event.type === 'fix_received' && event.fix) {
 				const existing = aircraftMap.get(event.fix.aircraftId);
 				if (existing) {
@@ -823,6 +956,8 @@
 						<div>Zoom: {debugZoomLevel.toFixed(1)}</div>
 						<div>Area: {debugSquareMiles.toLocaleString()} sq mi</div>
 						<div>Aircraft: {debugAircraftCount}</div>
+						<div>Clusters: {clusterMap.size}</div>
+						<div>Mode: {isClusteredMode ? 'Clustered' : 'Individual'}</div>
 						<div>Projection: {currentProjection}</div>
 					</div>
 				{/if}
