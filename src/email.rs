@@ -233,7 +233,8 @@ The SOAR Team"#,
         Ok(response)
     }
 
-    /// Send flight completion notification with KML attachment
+    /// Send flight completion notification with KML and IGC attachments
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_flight_completion_email(
         &self,
         to_email: &str,
@@ -242,6 +243,8 @@ The SOAR Team"#,
         device_address: &str,
         kml_content: String,
         kml_filename: &str,
+        igc_content: String,
+        igc_filename: &str,
     ) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -262,7 +265,9 @@ An aircraft on your watchlist has completed a flight!
 Device: {}
 Flight Details: {}
 
-A KML file of the flight track is attached. You can open it in Google Earth or other mapping applications.
+Attached files:
+- KML: Open in Google Earth or other mapping applications
+- IGC: Standard glider flight log format for analysis software
 
 Manage your watchlist and email preferences:
 {}
@@ -280,6 +285,10 @@ The SOAR Team"#,
             ContentType::parse("application/vnd.google-earth.kml+xml")?,
         );
 
+        // Create IGC attachment
+        let igc_part = Attachment::new(igc_filename.to_string())
+            .body(igc_content, ContentType::parse("application/x-igc")?);
+
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
@@ -287,7 +296,8 @@ The SOAR Team"#,
             .multipart(
                 MultiPart::mixed()
                     .singlepart(SinglePart::plain(body))
-                    .singlepart(kml_part),
+                    .singlepart(kml_part)
+                    .singlepart(igc_part),
             )?;
 
         let response = self.mailer.send(email).await?;

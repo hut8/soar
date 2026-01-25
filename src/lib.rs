@@ -48,6 +48,7 @@ pub mod flights_repo;
 pub mod geocoding;
 pub mod geometry;
 pub mod icao;
+pub mod igc;
 pub mod instance_lock;
 pub mod live_fixes;
 pub mod locations;

@@ -744,12 +744,23 @@ async fn complete_flight_in_background(
                         }
                     };
 
+                    let igc_content = match flight.make_igc(&fixes_repo, Some(&aircraft)).await {
+                        Ok(igc) => igc,
+                        Err(e) => {
+                            tracing::error!("Failed to generate IGC: {}", e);
+                            metrics::counter!("watchlist.emails.failed_total").increment(1);
+                            return;
+                        }
+                    };
+
                     let takeoff_time_str = flight
                         .takeoff_time
                         .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
                         .unwrap_or_else(|| "unknown".to_string());
                     let kml_filename =
                         format!("flight-{}-{}.kml", takeoff_time_str, device_address);
+                    let igc_filename =
+                        format!("flight-{}-{}.igc", takeoff_time_str, device_address);
 
                     let email_service = match crate::email::EmailService::new() {
                         Ok(service) => service,
@@ -773,6 +784,8 @@ async fn complete_flight_in_background(
                                             &device_address.to_string(),
                                             kml_content.clone(),
                                             &kml_filename,
+                                            igc_content.clone(),
+                                            &igc_filename,
                                         )
                                         .await
                                     {
