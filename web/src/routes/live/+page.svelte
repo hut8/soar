@@ -14,7 +14,7 @@
 	import { FixFeed } from '$lib/services/FixFeed';
 	import type { Aircraft, Airport, Airspace, Fix } from '$lib/types';
 	import { toaster } from '$lib/toaster';
-	import { MAPTILER_API_KEY, isStaging } from '$lib/config';
+	import { isStaging } from '$lib/config';
 	import { getLogger } from '$lib/logging';
 	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
 	import { serverCall } from '$lib/api/server';
@@ -102,45 +102,84 @@
 
 	const receiverLayerManager = new ReceiverLayerManager();
 
-	// Get MapTiler style URL
-	function getStyleUrl(style: MapStyle): string {
-		if (!MAPTILER_API_KEY) {
-			logger.warn('No MapTiler API key configured, using OSM fallback');
-			return '';
-		}
+	// Get style specification for the given map style (using free tile sources)
+	function getStyleSpec(style: MapStyle): maplibregl.StyleSpecification {
 		switch (style) {
 			case 'satellite':
-				return `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_API_KEY}`;
+				// ESRI World Imagery - free for non-commercial use
+				return {
+					version: 8,
+					sources: {
+						esri: {
+							type: 'raster',
+							tiles: [
+								'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+							],
+							tileSize: 256,
+							attribution:
+								'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+							maxzoom: 19
+						}
+					},
+					layers: [
+						{
+							id: 'esri-satellite',
+							type: 'raster',
+							source: 'esri',
+							minzoom: 0,
+							maxzoom: 19
+						}
+					]
+				};
 			case 'streets':
-				return `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_API_KEY}`;
+				// OpenStreetMap
+				return {
+					version: 8,
+					sources: {
+						osm: {
+							type: 'raster',
+							tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+							tileSize: 256,
+							attribution:
+								'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+							maxzoom: 19
+						}
+					},
+					layers: [
+						{
+							id: 'osm',
+							type: 'raster',
+							source: 'osm',
+							minzoom: 0,
+							maxzoom: 19
+						}
+					]
+				};
 			case 'terrain':
-				return `https://api.maptiler.com/maps/outdoor-v2/style.json?key=${MAPTILER_API_KEY}`;
+				// OpenTopoMap - topographic map
+				return {
+					version: 8,
+					sources: {
+						opentopomap: {
+							type: 'raster',
+							tiles: ['https://tile.opentopomap.org/{z}/{x}/{y}.png'],
+							tileSize: 256,
+							attribution:
+								'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+							maxzoom: 17
+						}
+					},
+					layers: [
+						{
+							id: 'opentopomap',
+							type: 'raster',
+							source: 'opentopomap',
+							minzoom: 0,
+							maxzoom: 17
+						}
+					]
+				};
 		}
-	}
-
-	// Get fallback style for when no API key is available
-	function getFallbackStyle(): maplibregl.StyleSpecification {
-		return {
-			version: 8,
-			sources: {
-				osm: {
-					type: 'raster',
-					tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-					tileSize: 256,
-					attribution:
-						'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-				}
-			},
-			layers: [
-				{
-					id: 'osm',
-					type: 'raster',
-					source: 'osm',
-					minzoom: 0,
-					maxzoom: 19
-				}
-			]
-		};
 	}
 
 	// Calculate viewport area in square miles
@@ -473,37 +512,32 @@
 		if (!map) return;
 
 		currentStyle = style;
-		const styleUrl = getStyleUrl(style);
-		logger.debug('[MAP] Setting style to {style}, URL: {url}', {
-			style,
-			url: styleUrl || '(none)'
+		const styleSpec = getStyleSpec(style);
+		logger.debug('[MAP] Setting style to {style}', { style });
+
+		// Clear layer managers before style change (they need to re-add layers)
+		airspaceLayerManager.clear();
+		airportLayerManager.clear();
+		receiverLayerManager.clear();
+
+		map.setStyle(styleSpec);
+		// Re-add layers after style change
+		map.once('style.load', () => {
+			map!.setProjection({ type: currentProjection });
+			addAircraftLayers();
+
+			// Re-initialize layer managers
+			airspaceLayerManager.setMap(map!);
+			airportLayerManager.setMap(map!);
+			receiverLayerManager.setMap(map!);
+
+			const viewportArea = calculateViewportArea();
+			airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
+			airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
+			receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
+
+			fetchAircraftInViewport();
 		});
-
-		if (styleUrl) {
-			// Clear layer managers before style change (they need to re-add layers)
-			airspaceLayerManager.clear();
-			airportLayerManager.clear();
-			receiverLayerManager.clear();
-
-			map.setStyle(styleUrl);
-			// Re-add layers after style change
-			map.once('style.load', () => {
-				map!.setProjection({ type: currentProjection });
-				addAircraftLayers();
-
-				// Re-initialize layer managers
-				airspaceLayerManager.setMap(map!);
-				airportLayerManager.setMap(map!);
-				receiverLayerManager.setMap(map!);
-
-				const viewportArea = calculateViewportArea();
-				airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
-				airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
-				receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
-
-				fetchAircraftInViewport();
-			});
-		}
 	}
 
 	// Handle user location request
@@ -587,14 +621,10 @@
 		const urlParams = new URLSearchParams($page.url.search);
 		const loadedState = loadMapState(urlParams);
 
-		// Determine initial style
-		const styleUrl = getStyleUrl(currentStyle);
-		const initialStyle = styleUrl ? styleUrl : getFallbackStyle();
-
-		// Initialize map
+		// Initialize map with current style
 		map = new maplibregl.Map({
 			container: mapContainer,
-			style: initialStyle,
+			style: getStyleSpec(currentStyle),
 			center: [loadedState.state.center.lng, loadedState.state.center.lat],
 			zoom: loadedState.state.zoom
 		});
