@@ -12,7 +12,8 @@
 	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Aircraft, Airport, Airspace, Fix } from '$lib/types';
+	import type { Aircraft, Airport, Airspace, Fix, AircraftSearchResponse } from '$lib/types';
+	import { isAircraftItem } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { isStaging } from '$lib/config';
 	import { getLogger } from '$lib/logging';
@@ -421,43 +422,49 @@
 				limit: MAX_AIRCRAFT_DISPLAY.toString()
 			});
 
-			const response = await serverCall<{ data: Aircraft[] }>(`/aircraft?${params.toString()}`);
-			const aircraft = response.data || [];
+			const response = await serverCall<AircraftSearchResponse>(`/aircraft?${params.toString()}`);
 
-			logger.debug('[AIRCRAFT] Fetched {total} aircraft from API', { total: aircraft.length });
+			logger.debug('[AIRCRAFT] Fetched {total} items from API (clustered: {clustered})', {
+				total: response.items.length,
+				clustered: response.clustered
+			});
 
 			// Update aircraft map with fetched data
 			aircraftMap.clear();
 			let skipped = 0;
-			for (const ac of aircraft) {
-				if (ac.latitude != null && ac.longitude != null) {
-					const fix: Fix = {
-						id: ac.id,
-						aircraftId: ac.id,
-						latitude: ac.latitude,
-						longitude: ac.longitude,
-						altitudeMslFeet: null,
-						altitudeAglFeet: null,
-						trackDegrees: null,
-						groundSpeedKnots: null,
-						climbFpm: null,
-						turnRateRot: null,
-						timestamp: ac.lastFixAt || new Date().toISOString(),
-						active: true,
-						source: 'api',
-						receivedAt: new Date().toISOString(),
-						altitudeAglValid: false,
-						rawMessageId: '',
-						flightId: null,
-						receiverId: null,
-						flightNumber: null,
-						squawk: null,
-						sourceMetadata: null,
-						timeGapSeconds: null
-					};
-					aircraftMap.set(ac.id, { aircraft: ac, fix });
-				} else {
-					skipped++;
+			for (const item of response.items) {
+				// Only process individual aircraft, not clusters
+				if (isAircraftItem(item)) {
+					const ac = item.data;
+					if (ac.latitude != null && ac.longitude != null) {
+						const fix: Fix = {
+							id: ac.id,
+							aircraftId: ac.id,
+							latitude: ac.latitude,
+							longitude: ac.longitude,
+							altitudeMslFeet: null,
+							altitudeAglFeet: null,
+							trackDegrees: null,
+							groundSpeedKnots: null,
+							climbFpm: null,
+							turnRateRot: null,
+							timestamp: ac.lastFixAt || new Date().toISOString(),
+							active: true,
+							source: 'api',
+							receivedAt: new Date().toISOString(),
+							altitudeAglValid: false,
+							rawMessageId: '',
+							flightId: null,
+							receiverId: null,
+							flightNumber: null,
+							squawk: null,
+							sourceMetadata: null,
+							timeGapSeconds: null
+						};
+						aircraftMap.set(ac.id, { aircraft: ac, fix });
+					} else {
+						skipped++;
+					}
 				}
 			}
 
