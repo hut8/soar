@@ -19,8 +19,11 @@ CREATE TABLE aircraft_merge_mapping (
 );
 
 -- Populate with FLARM+ICAO duplicate pairs
+-- Use DISTINCT ON to handle cases where one registration has multiple ICAO matches
+-- (e.g., test registrations like "TW-R" with 284 matches)
+-- Pick the ICAO with the most recent last_fix_at, or earliest created_at as tiebreaker
 INSERT INTO aircraft_merge_mapping (flarm_id, icao_id, registration)
-SELECT
+SELECT DISTINCT ON (f.id)
     f.id as flarm_id,
     i.id as icao_id,
     f.registration
@@ -30,7 +33,8 @@ WHERE f.address_type = 'flarm'
   AND i.address_type = 'icao'
   AND f.registration IS NOT NULL
   AND f.registration != ''
-  AND f.id != i.id;
+  AND f.id != i.id
+ORDER BY f.id, i.last_fix_at DESC NULLS LAST, i.created_at ASC;
 
 -- Log count
 DO $$
