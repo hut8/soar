@@ -240,17 +240,17 @@ export class AirportLayerManager {
 			source: SOURCE_ID,
 			layout: {
 				'text-field': ['get', 'ident'],
-				'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-				'text-size': 11,
+				'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+				'text-size': 12,
 				'text-offset': [0, 1.2],
 				'text-anchor': 'top',
 				'icon-allow-overlap': false,
 				'text-allow-overlap': false
 			},
 			paint: {
-				'text-color': '#1f2937',
-				'text-halo-color': '#ffffff',
-				'text-halo-width': 1.5
+				'text-color': '#ffffff',
+				'text-halo-color': 'rgba(0, 0, 0, 0.85)',
+				'text-halo-width': 2
 			}
 		});
 
