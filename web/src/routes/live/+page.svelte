@@ -1008,7 +1008,7 @@
 		transform: translate(-50%, -50%);
 		width: 12px;
 		height: 12px;
-		background: #3b82f6;
+		background: #f97316;
 		border: 2px solid white;
 		border-radius: 50%;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -1021,7 +1021,7 @@
 		transform: translate(-50%, -50%);
 		width: 40px;
 		height: 40px;
-		background: rgba(59, 130, 246, 0.3);
+		background: rgba(249, 115, 22, 0.3);
 		border-radius: 50%;
 		animation: pulse 2s ease-out infinite;
 	}
