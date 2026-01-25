@@ -869,6 +869,30 @@ impl Flight {
         kml.push_str("</kml>\n");
         kml
     }
+
+    /// Generate an IGC (International Gliding Commission) file for this flight
+    /// Returns IGC as a string containing the flight track with fixes
+    pub async fn make_igc(
+        &self,
+        fixes_repo: &crate::fixes_repo::FixesRepository,
+        device: Option<&crate::aircraft::Aircraft>,
+    ) -> Result<String> {
+        // Get all fixes for this flight based on aircraft ID and time range
+        let start_time = self.takeoff_time.unwrap_or(self.created_at);
+        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
+
+        let fixes = fixes_repo
+            .get_fixes_for_aircraft_with_time_range(
+                &self.aircraft_id.unwrap_or(Uuid::nil()),
+                start_time,
+                end_time,
+                None,
+            )
+            .await?;
+
+        // Generate IGC content using the igc module
+        Ok(crate::igc::generate_igc(self, &fixes, device))
+    }
 }
 
 /// Diesel model for the flights table - used for database operations

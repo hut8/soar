@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
@@ -285,11 +285,64 @@ pub async fn get_flight_kml(
             let mut headers = HeaderMap::new();
             headers.insert(
                 "content-type",
-                "application/vnd.google-earth.kml+xml".parse().unwrap(),
+                HeaderValue::from_static("application/vnd.google-earth.kml+xml"),
             );
 
             // Generate filename based on flight info
             let filename = generate_kml_filename(&flight);
+            let content_disposition = format!("attachment; filename=\"{}\"", filename);
+            if let Ok(value) = content_disposition.parse() {
+                headers.insert("content-disposition", value);
+            }
+
+            (StatusCode::OK, headers, kml_content).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to generate KML for flight {}: {}", id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate KML").into_response()
+        }
+    }
+}
+
+/// Get IGC file for a flight
+pub async fn get_flight_igc(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
+
+    // First get the flight
+    let flight = match flights_repo.get_flight_by_id(id).await {
+        Ok(Some(flight)) => flight,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
+                .into_response();
+        }
+    };
+
+    // Get aircraft info for better IGC naming
+    let aircraft = if let Some(aircraft_id) = flight.aircraft_id {
+        aircraft_repo
+            .get_aircraft_by_id(aircraft_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    // Generate IGC
+    match flight.make_igc(&fixes_repo, aircraft.as_ref()).await {
+        Ok(igc_content) => {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", "application/x-igc".parse().unwrap());
+
+            // Generate filename based on flight info
+            let filename = generate_igc_filename(&flight);
             headers.insert(
                 "content-disposition",
                 format!("attachment; filename=\"{}\"", filename)
@@ -297,11 +350,11 @@ pub async fn get_flight_kml(
                     .unwrap(),
             );
 
-            (StatusCode::OK, headers, kml_content).into_response()
+            (StatusCode::OK, headers, igc_content).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to generate KML for flight {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate KML").into_response()
+            tracing::error!("Failed to generate IGC for flight {}: {}", id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate IGC").into_response()
         }
     }
 }
@@ -550,6 +603,21 @@ fn generate_kml_filename(flight: &Flight) -> String {
     };
 
     format!("{}.kml", base_name)
+}
+
+/// Generate an appropriate filename for the IGC download
+fn generate_igc_filename(flight: &Flight) -> String {
+    let base_name = if let Some(takeoff_time) = flight.takeoff_time {
+        format!(
+            "flight-{}-{}",
+            flight.device_address,
+            takeoff_time.format("%Y%m%d-%H%M")
+        )
+    } else {
+        format!("flight-{}-{}", flight.device_address, flight.id)
+    };
+
+    format!("{}.igc", base_name)
 }
 
 /// Search flights by club ID, or return recent flights (in progress or completed)

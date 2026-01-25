@@ -1343,6 +1343,11 @@
 		window.open(`/data/flights/${data.flight.id}/kml`, '_blank');
 	}
 
+	// IGC download
+	function downloadIGC() {
+		window.open(`/data/flights/${data.flight.id}/igc`, '_blank');
+	}
+
 	function goToPage(page: number) {
 		if (page >= 1 && page <= totalPages) {
 			currentPage = page;
@@ -1553,6 +1558,14 @@
 				>
 					<Download class="h-4 w-4" />
 					KML
+				</button>
+				<button
+					onclick={downloadIGC}
+					class="btn flex items-center gap-2 preset-filled-primary-500"
+					type="button"
+				>
+					<Download class="h-4 w-4" />
+					IGC
 				</button>
 			</div>
 		</div>
