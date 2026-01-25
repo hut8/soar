@@ -742,10 +742,10 @@
 		<!-- Projection and style controls -->
 		<div class="absolute top-4 right-16 z-10 flex flex-col gap-2">
 			<!-- Projection toggle -->
-			<div class="flex overflow-hidden rounded-lg shadow-lg">
+			<div class="flex shadow-lg">
 				<button
 					onclick={() => setProjection('globe')}
-					class="px-3 py-2 transition-colors"
+					class="rounded-l-lg px-3 py-2 transition-colors"
 					class:bg-primary-500={currentProjection === 'globe'}
 					class:text-white={currentProjection === 'globe'}
 					class:bg-surface-700={currentProjection !== 'globe'}
@@ -757,7 +757,7 @@
 				</button>
 				<button
 					onclick={() => setProjection('mercator')}
-					class="px-3 py-2 transition-colors"
+					class="rounded-r-lg px-3 py-2 transition-colors"
 					class:bg-primary-500={currentProjection === 'mercator'}
 					class:text-white={currentProjection === 'mercator'}
 					class:bg-surface-700={currentProjection !== 'mercator'}
@@ -770,10 +770,10 @@
 			</div>
 
 			<!-- Style selector -->
-			<div class="flex overflow-hidden rounded-lg shadow-lg">
+			<div class="flex shadow-lg">
 				<button
 					onclick={() => setStyle('satellite')}
-					class="px-3 py-2 transition-colors"
+					class="rounded-l-lg px-3 py-2 transition-colors"
 					class:bg-primary-500={currentStyle === 'satellite'}
 					class:text-white={currentStyle === 'satellite'}
 					class:bg-surface-700={currentStyle !== 'satellite'}
@@ -797,7 +797,7 @@
 				</button>
 				<button
 					onclick={() => setStyle('terrain')}
-					class="px-3 py-2 transition-colors"
+					class="rounded-r-lg px-3 py-2 transition-colors"
 					class:bg-primary-500={currentStyle === 'terrain'}
 					class:text-white={currentStyle === 'terrain'}
 					class:bg-surface-700={currentStyle !== 'terrain'}
