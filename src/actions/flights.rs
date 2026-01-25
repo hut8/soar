@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
@@ -285,17 +285,15 @@ pub async fn get_flight_kml(
             let mut headers = HeaderMap::new();
             headers.insert(
                 "content-type",
-                "application/vnd.google-earth.kml+xml".parse().unwrap(),
+                HeaderValue::from_static("application/vnd.google-earth.kml+xml"),
             );
 
             // Generate filename based on flight info
             let filename = generate_kml_filename(&flight);
-            headers.insert(
-                "content-disposition",
-                format!("attachment; filename=\"{}\"", filename)
-                    .parse()
-                    .unwrap(),
-            );
+            let content_disposition = format!("attachment; filename=\"{}\"", filename);
+            if let Ok(value) = content_disposition.parse() {
+                headers.insert("content-disposition", value);
+            }
 
             (StatusCode::OK, headers, kml_content).into_response()
         }
