@@ -128,7 +128,6 @@ DROP TABLE aircraft_merge;
 -- The next data load will repopulate valid registrations using flydent validation
 -- This is safer than trying to validate in SQL
 UPDATE aircraft SET registration = NULL WHERE registration IS NOT NULL;
-UPDATE aircraft SET registration = NULL WHERE registration = '';
 
 -- Step 6: Drop existing non-unique index and add unique partial index
 DROP INDEX IF EXISTS idx_aircraft_registration;
