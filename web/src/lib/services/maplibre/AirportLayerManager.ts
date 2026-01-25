@@ -210,14 +210,7 @@ export class AirportLayerManager {
 				},
 				properties: {
 					id: airport.id,
-					ident: airport.ident,
-					name: airport.name,
-					airportType: airport.airportType,
-					elevationFt: airport.elevationFt,
-					icaoCode: airport.icaoCode,
-					iataCode: airport.iataCode,
-					// Store full airport data for click handler
-					_airportData: JSON.stringify(airport)
+					ident: airport.ident
 				}
 			});
 		}
@@ -315,14 +308,12 @@ export class AirportLayerManager {
 			if (!e.features || e.features.length === 0) return;
 
 			const feature = e.features[0];
-			const airportData = feature.properties?._airportData;
+			const airportId = feature.properties?.id;
 
-			if (airportData) {
-				try {
-					const airport = JSON.parse(airportData) as Airport;
+			if (airportId) {
+				const airport = this.airports.find((a) => a.id === airportId);
+				if (airport) {
 					clickHandler(airport);
-				} catch (err) {
-					logger.error('Failed to parse airport data: {error}', { error: err });
 				}
 			}
 		};

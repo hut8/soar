@@ -187,14 +187,12 @@ export class AirspaceLayerManager {
 	private createGeoJson(): GeoJSON.FeatureCollection {
 		return {
 			type: 'FeatureCollection',
-			features: this.airspaces.map((airspace) => ({
+			features: this.airspaces.map((airspace, index) => ({
 				type: 'Feature' as const,
 				geometry: airspace.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon,
 				properties: {
-					...airspace.properties,
-					color: getAirspaceColor(airspace.properties.airspaceClass),
-					// Store full airspace data for click handler
-					_airspaceData: JSON.stringify(airspace)
+					index,
+					color: getAirspaceColor(airspace.properties.airspaceClass)
 				}
 			}))
 		};
@@ -271,15 +269,22 @@ export class AirspaceLayerManager {
 		this.map.on('click', FILL_LAYER_ID, (e) => {
 			if (!e.features || e.features.length === 0) return;
 
-			const feature = e.features[0];
-			const airspaceData = feature.properties?._airspaceData;
+			// Check if an aircraft was clicked - if so, don't show airspace modal
+			// Aircraft layer has higher priority for click handling
+			const aircraftFeatures = this.map!.queryRenderedFeatures(e.point, {
+				layers: ['aircraft-markers']
+			});
+			if (aircraftFeatures.length > 0) {
+				return; // Aircraft clicked, let aircraft handler deal with it
+			}
 
-			if (airspaceData) {
-				try {
-					const airspace = JSON.parse(airspaceData) as Airspace;
+			const feature = e.features[0];
+			const airspaceIndex = feature.properties?.index;
+
+			if (airspaceIndex !== undefined && airspaceIndex !== null) {
+				const airspace = this.airspaces[airspaceIndex];
+				if (airspace) {
 					clickHandler(airspace);
-				} catch (err) {
-					logger.error('Failed to parse airspace data: {error}', { error: err });
 				}
 			}
 		});

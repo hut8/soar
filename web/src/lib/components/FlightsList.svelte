@@ -135,21 +135,6 @@
 		}
 	}
 
-	function formatAltitude(
-		mslFeet: number | null | undefined,
-		aglFeet: number | null | undefined
-	): string {
-		if (mslFeet === null && aglFeet === null) return '—';
-		const parts: string[] = [];
-		if (mslFeet !== null && mslFeet !== undefined) {
-			parts.push(`${mslFeet.toLocaleString()} ft MSL`);
-		}
-		if (aglFeet !== null && aglFeet !== undefined) {
-			parts.push(`${aglFeet.toLocaleString()} ft AGL`);
-		}
-		return parts.join(' / ');
-	}
-
 	// Check if flight was first seen airborne (no takeoff time)
 	function isAirborne(flight: Flight): boolean {
 		return !flight.takeoffTime;
@@ -366,8 +351,18 @@
 						{/if}
 						{#if !showEnd}
 							<td>
-								<div class="text-sm">
-									{formatAltitude(flight.latestAltitudeMslFeet, flight.latestAltitudeAglFeet)}
+								<div class="flex flex-col text-sm">
+									{#if flight.latestAltitudeMslFeet !== null && flight.latestAltitudeMslFeet !== undefined}
+										<span>{flight.latestAltitudeMslFeet.toLocaleString()} ft MSL</span>
+									{/if}
+									{#if flight.latestAltitudeAglFeet !== null && flight.latestAltitudeAglFeet !== undefined}
+										<span class="text-surface-500-400-token"
+											>{flight.latestAltitudeAglFeet.toLocaleString()} ft AGL</span
+										>
+									{/if}
+									{#if (flight.latestAltitudeMslFeet === null || flight.latestAltitudeMslFeet === undefined) && (flight.latestAltitudeAglFeet === null || flight.latestAltitudeAglFeet === undefined)}
+										<span>—</span>
+									{/if}
 								</div>
 							</td>
 							<td>
@@ -560,7 +555,14 @@
 				{#if !showEnd && (flight.latestAltitudeMslFeet !== null || flight.latestAltitudeAglFeet !== null)}
 					<div>
 						<span class="text-surface-500-400-token text-xs">Altitude:</span>
-						{formatAltitude(flight.latestAltitudeMslFeet, flight.latestAltitudeAglFeet)}
+						{#if flight.latestAltitudeMslFeet !== null && flight.latestAltitudeMslFeet !== undefined}
+							<span>{flight.latestAltitudeMslFeet.toLocaleString()} ft MSL</span>
+						{/if}
+						{#if flight.latestAltitudeAglFeet !== null && flight.latestAltitudeAglFeet !== undefined}
+							<span class="text-surface-500-400-token"
+								>/ {flight.latestAltitudeAglFeet.toLocaleString()} ft AGL</span
+							>
+						{/if}
 					</div>
 				{/if}
 				{#if !showEnd && flight.latestFixTimestamp}

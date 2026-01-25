@@ -19,11 +19,11 @@
 	import { getLogger } from '$lib/logging';
 	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
 	import { serverCall } from '$lib/api/server';
-	import { altitudeToColor } from '$lib/utils/mapColors';
 	import {
 		AirspaceLayerManager,
 		AirportLayerManager,
-		ReceiverLayerManager
+		ReceiverLayerManager,
+		RunwayLayerManager
 	} from '$lib/services/maplibre';
 
 	const logger = getLogger(['soar', 'Live']);
@@ -98,10 +98,19 @@
 		onAirportClick: (airport) => {
 			selectedAirport = airport;
 			showAirportModal = true;
+		},
+		onAirportsLoaded: () => {
+			// Refresh runway overlays when airports are loaded
+			runwayLayerManager.refresh();
 		}
 	});
 
 	const receiverLayerManager = new ReceiverLayerManager();
+
+	// Runway layer manager (uses airport manager for runway data)
+	const runwayLayerManager = new RunwayLayerManager({
+		getRunways: () => airportLayerManager.getRunways()
+	});
 
 	// Get style specification for the given map style (using free tile sources)
 	function getStyleSpec(style: MapStyle): maplibregl.StyleSpecification {
@@ -222,7 +231,7 @@
 				isActive: fix.active,
 				timestamp: fix.timestamp,
 				aircraftModel: aircraft.aircraftModel || '',
-				color: altitudeToColor(fix.altitudeMslFeet || 0)
+				iconName: getAircraftIconNameForAltitude(fix.altitudeMslFeet)
 			}
 		};
 	}
@@ -263,76 +272,87 @@
 		}
 	}
 
-	// Add aircraft layers to map
-	function addAircraftLayers() {
+	// Create aircraft icon SVG as a data URL for MapLibre
+	function createAircraftIconDataUrl(color: string): string {
+		const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="${color}">
+			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+		</svg>`;
+		return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+	}
+
+	// Get icon name based on altitude (discrete color bands)
+	function getAircraftIconNameForAltitude(altitude: number | null | undefined): string {
+		if (altitude === null || altitude === undefined) {
+			return 'aircraft-icon-gray';
+		}
+		// Map altitude ranges to icon colors
+		// Range: 500 ft (red) to 18000 ft (blue)
+		if (altitude < 2000) return 'aircraft-icon-red';
+		if (altitude < 4000) return 'aircraft-icon-orange';
+		if (altitude < 6000) return 'aircraft-icon-amber';
+		if (altitude < 8000) return 'aircraft-icon-yellow';
+		if (altitude < 10000) return 'aircraft-icon-lime';
+		if (altitude < 12000) return 'aircraft-icon-green';
+		if (altitude < 15000) return 'aircraft-icon-cyan';
+		return 'aircraft-icon-blue';
+	}
+
+	// Add aircraft icon images to the map
+	async function addAircraftIcons() {
 		if (!map) return;
 
-		// Add aircraft source
+		// Create icons for different altitude-based colors
+		const iconColors = [
+			{ name: 'aircraft-icon-red', color: '#ef4444' },
+			{ name: 'aircraft-icon-orange', color: '#f97316' },
+			{ name: 'aircraft-icon-amber', color: '#f59e0b' },
+			{ name: 'aircraft-icon-yellow', color: '#eab308' },
+			{ name: 'aircraft-icon-lime', color: '#84cc16' },
+			{ name: 'aircraft-icon-green', color: '#22c55e' },
+			{ name: 'aircraft-icon-cyan', color: '#06b6d4' },
+			{ name: 'aircraft-icon-blue', color: '#3b82f6' },
+			{ name: 'aircraft-icon-gray', color: '#6b7280' }
+		];
+
+		for (const { name, color } of iconColors) {
+			const img = new Image(48, 48);
+			img.src = createAircraftIconDataUrl(color);
+			await new Promise<void>((resolve) => {
+				img.onload = () => {
+					if (map && !map.hasImage(name)) {
+						map.addImage(name, img, { sdf: false });
+					}
+					resolve();
+				};
+				img.onerror = () => resolve();
+			});
+		}
+	}
+
+	// Add aircraft layers to map
+	async function addAircraftLayers() {
+		if (!map) return;
+
+		// Add aircraft icons first
+		await addAircraftIcons();
+
+		// Add aircraft source (clustering is handled by backend)
 		map.addSource('aircraft', {
 			type: 'geojson',
-			data: createAircraftGeoJson(),
-			cluster: true,
-			clusterMaxZoom: 10,
-			clusterRadius: 50
+			data: createAircraftGeoJson()
 		});
 
-		// Add cluster circles
-		map.addLayer({
-			id: 'aircraft-clusters',
-			type: 'circle',
-			source: 'aircraft',
-			filter: ['has', 'point_count'],
-			paint: {
-				'circle-color': [
-					'step',
-					['get', 'point_count'],
-					'#3b82f6', // blue for small clusters
-					10,
-					'#f59e0b', // amber for medium
-					50,
-					'#ef4444' // red for large
-				],
-				'circle-radius': [
-					'step',
-					['get', 'point_count'],
-					20, // radius for small clusters
-					10,
-					25,
-					50,
-					35
-				],
-				'circle-stroke-width': 2,
-				'circle-stroke-color': '#ffffff'
-			}
-		});
-
-		// Add cluster count labels
-		map.addLayer({
-			id: 'aircraft-cluster-count',
-			type: 'symbol',
-			source: 'aircraft',
-			filter: ['has', 'point_count'],
-			layout: {
-				'text-field': '{point_count_abbreviated}',
-				'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-				'text-size': 12
-			},
-			paint: {
-				'text-color': '#ffffff'
-			}
-		});
-
-		// Add unclustered aircraft markers
+		// Add aircraft markers with rotated icons
 		map.addLayer({
 			id: 'aircraft-markers',
-			type: 'circle',
+			type: 'symbol',
 			source: 'aircraft',
-			filter: ['!', ['has', 'point_count']],
-			paint: {
-				'circle-color': ['get', 'color'],
-				'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4, 8, 6, 12, 10],
-				'circle-stroke-width': 2,
-				'circle-stroke-color': '#ffffff'
+			layout: {
+				'icon-image': ['get', 'iconName'],
+				'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.4, 8, 0.6, 12, 0.8],
+				'icon-rotate': ['get', 'track'],
+				'icon-rotation-alignment': 'map',
+				'icon-allow-overlap': true
 			}
 		});
 
@@ -341,7 +361,6 @@
 			id: 'aircraft-labels',
 			type: 'symbol',
 			source: 'aircraft',
-			filter: ['!', ['has', 'point_count']],
 			minzoom: 8,
 			layout: {
 				'text-field': ['get', 'registration'],
@@ -361,6 +380,9 @@
 		map.on('click', 'aircraft-markers', async (e) => {
 			if (!e.features || e.features.length === 0) return;
 
+			// Stop propagation to prevent airspace click handler from firing
+			e.originalEvent.stopPropagation();
+
 			const feature = e.features[0];
 			const aircraftId = feature.properties?.id;
 
@@ -373,35 +395,11 @@
 			}
 		});
 
-		// Add click handler for clusters
-		map.on('click', 'aircraft-clusters', async (e) => {
-			if (!e.features || e.features.length === 0) return;
-
-			const feature = e.features[0];
-			const clusterId = feature.properties?.cluster_id;
-			const source = map!.getSource('aircraft') as maplibregl.GeoJSONSource;
-
-			// Get cluster expansion zoom
-			const zoom = await source.getClusterExpansionZoom(clusterId);
-			const geometry = feature.geometry as GeoJSON.Point;
-
-			map!.easeTo({
-				center: geometry.coordinates as [number, number],
-				zoom: zoom
-			});
-		});
-
 		// Change cursor on hover
 		map.on('mouseenter', 'aircraft-markers', () => {
 			if (map) map.getCanvas().style.cursor = 'pointer';
 		});
 		map.on('mouseleave', 'aircraft-markers', () => {
-			if (map) map.getCanvas().style.cursor = '';
-		});
-		map.on('mouseenter', 'aircraft-clusters', () => {
-			if (map) map.getCanvas().style.cursor = 'pointer';
-		});
-		map.on('mouseleave', 'aircraft-clusters', () => {
 			if (map) map.getCanvas().style.cursor = '';
 		});
 	}
@@ -432,35 +430,17 @@
 			// Update aircraft map with fetched data
 			aircraftMap.clear();
 			let skipped = 0;
+			let hasTrackCount = 0;
 			for (const item of response.items) {
 				// Only process individual aircraft, not clusters
 				if (isAircraftItem(item)) {
 					const ac = item.data;
-					if (ac.latitude != null && ac.longitude != null) {
-						const fix: Fix = {
-							id: ac.id,
-							aircraftId: ac.id,
-							latitude: ac.latitude,
-							longitude: ac.longitude,
-							altitudeMslFeet: null,
-							altitudeAglFeet: null,
-							trackDegrees: null,
-							groundSpeedKnots: null,
-							climbFpm: null,
-							turnRateRot: null,
-							timestamp: ac.lastFixAt || new Date().toISOString(),
-							active: true,
-							source: 'api',
-							receivedAt: new Date().toISOString(),
-							altitudeAglValid: false,
-							rawMessageId: '',
-							flightId: null,
-							receiverId: null,
-							flightNumber: null,
-							squawk: null,
-							sourceMetadata: null,
-							timeGapSeconds: null
-						};
+					// currentFix is always present when latitude/longitude exist (updated together in DB)
+					const fix = ac.currentFix as Fix | null;
+					if (fix) {
+						if (fix.trackDegrees != null) {
+							hasTrackCount++;
+						}
 						aircraftMap.set(ac.id, { aircraft: ac, fix });
 					} else {
 						skipped++;
@@ -468,10 +448,14 @@
 				}
 			}
 
-			logger.debug('[AIRCRAFT] Added {added} aircraft to map, skipped {skipped} without coords', {
-				added: aircraftMap.size,
-				skipped
-			});
+			logger.debug(
+				'[AIRCRAFT] Added {added} aircraft to map, skipped {skipped} without coords, {hasTrack} with track data',
+				{
+					added: aircraftMap.size,
+					skipped,
+					hasTrack: hasTrackCount
+				}
+			);
 			updateAircraftSource();
 		} catch (err) {
 			logger.error('Failed to fetch aircraft: {error}', { error: err });
@@ -502,9 +486,10 @@
 			airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
 			airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
 			receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
+			runwayLayerManager.checkAndUpdate(viewportArea, currentSettings.showRunwayOverlays);
 
 			fetchAircraftInViewport();
-		}, 1000);
+		}, 300);
 	}
 
 	// Set map projection
@@ -529,19 +514,21 @@
 
 		map.setStyle(styleSpec);
 		// Re-add layers after style change
-		map.once('style.load', () => {
+		map.once('style.load', async () => {
 			map!.setProjection({ type: currentProjection });
-			addAircraftLayers();
+			await addAircraftLayers();
 
 			// Re-initialize layer managers
 			airspaceLayerManager.setMap(map!);
 			airportLayerManager.setMap(map!);
 			receiverLayerManager.setMap(map!);
+			runwayLayerManager.setMap(map!);
 
 			const viewportArea = calculateViewportArea();
 			airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
 			airportLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirportMarkers);
 			receiverLayerManager.checkAndUpdate(viewportArea, currentSettings.showReceiverMarkers);
+			runwayLayerManager.checkAndUpdate(viewportArea, currentSettings.showRunwayOverlays);
 
 			fetchAircraftInViewport();
 		});
@@ -604,6 +591,7 @@
 			airspaceLayerManager.checkAndUpdate(viewportArea, newSettings.showAirspaceMarkers);
 			airportLayerManager.checkAndUpdate(viewportArea, newSettings.showAirportMarkers);
 			receiverLayerManager.checkAndUpdate(viewportArea, newSettings.showReceiverMarkers);
+			runwayLayerManager.checkAndUpdate(viewportArea, newSettings.showRunwayOverlays);
 		}
 	}
 
@@ -640,7 +628,7 @@
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 		// Handle map load
-		map.on('load', () => {
+		map.on('load', async () => {
 			mapLoading = false;
 
 			// Set projection after style is loaded
@@ -651,12 +639,13 @@
 			});
 
 			// Add aircraft layers
-			addAircraftLayers();
+			await addAircraftLayers();
 
 			// Set up layer managers
 			airspaceLayerManager.setMap(map!);
 			airportLayerManager.setMap(map!);
 			receiverLayerManager.setMap(map!);
+			runwayLayerManager.setMap(map!);
 
 			// Fit to bounds if provided in URL
 			if (loadedState.bounds) {
@@ -674,6 +663,7 @@
 			airspaceLayerManager.checkAndUpdate(initialArea, currentSettings.showAirspaceMarkers);
 			airportLayerManager.checkAndUpdate(initialArea, currentSettings.showAirportMarkers);
 			receiverLayerManager.checkAndUpdate(initialArea, currentSettings.showReceiverMarkers);
+			runwayLayerManager.checkAndUpdate(initialArea, currentSettings.showRunwayOverlays);
 
 			// Start live feed
 			fixFeed.startLiveFixesFeed();
@@ -690,6 +680,7 @@
 			airspaceLayerManager.dispose();
 			airportLayerManager.dispose();
 			receiverLayerManager.dispose();
+			runwayLayerManager.dispose();
 			map?.remove();
 		};
 	});

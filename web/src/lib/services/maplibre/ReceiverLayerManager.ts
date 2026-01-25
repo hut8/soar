@@ -200,10 +200,7 @@ export class ReceiverLayerManager {
 				},
 				properties: {
 					id: receiver.id,
-					callsign: receiver.callsign,
-					description: receiver.description || '',
-					// Store full receiver data for click handler
-					_receiverData: JSON.stringify(receiver)
+					callsign: receiver.callsign
 				}
 			});
 		}
@@ -297,14 +294,12 @@ export class ReceiverLayerManager {
 			if (!e.features || e.features.length === 0) return;
 
 			const feature = e.features[0];
-			const receiverData = feature.properties?._receiverData;
+			const receiverId = feature.properties?.id;
 
-			if (receiverData) {
-				try {
-					const receiver = JSON.parse(receiverData) as Receiver;
+			if (receiverId) {
+				const receiver = this.receivers.find((r) => r.id === receiverId);
+				if (receiver) {
 					clickHandler(receiver);
-				} catch (err) {
-					logger.error('Failed to parse receiver data: {error}', { error: err });
 				}
 			}
 		};
