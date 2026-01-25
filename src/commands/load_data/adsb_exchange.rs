@@ -67,13 +67,16 @@ fn parse_icao_address(icao_hex: &str) -> Result<(i32, AddressType)> {
     Ok((address, address_type))
 }
 
-/// Canonicalize registration using flydent
-fn canonicalize_registration(registration: &str) -> String {
-    let parser = flydent::Parser::new();
-    match parser.parse(registration, false, false) {
-        Some(r) => r.canonical_callsign().to_string(),
-        None => registration.to_string(),
+/// Validate and canonicalize registration using flydent
+/// Returns None if the registration is invalid or empty
+fn validate_registration(registration: &str) -> Option<String> {
+    if registration.is_empty() {
+        return None;
     }
+    let parser = flydent::Parser::new();
+    parser
+        .parse(registration, false, false)
+        .map(|r| r.canonical_callsign().to_string())
 }
 
 /// Build aircraft model string from manufacturer and model
@@ -94,7 +97,7 @@ fn build_aircraft_model(manufacturer: Option<&String>, model: Option<&String>) -
 struct NewAircraftAdsb {
     address: i32,
     address_type: AddressType,
-    registration: String,
+    registration: Option<String>,
     aircraft_model: String,
     competition_number: String,
     tracked: bool,
@@ -208,20 +211,27 @@ pub async fn load_adsb_exchange_data(
                 .map(|st| parse_short_type(st))
                 .unwrap_or((None, None, None));
 
-            // Canonicalize registration if present
+            // Validate and canonicalize registration if present
+            // Invalid registrations (that flydent can't parse) become None
             let registration = record
                 .registration
                 .as_ref()
                 .filter(|r| !r.is_empty())
-                .map(|r| {
-                    let canonical = canonicalize_registration(r);
-                    debug!(
-                        "ICAO {}: registration '{}' -> canonical '{}'",
-                        record.icao, r, canonical
-                    );
-                    canonical
-                })
-                .unwrap_or_default();
+                .and_then(|r| {
+                    let validated = validate_registration(r);
+                    if let Some(ref canonical) = validated {
+                        debug!(
+                            "ICAO {}: registration '{}' -> canonical '{}'",
+                            record.icao, r, canonical
+                        );
+                    } else {
+                        debug!(
+                            "ICAO {}: registration '{}' is invalid, setting to NULL",
+                            record.icao, r
+                        );
+                    }
+                    validated
+                });
 
             // Build aircraft model from manufacturer and model
             let aircraft_model =

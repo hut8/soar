@@ -614,14 +614,9 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                         (reg, country)
                                     }
                                     None => {
-                                        // If flydent can't parse it, return the original
-                                        // This handles edge cases where the registration format is unusual
-                                        let reg = if record.registration.is_empty() {
-                                            None
-                                        } else {
-                                            Some(record.registration.clone())
-                                        };
-                                        (reg, None)
+                                        // If flydent can't parse it, the registration is invalid
+                                        // Return None to prevent storing invalid values
+                                        (None, None)
                                     }
                                 }
                             });
@@ -832,14 +827,9 @@ impl AircraftFetcher {
                                             (reg, country)
                                         }
                                         None => {
-                                            // If flydent can't parse it, return the original
-                                            // This handles edge cases where the registration format is unusual
-                                            let reg = if record.registration.is_empty() {
-                                                None
-                                            } else {
-                                                Some(record.registration.clone())
-                                            };
-                                            (reg, None)
+                                            // If flydent can't parse it, the registration is invalid
+                                            // Return None to prevent storing invalid values
+                                            (None, None)
                                         }
                                     }
                                 });
