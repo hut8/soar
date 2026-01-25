@@ -34,6 +34,30 @@
 
 	$: airportId = $page.params.id || '';
 
+	// Generate JSON-LD structured data for SEO (reactive to airport changes)
+	$: jsonLdScript = (() => {
+		const data = {
+			'@context': 'https://schema.org',
+			'@type': 'Airport',
+			name: airport?.name || 'Airport',
+			description: airport
+				? `${airport.name}${airport.icaoCode ? ` (${airport.icaoCode})` : ''} - ${airport.municipality || 'Airport'}, ${airport.isoCountry || ''}`
+				: 'View airport details including location, runway information, and flight activity.',
+			url: `https://glider.flights/airports/${airportId}`,
+			iataCode: airport?.iataCode || undefined,
+			icaoCode: airport?.icaoCode || undefined,
+			...(airport?.latitudeDeg &&
+				airport?.longitudeDeg && {
+					geo: {
+						'@type': 'GeoCoordinates',
+						latitude: airport.latitudeDeg,
+						longitude: airport.longitudeDeg
+					}
+				})
+		};
+		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
+	})();
+
 	onMount(async () => {
 		if (airportId) {
 			await Promise.all([loadAirport(), loadFlights(), loadClubs()]);
@@ -161,7 +185,21 @@
 </script>
 
 <svelte:head>
-	<title>{airport?.name || 'Airport Details'} - Airports</title>
+	<title
+		>{airport?.name || 'Airport Details'}{airport?.icaoCode ? ` (${airport.icaoCode})` : ''} - Airports
+		- SOAR</title
+	>
+	<meta
+		name="description"
+		content={airport
+			? `${airport.name}${airport.icaoCode ? ` (${airport.icaoCode})` : ''} in ${airport.municipality || 'Unknown'}, ${airport.isoCountry || ''}. View location, flight activity, and soaring clubs.`
+			: 'View airport details including location, coordinates, flight activity, and nearby soaring clubs on SOAR.'}
+	/>
+	<link rel="canonical" href="https://glider.flights/airports/{airportId}" />
+
+	<!-- JSON-LD structured data for SEO -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html jsonLdScript}
 </svelte:head>
 
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
@@ -179,6 +217,20 @@
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading airport details...</span>
+			</div>
+
+			<!-- SEO fallback content - visible during loading for crawlers -->
+			<div class="text-surface-600-300-token mt-6 space-y-4">
+				<h1 class="h2">Airport Details</h1>
+				<p>
+					This page displays detailed information about an airport, including location coordinates,
+					runway information, recent flight activity, and nearby soaring clubs.
+				</p>
+				<p>
+					SOAR tracks flights at airports worldwide using Open Glider Network and ADS-B data. View
+					<a href="/airports" class="anchor">all airports</a>
+					or <a href="/flights" class="anchor">recent flights</a>.
+				</p>
 			</div>
 		</div>
 	{/if}

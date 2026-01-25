@@ -91,7 +91,6 @@
 	let loadingFixes = false;
 	let loadingFlights = false;
 	let error = '';
-	let aircraftId = '';
 	let fixesPage = 1;
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
@@ -108,6 +107,31 @@
 	$: isAdmin = $auth.user?.isAdmin === true;
 	$: userClubId = $auth.user?.clubId;
 	$: isInWatchlist = watchlist.has(aircraftId);
+
+	// Generate JSON-LD structured data for SEO (reactive to aircraft and aircraftId changes)
+	$: jsonLdScript = (() => {
+		const data = {
+			'@context': 'https://schema.org',
+			'@type': 'WebPage',
+			name: aircraft?.registration
+				? `${aircraft.registration} - Aircraft Details`
+				: 'Aircraft Details',
+			description: aircraft
+				? `Aircraft details for ${aircraft.registration || 'unknown'}${aircraft.aircraftModel ? `, a ${aircraft.aircraftModel}` : ''}`
+				: 'View aircraft details including flight history and registration information',
+			url: `https://glider.flights/aircraft/${aircraftId}`,
+			mainEntity: aircraft
+				? {
+						'@type': 'Vehicle',
+						name: aircraft.registration || undefined,
+						model: aircraft.aircraftModel || undefined,
+						vehicleIdentificationNumber: aircraft.address || undefined,
+						category: aircraft.aircraftCategory || 'Aircraft'
+					}
+				: undefined
+		};
+		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
+	})();
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {
@@ -307,7 +331,18 @@
 </script>
 
 <svelte:head>
-	<title>{aircraft?.registration || 'Aircraft'} - Aircraft Details</title>
+	<title>{aircraft?.registration || 'Aircraft'} - Aircraft Details - SOAR</title>
+	<meta
+		name="description"
+		content={aircraft
+			? `View details for ${aircraft.registration || 'aircraft'}${aircraft.aircraftModel ? ` (${aircraft.aircraftModel})` : ''} including flight history, registration info, and real-time tracking data.`
+			: 'View aircraft details including flight history, registration information, photos, and real-time position tracking on SOAR.'}
+	/>
+	<link rel="canonical" href="https://glider.flights/aircraft/{aircraftId}" />
+
+	<!-- JSON-LD structured data for SEO -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html jsonLdScript}
 </svelte:head>
 
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
@@ -342,6 +377,23 @@
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading aircraft details...</span>
+			</div>
+
+			<!-- SEO fallback content - visible during loading for crawlers -->
+			<div class="text-surface-600-300-token mt-6 space-y-4">
+				<h1 class="h2">Aircraft Details</h1>
+				<p>
+					This page displays detailed information about a tracked aircraft on SOAR (Soaring
+					Observation And Records), including aircraft registration, model details, flight history,
+					real-time position tracking, and photos.
+				</p>
+				<p>
+					SOAR tracks gliders, sailplanes, and other aircraft using data from the Open Glider
+					Network (OGN) and ADS-B receivers worldwide. View <a href="/aircraft" class="anchor"
+						>all tracked aircraft</a
+					>
+					or <a href="/flights" class="anchor">recent flights</a>.
+				</p>
 			</div>
 		</div>
 	{/if}
@@ -505,7 +557,7 @@
 				{:else if flights.length === 0}
 					<div class="text-surface-600-300-token py-8 text-center">
 						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-						<p>No flights found for this aircraft</p>
+						<p>Flight history will appear here once this aircraft is tracked in flight.</p>
 					</div>
 				{:else}
 					<FlightsList {flights} showEnd={true} showAircraft={false} />
@@ -874,9 +926,9 @@
 					{:else}
 						<div class="text-surface-600-300-token py-4 text-center text-xs">
 							<p>
-								No registration data found
+								Registration data unavailable
 								<br />
-								<i>(Data currently only available for USA-registered aircraft)</i>
+								<i>(Currently only available for USA-registered aircraft)</i>
 							</p>
 						</div>
 					{/if}
@@ -911,7 +963,7 @@
 						loading={loadingFixes}
 						showHideInactive={true}
 						showRaw={true}
-						emptyMessage="No position fixes found in the last 24 hours"
+						emptyMessage="No recent position data in the last 24 hours"
 						hideInactiveValue={hideInactiveFixes}
 						onHideInactiveChange={handleHideInactiveChange}
 						fixesInChronologicalOrder={false}
