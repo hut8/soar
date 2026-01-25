@@ -15,18 +15,17 @@ use crate::aircraft_types::AircraftType;
 use crate::locations::Point;
 use crate::schema::{aircraft_approved_operations, aircraft_other_names};
 
-/// Canonicalize a registration number using flydent
-/// This ensures consistent formatting for matching with devices
-fn canonicalize_registration(registration: &str) -> String {
-    let parser = flydent::Parser::new();
-    match parser.parse(registration, false, false) {
-        Some(r) => r.canonical_callsign().to_string(),
-        None => {
-            // If flydent can't parse it, return the original
-            // This handles edge cases where the registration format is unusual
-            registration.to_string()
-        }
+/// Validate and canonicalize a registration number using flydent
+/// Returns None if the registration is invalid or empty
+/// Note: FAA N-numbers should always parse successfully, but this ensures consistency
+fn validate_registration(registration: &str) -> Option<String> {
+    if registration.is_empty() {
+        return None;
     }
+    let parser = flydent::Parser::new();
+    parser
+        .parse(registration, false, false)
+        .map(|r| r.canonical_callsign().to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
@@ -899,15 +898,21 @@ impl Aircraft {
             return Err(anyhow!("Missing N-number at positions 1–5"));
         }
 
-        // Ensure it starts with 'N', then canonicalize
+        // Ensure it starts with 'N', then validate and canonicalize
         let n_number_with_prefix = if n_number_raw.starts_with('N') {
             n_number_raw
         } else {
             format!("N{}", n_number_raw)
         };
 
-        // Canonicalize the registration number for consistent matching with devices
-        let n_number = canonicalize_registration(&n_number_with_prefix);
+        // Validate and canonicalize the registration number
+        // FAA N-numbers should always parse successfully
+        let n_number = validate_registration(&n_number_with_prefix).ok_or_else(|| {
+            anyhow!(
+                "Invalid N-number '{}' - flydent could not parse",
+                n_number_with_prefix
+            )
+        })?;
 
         let serial_number = to_string_trim(fw(line, 7, 36));
 
@@ -1103,15 +1108,21 @@ impl Aircraft {
             return Err(anyhow!("Missing N-number in CSV"));
         }
 
-        // Ensure it starts with 'N', then canonicalize
+        // Ensure it starts with 'N', then validate and canonicalize
         let n_number_with_prefix = if !n_number_raw.starts_with("N") {
             format!("N{}", n_number_raw)
         } else {
             n_number_raw
         };
 
-        // Canonicalize the registration number for consistent matching with devices
-        let n_number = canonicalize_registration(&n_number_with_prefix);
+        // Validate and canonicalize the registration number
+        // FAA N-numbers should always parse successfully
+        let n_number = validate_registration(&n_number_with_prefix).ok_or_else(|| {
+            anyhow!(
+                "Invalid N-number '{}' - flydent could not parse",
+                n_number_with_prefix
+            )
+        })?;
 
         let serial_number = to_string_trim(fields[1]);
 
