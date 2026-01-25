@@ -1,0 +1,28 @@
+[Unit]
+Description=Pelias Geocoding API Service
+Documentation=https://github.com/pelias/api
+After=network.target pelias-pip.service pelias-libpostal.service pelias-placeholder.service
+Requires=pelias-pip.service
+Wants=pelias-libpostal.service pelias-placeholder.service
+
+[Service]
+Type=simple
+User=pelias
+Group=pelias
+WorkingDirectory=/opt/pelias/api
+Environment="NODE_ENV=production"
+Environment="HOST=127.0.0.1"
+Environment="PORT=4000"
+Environment="PELIAS_CONFIG=/opt/pelias/api/pelias.json"
+ExecStart=/usr/bin/node /opt/pelias/api/index.js
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pelias-api
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

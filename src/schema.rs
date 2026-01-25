@@ -100,7 +100,6 @@ diesel::table! {
         latitude -> Nullable<Float8>,
         longitude -> Nullable<Float8>,
         location_geom -> Nullable<Geometry>,
-        location_geog -> Nullable<Geography>,
         aircraft_category -> Nullable<AircraftCategory>,
         engine_count -> Nullable<Int2>,
         engine_type -> Nullable<EngineType>,
@@ -848,7 +847,6 @@ diesel::table! {
         longitude -> Float8,
         heading -> Nullable<Float8>,
         location_geom -> Nullable<Geometry>,
-        location_geog -> Nullable<Geography>,
         raw -> Nullable<Jsonb>,
         timestamp -> Timestamptz,
     }

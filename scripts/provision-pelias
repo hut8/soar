@@ -259,9 +259,30 @@ else
     echo -e "${BLUE}Pelias docker repository already exists${NC}"
 fi
 
-# Create data directory inside cloned repo
+# Create data directories inside cloned repo
 mkdir -p /opt/pelias/docker/data/whosonfirst
+mkdir -p /opt/pelias/docker/data/openaddresses
+mkdir -p /opt/pelias/docker/data/placeholder
 chown -R pelias:pelias /opt/pelias
+
+# Check for OpenAddresses token (required for forward geocoding)
+# Token should be in /etc/soar/env-production or /etc/soar/env-staging as OPENADDRESSES_TOKEN=...
+OPENADDRESSES_TOKEN=""
+if [ -f /etc/soar/env-production ]; then
+    source /etc/soar/env-production 2>/dev/null || true
+fi
+if [ -f /etc/soar/env-staging ]; then
+    source /etc/soar/env-staging 2>/dev/null || true
+fi
+
+if [ -n "${OPENADDRESSES_TOKEN:-}" ]; then
+    echo -e "${GREEN}OpenAddresses token found in environment${NC}"
+else
+    echo -e "${YELLOW}Warning: OpenAddresses token not found${NC}"
+    echo -e "${YELLOW}Forward geocoding will be limited without OpenAddresses data${NC}"
+    echo -e "${YELLOW}To enable: add OPENADDRESSES_TOKEN=... to /etc/soar/env-production${NC}"
+    echo -e "${YELLOW}Get a free token from https://openaddresses.io${NC}"
+fi
 
 # Create pelias.json configuration
 echo -e "${BLUE}Creating pelias.json configuration...${NC}"
@@ -285,7 +306,7 @@ cat > /opt/pelias/docker/pelias.json <<EOF
       "index": {
         "refresh_interval": "30s",
         "number_of_replicas": "0",
-        "number_of_shards": "3"
+        "number_of_shards": "5"
       }
     }
   },
@@ -297,6 +318,12 @@ cat > /opt/pelias/docker/pelias.json <<EOF
     "services": {
       "pip": {
         "url": "http://localhost:4200"
+      },
+      "libpostal": {
+        "url": "http://localhost:4400"
+      },
+      "placeholder": {
+        "url": "http://localhost:4100"
       }
     }
   },
@@ -306,6 +333,10 @@ cat > /opt/pelias/docker/pelias.json <<EOF
     },
     "whosonfirst": {
       "datapath": "/data/whosonfirst"
+    },
+    "openaddresses": {
+      "datapath": "/data/openaddresses",
+      "token": "${OPENADDRESSES_TOKEN}"
     }
   }
 }
@@ -321,7 +352,7 @@ EOF
 
 chown pelias:pelias /opt/pelias/docker/.env
 
-# Create minimal docker-compose.yml for data import
+# Create docker-compose.yml for data import
 echo -e "${BLUE}Creating docker-compose.yml for Pelias data import...${NC}"
 cat > /opt/pelias/docker/docker-compose.yml <<'EOF'
 services:
@@ -335,6 +366,22 @@ services:
   whosonfirst:
     image: pelias/whosonfirst:master
     container_name: pelias_whosonfirst
+    user: "${DOCKER_USER}"
+    network_mode: host
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+      - "${DATA_DIR}:/data"
+  openaddresses:
+    image: pelias/openaddresses:master
+    container_name: pelias_openaddresses
+    user: "${DOCKER_USER}"
+    network_mode: host
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+      - "${DATA_DIR}:/data"
+  placeholder:
+    image: pelias/placeholder:master
+    container_name: pelias_placeholder
     user: "${DOCKER_USER}"
     network_mode: host
     volumes:
@@ -376,7 +423,50 @@ if [ "$DOC_COUNT" -gt 100000 ]; then
 else
     echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
     su - pelias -c "cd /opt/pelias/docker && ./pelias import wof"
-    echo -e "${GREEN}Data import complete${NC}"
+    echo -e "${GREEN}Who's on First data import complete${NC}"
+fi
+
+# Download and import OpenAddresses data (for forward geocoding)
+if [ -n "$OPENADDRESSES_TOKEN" ]; then
+    OA_DATA_DIR="/opt/pelias/docker/data/openaddresses"
+    if [ -d "$OA_DATA_DIR" ] && [ "$(find "$OA_DATA_DIR" -type f -name '*.csv' 2>/dev/null | wc -l)" -gt 100 ]; then
+        echo -e "${BLUE}OpenAddresses data already downloaded (skipping)${NC}"
+        du -sh "$OA_DATA_DIR" | awk '{print "  Current data size: " $1}'
+    else
+        echo -e "${BLUE}Downloading OpenAddresses data (this will take 1-2 hours and use ~50GB)...${NC}"
+        echo -e "${YELLOW}This enables forward geocoding (address → coordinates)${NC}"
+        su - pelias -c "cd /opt/pelias/docker && ./pelias download oa"
+    fi
+
+    # Check if OpenAddresses data was successfully downloaded before importing
+    OA_FILE_COUNT=$(find "$OA_DATA_DIR" -type f -name '*.csv' 2>/dev/null | wc -l)
+    if [ "$OA_FILE_COUNT" -gt 100 ]; then
+        # Check current document count - OpenAddresses adds millions of addresses
+        CURRENT_DOC_COUNT=$(curl -s "http://localhost:9200/pelias/_count" | jq -r '.count // 0' 2>/dev/null || echo "0")
+        if [ "$CURRENT_DOC_COUNT" -gt 1000000 ]; then
+            echo -e "${BLUE}OpenAddresses data already imported ($CURRENT_DOC_COUNT documents, skipping)${NC}"
+        else
+            echo -e "${BLUE}Importing OpenAddresses data (this will take 2-4 hours)...${NC}"
+            echo -e "${YELLOW}Importing ~600 million addresses globally${NC}"
+            su - pelias -c "cd /opt/pelias/docker && ./pelias import oa"
+            echo -e "${GREEN}OpenAddresses data import complete${NC}"
+        fi
+    else
+        echo -e "${YELLOW}OpenAddresses data not downloaded, skipping import${NC}"
+    fi
+else
+    echo -e "${YELLOW}Skipping OpenAddresses download/import (no token configured)${NC}"
+    echo -e "${YELLOW}Forward geocoding will fall back to Nominatim/Google Maps${NC}"
+fi
+
+# Build Placeholder data (administrative area relationships)
+PLACEHOLDER_DB="/opt/pelias/docker/data/placeholder/store.sqlite3"
+if [ -f "$PLACEHOLDER_DB" ]; then
+    echo -e "${BLUE}Placeholder data already built (skipping)${NC}"
+else
+    echo -e "${BLUE}Building Placeholder database from Who's on First data...${NC}"
+    su - pelias -c "cd /opt/pelias/docker && docker-compose run --rm placeholder npm run build"
+    echo -e "${GREEN}Placeholder database built${NC}"
 fi
 
 # Clone and install Pelias API
@@ -412,77 +502,35 @@ sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/pip/pelias.jso
 sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/api/pelias.json
 sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/pip/pelias.json
 
-# Create systemd service for Pelias PIP
-echo -e "${BLUE}Creating Pelias PIP systemd service...${NC}"
-cat > /etc/systemd/system/pelias-pip.service <<EOF
-[Unit]
-Description=Pelias PIP (Point in Polygon) Service
-Documentation=https://github.com/pelias/pip-service
-After=network.target elasticsearch.service
-Requires=elasticsearch.service
+# Install Pelias systemd service files
+echo -e "${BLUE}Installing Pelias systemd service files...${NC}"
+PELIAS_SERVICES=("pelias-pip" "pelias-api" "pelias-libpostal" "pelias-placeholder")
+for service in "${PELIAS_SERVICES[@]}"; do
+    SERVICE_SOURCE="$REPO_ROOT/infrastructure/systemd/${service}.service"
+    if [ -f "$SERVICE_SOURCE" ]; then
+        cp "$SERVICE_SOURCE" "/etc/systemd/system/${service}.service"
+        echo "  Installed ${service}.service"
+    else
+        echo -e "${RED}Error: $SERVICE_SOURCE not found${NC}"
+        exit 1
+    fi
+done
 
-[Service]
-Type=simple
-User=pelias
-Group=pelias
-WorkingDirectory=/opt/pelias/pip
-Environment="NODE_ENV=production"
-Environment="HOST=127.0.0.1"
-Environment="PORT=4200"
-Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
-ExecStart=/usr/bin/node --max-old-space-size=28672 /opt/pelias/pip/index.js
-Restart=on-failure
-RestartSec=10s
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=pelias-pip
-
-# Resource limits
-LimitNOFILE=65536
-MemoryMax=32G
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Create systemd service for Pelias API
-echo -e "${BLUE}Creating Pelias API systemd service...${NC}"
-cat > /etc/systemd/system/pelias-api.service <<EOF
-[Unit]
-Description=Pelias Geocoding API Service
-Documentation=https://github.com/pelias/api
-After=network.target pelias-pip.service
-Requires=pelias-pip.service
-
-[Service]
-Type=simple
-User=pelias
-Group=pelias
-WorkingDirectory=/opt/pelias/api
-Environment="NODE_ENV=production"
-Environment="HOST=127.0.0.1"
-Environment="PORT=4000"
-Environment="PELIAS_CONFIG=/opt/pelias/api/pelias.json"
-ExecStart=/usr/bin/node /opt/pelias/api/index.js
-Restart=on-failure
-RestartSec=10s
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=pelias-api
-
-# Resource limits
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# Pull Docker images for Libpostal and Placeholder
+echo -e "${BLUE}Pulling Pelias Docker images...${NC}"
+docker pull pelias/libpostal-service
+docker pull pelias/placeholder
 
 # Enable and start services
 echo -e "${BLUE}Starting Pelias services...${NC}"
 systemctl daemon-reload
 systemctl enable pelias-pip.service
+systemctl enable pelias-libpostal.service
+systemctl enable pelias-placeholder.service
 systemctl enable pelias-api.service
 systemctl start pelias-pip.service
+systemctl start pelias-libpostal.service
+systemctl start pelias-placeholder.service
 systemctl start pelias-api.service
 
 # Wait for services to be ready
@@ -499,12 +547,38 @@ else
     echo -e "${YELLOW}Warning: PIP service health check failed (may still be loading data)${NC}"
 fi
 
-# Test API service
-if curl -s 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857' | jq -e '.features' > /dev/null 2>&1; then
-    echo -e "${GREEN}Pelias API service is running and returning results${NC}"
+# Test Libpostal service
+if curl -s -X POST http://localhost:4400/parse -d '{"address": "123 Main St, New York, NY"}' | jq -e '.' > /dev/null 2>&1; then
+    echo -e "${GREEN}Pelias Libpostal service is running${NC}"
 else
-    echo -e "${YELLOW}Warning: API service test failed (PIP may still be loading data)${NC}"
+    echo -e "${YELLOW}Warning: Libpostal service health check failed (may still be starting)${NC}"
+    echo -e "${YELLOW}Check status with: journalctl -u pelias-libpostal -f${NC}"
+fi
+
+# Test Placeholder service
+if curl -s http://localhost:4100/demo > /dev/null 2>&1; then
+    echo -e "${GREEN}Pelias Placeholder service is running${NC}"
+else
+    echo -e "${YELLOW}Warning: Placeholder service health check failed (may need data build)${NC}"
+    echo -e "${YELLOW}Check status with: journalctl -u pelias-placeholder -f${NC}"
+fi
+
+# Test API reverse geocoding
+if curl -s 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857' | jq -e '.features' > /dev/null 2>&1; then
+    echo -e "${GREEN}Pelias API reverse geocoding is working${NC}"
+else
+    echo -e "${YELLOW}Warning: API reverse geocoding test failed (PIP may still be loading data)${NC}"
     echo -e "${YELLOW}Check status with: journalctl -u pelias-pip -f${NC}"
+fi
+
+# Test API forward geocoding (if OpenAddresses data is loaded)
+if [ -n "$OPENADDRESSES_TOKEN" ]; then
+    if curl -s 'http://localhost:4000/v1/search?text=1600+Pennsylvania+Avenue,+Washington+DC' | jq -e '.features[0]' > /dev/null 2>&1; then
+        echo -e "${GREEN}Pelias API forward geocoding is working${NC}"
+    else
+        echo -e "${YELLOW}Warning: API forward geocoding test returned no results${NC}"
+        echo -e "${YELLOW}This is normal if OpenAddresses data hasn't been imported yet${NC}"
+    fi
 fi
 
 # Install Caddy
@@ -608,7 +682,9 @@ echo ""
 echo -e "${BLUE}Services:${NC}"
 echo -e "  - Elasticsearch: http://localhost:9200"
 echo -e "  - Pelias API: http://localhost:4000"
-echo -e "  - Pelias PIP: http://localhost:4200"
+echo -e "  - Pelias PIP: http://localhost:4200 (reverse geocoding)"
+echo -e "  - Pelias Libpostal: http://localhost:4400 (address parsing)"
+echo -e "  - Pelias Placeholder: http://localhost:4100 (admin lookups)"
 echo -e "  - Caddy reverse proxy: http://localhost (configured)"
 echo ""
 echo -e "${BLUE}Public URLs (via Caddy):${NC}"
@@ -618,19 +694,32 @@ echo ""
 echo -e "${BLUE}Service management:${NC}"
 echo -e "  sudo systemctl status pelias-api"
 echo -e "  sudo systemctl status pelias-pip"
+echo -e "  sudo systemctl status pelias-libpostal"
+echo -e "  sudo systemctl status pelias-placeholder"
 echo -e "  sudo systemctl status elasticsearch"
 echo -e "  sudo systemctl status caddy"
 echo ""
 echo -e "${BLUE}View logs:${NC}"
 echo -e "  sudo journalctl -u pelias-api -f"
 echo -e "  sudo journalctl -u pelias-pip -f"
+echo -e "  sudo journalctl -u pelias-libpostal -f"
+echo -e "  sudo journalctl -u pelias-placeholder -f"
 echo ""
-echo -e "${BLUE}Test geocoding:${NC}"
-echo -e "  # Local:"
-echo -e "  curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857&layers=locality,region,country'"
-echo -e ""
-echo -e "  # Via Caddy (once DNS is configured):"
-echo -e "  curl 'https://pelias.glider.flights/v1/reverse?point.lat=40.7484&point.lon=-73.9857'"
+echo -e "${BLUE}Test reverse geocoding (coordinates → address):${NC}"
+echo -e "  curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857'"
+echo ""
+echo -e "${BLUE}Test forward geocoding (address → coordinates):${NC}"
+echo -e "  curl 'http://localhost:4000/v1/search?text=1600+Pennsylvania+Avenue,+Washington+DC'"
+echo ""
+if [ -n "$OPENADDRESSES_TOKEN" ]; then
+    echo -e "${GREEN}OpenAddresses token configured - forward geocoding enabled${NC}"
+else
+    echo -e "${YELLOW}OpenAddresses token NOT configured${NC}"
+    echo -e "${YELLOW}To enable forward geocoding:${NC}"
+    echo -e "${YELLOW}  1. Register at https://openaddresses.io to get a token${NC}"
+    echo -e "${YELLOW}  2. Add OPENADDRESSES_TOKEN=... to /etc/soar/env-production${NC}"
+    echo -e "${YELLOW}  3. Re-run this script to download OpenAddresses data${NC}"
+fi
 echo ""
 echo -e "${YELLOW}Note: PIP service may take 10-20 minutes to load all locality data into memory.${NC}"
 echo -e "${YELLOW}Monitor with: journalctl -u pelias-pip -f${NC}"

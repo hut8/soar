@@ -1,0 +1,21 @@
+[Unit]
+Description=Pelias Libpostal Address Parser Service
+Documentation=https://github.com/pelias/libpostal-service
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStartPre=-/usr/bin/docker stop pelias_libpostal
+ExecStartPre=-/usr/bin/docker rm pelias_libpostal
+ExecStart=/usr/bin/docker run --rm --name pelias_libpostal -p 4400:4400 pelias/libpostal-service
+ExecStop=/usr/bin/docker stop pelias_libpostal
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pelias-libpostal
+
+[Install]
+WantedBy=multi-user.target
