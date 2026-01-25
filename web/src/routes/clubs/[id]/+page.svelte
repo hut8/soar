@@ -39,23 +39,22 @@
 		aircraftRegistration?: AircraftRegistration;
 	}
 
-	let club: ClubWithSoaring | null = null;
-	let aircraft: ClubAircraftData[] = [];
-	let airport: Airport | null = null;
-	let loading = true;
-	let loadingAircraft = false;
-	let loadingAirport = false;
-	let error = '';
-	let aircraftError = '';
-	let airportError = '';
-	let clubId = '';
-	let settingClub = false;
+	let club: ClubWithSoaring | null = $state(null);
+	let aircraft: ClubAircraftData[] = $state([]);
+	let airport: Airport | null = $state(null);
+	let loading = $state(true);
+	let loadingAircraft = $state(false);
+	let loadingAirport = $state(false);
+	let error = $state('');
+	let aircraftError = $state('');
+	let airportError = $state('');
+	let settingClub = $state(false);
 
-	$: clubId = $page.params.id || '';
-	$: isCurrentClub = $auth.user?.clubId === clubId;
+	let clubId = $derived($page.params.id || '');
+	let isCurrentClub = $derived($auth.user?.clubId === clubId);
 
 	// Generate JSON-LD structured data for SEO (reactive to club changes)
-	$: jsonLdScript = (() => {
+	let jsonLdScript = $derived.by(() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'SportsClub',
@@ -70,7 +69,7 @@
 			})
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	})();
+	});
 
 	onMount(async () => {
 		if (clubId) {
@@ -79,9 +78,11 @@
 		}
 	});
 
-	$: if (club?.homeBaseAirportId) {
-		loadAirport(club.homeBaseAirportId);
-	}
+	$effect(() => {
+		if (club?.homeBaseAirportId) {
+			loadAirport(club.homeBaseAirportId);
+		}
+	});
 
 	async function loadClub() {
 		loading = true;

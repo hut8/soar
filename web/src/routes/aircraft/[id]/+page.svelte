@@ -82,34 +82,34 @@
 		lastFetched: Record<string, string>;
 	}
 
-	let aircraft: Aircraft | null = null;
-	let aircraftRegistration: AircraftRegistration | null = null;
-	let aircraftModel: AircraftModel | null = null;
-	let fixes: Fix[] = [];
-	let flights: Flight[] = [];
-	let loading = true;
-	let loadingFixes = false;
-	let loadingFlights = false;
-	let error = '';
-	let fixesPage = 1;
-	let flightsPage = 1;
-	let fixesTotalPages = 1;
-	let flightsTotalPages = 1;
-	let hideInactiveFixes = false;
-	let clubs: Club[] = [];
-	let selectedClubId: string = '';
-	let savingClub = false;
-	let aircraftImages: AircraftImage[] = [];
-	let loadingImages = true;
-	let isFixesCollapsed = true;
+	let aircraft: Aircraft | null = $state(null);
+	let aircraftRegistration: AircraftRegistration | null = $state(null);
+	let aircraftModel: AircraftModel | null = $state(null);
+	let fixes: Fix[] = $state([]);
+	let flights: Flight[] = $state([]);
+	let loading = $state(true);
+	let loadingFixes = $state(false);
+	let loadingFlights = $state(false);
+	let error = $state('');
+	let fixesPage = $state(1);
+	let flightsPage = $state(1);
+	let fixesTotalPages = $state(1);
+	let flightsTotalPages = $state(1);
+	let hideInactiveFixes = $state(false);
+	let clubs: Club[] = $state([]);
+	let selectedClubId: string = $state('');
+	let savingClub = $state(false);
+	let aircraftImages: AircraftImage[] = $state([]);
+	let loadingImages = $state(true);
+	let isFixesCollapsed = $state(true);
 
-	$: aircraftId = $page.params.id || '';
-	$: isAdmin = $auth.user?.isAdmin === true;
-	$: userClubId = $auth.user?.clubId;
-	$: isInWatchlist = watchlist.has(aircraftId);
+	let aircraftId = $derived($page.params.id || '');
+	let isAdmin = $derived($auth.user?.isAdmin === true);
+	let userClubId = $derived($auth.user?.clubId);
+	let isInWatchlist = $derived(watchlist.has(aircraftId));
 
 	// Generate JSON-LD structured data for SEO (reactive to aircraft and aircraftId changes)
-	$: jsonLdScript = (() => {
+	let jsonLdScript = $derived.by(() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'WebPage',
@@ -131,7 +131,7 @@
 				: undefined
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	})();
+	});
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {

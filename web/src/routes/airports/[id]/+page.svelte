@@ -21,21 +21,20 @@
 
 	const logger = getLogger(['soar', 'AirportDetailsPage']);
 
-	let airport: Airport | null = null;
-	let flights: Flight[] = [];
-	let clubs: Club[] = [];
-	let loading = true;
-	let flightsLoading = false;
-	let clubsLoading = false;
-	let error = '';
-	let flightsError = '';
-	let clubsError = '';
-	let airportId = '';
+	let airport: Airport | null = $state(null);
+	let flights: Flight[] = $state([]);
+	let clubs: Club[] = $state([]);
+	let loading = $state(true);
+	let flightsLoading = $state(false);
+	let clubsLoading = $state(false);
+	let error = $state('');
+	let flightsError = $state('');
+	let clubsError = $state('');
 
-	$: airportId = $page.params.id || '';
+	let airportId = $derived($page.params.id || '');
 
 	// Generate JSON-LD structured data for SEO (reactive to airport changes)
-	$: jsonLdScript = (() => {
+	let jsonLdScript = $derived.by(() => {
 		const data = {
 			'@context': 'https://schema.org',
 			'@type': 'Airport',
@@ -56,7 +55,7 @@
 				})
 		};
 		return '<script type="application/ld+json">' + JSON.stringify(data) + '</' + 'script>';
-	})();
+	});
 
 	onMount(async () => {
 		if (airportId) {
