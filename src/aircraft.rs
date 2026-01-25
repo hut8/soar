@@ -137,7 +137,7 @@ pub struct Aircraft {
     pub address: u32,
     pub aircraft_model: String,
     pub registration: Option<String>,
-    #[serde(rename(deserialize = "cn", serialize = "cn"))]
+    #[serde(alias = "cn")]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
     pub tracked: bool,
