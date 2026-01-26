@@ -57,8 +57,9 @@ async fn process_aprs_message(
             Ok(timestamp) => (timestamp.with_timezone(&chrono::Utc), rest),
             Err(e) => {
                 warn!(
-                    "Failed to parse timestamp from message: {} - using current time",
-                    e
+                    timestamp = %timestamp_str,
+                    error = %e,
+                    "Failed to parse timestamp from message - using current time"
                 );
                 (chrono::Utc::now(), message)
             }
