@@ -158,7 +158,7 @@ enum Commands {
         #[arg(long, default_value = "5")]
         retry_delay: u64,
     },
-    /// Run the main APRS processing service (consumes from JetStream durable queue)
+    /// Run the main APRS processing service
     Run {
         /// Base directory for message archive (optional)
         #[arg(long)]
@@ -168,7 +168,7 @@ enum Commands {
         #[arg(long)]
         archive: bool,
 
-        /// NATS server URL for JetStream consumer and pub/sub
+        /// NATS server URL for pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
 

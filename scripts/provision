@@ -778,7 +778,7 @@ sudo mkdir -p /var/lib/soar/logs
 sudo mkdir -p /var/lib/soar/archive
 sudo mkdir -p /var/lib/soar/elevation
 sudo mkdir -p /etc/soar
-sudo mkdir -p /var/lib/nats/jetstream
+sudo mkdir -p /var/lib/nats
 sudo mkdir -p /storage/soar/backups/base
 sudo mkdir -p /var/lib/pyroscope
 sudo mkdir -p /etc/pyroscope
@@ -840,10 +840,10 @@ else
     echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md for instructions${NC}"
 fi
 
-# Set ownership for NATS JetStream storage
-echo -e "${BLUE}Setting ownership for NATS JetStream storage...${NC}"
-sudo chown -R daemon:daemon /var/lib/nats/jetstream
-echo -e "${GREEN}NATS JetStream storage configured${NC}"
+# Set ownership for NATS storage
+echo -e "${BLUE}Setting ownership for NATS storage...${NC}"
+sudo chown -R daemon:daemon /var/lib/nats
+echo -e "${GREEN}NATS storage configured${NC}"
 
 # Configure PostgreSQL authentication
 echo -e "${BLUE}Configuring PostgreSQL authentication...${NC}"
@@ -1075,12 +1075,11 @@ echo ""
 echo "  IMPORTANT: To use PgBouncer, update DATABASE_URL in $ENV_FILE:"
 echo "    DATABASE_URL=postgresql://soar@127.0.0.1:6432/$DB_NAME"
 echo
-echo -e "${YELLOW}NATS JetStream:${NC}"
-echo "  NATS server installed with JetStream enabled"
-echo "  JetStream storage: /var/lib/nats/jetstream"
+echo -e "${YELLOW}NATS:${NC}"
+echo "  NATS server installed"
+echo "  Storage: /var/lib/nats"
 echo "  HTTP monitoring: http://localhost:8222"
 echo "  Verify NATS is running: curl http://localhost:8222/varz"
-echo "  Verify JetStream: curl http://localhost:8222/jsz"
 echo
 echo -e "${YELLOW}Prometheus:${NC}"
 echo "  Configuration: /etc/prometheus/prometheus.yml"

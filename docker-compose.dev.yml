@@ -23,12 +23,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # NATS JetStream for messaging
+  # NATS for messaging
   nats:
     image: nats:2.10-alpine
     container_name: soar-dev-nats
     restart: unless-stopped
-    command: ["-js", "-m", "8222"]
+    command: ["-m", "8222"]
     ports:
       - "4222:4222"  # NATS client connections
       - "8222:8222"  # NATS monitoring

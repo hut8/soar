@@ -1,6 +1,6 @@
 # NATS Metrics (prometheus-nats-exporter)
 # The prometheus-nats-exporter service scrapes NATS HTTP endpoint (localhost:8222)
-# and exposes JetStream metrics in Prometheus format on port 7777.
+# and exposes NATS metrics in Prometheus format on port 7777.
 
 scrape_configs:
   - job_name: 'nats'

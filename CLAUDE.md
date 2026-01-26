@@ -105,7 +105,7 @@ This ensures config changes are tracked in version control and can be reproduced
   - `grafana-dashboard-run-elevation.json` - Elevation processing and AGL
   - `grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
   - `grafana-dashboard-web.json` - Web server (`web` command)
-  - `grafana-dashboard-nats.json` - NATS/JetStream metrics
+  - `grafana-dashboard-nats.json` - NATS metrics
   - `grafana-dashboard-analytics.json` - Analytics API and cache performance
   - `grafana-dashboard-coverage.json` - Coverage API metrics
 

@@ -23,7 +23,7 @@ The `soar run` command dashboard has been split into focused sub-dashboards:
 - **grafana-dashboard-run-elevation.json** - Elevation processing and AGL calculations
 
 ### NATS Messaging
-- **grafana-dashboard-nats.json** - NATS/JetStream metrics
+- **grafana-dashboard-nats.json** - NATS metrics
 
 ## Automated Deployment (Recommended)
 

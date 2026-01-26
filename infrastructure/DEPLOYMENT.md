@@ -191,7 +191,7 @@ The ADS-B ingester is deployed alongside other SOAR services:
 - **Staging**: `soar-ingest-adsb-staging.service` runs on the staging server
 - **Beast Server**: Both connect to `radar:41365` (external Beast data source)
 - **NATS**: Connects to localhost NATS (same server)
-- **No database**: The ingester only publishes to NATS JetStream, no database access required
+- **No database**: The ingester only publishes to NATS, no database access required
 
 ### Architecture
 
@@ -205,7 +205,7 @@ The ADS-B ingester is deployed alongside other SOAR services:
                             │                 │                     │
                             │                 ↓                     │
                             │  ┌────────────────────────────────┐  │
-                            │  │  NATS JetStream (localhost)    │  │
+                            │  │  NATS (localhost)              │  │
                             │  └────────────────────────────────┘  │
                             │                 │                     │
                             │                 ↓                     │

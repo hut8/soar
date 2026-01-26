@@ -2,7 +2,7 @@
 
 ## Overview
 
-This migration adds deduplication support for `aprs_messages` to prevent duplicate data on JetStream message redelivery after crashes. Uses a **fast-forward strategy** that only computes hashes for NEW records going forward.
+This migration adds deduplication support for `aprs_messages` to prevent duplicate data on message redelivery after crashes. Uses a **fast-forward strategy** that only computes hashes for NEW records going forward.
 
 ## Table Sizes (as of 2025-11-05)
 - **aprs_messages**: 167 GB, ~385 million rows
