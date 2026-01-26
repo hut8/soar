@@ -254,7 +254,7 @@ async fn run_beast_stream(
         max_retry_delay_seconds: 60,
     };
 
-    let mut client = BeastClient::new(config);
+    let client = BeastClient::new(config);
 
     tokio::select! {
         _ = cancel.cancelled() => {
@@ -290,7 +290,7 @@ async fn run_sbs_stream(
         max_retry_delay_seconds: 60,
     };
 
-    let mut client = SbsClient::new(config);
+    let client = SbsClient::new(config);
 
     tokio::select! {
         _ = cancel.cancelled() => {
