@@ -465,7 +465,7 @@ if [ -f "$PLACEHOLDER_DB" ]; then
     echo -e "${BLUE}Placeholder data already built (skipping)${NC}"
 else
     echo -e "${BLUE}Building Placeholder database from Who's on First data...${NC}"
-    su - pelias -c "cd /opt/pelias/docker && docker-compose run --rm placeholder npm run build"
+    su - pelias -c "cd /opt/pelias/docker && docker compose run --rm placeholder npm run build"
     echo -e "${GREEN}Placeholder database built${NC}"
 fi
 
