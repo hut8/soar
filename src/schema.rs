@@ -150,6 +150,17 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
 
+    aircraft_geofences (aircraft_id, geofence_id) {
+        aircraft_id -> Uuid,
+        geofence_id -> Uuid,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     aircraft_models (manufacturer_code, model_code, series_code) {
         manufacturer_code -> Text,
         model_code -> Text,
@@ -563,6 +574,60 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
+
+    geofence_exit_events (id) {
+        id -> Uuid,
+        geofence_id -> Uuid,
+        flight_id -> Uuid,
+        aircraft_id -> Uuid,
+        exit_time -> Timestamptz,
+        exit_latitude -> Float8,
+        exit_longitude -> Float8,
+        exit_altitude_msl_ft -> Nullable<Int4>,
+        exit_layer_floor_ft -> Int4,
+        exit_layer_ceiling_ft -> Int4,
+        exit_layer_radius_nm -> Float8,
+        email_notifications_sent -> Int4,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
+    geofence_subscribers (geofence_id, user_id) {
+        geofence_id -> Uuid,
+        user_id -> Uuid,
+        send_email -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
+    geofences (id) {
+        id -> Uuid,
+        #[max_length = 255]
+        name -> Varchar,
+        description -> Nullable<Text>,
+        center -> Geography,
+        max_radius_meters -> Float8,
+        layers -> Jsonb,
+        owner_user_id -> Uuid,
+        club_id -> Nullable<Uuid>,
+        deleted_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::Point;
 
     locations (id) {
@@ -901,6 +966,8 @@ diesel::table! {
 
 diesel::joinable!(aircraft -> clubs (club_id));
 diesel::joinable!(aircraft_approved_operations -> aircraft_registrations (aircraft_registration_id));
+diesel::joinable!(aircraft_geofences -> aircraft (aircraft_id));
+diesel::joinable!(aircraft_geofences -> geofences (geofence_id));
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
 diesel::joinable!(aircraft_registrations -> aircraft (aircraft_id));
 diesel::joinable!(aircraft_registrations -> airports (home_base_airport_id));
@@ -919,6 +986,13 @@ diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> users (user_id));
 diesel::joinable!(flights -> clubs (club_id));
+diesel::joinable!(geofence_exit_events -> aircraft (aircraft_id));
+diesel::joinable!(geofence_exit_events -> flights (flight_id));
+diesel::joinable!(geofence_exit_events -> geofences (geofence_id));
+diesel::joinable!(geofence_subscribers -> geofences (geofence_id));
+diesel::joinable!(geofence_subscribers -> users (user_id));
+diesel::joinable!(geofences -> clubs (club_id));
+diesel::joinable!(geofences -> users (owner_user_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
@@ -933,6 +1007,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft,
     aircraft_analytics,
     aircraft_approved_operations,
+    aircraft_geofences,
     aircraft_models,
     aircraft_other_names,
     aircraft_registrations,
@@ -951,6 +1026,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     flight_duration_buckets,
     flight_pilots,
     flights,
+    geofence_exit_events,
+    geofence_subscribers,
+    geofences,
     locations,
     raw_messages,
     receiver_coverage_h3,

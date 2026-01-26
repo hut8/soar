@@ -928,3 +928,288 @@ fn html_escape(s: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
 }
+
+/// Data about a geofence exit event for email display
+#[derive(Debug, Clone)]
+pub struct GeofenceExitEmailData {
+    /// Geofence name
+    pub geofence_name: String,
+    /// Geofence ID (for link generation)
+    pub geofence_id: uuid::Uuid,
+    /// Flight ID (for link generation)
+    pub flight_id: uuid::Uuid,
+    /// Aircraft information
+    pub aircraft: AircraftEmailData,
+    /// Exit time
+    pub exit_time: DateTime<Utc>,
+    /// Exit location
+    pub exit_latitude: f64,
+    pub exit_longitude: f64,
+    /// Exit altitude (MSL feet)
+    pub exit_altitude_msl_ft: Option<i32>,
+    /// Layer that was exited
+    pub exit_layer_floor_ft: i32,
+    pub exit_layer_ceiling_ft: i32,
+    pub exit_layer_radius_nm: f64,
+}
+
+impl EmailService {
+    /// Send geofence exit alert email
+    pub async fn send_geofence_exit_email(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        exit_data: &GeofenceExitEmailData,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        let geofence_url = format!("{}/geofences/{}", base_url, exit_data.geofence_id);
+        let flight_url = format!("{}/flights/{}", base_url, exit_data.flight_id);
+        let aircraft_url = format!("{}/aircraft/{}", base_url, exit_data.aircraft.id);
+
+        let aircraft_name = exit_data.aircraft.display_name();
+        let environment = get_environment_name();
+
+        let subject = format!(
+            "{}Geofence Alert: {} exited \"{}\"",
+            get_staging_prefix(),
+            aircraft_name,
+            exit_data.geofence_name
+        );
+
+        // Build HTML email
+        let html_body = self.build_geofence_exit_html(
+            to_name,
+            exit_data,
+            &geofence_url,
+            &flight_url,
+            &aircraft_url,
+            &environment,
+        );
+
+        // Build plain text fallback
+        let text_body = self.build_geofence_exit_text(
+            to_name,
+            exit_data,
+            &geofence_url,
+            &flight_url,
+            &aircraft_url,
+        );
+
+        let email = Message::builder()
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
+            .subject(subject)
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(text_body))
+                    .singlepart(SinglePart::html(html_body)),
+            )?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
+
+    /// Build HTML body for geofence exit email
+    fn build_geofence_exit_html(
+        &self,
+        to_name: &str,
+        exit_data: &GeofenceExitEmailData,
+        geofence_url: &str,
+        flight_url: &str,
+        aircraft_url: &str,
+        environment: &str,
+    ) -> String {
+        let aircraft_name = exit_data.aircraft.display_name();
+        let exit_time_display = exit_data
+            .exit_time
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+        let altitude_display = exit_data
+            .exit_altitude_msl_ft
+            .map(|a| format!("{} ft MSL", a))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let layer_display = format!(
+            "{}-{} ft MSL, {} nm radius",
+            exit_data.exit_layer_floor_ft,
+            exit_data.exit_layer_ceiling_ft,
+            exit_data.exit_layer_radius_nm
+        );
+
+        format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 24px; text-align: center; }}
+        .header h1 {{ margin: 0 0 8px 0; font-size: 24px; font-weight: 600; }}
+        .header .geofence-name {{ font-size: 20px; font-weight: 500; opacity: 0.95; }}
+        .alert-badge {{ display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; color: white; background-color: #ffc107; margin-top: 8px; }}
+        .content {{ padding: 24px; }}
+        .greeting {{ font-size: 16px; margin-bottom: 16px; }}
+        .alert-message {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; border-radius: 4px; margin-bottom: 24px; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }}
+        .stat-card {{ background-color: #f8f9fa; border-radius: 8px; padding: 16px; border-left: 4px solid #dc3545; }}
+        .stat-label {{ font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }}
+        .stat-value {{ font-size: 18px; font-weight: 600; color: #1e3a5f; }}
+        .stat-subvalue {{ font-size: 12px; color: #888; margin-top: 2px; }}
+        .flight-details {{ margin-bottom: 24px; }}
+        .detail-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }}
+        .detail-row:last-child {{ border-bottom: none; }}
+        .detail-label {{ color: #666; }}
+        .detail-value {{ font-weight: 500; text-align: right; }}
+        .cta-button {{ display: inline-block; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-right: 8px; margin-bottom: 8px; }}
+        .cta-button:hover {{ opacity: 0.9; }}
+        .cta-secondary {{ background: white; color: #dc3545; border: 2px solid #dc3545; }}
+        .footer {{ background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #666; }}
+        .footer a {{ color: #dc3545; text-decoration: none; }}
+        .footer a:hover {{ text-decoration: underline; }}
+        @media (max-width: 480px) {{
+            .stats-grid {{ grid-template-columns: 1fr; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Geofence Alert</h1>
+            <div class="geofence-name">"{geofence_name}"</div>
+            <div class="alert-badge">BOUNDARY EXITED</div>
+        </div>
+        <div class="content">
+            <p class="greeting">Hello {to_name},</p>
+
+            <div class="alert-message">
+                <strong><a href="{aircraft_url}" style="color: #856404;">{aircraft_name}</a></strong> has exited the geofence boundary.
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Exit Time</div>
+                    <div class="stat-value">{exit_time}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Altitude</div>
+                    <div class="stat-value">{altitude}</div>
+                </div>
+            </div>
+
+            <div class="flight-details">
+                <div class="detail-row">
+                    <span class="detail-label">Exit Location</span>
+                    <span class="detail-value">{lat:.4}°, {lng:.4}°</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Layer Exited</span>
+                    <span class="detail-value">{layer}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Aircraft Address</span>
+                    <span class="detail-value">{hex_address}</span>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-bottom: 16px;">
+                <a href="{flight_url}" class="cta-button">View Flight</a>
+                <a href="{geofence_url}" class="cta-button cta-secondary">View Geofence</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>You received this email because you're subscribed to geofence alerts for "{geofence_name}".</p>
+            <p><a href="{geofence_url}">Manage subscription</a> | Environment: {environment}</p>
+            <p style="margin-top: 12px; color: #999;">Generated by SOAR Flight Tracker</p>
+        </div>
+    </div>
+</body>
+</html>"#,
+            geofence_name = html_escape(&exit_data.geofence_name),
+            to_name = html_escape(to_name),
+            aircraft_url = aircraft_url,
+            aircraft_name = html_escape(&aircraft_name),
+            exit_time = html_escape(&exit_time_display),
+            altitude = html_escape(&altitude_display),
+            lat = exit_data.exit_latitude,
+            lng = exit_data.exit_longitude,
+            layer = html_escape(&layer_display),
+            hex_address = html_escape(&exit_data.aircraft.hex_address),
+            flight_url = flight_url,
+            geofence_url = geofence_url,
+            environment = html_escape(environment),
+        )
+    }
+
+    /// Build plain text body for geofence exit email
+    fn build_geofence_exit_text(
+        &self,
+        to_name: &str,
+        exit_data: &GeofenceExitEmailData,
+        geofence_url: &str,
+        flight_url: &str,
+        aircraft_url: &str,
+    ) -> String {
+        let aircraft_name = exit_data.aircraft.display_name();
+        let exit_time_display = exit_data
+            .exit_time
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+        let altitude_display = exit_data
+            .exit_altitude_msl_ft
+            .map(|a| format!("{} ft MSL", a))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let layer_display = format!(
+            "{}-{} ft MSL, {} nm radius",
+            exit_data.exit_layer_floor_ft,
+            exit_data.exit_layer_ceiling_ft,
+            exit_data.exit_layer_radius_nm
+        );
+
+        format!(
+            r#"Hello {to_name},
+
+GEOFENCE ALERT: BOUNDARY EXITED
+===============================
+
+Aircraft "{aircraft_name}" has exited the geofence "{geofence_name}".
+
+EXIT DETAILS
+============
+Exit Time:     {exit_time}
+Altitude:      {altitude}
+Location:      {lat:.4}°, {lng:.4}°
+Layer Exited:  {layer}
+Aircraft Hex:  {hex_address}
+
+LINKS
+=====
+View Flight:   {flight_url}
+View Aircraft: {aircraft_url}
+View Geofence: {geofence_url}
+
+---
+You received this email because you're subscribed to geofence alerts for "{geofence_name}".
+To manage your subscription, visit: {geofence_url}
+
+Best regards,
+The SOAR Team"#,
+            to_name = to_name,
+            aircraft_name = aircraft_name,
+            geofence_name = exit_data.geofence_name,
+            exit_time = exit_time_display,
+            altitude = altitude_display,
+            lat = exit_data.exit_latitude,
+            lng = exit_data.exit_longitude,
+            layer = layer_display,
+            hex_address = exit_data.aircraft.hex_address,
+            flight_url = flight_url,
+            aircraft_url = aircraft_url,
+            geofence_url = geofence_url,
+        )
+    }
+}

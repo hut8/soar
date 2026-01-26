@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 use super::towing::TowingInfo;
 use crate::Fix;
+
+/// Geofence status: tracks whether aircraft was inside each geofence by ID
+pub type GeofenceStatus = HashMap<Uuid, bool>;
 
 /// Compact fix data for in-memory state tracking
 /// Much smaller than the full Fix struct - only the fields needed for flight decisions
@@ -65,6 +68,11 @@ pub struct AircraftState {
 
     /// Whether takeoff runway was inferred (for determining runways_inferred field)
     pub takeoff_runway_inferred: Option<bool>,
+
+    /// Geofence status: tracks whether aircraft was inside each monitored geofence
+    /// Key is geofence_id, value is whether aircraft was inside on last check
+    #[serde(default)]
+    pub geofence_status: GeofenceStatus,
 }
 
 impl AircraftState {
@@ -84,6 +92,7 @@ impl AircraftState {
             last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
+            geofence_status: GeofenceStatus::new(),
         }
     }
 
@@ -103,6 +112,7 @@ impl AircraftState {
             last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
+            geofence_status: GeofenceStatus::new(),
         }
     }
 
@@ -308,6 +318,7 @@ mod tests {
             last_update_time: Utc::now(),
             towing_info: None,
             takeoff_runway_inferred: None,
+            geofence_status: GeofenceStatus::new(),
         }
     }
 
