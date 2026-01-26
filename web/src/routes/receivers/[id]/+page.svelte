@@ -163,7 +163,8 @@
 	>();
 
 	// Fetch raw message for a fix
-	async function fetchFixRawMessage(rawMessageId: string) {
+	// Uses the fix's receivedAt timestamp as a hint to optimize partition lookup
+	async function fetchFixRawMessage(rawMessageId: string, timestampHint?: string) {
 		if (
 			fixRawMessagesCache.get(rawMessageId)?.data ||
 			fixRawMessagesCache.get(rawMessageId)?.loading
@@ -174,9 +175,11 @@
 		fixRawMessagesCache.set(rawMessageId, { loading: true });
 
 		try {
-			const response = await serverCall<{ data: RawMessageResponse }>(
-				`/raw-messages/${rawMessageId}`
-			);
+			// Include timestamp hint if available to enable partition pruning
+			const url = timestampHint
+				? `/raw-messages/${rawMessageId}?timestamp=${encodeURIComponent(timestampHint)}`
+				: `/raw-messages/${rawMessageId}`;
+			const response = await serverCall<{ data: RawMessageResponse }>(url);
 			fixRawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';
@@ -227,10 +230,11 @@
 	});
 
 	// Fetch raw messages for fixes when showRawFixes is toggled on
+	// Pass receivedAt as a timestamp hint for partition pruning
 	$effect(() => {
 		if (showRawFixes && fixes && fixes.length > 0) {
 			for (const fix of fixes) {
-				fetchFixRawMessage(fix.rawMessageId);
+				fetchFixRawMessage(fix.rawMessageId, fix.receivedAt);
 			}
 		}
 	});
