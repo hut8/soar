@@ -643,6 +643,43 @@ impl RawMessagesRepository {
         })
         .await?
     }
+
+    /// Get a raw message by ID with a timestamp hint for partition pruning
+    ///
+    /// The raw_messages table is a TimescaleDB hypertable partitioned by received_at.
+    /// When querying by ID alone, all partitions must be scanned. By providing a
+    /// timestamp hint (e.g., from the associated fix's received_at), we can narrow
+    /// the search to a specific partition, dramatically improving query performance.
+    ///
+    /// The search window is +/- 5 minutes around the hint to handle any clock skew.
+    pub async fn get_message_response_by_id_with_hint(
+        &self,
+        message_id: Uuid,
+        timestamp_hint: DateTime<Utc>,
+    ) -> Result<Option<RawMessageResponse>> {
+        use crate::schema::raw_messages::dsl::*;
+
+        let pool = self.pool.clone();
+
+        // Use a 5-minute window around the hint to handle any clock skew
+        let window_start = timestamp_hint - Duration::minutes(5);
+        let window_end = timestamp_hint + Duration::minutes(5);
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let message = raw_messages
+                .filter(id.eq(message_id))
+                .filter(received_at.ge(window_start))
+                .filter(received_at.le(window_end))
+                .select(RawMessageWithSource::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<RawMessageResponse>, anyhow::Error>(message.map(RawMessageResponse::from))
+        })
+        .await?
+    }
 }
 
 // Type aliases for backward compatibility during migration
