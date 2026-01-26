@@ -1,7 +1,7 @@
 #!/bin/bash
 # Manual script to update fixes.aircraft_id for aircraft deduplication
 #
-# This script updates fixes in batches, committing after each batch.
+# This script updates fixes in batches by time range, committing after each batch.
 # It can be interrupted (Ctrl+C) and restarted - it will resume from where it left off.
 #
 # Usage:
@@ -15,11 +15,12 @@
 set -e
 
 DB="${1:-soar_staging}"
-BATCH_SIZE=500000
+# Process 6 hours at a time - balances batch size with commit frequency
+HOURS_PER_BATCH=6
 
 echo "=== Fixes Aircraft ID Update Script ==="
 echo "Database: $DB"
-echo "Batch size: $BATCH_SIZE"
+echo "Hours per batch: $HOURS_PER_BATCH"
 echo ""
 
 # Check prerequisites
@@ -30,6 +31,23 @@ if [ "$EXISTS" != "t" ]; then
     exit 1
 fi
 
+# Get time range
+TIME_RANGE=$(psql -d "$DB" -tAc "
+    SELECT MIN(fx.received_at)::text || '|' || MAX(fx.received_at)::text
+    FROM fixes fx
+    JOIN aircraft_merge_mapping m ON fx.aircraft_id = m.flarm_id
+")
+
+if [ -z "$TIME_RANGE" ] || [ "$TIME_RANGE" = "|" ]; then
+    echo "No fixes to update. Already complete!"
+    exit 0
+fi
+
+MIN_TS=$(echo "$TIME_RANGE" | cut -d'|' -f1)
+MAX_TS=$(echo "$TIME_RANGE" | cut -d'|' -f2)
+
+echo "Time range: $MIN_TS to $MAX_TS"
+
 # Get initial count
 REMAINING=$(psql -d "$DB" -tAc "
     SELECT COUNT(*)
@@ -39,45 +57,38 @@ REMAINING=$(psql -d "$DB" -tAc "
 echo "Fixes remaining to update: $REMAINING"
 echo ""
 
-if [ "$REMAINING" -eq 0 ]; then
-    echo "No fixes to update. Already complete!"
-    exit 0
-fi
-
 TOTAL_UPDATED=0
 BATCH_NUM=0
 START_TIME=$(date +%s)
+
+# Start from the minimum timestamp, truncated to hour
+BATCH_START="$MIN_TS"
 
 echo "Starting batched update..."
 echo ""
 
 while true; do
     BATCH_NUM=$((BATCH_NUM + 1))
-    BATCH_START=$(date +%s)
+    BATCH_TIME_START=$(date +%s)
 
-    # Update a batch
+    # Calculate batch end (HOURS_PER_BATCH hours later)
+    BATCH_END=$(psql -d "$DB" -tAc "SELECT ('$BATCH_START'::timestamptz + interval '$HOURS_PER_BATCH hours')::text")
+
+    # Update this batch (disable decompression limit for this session)
     UPDATED=$(psql -d "$DB" -tAc "
-        WITH batch AS (
-            SELECT fx.ctid, m.icao_id
-            FROM fixes fx
-            JOIN aircraft_merge_mapping m ON fx.aircraft_id = m.flarm_id
-            LIMIT $BATCH_SIZE
-        )
+        SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
         UPDATE fixes fx
-        SET aircraft_id = batch.icao_id
-        FROM batch
-        WHERE fx.ctid = batch.ctid
-        RETURNING 1
-    " | wc -l)
-
-    if [ "$UPDATED" -eq 0 ]; then
-        break
-    fi
+        SET aircraft_id = m.icao_id
+        FROM aircraft_merge_mapping m
+        WHERE fx.aircraft_id = m.flarm_id
+          AND fx.received_at >= '$BATCH_START'::timestamptz
+          AND fx.received_at < '$BATCH_END'::timestamptz
+    " | grep -oP 'UPDATE \K\d+' || echo "0")
 
     TOTAL_UPDATED=$((TOTAL_UPDATED + UPDATED))
-    BATCH_END=$(date +%s)
-    BATCH_DURATION=$((BATCH_END - BATCH_START))
-    TOTAL_DURATION=$((BATCH_END - START_TIME))
+    BATCH_TIME_END=$(date +%s)
+    BATCH_DURATION=$((BATCH_TIME_END - BATCH_TIME_START))
+    TOTAL_DURATION=$((BATCH_TIME_END - START_TIME))
 
     # Calculate rate
     if [ "$TOTAL_DURATION" -gt 0 ]; then
@@ -86,7 +97,16 @@ while true; do
         RATE=0
     fi
 
-    echo "Batch $BATCH_NUM: updated $UPDATED fixes (total: $TOTAL_UPDATED, ${BATCH_DURATION}s, ${RATE} fixes/sec)"
+    echo "Batch $BATCH_NUM ($BATCH_START): updated $UPDATED fixes (total: $TOTAL_UPDATED, ${BATCH_DURATION}s, ${RATE}/sec)"
+
+    # Move to next batch
+    BATCH_START="$BATCH_END"
+
+    # Check if we've passed the max timestamp
+    PAST_MAX=$(psql -d "$DB" -tAc "SELECT '$BATCH_START'::timestamptz > '$MAX_TS'::timestamptz")
+    if [ "$PAST_MAX" = "t" ]; then
+        break
+    fi
 done
 
 END_TIME=$(date +%s)
@@ -109,7 +129,7 @@ echo "Remaining fixes with old aircraft_id: $REMAINING"
 if [ "$REMAINING" -eq 0 ]; then
     echo ""
     echo "SUCCESS! All fixes updated."
-    echo "Next: Run migration 2 (deduplicate_aircraft_finish)"
+    echo "Next: Run 'diesel migration run' to complete migration 2"
 else
     echo ""
     echo "WARNING: $REMAINING fixes still need updating. Re-run this script."

@@ -55,6 +55,13 @@ CREATE EXTENSION IF NOT EXISTS h3_postgis WITH SCHEMA public;
 
 
 --
+-- Name: pg_stat_statements; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
+
+--
 -- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -133,7 +140,14 @@ CREATE TYPE public.aircraft_category AS ENUM (
     'tiltrotor',
     'vtol',
     'electric',
-    'unknown'
+    'unknown',
+    'glider',
+    'tow_tug',
+    'paraglider',
+    'hang_glider',
+    'airship',
+    'skydiver_parachute',
+    'static_obstacle'
 );
 
 
@@ -153,29 +167,6 @@ CREATE TYPE public.aircraft_type AS ENUM (
     'gyroplane',
     'hybrid_lift',
     'other'
-);
-
-
---
--- Name: aircraft_type_ogn; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.aircraft_type_ogn AS ENUM (
-    'reserved',
-    'glider',
-    'tow_tug',
-    'helicopter_gyro',
-    'skydiver_parachute',
-    'drop_plane',
-    'hang_glider',
-    'paraglider',
-    'recip_engine',
-    'jet_turboprop',
-    'unknown',
-    'balloon',
-    'airship',
-    'uav',
-    'static_obstacle'
 );
 
 
@@ -286,6 +277,16 @@ CREATE TYPE public.engine_type AS ENUM (
 
 
 --
+-- Name: icao_aircraft_category; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.icao_aircraft_category AS ENUM (
+    'airplane',
+    'helicopter'
+);
+
+
+--
 -- Name: light_sport_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -303,8 +304,9 @@ CREATE TYPE public.light_sport_type AS ENUM (
 --
 
 CREATE TYPE public.message_source AS ENUM (
-    'ogn',
-    'adsb'
+    'aprs',
+    'beast',
+    'sbs'
 );
 
 
@@ -334,6 +336,16 @@ CREATE TYPE public.timeout_phase AS ENUM (
     'cruising',
     'descending',
     'unknown'
+);
+
+
+--
+-- Name: wing_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.wing_type AS ENUM (
+    'fixed_wing',
+    'rotary_wing'
 );
 
 
@@ -1119,33 +1131,6 @@ $$;
 
 
 --
--- Name: update_runway_locations(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_runway_locations() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Update low end location
-    IF NEW.le_latitude_deg IS NOT NULL AND NEW.le_longitude_deg IS NOT NULL THEN
-        NEW.le_location = ST_SetSRID(ST_MakePoint(NEW.le_longitude_deg, NEW.le_latitude_deg), 4326)::geography;
-    ELSE
-        NEW.le_location = NULL;
-    END IF;
-
-    -- Update high end location
-    IF NEW.he_latitude_deg IS NOT NULL AND NEW.he_longitude_deg IS NOT NULL THEN
-        NEW.he_location = ST_SetSRID(ST_MakePoint(NEW.he_longitude_deg, NEW.he_latitude_deg), 4326)::geography;
-    ELSE
-        NEW.he_location = NULL;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
 -- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1178,6 +1163,2738 @@ CREATE TABLE _timescaledb_internal._compressed_hypertable_4 (
 
 
 --
+-- Name: raw_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'aprs'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: _hyper_1_111_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_111_chunk (
+    CONSTRAINT constraint_35 CHECK (((received_at >= '2025-12-29 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-30 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_135_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_135_chunk (
+    CONSTRAINT constraint_37 CHECK (((received_at >= '2025-12-30 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-31 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_15_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_15_chunk (
+    CONSTRAINT constraint_15 CHECK (((received_at >= '2025-12-26 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-27 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_160_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_160_chunk (
+    CONSTRAINT constraint_39 CHECK (((received_at >= '2025-12-31 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-01 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_16_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_16_chunk (
+    CONSTRAINT constraint_16 CHECK (((received_at >= '2025-12-27 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-28 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_187_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_187_chunk (
+    CONSTRAINT constraint_41 CHECK (((received_at >= '2026-01-01 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-02 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_203_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_203_chunk (
+    CONSTRAINT constraint_43 CHECK (((received_at >= '2026-01-02 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-03 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_265_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_265_chunk (
+    CONSTRAINT constraint_45 CHECK (((received_at >= '2026-01-03 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-04 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_287_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_287_chunk (
+    CONSTRAINT constraint_47 CHECK (((received_at >= '2026-01-04 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-05 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_318_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_318_chunk (
+    CONSTRAINT constraint_49 CHECK (((received_at >= '2026-01-05 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-06 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_338_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_338_chunk (
+    CONSTRAINT constraint_51 CHECK (((received_at >= '2026-01-06 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-07 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_398_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_398_chunk (
+    CONSTRAINT constraint_53 CHECK (((received_at >= '2026-01-07 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-08 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_407_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_407_chunk (
+    CONSTRAINT constraint_55 CHECK (((received_at >= '2026-01-08 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-09 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_443_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_443_chunk (
+    CONSTRAINT constraint_57 CHECK (((received_at >= '2026-01-09 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-10 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_447_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_447_chunk (
+    CONSTRAINT constraint_59 CHECK (((received_at >= '2026-01-10 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-11 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_472_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_472_chunk (
+    CONSTRAINT constraint_61 CHECK (((received_at >= '2026-01-11 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-12 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_523_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_523_chunk (
+    CONSTRAINT constraint_63 CHECK (((received_at >= '2026-01-12 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-13 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_539_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_539_chunk (
+    CONSTRAINT constraint_65 CHECK (((received_at >= '2026-01-13 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-14 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_552_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_552_chunk (
+    CONSTRAINT constraint_67 CHECK (((received_at >= '2026-01-14 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-15 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_556_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_556_chunk (
+    CONSTRAINT constraint_69 CHECK (((received_at >= '2026-01-15 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-16 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_561_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_561_chunk (
+    CONSTRAINT constraint_71 CHECK (((received_at >= '2026-01-16 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-17 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_564_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_564_chunk (
+    CONSTRAINT constraint_73 CHECK (((received_at >= '2026-01-17 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-18 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_568_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_568_chunk (
+    CONSTRAINT constraint_75 CHECK (((received_at >= '2026-01-18 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-19 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_572_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_572_chunk (
+    CONSTRAINT constraint_77 CHECK (((received_at >= '2026-01-19 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-20 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_576_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_576_chunk (
+    CONSTRAINT constraint_79 CHECK (((received_at >= '2026-01-20 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-21 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_580_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_580_chunk (
+    CONSTRAINT constraint_81 CHECK (((received_at >= '2026-01-21 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-22 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_584_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_584_chunk (
+    CONSTRAINT constraint_83 CHECK (((received_at >= '2026-01-22 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-23 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_588_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_588_chunk (
+    CONSTRAINT constraint_85 CHECK (((received_at >= '2026-01-23 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-24 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_592_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_592_chunk (
+    CONSTRAINT constraint_87 CHECK (((received_at >= '2026-01-24 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-25 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_596_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_596_chunk (
+    CONSTRAINT constraint_89 CHECK (((received_at >= '2026-01-25 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-26 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: _hyper_1_73_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_1_73_chunk (
+    CONSTRAINT constraint_33 CHECK (((received_at >= '2025-12-28 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-29 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.raw_messages);
+
+
+--
+-- Name: fixes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fixes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    source character varying(9) NOT NULL,
+    "timestamp" timestamp with time zone NOT NULL,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
+    altitude_msl_feet integer,
+    flight_number character varying(20),
+    squawk character varying(4),
+    ground_speed_knots real,
+    track_degrees real,
+    climb_fpm integer,
+    turn_rate_rot real,
+    flight_id uuid,
+    aircraft_id uuid NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    altitude_agl_feet integer,
+    receiver_id uuid,
+    raw_message_id uuid NOT NULL,
+    altitude_agl_valid boolean DEFAULT false NOT NULL,
+    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
+    time_gap_seconds integer,
+    source_metadata jsonb,
+    CONSTRAINT fixes_track_degrees_check2 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: _hyper_2_112_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_112_chunk (
+    CONSTRAINT constraint_36 CHECK (((received_at >= '2025-12-29 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-30 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_136_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_136_chunk (
+    CONSTRAINT constraint_38 CHECK (((received_at >= '2025-12-30 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-31 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_161_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_161_chunk (
+    CONSTRAINT constraint_40 CHECK (((received_at >= '2025-12-31 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-01 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_188_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_188_chunk (
+    CONSTRAINT constraint_42 CHECK (((received_at >= '2026-01-01 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-02 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_204_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_204_chunk (
+    CONSTRAINT constraint_44 CHECK (((received_at >= '2026-01-02 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-03 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_266_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_266_chunk (
+    CONSTRAINT constraint_46 CHECK (((received_at >= '2026-01-03 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-04 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_288_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_288_chunk (
+    CONSTRAINT constraint_48 CHECK (((received_at >= '2026-01-04 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-05 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_319_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_319_chunk (
+    CONSTRAINT constraint_50 CHECK (((received_at >= '2026-01-05 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-06 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_31_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_31_chunk (
+    CONSTRAINT constraint_31 CHECK (((received_at >= '2025-12-26 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-27 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_32_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_32_chunk (
+    CONSTRAINT constraint_32 CHECK (((received_at >= '2025-12-27 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-28 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_339_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_339_chunk (
+    CONSTRAINT constraint_52 CHECK (((received_at >= '2026-01-06 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-07 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_399_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_399_chunk (
+    CONSTRAINT constraint_54 CHECK (((received_at >= '2026-01-07 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-08 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_408_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_408_chunk (
+    CONSTRAINT constraint_56 CHECK (((received_at >= '2026-01-08 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-09 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_444_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_444_chunk (
+    CONSTRAINT constraint_58 CHECK (((received_at >= '2026-01-09 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-10 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_448_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_448_chunk (
+    CONSTRAINT constraint_60 CHECK (((received_at >= '2026-01-10 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-11 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_473_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_473_chunk (
+    CONSTRAINT constraint_62 CHECK (((received_at >= '2026-01-11 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-12 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_524_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_524_chunk (
+    CONSTRAINT constraint_64 CHECK (((received_at >= '2026-01-12 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-13 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_540_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_540_chunk (
+    CONSTRAINT constraint_66 CHECK (((received_at >= '2026-01-13 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-14 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_553_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_553_chunk (
+    CONSTRAINT constraint_68 CHECK (((received_at >= '2026-01-14 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-15 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_557_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_557_chunk (
+    CONSTRAINT constraint_70 CHECK (((received_at >= '2026-01-15 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-16 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_562_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_562_chunk (
+    CONSTRAINT constraint_72 CHECK (((received_at >= '2026-01-16 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-17 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_565_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_565_chunk (
+    CONSTRAINT constraint_74 CHECK (((received_at >= '2026-01-17 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-18 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_569_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_569_chunk (
+    CONSTRAINT constraint_76 CHECK (((received_at >= '2026-01-18 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-19 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_573_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_573_chunk (
+    CONSTRAINT constraint_78 CHECK (((received_at >= '2026-01-19 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-20 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_577_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_577_chunk (
+    CONSTRAINT constraint_80 CHECK (((received_at >= '2026-01-20 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-21 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_581_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_581_chunk (
+    CONSTRAINT constraint_82 CHECK (((received_at >= '2026-01-21 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-22 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_585_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_585_chunk (
+    CONSTRAINT constraint_84 CHECK (((received_at >= '2026-01-22 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-23 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_589_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_589_chunk (
+    CONSTRAINT constraint_86 CHECK (((received_at >= '2026-01-23 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-24 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_593_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_593_chunk (
+    CONSTRAINT constraint_88 CHECK (((received_at >= '2026-01-24 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-25 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_597_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_597_chunk (
+    CONSTRAINT constraint_90 CHECK (((received_at >= '2026-01-25 00:00:00+00'::timestamp with time zone) AND (received_at < '2026-01-26 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: _hyper_2_74_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal._hyper_2_74_chunk (
+    CONSTRAINT constraint_34 CHECK (((received_at >= '2025-12-28 00:00:00+00'::timestamp with time zone) AND (received_at < '2025-12-29 00:00:00+00'::timestamp with time zone)))
+)
+INHERITS (public.fixes);
+
+
+--
+-- Name: compress_hyper_3_538_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_538_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_538_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_541_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_541_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_541_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_542_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_542_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_542_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_543_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_543_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_543_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_544_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_544_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_544_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_545_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_545_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_545_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_546_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_546_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_546_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_547_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_547_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_547_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_548_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_548_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_548_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_549_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_549_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_549_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_551_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_551_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_551_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_554_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_554_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_554_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_558_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_558_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_558_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_560_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_560_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_560_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_566_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_566_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_566_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_570_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_570_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_570_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_574_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_574_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_574_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_578_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_578_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_578_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_582_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_582_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_582_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_586_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_586_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_586_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_590_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_590_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_590_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_594_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_594_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_594_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_598_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_598_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_598_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_3_630_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_3_630_chunk (
+    _ts_meta_count integer,
+    receiver_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    unparsed _timescaledb_internal.compressed_data,
+    raw_message_hash _timescaledb_internal.compressed_data,
+    raw_message _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN receiver_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN unparsed SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN unparsed SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN raw_message_hash SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN raw_message_hash SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN raw_message SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN raw_message SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_3_630_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_615_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_615_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_615_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_616_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_616_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_616_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_617_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_617_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_617_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_618_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_618_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_618_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_619_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_619_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_619_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_620_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_620_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_620_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_621_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_621_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_621_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_622_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_622_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_622_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_623_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_623_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_623_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_624_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_624_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_624_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_625_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_625_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_625_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_626_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_626_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_626_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_627_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_627_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_627_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_628_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_628_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_628_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_629_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_629_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_629_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
+-- Name: compress_hyper_4_631_chunk; Type: TABLE; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE TABLE _timescaledb_internal.compress_hyper_4_631_chunk (
+    _ts_meta_count integer,
+    aircraft_id uuid,
+    _ts_meta_v2_bloomh_id _timescaledb_internal.bloom1,
+    id _timescaledb_internal.compressed_data,
+    source _timescaledb_internal.compressed_data,
+    "timestamp" _timescaledb_internal.compressed_data,
+    latitude _timescaledb_internal.compressed_data,
+    longitude _timescaledb_internal.compressed_data,
+    location _timescaledb_internal.compressed_data,
+    altitude_msl_feet _timescaledb_internal.compressed_data,
+    flight_number _timescaledb_internal.compressed_data,
+    squawk _timescaledb_internal.compressed_data,
+    ground_speed_knots _timescaledb_internal.compressed_data,
+    track_degrees _timescaledb_internal.compressed_data,
+    climb_fpm _timescaledb_internal.compressed_data,
+    turn_rate_rot _timescaledb_internal.compressed_data,
+    _ts_meta_v2_bloomh_flight_id _timescaledb_internal.bloom1,
+    flight_id _timescaledb_internal.compressed_data,
+    _ts_meta_min_1 timestamp with time zone,
+    _ts_meta_max_1 timestamp with time zone,
+    received_at _timescaledb_internal.compressed_data,
+    is_active _timescaledb_internal.compressed_data,
+    altitude_agl_feet _timescaledb_internal.compressed_data,
+    receiver_id _timescaledb_internal.compressed_data,
+    raw_message_id _timescaledb_internal.compressed_data,
+    altitude_agl_valid _timescaledb_internal.compressed_data,
+    location_geom _timescaledb_internal.compressed_data,
+    time_gap_seconds _timescaledb_internal.compressed_data,
+    source_metadata _timescaledb_internal.compressed_data
+)
+WITH (toast_tuple_target='128');
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_count SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN aircraft_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_v2_bloomh_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN source SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN source SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN "timestamp" SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN latitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN longitude SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN location SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN location SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN altitude_msl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN flight_number SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN flight_number SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN squawk SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN squawk SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN ground_speed_knots SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN track_degrees SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN climb_fpm SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN turn_rate_rot SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_v2_bloomh_flight_id SET STORAGE EXTERNAL;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN flight_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_min_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN _ts_meta_max_1 SET STATISTICS 1000;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN received_at SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN is_active SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN altitude_agl_feet SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN receiver_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN raw_message_id SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN altitude_agl_valid SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN location_geom SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN location_geom SET STORAGE EXTENDED;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN time_gap_seconds SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN source_metadata SET STATISTICS 0;
+ALTER TABLE ONLY _timescaledb_internal.compress_hyper_4_631_chunk ALTER COLUMN source_metadata SET STORAGE EXTENDED;
+
+
+--
 -- Name: __diesel_schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1206,7 +3923,6 @@ CREATE TABLE public.aircraft (
     frequency_mhz numeric(6,3),
     pilot_name text,
     home_base_airport_ident text,
-    aircraft_type_ogn public.aircraft_type_ogn,
     last_fix_at timestamp with time zone,
     club_id uuid,
     icao_model_code character varying(4),
@@ -1225,15 +3941,16 @@ CASE
     WHEN ((latitude IS NOT NULL) AND (longitude IS NOT NULL)) THEN (public.st_point(longitude, latitude))::public.geography
     ELSE NULL::public.geography
 END) STORED,
+    icao_type_code text,
+    owner_operator text,
+    faa_pia boolean,
+    faa_ladd boolean,
+    year smallint,
+    is_military boolean,
     aircraft_category public.aircraft_category,
     engine_count smallint,
     engine_type public.engine_type,
-    faa_pia boolean,
-    faa_ladd boolean,
-    owner_operator text,
     from_adsbx_ddb boolean DEFAULT false NOT NULL,
-    year smallint,
-    is_military boolean,
     current_fix jsonb,
     images jsonb,
     CONSTRAINT icao_model_code_length_check CHECK (((icao_model_code IS NULL) OR (length((icao_model_code)::text) = ANY (ARRAY[3, 4]))))
@@ -1352,10 +4069,13 @@ CREATE TABLE public.aircraft_registrations (
 
 CREATE TABLE public.aircraft_types (
     icao_code text NOT NULL,
-    iata_code text,
+    iata_code text DEFAULT ''::text NOT NULL,
     description text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    manufacturer text,
+    wing_type public.wing_type,
+    aircraft_category public.icao_aircraft_category
 );
 
 
@@ -1508,41 +4228,6 @@ CREATE TABLE public.countries (
 
 
 --
--- Name: fixes; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.fixes (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    source character varying(9) NOT NULL,
-    aprs_type character varying(9) NOT NULL,
-    via text[] NOT NULL,
-    "timestamp" timestamp with time zone NOT NULL,
-    latitude double precision NOT NULL,
-    longitude double precision NOT NULL,
-    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
-    altitude_msl_feet integer,
-    flight_number character varying(20),
-    squawk character varying(4),
-    ground_speed_knots real,
-    track_degrees real,
-    climb_fpm integer,
-    turn_rate_rot real,
-    flight_id uuid,
-    aircraft_id uuid NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    altitude_agl_feet integer,
-    receiver_id uuid NOT NULL,
-    raw_message_id uuid NOT NULL,
-    altitude_agl_valid boolean DEFAULT false NOT NULL,
-    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
-    time_gap_seconds integer,
-    source_metadata jsonb,
-    CONSTRAINT fixes_track_degrees_check2 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
-);
-
-
---
 -- Name: flight_analytics_daily; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1666,22 +4351,8 @@ CREATE TABLE public.locations (
     country_code text,
     geolocation point,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: raw_messages; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.raw_messages (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    geocode_attempted_at timestamp with time zone
 );
 
 
@@ -1694,7 +4365,7 @@ CREATE TABLE public.receiver_coverage_h3 (
     resolution smallint NOT NULL,
     receiver_id uuid NOT NULL,
     date date NOT NULL,
-    fix_count integer DEFAULT 0 NOT NULL,
+    fix_count bigint DEFAULT 0 NOT NULL,
     first_seen_at timestamp with time zone NOT NULL,
     last_seen_at timestamp with time zone NOT NULL,
     min_altitude_msl_feet integer,
@@ -1861,19 +4532,27 @@ CREATE TABLE public.runways (
     le_ident text,
     le_latitude_deg numeric(10,8),
     le_longitude_deg numeric(11,8),
-    le_location public.geography(Point,4326),
     le_elevation_ft integer,
     le_heading_degt numeric(5,2),
     le_displaced_threshold_ft integer,
     he_ident text,
     he_latitude_deg numeric(10,8),
     he_longitude_deg numeric(11,8),
-    he_location public.geography(Point,4326),
     he_elevation_ft integer,
     he_heading_degt numeric(5,2),
     he_displaced_threshold_ft integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    le_location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (
+CASE
+    WHEN ((le_latitude_deg IS NOT NULL) AND (le_longitude_deg IS NOT NULL)) THEN public.st_setsrid(public.st_makepoint((le_longitude_deg)::double precision, (le_latitude_deg)::double precision), 4326)
+    ELSE NULL::public.geometry
+END) STORED,
+    he_location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (
+CASE
+    WHEN ((he_latitude_deg IS NOT NULL) AND (he_longitude_deg IS NOT NULL)) THEN public.st_setsrid(public.st_makepoint((he_longitude_deg)::double precision, (he_latitude_deg)::double precision), 4326)
+    ELSE NULL::public.geometry
+END) STORED
 );
 
 
@@ -1985,7 +4664,8 @@ CREATE TABLE public.users (
     is_instructor boolean DEFAULT false NOT NULL,
     is_tow_pilot boolean DEFAULT false NOT NULL,
     is_examiner boolean DEFAULT false NOT NULL,
-    deleted_at timestamp with time zone
+    deleted_at timestamp with time zone,
+    CONSTRAINT users_auth_consistency_check CHECK ((((email IS NULL) AND (password_hash IS NULL)) OR ((email IS NOT NULL) AND (password_hash IS NOT NULL))))
 );
 
 
@@ -2003,6 +4683,1091 @@ CREATE TABLE public.watchlist (
 
 
 --
+-- Name: _hyper_1_111_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_111_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_111_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_111_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_135_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_135_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_135_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_135_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_15_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_15_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_15_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_15_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_160_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_160_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_160_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_160_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_16_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_16_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_16_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_16_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_187_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_187_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_187_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_187_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_203_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_203_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_203_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_203_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_265_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_265_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_265_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_265_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_287_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_287_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_287_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_287_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_318_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_318_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_318_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_318_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_338_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_338_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_338_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_338_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_398_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_398_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_398_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_398_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_407_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_407_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_407_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_407_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_443_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_443_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_443_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_443_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_447_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_447_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_447_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_447_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_472_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_472_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_472_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_472_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_523_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_523_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_523_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_523_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_539_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_539_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_539_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_539_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_552_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_552_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_552_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_552_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_556_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_556_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_556_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_556_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_561_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_561_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_561_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_561_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_564_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_564_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_564_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_564_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_568_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_568_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_568_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_568_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_572_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_572_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_572_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_572_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_576_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_576_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_576_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_576_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_580_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_580_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_580_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_580_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_584_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_584_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_584_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_584_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_588_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_588_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_588_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_588_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_592_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_592_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_592_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_592_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_596_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_596_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_596_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_596_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_1_73_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_73_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_1_73_chunk source; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_73_chunk ALTER COLUMN source SET DEFAULT 'aprs'::public.message_source;
+
+
+--
+-- Name: _hyper_2_112_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_112_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_112_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_136_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_136_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_136_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_161_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_161_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_161_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_188_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_188_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_188_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_204_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_204_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_204_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_266_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_266_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_266_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_288_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_288_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_288_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_319_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_319_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_319_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_31_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_31_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_31_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_32_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_32_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_32_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_339_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_339_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_339_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_399_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_399_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_399_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_408_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_408_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_408_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_444_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_444_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_444_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_448_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_448_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_448_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_473_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_473_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_473_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_524_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_524_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_524_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_540_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_540_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_540_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_553_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_553_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_553_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_557_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_557_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_557_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_562_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_562_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_562_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_565_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_565_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_565_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_569_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_569_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_569_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_573_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_573_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_573_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_577_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_577_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_577_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_581_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_581_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_581_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_585_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_585_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_585_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_589_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_589_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_589_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_593_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_593_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_593_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_597_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_597_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_597_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
+-- Name: _hyper_2_74_chunk id; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: _hyper_2_74_chunk is_active; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk ALTER COLUMN is_active SET DEFAULT true;
+
+
+--
+-- Name: _hyper_2_74_chunk altitude_agl_valid; Type: DEFAULT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk ALTER COLUMN altitude_agl_valid SET DEFAULT false;
+
+
+--
 -- Name: receivers_links id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2014,6 +5779,502 @@ ALTER TABLE ONLY public.receivers_links ALTER COLUMN id SET DEFAULT nextval('pub
 --
 
 ALTER TABLE ONLY public.receivers_photos ALTER COLUMN id SET DEFAULT nextval('public.receivers_photos_id_seq'::regclass);
+
+
+--
+-- Name: _hyper_1_111_chunk 111_103_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_111_chunk
+    ADD CONSTRAINT "111_103_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_112_chunk 112_107_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk
+    ADD CONSTRAINT "112_107_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_135_chunk 135_109_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_135_chunk
+    ADD CONSTRAINT "135_109_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_136_chunk 136_113_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk
+    ADD CONSTRAINT "136_113_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_15_chunk 15_15_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_15_chunk
+    ADD CONSTRAINT "15_15_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_160_chunk 160_115_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_160_chunk
+    ADD CONSTRAINT "160_115_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_161_chunk 161_119_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk
+    ADD CONSTRAINT "161_119_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_16_chunk 16_16_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_16_chunk
+    ADD CONSTRAINT "16_16_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_187_chunk 187_121_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_187_chunk
+    ADD CONSTRAINT "187_121_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_188_chunk 188_125_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk
+    ADD CONSTRAINT "188_125_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_203_chunk 203_127_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_203_chunk
+    ADD CONSTRAINT "203_127_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_204_chunk 204_131_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk
+    ADD CONSTRAINT "204_131_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_265_chunk 265_133_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_265_chunk
+    ADD CONSTRAINT "265_133_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_266_chunk 266_137_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk
+    ADD CONSTRAINT "266_137_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_287_chunk 287_139_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_287_chunk
+    ADD CONSTRAINT "287_139_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_288_chunk 288_143_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk
+    ADD CONSTRAINT "288_143_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_318_chunk 318_145_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_318_chunk
+    ADD CONSTRAINT "318_145_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_319_chunk 319_149_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk
+    ADD CONSTRAINT "319_149_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_31_chunk 31_47_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk
+    ADD CONSTRAINT "31_47_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_32_chunk 32_48_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk
+    ADD CONSTRAINT "32_48_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_338_chunk 338_151_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_338_chunk
+    ADD CONSTRAINT "338_151_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_339_chunk 339_155_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk
+    ADD CONSTRAINT "339_155_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_398_chunk 398_183_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_398_chunk
+    ADD CONSTRAINT "398_183_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_399_chunk 399_187_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk
+    ADD CONSTRAINT "399_187_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_407_chunk 407_189_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_407_chunk
+    ADD CONSTRAINT "407_189_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_408_chunk 408_193_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk
+    ADD CONSTRAINT "408_193_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_443_chunk 443_195_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_443_chunk
+    ADD CONSTRAINT "443_195_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_444_chunk 444_199_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk
+    ADD CONSTRAINT "444_199_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_447_chunk 447_201_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_447_chunk
+    ADD CONSTRAINT "447_201_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_448_chunk 448_205_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk
+    ADD CONSTRAINT "448_205_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_472_chunk 472_207_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_472_chunk
+    ADD CONSTRAINT "472_207_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_473_chunk 473_211_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk
+    ADD CONSTRAINT "473_211_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_523_chunk 523_213_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_523_chunk
+    ADD CONSTRAINT "523_213_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_524_chunk 524_217_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk
+    ADD CONSTRAINT "524_217_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_539_chunk 539_219_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_539_chunk
+    ADD CONSTRAINT "539_219_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_540_chunk 540_223_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk
+    ADD CONSTRAINT "540_223_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_552_chunk 552_225_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_552_chunk
+    ADD CONSTRAINT "552_225_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_553_chunk 553_229_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk
+    ADD CONSTRAINT "553_229_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_556_chunk 556_231_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_556_chunk
+    ADD CONSTRAINT "556_231_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_557_chunk 557_235_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk
+    ADD CONSTRAINT "557_235_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_561_chunk 561_237_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_561_chunk
+    ADD CONSTRAINT "561_237_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_562_chunk 562_241_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk
+    ADD CONSTRAINT "562_241_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_564_chunk 564_243_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_564_chunk
+    ADD CONSTRAINT "564_243_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_565_chunk 565_247_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk
+    ADD CONSTRAINT "565_247_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_568_chunk 568_249_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_568_chunk
+    ADD CONSTRAINT "568_249_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_569_chunk 569_253_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk
+    ADD CONSTRAINT "569_253_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_572_chunk 572_255_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_572_chunk
+    ADD CONSTRAINT "572_255_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_573_chunk 573_259_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk
+    ADD CONSTRAINT "573_259_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_576_chunk 576_261_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_576_chunk
+    ADD CONSTRAINT "576_261_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_577_chunk 577_265_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk
+    ADD CONSTRAINT "577_265_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_580_chunk 580_267_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_580_chunk
+    ADD CONSTRAINT "580_267_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_581_chunk 581_271_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk
+    ADD CONSTRAINT "581_271_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_584_chunk 584_273_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_584_chunk
+    ADD CONSTRAINT "584_273_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_585_chunk 585_277_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk
+    ADD CONSTRAINT "585_277_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_588_chunk 588_279_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_588_chunk
+    ADD CONSTRAINT "588_279_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_589_chunk 589_283_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk
+    ADD CONSTRAINT "589_283_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_592_chunk 592_285_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_592_chunk
+    ADD CONSTRAINT "592_285_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_593_chunk 593_289_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk
+    ADD CONSTRAINT "593_289_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_596_chunk 596_291_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_596_chunk
+    ADD CONSTRAINT "596_291_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_597_chunk 597_295_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk
+    ADD CONSTRAINT "597_295_fixes_pkey2" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_1_73_chunk 73_97_raw_messages_pkey1; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_73_chunk
+    ADD CONSTRAINT "73_97_raw_messages_pkey1" PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: _hyper_2_74_chunk 74_101_fixes_pkey2; Type: CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk
+    ADD CONSTRAINT "74_101_fixes_pkey2" PRIMARY KEY (id, received_at);
 
 
 --
@@ -2085,7 +6346,7 @@ ALTER TABLE ONLY public.aircraft_registrations
 --
 
 ALTER TABLE ONLY public.aircraft_types
-    ADD CONSTRAINT aircraft_types_pkey PRIMARY KEY (icao_code);
+    ADD CONSTRAINT aircraft_types_pkey PRIMARY KEY (icao_code, iata_code);
 
 
 --
@@ -2385,6 +6646,1154 @@ ALTER TABLE ONLY public.watchlist
 
 
 --
+-- Name: _hyper_1_111_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_111_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_111_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_111_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_111_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_111_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_135_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_135_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_135_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_135_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_135_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_135_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_15_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_15_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_15_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_15_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_15_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_15_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_160_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_160_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_160_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_160_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_160_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_160_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_16_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_16_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_16_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_16_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_16_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_16_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_187_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_187_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_187_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_187_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_187_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_187_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_203_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_203_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_203_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_203_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_203_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_203_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_265_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_265_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_265_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_265_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_265_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_265_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_287_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_287_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_287_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_287_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_287_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_287_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_318_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_318_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_318_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_318_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_318_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_318_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_338_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_338_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_338_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_338_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_338_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_338_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_398_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_398_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_398_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_398_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_398_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_398_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_407_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_407_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_407_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_407_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_407_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_407_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_443_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_443_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_443_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_443_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_443_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_443_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_447_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_447_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_447_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_447_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_447_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_447_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_472_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_472_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_472_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_472_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_472_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_472_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_523_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_523_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_523_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_523_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_523_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_523_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_539_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_539_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_539_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_539_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_539_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_539_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_552_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_552_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_552_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_552_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_552_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_552_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_556_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_556_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_556_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_556_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_556_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_556_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_561_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_561_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_561_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_561_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_561_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_561_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_564_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_564_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_564_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_564_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_564_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_564_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_568_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_568_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_568_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_568_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_568_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_568_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_572_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_572_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_572_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_572_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_572_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_572_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_576_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_576_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_576_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_576_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_576_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_576_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_580_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_580_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_580_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_580_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_580_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_580_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_584_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_584_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_584_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_584_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_584_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_584_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_588_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_588_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_588_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_588_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_588_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_588_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_592_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_592_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_592_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_592_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_592_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_592_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_596_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_596_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_596_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_596_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_596_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_596_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_1_73_chunk_idx_raw_messages_receiver_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_73_chunk_idx_raw_messages_receiver_id ON _timescaledb_internal._hyper_1_73_chunk USING btree (receiver_id);
+
+
+--
+-- Name: _hyper_1_73_chunk_raw_messages_received_at_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_1_73_chunk_raw_messages_received_at_idx ON _timescaledb_internal._hyper_1_73_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_112_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_112_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_112_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_112_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_112_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_112_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_136_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_136_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_136_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_136_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_136_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_136_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_161_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_161_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_161_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_161_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_161_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_161_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_188_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_188_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_188_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_188_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_188_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_188_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_204_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_204_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_204_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_204_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_204_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_204_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_266_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_266_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_266_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_266_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_266_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_266_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_288_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_288_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_288_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_288_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_288_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_288_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_319_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_319_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_319_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_319_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_319_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_319_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_31_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_31_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_31_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_31_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_31_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_31_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_32_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_32_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_32_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_32_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_32_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_32_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_339_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_339_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_339_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_339_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_339_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_339_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_399_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_399_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_399_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_399_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_399_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_399_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_408_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_408_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_408_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_408_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_408_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_408_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_444_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_444_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_444_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_444_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_444_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_444_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_448_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_448_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_448_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_448_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_448_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_448_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_473_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_473_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_473_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_473_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_473_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_473_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_524_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_524_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_524_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_524_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_524_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_524_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_540_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_540_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_540_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_540_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_540_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_540_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_553_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_553_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_553_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_553_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_553_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_553_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_557_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_557_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_557_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_557_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_557_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_557_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_562_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_562_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_562_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_562_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_562_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_562_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_565_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_565_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_565_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_565_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_565_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_565_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_569_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_569_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_569_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_569_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_569_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_569_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_573_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_573_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_573_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_573_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_573_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_573_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_577_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_577_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_577_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_577_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_577_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_577_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_581_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_581_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_581_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_581_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_581_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_581_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_585_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_585_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_585_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_585_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_585_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_585_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_589_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_589_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_589_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_589_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_589_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_589_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_593_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_593_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_593_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_593_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_593_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_593_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_597_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_597_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_597_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_597_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_597_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_597_chunk USING btree (flight_id);
+
+
+--
+-- Name: _hyper_2_74_chunk_fixes_received_at_idx1; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_74_chunk_fixes_received_at_idx1 ON _timescaledb_internal._hyper_2_74_chunk USING btree (received_at DESC);
+
+
+--
+-- Name: _hyper_2_74_chunk_idx_fixes_flight_id; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX _hyper_2_74_chunk_idx_fixes_flight_id ON _timescaledb_internal._hyper_2_74_chunk USING btree (flight_id);
+
+
+--
+-- Name: compress_hyper_3_538_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_538_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_538_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_541_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_541_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_541_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_542_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_542_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_542_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_543_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_543_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_543_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_544_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_544_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_544_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_545_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_545_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_545_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_546_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_546_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_546_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_547_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_547_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_547_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_548_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_548_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_548_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_549_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_549_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_549_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_551_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_551_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_551_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_554_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_554_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_554_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_558_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_558_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_558_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_560_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_560_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_560_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_566_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_566_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_566_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_570_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_570_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_570_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_574_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_574_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_574_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_578_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_578_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_578_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_582_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_582_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_582_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_586_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_586_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_586_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_590_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_590_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_590_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_594_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_594_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_594_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_598_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_598_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_598_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_3_630_chunk_receiver_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_3_630_chunk_receiver_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_3_630_chunk USING btree (receiver_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_615_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_615_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_615_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_616_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_616_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_616_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_617_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_617_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_617_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_618_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_618_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_618_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_619_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_619_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_619_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_620_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_620_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_620_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_621_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_621_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_621_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_622_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_622_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_622_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_623_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_623_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_623_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_624_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_624_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_624_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_625_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_625_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_625_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_626_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_626_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_626_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_627_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_627_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_627_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_628_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_628_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_628_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_629_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_629_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_629_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
+-- Name: compress_hyper_4_631_chunk_aircraft_id__ts_meta_min_1__ts_m_idx; Type: INDEX; Schema: _timescaledb_internal; Owner: -
+--
+
+CREATE INDEX compress_hyper_4_631_chunk_aircraft_id__ts_meta_min_1__ts_m_idx ON _timescaledb_internal.compress_hyper_4_631_chunk USING btree (aircraft_id, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+
+
+--
 -- Name: aircraft_registrations_aw_class_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2602,6 +8011,13 @@ CREATE INDEX idx_aircraft_icao_model_code ON public.aircraft USING btree (icao_m
 
 
 --
+-- Name: idx_aircraft_icao_type_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_aircraft_icao_type_code ON public.aircraft USING btree (icao_type_code) WHERE (icao_type_code IS NOT NULL);
+
+
+--
 -- Name: idx_aircraft_identified; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2686,10 +8102,10 @@ CREATE INDEX idx_aircraft_owner_operator ON public.aircraft USING btree (owner_o
 
 
 --
--- Name: idx_aircraft_registration; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_aircraft_registration_unique; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_aircraft_registration ON public.aircraft USING btree (registration);
+CREATE UNIQUE INDEX idx_aircraft_registration_unique ON public.aircraft USING btree (registration) WHERE (registration IS NOT NULL);
 
 
 --
@@ -3036,6 +8452,13 @@ CREATE INDEX idx_flights_towed_by_flight ON public.flights USING btree (towed_by
 
 
 --
+-- Name: idx_locations_needs_geocoding; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_locations_needs_geocoding ON public.locations USING btree (geocode_attempted_at) WHERE ((geolocation IS NULL) AND (geocode_attempted_at IS NULL));
+
+
+--
 -- Name: idx_raw_messages_receiver_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3134,17 +8557,17 @@ CREATE INDEX idx_runways_closed ON public.runways USING btree (closed);
 
 
 --
--- Name: idx_runways_he_location_gist; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_runways_he_location_geom; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_runways_he_location_gist ON public.runways USING gist (he_location) WHERE (he_location IS NOT NULL);
+CREATE INDEX idx_runways_he_location_geom ON public.runways USING gist (he_location_geom) WHERE (he_location_geom IS NOT NULL);
 
 
 --
--- Name: idx_runways_le_location_gist; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_runways_le_location_geom; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_runways_le_location_gist ON public.runways USING gist (le_location) WHERE (le_location IS NOT NULL);
+CREATE INDEX idx_runways_le_location_geom ON public.runways USING gist (le_location_geom) WHERE (le_location_geom IS NOT NULL);
 
 
 --
@@ -3288,48 +8711,6 @@ CREATE TRIGGER set_watchlist_updated_at BEFORE UPDATE ON public.watchlist FOR EA
 
 
 --
--- Name: flights trigger_airport_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_airport_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_airport_analytics_daily();
-
-
---
--- Name: flights trigger_club_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_club_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_club_analytics_daily();
-
-
---
--- Name: flights trigger_device_analytics; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_device_analytics AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_device_analytics();
-
-
---
--- Name: flights trigger_flight_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_flight_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_daily();
-
-
---
--- Name: flights trigger_flight_analytics_hourly; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_flight_analytics_hourly AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_hourly();
-
-
---
--- Name: flights trigger_flight_duration_buckets; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_flight_duration_buckets AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_duration_buckets();
-
-
---
 -- Name: aircraft_models update_aircraft_model_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3372,13 +8753,6 @@ CREATE TRIGGER update_receivers_updated_at BEFORE UPDATE ON public.receivers FOR
 
 
 --
--- Name: runways update_runway_locations_trigger; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER update_runway_locations_trigger BEFORE INSERT OR UPDATE OF le_latitude_deg, le_longitude_deg, he_latitude_deg, he_longitude_deg ON public.runways FOR EACH ROW EXECUTE FUNCTION public.update_runway_locations();
-
-
---
 -- Name: runways update_runways_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3390,6 +8764,998 @@ CREATE TRIGGER update_runways_updated_at BEFORE UPDATE ON public.runways FOR EAC
 --
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: _hyper_1_111_chunk 111_174_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_111_chunk
+    ADD CONSTRAINT "111_174_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_112_chunk 112_106_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk
+    ADD CONSTRAINT "112_106_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_112_chunk 112_108_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk
+    ADD CONSTRAINT "112_108_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_112_chunk 112_300_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_112_chunk
+    ADD CONSTRAINT "112_300_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_135_chunk 135_175_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_135_chunk
+    ADD CONSTRAINT "135_175_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_136_chunk 136_112_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk
+    ADD CONSTRAINT "136_112_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_136_chunk 136_114_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk
+    ADD CONSTRAINT "136_114_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_136_chunk 136_301_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_136_chunk
+    ADD CONSTRAINT "136_301_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_15_chunk 15_171_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_15_chunk
+    ADD CONSTRAINT "15_171_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_1_160_chunk 160_176_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_160_chunk
+    ADD CONSTRAINT "160_176_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_161_chunk 161_118_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk
+    ADD CONSTRAINT "161_118_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_161_chunk 161_120_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk
+    ADD CONSTRAINT "161_120_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_161_chunk 161_302_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_161_chunk
+    ADD CONSTRAINT "161_302_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_16_chunk 16_172_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_16_chunk
+    ADD CONSTRAINT "16_172_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_1_187_chunk 187_177_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_187_chunk
+    ADD CONSTRAINT "187_177_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_188_chunk 188_124_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk
+    ADD CONSTRAINT "188_124_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_188_chunk 188_126_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk
+    ADD CONSTRAINT "188_126_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_188_chunk 188_303_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_188_chunk
+    ADD CONSTRAINT "188_303_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_203_chunk 203_178_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_203_chunk
+    ADD CONSTRAINT "203_178_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_204_chunk 204_130_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk
+    ADD CONSTRAINT "204_130_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_204_chunk 204_132_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk
+    ADD CONSTRAINT "204_132_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_204_chunk 204_304_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_204_chunk
+    ADD CONSTRAINT "204_304_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_265_chunk 265_179_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_265_chunk
+    ADD CONSTRAINT "265_179_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_266_chunk 266_136_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk
+    ADD CONSTRAINT "266_136_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_266_chunk 266_138_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk
+    ADD CONSTRAINT "266_138_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_266_chunk 266_305_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_266_chunk
+    ADD CONSTRAINT "266_305_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_287_chunk 287_180_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_287_chunk
+    ADD CONSTRAINT "287_180_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_288_chunk 288_142_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk
+    ADD CONSTRAINT "288_142_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_288_chunk 288_144_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk
+    ADD CONSTRAINT "288_144_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_288_chunk 288_306_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_288_chunk
+    ADD CONSTRAINT "288_306_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_318_chunk 318_181_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_318_chunk
+    ADD CONSTRAINT "318_181_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_319_chunk 319_148_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk
+    ADD CONSTRAINT "319_148_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_319_chunk 319_150_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk
+    ADD CONSTRAINT "319_150_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_319_chunk 319_307_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_319_chunk
+    ADD CONSTRAINT "319_307_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_2_31_chunk 31_297_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk
+    ADD CONSTRAINT "31_297_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_2_31_chunk 31_79_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk
+    ADD CONSTRAINT "31_79_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_31_chunk 31_95_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_31_chunk
+    ADD CONSTRAINT "31_95_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_32_chunk 32_298_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk
+    ADD CONSTRAINT "32_298_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_2_32_chunk 32_80_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk
+    ADD CONSTRAINT "32_80_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_32_chunk 32_96_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_32_chunk
+    ADD CONSTRAINT "32_96_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_1_338_chunk 338_182_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_338_chunk
+    ADD CONSTRAINT "338_182_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_339_chunk 339_154_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk
+    ADD CONSTRAINT "339_154_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_339_chunk 339_156_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk
+    ADD CONSTRAINT "339_156_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_339_chunk 339_308_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_339_chunk
+    ADD CONSTRAINT "339_308_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_398_chunk 398_184_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_398_chunk
+    ADD CONSTRAINT "398_184_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_399_chunk 399_186_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk
+    ADD CONSTRAINT "399_186_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_399_chunk 399_188_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk
+    ADD CONSTRAINT "399_188_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_399_chunk 399_309_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_399_chunk
+    ADD CONSTRAINT "399_309_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_407_chunk 407_190_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_407_chunk
+    ADD CONSTRAINT "407_190_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_408_chunk 408_192_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk
+    ADD CONSTRAINT "408_192_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_408_chunk 408_194_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk
+    ADD CONSTRAINT "408_194_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_408_chunk 408_310_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_408_chunk
+    ADD CONSTRAINT "408_310_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_443_chunk 443_196_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_443_chunk
+    ADD CONSTRAINT "443_196_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_444_chunk 444_198_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk
+    ADD CONSTRAINT "444_198_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_444_chunk 444_200_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk
+    ADD CONSTRAINT "444_200_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_444_chunk 444_311_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_444_chunk
+    ADD CONSTRAINT "444_311_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_447_chunk 447_202_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_447_chunk
+    ADD CONSTRAINT "447_202_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_448_chunk 448_204_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk
+    ADD CONSTRAINT "448_204_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_448_chunk 448_206_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk
+    ADD CONSTRAINT "448_206_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_448_chunk 448_312_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_448_chunk
+    ADD CONSTRAINT "448_312_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_472_chunk 472_208_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_472_chunk
+    ADD CONSTRAINT "472_208_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_473_chunk 473_210_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk
+    ADD CONSTRAINT "473_210_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_473_chunk 473_212_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk
+    ADD CONSTRAINT "473_212_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_473_chunk 473_313_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_473_chunk
+    ADD CONSTRAINT "473_313_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_523_chunk 523_214_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_523_chunk
+    ADD CONSTRAINT "523_214_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_524_chunk 524_216_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk
+    ADD CONSTRAINT "524_216_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_524_chunk 524_218_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk
+    ADD CONSTRAINT "524_218_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_524_chunk 524_314_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_524_chunk
+    ADD CONSTRAINT "524_314_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_539_chunk 539_220_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_539_chunk
+    ADD CONSTRAINT "539_220_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_540_chunk 540_222_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk
+    ADD CONSTRAINT "540_222_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_540_chunk 540_224_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk
+    ADD CONSTRAINT "540_224_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_540_chunk 540_315_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_540_chunk
+    ADD CONSTRAINT "540_315_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_552_chunk 552_226_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_552_chunk
+    ADD CONSTRAINT "552_226_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_553_chunk 553_228_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk
+    ADD CONSTRAINT "553_228_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_553_chunk 553_230_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk
+    ADD CONSTRAINT "553_230_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_553_chunk 553_316_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_553_chunk
+    ADD CONSTRAINT "553_316_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_556_chunk 556_232_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_556_chunk
+    ADD CONSTRAINT "556_232_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_557_chunk 557_234_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk
+    ADD CONSTRAINT "557_234_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_557_chunk 557_236_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk
+    ADD CONSTRAINT "557_236_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_557_chunk 557_317_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_557_chunk
+    ADD CONSTRAINT "557_317_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_561_chunk 561_238_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_561_chunk
+    ADD CONSTRAINT "561_238_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_562_chunk 562_240_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk
+    ADD CONSTRAINT "562_240_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_562_chunk 562_242_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk
+    ADD CONSTRAINT "562_242_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_562_chunk 562_318_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_562_chunk
+    ADD CONSTRAINT "562_318_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_564_chunk 564_244_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_564_chunk
+    ADD CONSTRAINT "564_244_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_565_chunk 565_246_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk
+    ADD CONSTRAINT "565_246_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_565_chunk 565_248_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk
+    ADD CONSTRAINT "565_248_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_565_chunk 565_319_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_565_chunk
+    ADD CONSTRAINT "565_319_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_568_chunk 568_250_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_568_chunk
+    ADD CONSTRAINT "568_250_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_569_chunk 569_252_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk
+    ADD CONSTRAINT "569_252_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_569_chunk 569_254_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk
+    ADD CONSTRAINT "569_254_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_569_chunk 569_320_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_569_chunk
+    ADD CONSTRAINT "569_320_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_572_chunk 572_256_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_572_chunk
+    ADD CONSTRAINT "572_256_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_573_chunk 573_258_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk
+    ADD CONSTRAINT "573_258_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_573_chunk 573_260_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk
+    ADD CONSTRAINT "573_260_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_573_chunk 573_321_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_573_chunk
+    ADD CONSTRAINT "573_321_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_576_chunk 576_262_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_576_chunk
+    ADD CONSTRAINT "576_262_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_577_chunk 577_264_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk
+    ADD CONSTRAINT "577_264_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_577_chunk 577_266_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk
+    ADD CONSTRAINT "577_266_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_577_chunk 577_322_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_577_chunk
+    ADD CONSTRAINT "577_322_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_580_chunk 580_268_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_580_chunk
+    ADD CONSTRAINT "580_268_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_581_chunk 581_270_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk
+    ADD CONSTRAINT "581_270_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_581_chunk 581_272_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk
+    ADD CONSTRAINT "581_272_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_581_chunk 581_323_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_581_chunk
+    ADD CONSTRAINT "581_323_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_584_chunk 584_274_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_584_chunk
+    ADD CONSTRAINT "584_274_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_585_chunk 585_276_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk
+    ADD CONSTRAINT "585_276_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_585_chunk 585_278_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk
+    ADD CONSTRAINT "585_278_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_585_chunk 585_324_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_585_chunk
+    ADD CONSTRAINT "585_324_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_588_chunk 588_280_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_588_chunk
+    ADD CONSTRAINT "588_280_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_589_chunk 589_282_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk
+    ADD CONSTRAINT "589_282_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_589_chunk 589_284_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk
+    ADD CONSTRAINT "589_284_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_589_chunk 589_325_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_589_chunk
+    ADD CONSTRAINT "589_325_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_592_chunk 592_286_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_592_chunk
+    ADD CONSTRAINT "592_286_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_593_chunk 593_288_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk
+    ADD CONSTRAINT "593_288_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_593_chunk 593_290_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk
+    ADD CONSTRAINT "593_290_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_593_chunk 593_326_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_593_chunk
+    ADD CONSTRAINT "593_326_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_596_chunk 596_292_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_596_chunk
+    ADD CONSTRAINT "596_292_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_597_chunk 597_294_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk
+    ADD CONSTRAINT "597_294_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_597_chunk 597_296_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk
+    ADD CONSTRAINT "597_296_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_597_chunk 597_327_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_597_chunk
+    ADD CONSTRAINT "597_327_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
+
+
+--
+-- Name: _hyper_1_73_chunk 73_173_raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_1_73_chunk
+    ADD CONSTRAINT "73_173_raw_messages_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: _hyper_2_74_chunk 74_100_fixes_flight_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk
+    ADD CONSTRAINT "74_100_fixes_flight_id_fkey" FOREIGN KEY (flight_id) REFERENCES public.flights(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: _hyper_2_74_chunk 74_102_fixes_receiver_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk
+    ADD CONSTRAINT "74_102_fixes_receiver_id_fkey" FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: _hyper_2_74_chunk 74_299_fixes_aircraft_id_fkey; Type: FK CONSTRAINT; Schema: _timescaledb_internal; Owner: -
+--
+
+ALTER TABLE ONLY _timescaledb_internal._hyper_2_74_chunk
+    ADD CONSTRAINT "74_299_fixes_aircraft_id_fkey" FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
 
 
 --
@@ -3501,7 +9867,7 @@ ALTER TABLE ONLY public.clubs
 --
 
 ALTER TABLE ONLY public.fixes
-    ADD CONSTRAINT fixes_aircraft_id_fkey FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fixes_aircraft_id_fkey FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) NOT VALID;
 
 
 --
@@ -3654,14 +10020,6 @@ ALTER TABLE ONLY public.raw_messages
 
 ALTER TABLE ONLY public.receiver_coverage_h3
     ADD CONSTRAINT receiver_coverage_h3_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
-
-
---
--- Name: receiver_statuses receiver_statuses_raw_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.receiver_statuses
-    ADD CONSTRAINT receiver_statuses_raw_message_id_fkey FOREIGN KEY (raw_message_id, received_at) REFERENCES public.raw_messages(id, received_at);
 
 
 --
