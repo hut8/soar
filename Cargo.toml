@@ -14,7 +14,7 @@ bundled-postgres = ["pq-sys/bundled", "dep:openssl", "openssl/vendored"]
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5"
-async-nats = "0.45"
+async-nats = "0.46"
 async-trait = "0.1"
 bcrypt = "0.18"
 bigdecimal = { version = "0.4", features = ["serde"] }
@@ -121,7 +121,7 @@ serial_test = "3.2"
 tempfile = "3.24.0"
 
 [build-dependencies]
-vergen-git2 = { version = "1.0", features = ["build", "cargo"] }
+vergen-git2 = { version = "9.1", features = ["build", "cargo"] }
 prost-build = "0.14"
 
 # Optimized development profile with light optimization
