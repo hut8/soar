@@ -1,10 +1,12 @@
 -- Migration: Deduplicate aircraft by registration
 -- This migration:
 -- 1. Merges FLARM+ICAO duplicates (keeping ICAO address, merging data)
--- 2. Updates FK references
--- 3. Deletes merged FLARM records
--- 4. Nulls all registrations (will be repopulated by next data load with validation)
--- 5. Adds unique partial index on registration
+-- 2. Updates FK references (including fixes in hourly batches)
+-- 3. Drops FK constraint temporarily (avoids expensive validation scan)
+-- 4. Deletes merged FLARM records
+-- 5. Recreates FK constraint with NOT VALID
+-- 6. Nulls all registrations (will be repopulated by next data load with validation)
+-- 7. Adds unique partial index on registration
 
 -- CRITICAL: Disable TimescaleDB decompression limit for this migration
 -- The fixes table has compressed chunks, and updating aircraft_id across 16M+ rows
@@ -128,7 +130,12 @@ BEGIN
     RAISE NOTICE 'Total fixes updated: %', total_updated;
 END $$;
 
--- Step 4: Delete merged FLARM records
+-- Step 4: Drop FK constraint temporarily to avoid expensive validation scan
+-- The fixes table is a compressed hypertable; FK validation would trigger
+-- transparent decompression of 300M+ rows even though no fixes reference these aircraft
+ALTER TABLE fixes DROP CONSTRAINT fixes_aircraft_id_fkey;
+
+-- Step 5: Delete merged FLARM records (fast without FK validation)
 DELETE FROM aircraft WHERE id IN (SELECT flarm_id FROM aircraft_merge);
 
 -- Log count of deleted records
@@ -140,15 +147,20 @@ BEGIN
     RAISE NOTICE 'Deleted % merged FLARM records', deleted_count;
 END $$;
 
+-- Step 6: Recreate FK constraint with NOT VALID (skips expensive validation scan)
+-- The fixes were already updated to point to valid aircraft IDs above
+ALTER TABLE fixes ADD CONSTRAINT fixes_aircraft_id_fkey
+    FOREIGN KEY (aircraft_id) REFERENCES aircraft(id) NOT VALID;
+
 -- Clean up temp table
 DROP TABLE aircraft_merge;
 
--- Step 5: Null ALL registrations
+-- Step 7: Null ALL registrations
 -- The next data load will repopulate valid registrations using flydent validation
 -- This is safer than trying to validate in SQL
 UPDATE aircraft SET registration = NULL WHERE registration IS NOT NULL;
 
--- Step 6: Drop existing non-unique index and add unique partial index
+-- Step 8: Drop existing non-unique index and add unique partial index
 DROP INDEX IF EXISTS idx_aircraft_registration;
 
 CREATE UNIQUE INDEX idx_aircraft_registration_unique
