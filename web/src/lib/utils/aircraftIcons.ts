@@ -17,50 +17,57 @@ export type IconShape =
 	| 'tiltrotor'
 	| 'balloon'
 	| 'drone'
+	| 'jet'
 	| 'fixedWing'
 	| 'obstacle'
 	| 'unknown';
 
 /**
  * SVG path data for each icon shape
- * All paths are designed for a 24x24 viewBox, pointing north (up)
+ * All paths are designed for a 36x36 viewBox, pointing north (up)
+ * Top-down planform views inspired by standard aviation symbology
  */
 const ICON_PATHS: Record<IconShape, string> = {
-	// Glider/sailplane - long slender wings, no engine
+	// Glider/sailplane - very long slender wings, narrow fuselage (high aspect ratio)
 	glider:
-		'M12 2L12 6M12 6L3 10L3 12L12 10L12 18L8 20L8 22L12 20L16 22L16 20L12 18L12 10L21 12L21 10L12 6Z',
+		'M18 3L18 7L17 7L17 14L18 14L18 16L20 18L20 19L18 18L18 21L20 22L20 24L18 23L18 33L17 33L17 23L15 24L15 22L17 21L17 18L15 19L15 18L17 16L17 14L18 14L18 7L17 7L17 3L18 3Z M1 15L1 17L17 19L17 17L1 15Z M35 15L35 17L19 19L19 17L35 15Z',
 
-	// Hang glider - delta/triangular wing
-	hangGlider: 'M12 4L3 20L12 16L21 20L12 4Z M12 16L12 22',
+	// Hang glider - delta/triangular wing with pilot
+	hangGlider: 'M18 2L2 28L18 22L34 28L18 2Z M17 22L17 34L19 34L19 22L17 22Z',
 
-	// Paraglider/parachute - curved canopy shape
+	// Paraglider - curved rectangular canopy with lines to pilot
 	paraglider:
-		'M4 8C4 5 8 3 12 3C16 3 20 5 20 8C20 10 18 12 12 12C6 12 4 10 4 8Z M12 12L12 20M8 10L6 18M16 10L18 18',
+		'M6 6Q6 2 18 2Q30 2 30 6Q30 10 18 12Q6 10 6 6Z M18 12L18 28 M10 9L8 24 M26 9L28 24 M8 24L18 28L28 24',
 
-	// Helicopter - side profile silhouette (based on Material Design)
+	// Helicopter - top-down with rotor disc and tail boom
 	helicopter:
-		'M12 2c-.55 0-1 .45-1 1v1H9.5c-.28 0-.5.22-.5.5s.22.5.5.5H11v1H4c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1l1.5 5h1l.5-2h8l.5 2h1l1.5-5h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2h-7V5h1.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5H13V3c0-.55-.45-1-1-1z',
+		'M18 2A14 14 0 0 1 18 30A14 14 0 0 1 18 2Z M16 16L16 34L14 34L13 33L13 31L14 30L14 28L20 28L20 16L16 16Z M13 31L9 31L9 33L13 33L13 31Z M22 30L22 34L24 34L24 30L22 30Z',
 
-	// Tiltrotor/VTOL - twin rotors with wing
+	// Tiltrotor/VTOL - V-22 Osprey style with rotors on wingtips
 	tiltrotor:
-		'M6 6A3 3 0 1 0 6 12A3 3 0 1 0 6 6M18 6A3 3 0 1 0 18 12A3 3 0 1 0 18 6M6 9L18 9M12 9L12 16L9 18L9 20L12 18L15 20L15 18L12 16',
+		'M17 4L17 12L19 12L19 4L17 4Z M5 11A5 5 0 1 1 5 21A5 5 0 1 1 5 11Z M31 11A5 5 0 1 1 31 21A5 5 0 1 1 31 11Z M10 15L17 15L17 17L10 17L10 15Z M19 15L26 15L26 17L19 17L19 15Z M17 17L17 28L15 30L15 32L17 30L17 32L19 32L19 30L21 32L21 30L19 28L19 17L17 17Z',
 
-	// Balloon/airship - envelope shape
-	balloon: 'M12 2C7 2 4 6 4 11C4 15 7 18 10 19L10 22L14 22L14 19C17 18 20 15 20 11C20 6 17 2 12 2Z',
+	// Balloon - simple filled circle with basket
+	balloon:
+		'M18 2A12 12 0 0 1 18 26A12 12 0 0 1 18 2Z M15 26L15 30L21 30L21 26 M14 30L14 34L22 34L22 30L14 30Z',
 
-	// Drone/quadcopter - four rotors
+	// Drone/quadcopter - X-frame with four rotors
 	drone:
-		'M6 6A2 2 0 1 0 6 10A2 2 0 1 0 6 6M18 6A2 2 0 1 0 18 10A2 2 0 1 0 18 6M6 14A2 2 0 1 0 6 18A2 2 0 1 0 6 14M18 14A2 2 0 1 0 18 18A2 2 0 1 0 18 14M8 8L16 16M16 8L8 16M12 10L12 14',
+		'M6 6A4 4 0 1 1 6 14A4 4 0 1 1 6 6Z M30 6A4 4 0 1 1 30 14A4 4 0 1 1 30 6Z M6 22A4 4 0 1 1 6 30A4 4 0 1 1 6 22Z M30 22A4 4 0 1 1 30 30A4 4 0 1 1 30 22Z M10 10L15 15L15 21L10 26 M26 10L21 15L21 21L26 26 M15 15L21 15L21 21L15 21Z',
 
-	// Fixed wing aircraft - standard airplane (Material Design icon)
+	// Jet airliner - twin engine, swept wings (like A320/737)
+	jet: 'M17 1L17 10L19 10L19 1L17 1Z M17 10L5 18L5 21L17 18L17 28L12 31L12 34L17 31L17 35L19 35L19 31L24 34L24 31L19 28L19 18L31 21L31 18L19 10L17 10Z M5 18L5 24L8 24L9 18L5 18Z M27 18L31 18L31 24L28 24L27 18Z',
+
+	// Single-engine prop plane - high wing, fixed gear style
 	fixedWing:
-		'M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z',
+		'M17 2L17 8L19 8L19 2L17 2Z M17 8L17 12L4 16L4 19L17 16L17 26L13 29L13 32L17 29L17 34L19 34L19 29L23 32L23 29L19 26L19 16L32 19L32 16L19 12L19 8L17 8Z',
 
-	// Static obstacle - tower/mast marker
-	obstacle: 'M12 2L12 18M8 18L16 18M10 6L14 6M9 10L15 10M8 14L16 14M6 22L18 22L18 20L6 20L6 22Z',
+	// Static obstacle - warning triangle with tower
+	obstacle:
+		'M18 2L32 30L4 30L18 2Z M17 10L17 20L19 20L19 10L17 10Z M17 23L17 27L19 27L19 23L17 23Z',
 
-	// Unknown - simple diamond/dot
-	unknown: 'M12 4L18 12L12 20L6 12L12 4Z'
+	// Unknown - diamond marker
+	unknown: 'M18 4L30 18L18 32L6 18L18 4Z M18 10L24 18L18 26L12 18L18 10Z'
 };
 
 /**
@@ -119,17 +126,10 @@ export function createAircraftIconDataUrl(
 ): string {
 	const path = ICON_PATHS[shape];
 
-	// Use stroke for line-based icons, fill for solid icons
-	const isSolidIcon =
-		shape === 'fixedWing' || shape === 'helicopter' || shape === 'balloon' || shape === 'unknown';
-
-	const svg = isSolidIcon
-		? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}">
-			<path d="${path}"/>
-		</svg>`
-		: `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-			<path d="${path}"/>
-		</svg>`;
+	// All icons are now solid filled shapes for clean rendering at small sizes
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 36 36" fill="${color}">
+		<path d="${path}" fill-rule="evenodd"/>
+	</svg>`;
 
 	return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
