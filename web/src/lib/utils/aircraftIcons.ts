@@ -37,9 +37,9 @@ const ICON_PATHS: Record<IconShape, string> = {
 	paraglider:
 		'M4 8C4 5 8 3 12 3C16 3 20 5 20 8C20 10 18 12 12 12C6 12 4 10 4 8Z M12 12L12 20M8 10L6 18M16 10L18 18',
 
-	// Helicopter - rotor disc with body
+	// Helicopter - side profile silhouette (based on Material Design)
 	helicopter:
-		'M12 4L12 8M6 6L18 6M12 8L12 14M8 14L16 14L16 18L8 18L8 14Z M8 18L6 22M16 18L18 22M4 12L20 12',
+		'M12 2c-.55 0-1 .45-1 1v1H9.5c-.28 0-.5.22-.5.5s.22.5.5.5H11v1H4c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1l1.5 5h1l.5-2h8l.5 2h1l1.5-5h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2h-7V5h1.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5H13V3c0-.55-.45-1-1-1z',
 
 	// Tiltrotor/VTOL - twin rotors with wing
 	tiltrotor:
@@ -120,7 +120,8 @@ export function createAircraftIconDataUrl(
 	const path = ICON_PATHS[shape];
 
 	// Use stroke for line-based icons, fill for solid icons
-	const isSolidIcon = shape === 'fixedWing' || shape === 'balloon' || shape === 'unknown';
+	const isSolidIcon =
+		shape === 'fixedWing' || shape === 'helicopter' || shape === 'balloon' || shape === 'unknown';
 
 	const svg = isSolidIcon
 		? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}">
