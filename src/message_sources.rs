@@ -81,8 +81,9 @@ pub async fn process_messages_from_source(
                 Ok(timestamp) => (timestamp.with_timezone(&Utc), rest),
                 Err(e) => {
                     warn!(
-                        "Failed to parse timestamp from message: {} - using current time",
-                        e
+                        timestamp = %timestamp_str,
+                        error = %e,
+                        "Failed to parse timestamp from message - using current time"
                     );
                     (Utc::now(), message.as_str())
                 }
