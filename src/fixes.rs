@@ -23,9 +23,6 @@ pub struct Fix {
     /// APRS packet header information
     pub source: String,
 
-    /// Timestamp when this fix was received/parsed
-    pub timestamp: DateTime<Utc>,
-
     /// Aircraft position
     pub latitude: f64,
     pub longitude: f64,
@@ -52,7 +49,8 @@ pub struct Fix {
     pub flight_id: Option<Uuid>,
     pub aircraft_id: Uuid,
 
-    /// Timestamp when we received/processed the packet
+    /// Timestamp when the server received/processed the packet.
+    /// This is the canonical timestamp for the fix and is used for table partitioning.
     pub received_at: DateTime<Utc>,
 
     /// Whether the aircraft is considered active (ground_speed >= 25 knots)
@@ -121,9 +119,6 @@ impl Fix {
         receiver_id: Option<Uuid>,
         raw_message_id: Uuid,
     ) -> Result<Option<Self>> {
-        // For now, use received_at as the packet timestamp
-        let timestamp = received_at;
-
         // Extract source and aprs_type from packet header
         let source = packet.from.to_string();
         let aprs_type = packet.to.to_string();
@@ -229,7 +224,6 @@ impl Fix {
                 Ok(Some(Fix {
                     id: Uuid::now_v7(),
                     source,
-                    timestamp,
                     latitude,
                     longitude,
                     altitude_msl_feet: altitude_feet,

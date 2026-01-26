@@ -26,7 +26,7 @@ pub fn generate_igc(flight: &Flight, fixes: &[Fix], aircraft: Option<&Aircraft>)
     // Get flight date from takeoff time or first fix
     let flight_date = flight
         .takeoff_time
-        .or_else(|| fixes.first().map(|f| f.timestamp))
+        .or_else(|| fixes.first().map(|f| f.received_at))
         .unwrap_or_else(Utc::now);
 
     // H records - Header information
@@ -105,9 +105,9 @@ fn write_b_record(igc: &mut String, fix: &Fix) {
     // Time (HHMMSS)
     let time = format!(
         "{:02}{:02}{:02}",
-        fix.timestamp.hour(),
-        fix.timestamp.minute(),
-        fix.timestamp.second()
+        fix.received_at.hour(),
+        fix.received_at.minute(),
+        fix.received_at.second()
     );
 
     // Latitude (DDMMmmmN/S)

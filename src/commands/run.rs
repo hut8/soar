@@ -270,7 +270,6 @@ async fn process_beast_message(
         let fix = soar::Fix {
             id: Uuid::now_v7(),
             source: partial_fix.icao_hex,
-            timestamp: partial_fix.timestamp,
             latitude: partial_fix.latitude,
             longitude: partial_fix.longitude,
             altitude_msl_feet: partial_fix.altitude_feet,
@@ -500,7 +499,6 @@ async fn process_sbs_message(
         let fix = soar::Fix {
             id: Uuid::now_v7(),
             source: partial_fix.icao_hex,
-            timestamp: partial_fix.timestamp,
             latitude: partial_fix.latitude,
             longitude: partial_fix.longitude,
             altitude_msl_feet: partial_fix.altitude_feet,

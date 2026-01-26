@@ -181,9 +181,20 @@ export class ARTracker {
 			heading = (360 - (event.alpha ?? 0)) % 360;
 		}
 
+		// Convert device beta to AR pitch
+		// beta is the angle in degrees the device is tilted front-to-back:
+		//   - beta = 0°: phone flat on table, screen facing up
+		//   - beta = 90°: phone held vertically, screen facing user (portrait AR mode)
+		//   - beta = 180°/-180°: phone flat, screen facing down
+		// For AR, we want pitch = 0° when phone is held vertically (the typical AR pose).
+		// Tilting the phone up (looking at sky) = positive pitch
+		// Tilting the phone down (looking at ground) = negative pitch
+		const beta = event.beta ?? 0;
+		const arPitch = beta - 90;
+
 		this.currentOrientation = {
 			heading,
-			pitch: event.beta ?? 0,
+			pitch: arPitch,
 			roll: event.gamma ?? 0,
 			absolute: event.absolute || this.hasAbsoluteOrientation
 		};

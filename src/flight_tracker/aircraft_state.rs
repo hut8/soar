@@ -13,7 +13,7 @@ pub type GeofenceStatus = HashMap<Uuid, bool>;
 /// Much smaller than the full Fix struct - only the fields needed for flight decisions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompactFix {
-    pub timestamp: DateTime<Utc>,
+    pub received_at: DateTime<Utc>,
     pub lat: f64,
     pub lng: f64,
     pub altitude_msl_ft: Option<i32>,
@@ -26,7 +26,7 @@ impl CompactFix {
     /// Create a CompactFix from a full Fix
     pub fn from_fix(fix: &Fix, is_active: bool) -> Self {
         Self {
-            timestamp: fix.timestamp,
+            received_at: fix.received_at,
             lat: fix.latitude,
             lng: fix.longitude,
             altitude_msl_ft: fix.altitude_msl_feet,
@@ -89,7 +89,7 @@ impl AircraftState {
             last_timed_out_flight_id: None,
             last_timed_out_callsign: None,
             last_timed_out_at: None,
-            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
+            last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
             geofence_status: GeofenceStatus::new(),
@@ -109,7 +109,7 @@ impl AircraftState {
             last_timed_out_flight_id: None,
             last_timed_out_callsign: None,
             last_timed_out_at: None,
-            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
+            last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
             geofence_status: GeofenceStatus::new(),
@@ -121,7 +121,7 @@ impl AircraftState {
     pub fn add_fix(&mut self, fix: &Fix, is_active: bool) {
         // Use fix timestamp, not wall clock time
         // This is critical for timeout detection when processing old queued messages from soar-ingest
-        self.last_update_time = fix.timestamp;
+        self.last_update_time = fix.received_at;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {
@@ -136,7 +136,7 @@ impl AircraftState {
     pub fn add_fix_for_restore(&mut self, fix: &Fix, is_active: bool) {
         // Use the fix's timestamp, not wall clock time
         // This ensures timeout detection works correctly after restart
-        self.last_update_time = fix.timestamp;
+        self.last_update_time = fix.received_at;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {
@@ -190,14 +190,14 @@ impl AircraftState {
             return None;
         }
 
-        let most_recent_timestamp = self.recent_fixes.back()?.timestamp;
+        let most_recent_timestamp = self.recent_fixes.back()?.received_at;
 
         // Filter to fixes within last 60 seconds that have altitude data
         let recent_with_altitude: Vec<&CompactFix> = self
             .recent_fixes
             .iter()
             .filter(|f| {
-                let age = most_recent_timestamp.signed_duration_since(f.timestamp);
+                let age = most_recent_timestamp.signed_duration_since(f.received_at);
                 age.num_seconds() <= 60 && f.altitude_msl_ft.is_some()
             })
             .collect();
@@ -213,7 +213,7 @@ impl AircraftState {
         let first_alt = first_fix.altitude_msl_ft?;
         let last_alt = last_fix.altitude_msl_ft?;
 
-        let time_delta_seconds = (last_fix.timestamp - first_fix.timestamp).num_seconds();
+        let time_delta_seconds = (last_fix.received_at - first_fix.received_at).num_seconds();
 
         // Require at least 5 seconds between fixes to avoid noise
         if time_delta_seconds < 5 {
@@ -257,14 +257,14 @@ impl AircraftState {
 
     /// Get the timestamp of the last fix
     pub fn last_fix_timestamp(&self) -> Option<DateTime<Utc>> {
-        self.recent_fixes.back().map(|f| f.timestamp)
+        self.recent_fixes.back().map(|f| f.received_at)
     }
 
     /// Get the timestamp of the second-to-last fix (before the current one)
     /// Useful for calculating time gaps when the current fix has already been added to history
     pub fn previous_fix_timestamp(&self) -> Option<DateTime<Utc>> {
         if self.recent_fixes.len() >= 2 {
-            self.recent_fixes.iter().rev().nth(1).map(|f| f.timestamp)
+            self.recent_fixes.iter().rev().nth(1).map(|f| f.received_at)
         } else {
             None
         }
@@ -293,7 +293,7 @@ mod tests {
     fn create_compact_fix(is_active: bool, seconds_offset: i64) -> CompactFix {
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
         CompactFix {
-            timestamp: base_time + chrono::Duration::seconds(seconds_offset),
+            received_at: base_time + chrono::Duration::seconds(seconds_offset),
             lat: 42.0,
             lng: -71.0,
             altitude_msl_ft: Some(1000),

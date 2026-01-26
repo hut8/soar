@@ -110,7 +110,6 @@ mod tests {
         Fix {
             id: Uuid::new_v4(),
             source: "TEST".to_string(),
-            timestamp: Utc::now(),
             latitude: lat,
             longitude: lng,
             altitude_msl_feet: altitude_msl_ft,

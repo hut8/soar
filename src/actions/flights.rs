@@ -719,7 +719,7 @@ pub async fn search_flights(
                                 Ok(Some(fix)) => (
                                     fix.altitude_msl_feet,
                                     fix.altitude_agl_feet,
-                                    Some(fix.timestamp),
+                                    Some(fix.received_at),
                                 ),
                                 _ => (None, None, None),
                             }
@@ -910,7 +910,7 @@ fn calculate_avg_climb_rate(fixes: &[Fix]) -> Option<i32> {
     let last_alt = last.altitude_msl_feet?;
 
     // Calculate time difference in minutes
-    let time_diff = (last.timestamp - first.timestamp).num_seconds() as f64 / 60.0;
+    let time_diff = (last.received_at - first.received_at).num_seconds() as f64 / 60.0;
 
     if time_diff == 0.0 {
         return None;
@@ -979,7 +979,7 @@ pub async fn get_flight_gaps(
         let current = &fixes[i];
         let next = &fixes[i + 1];
 
-        let time_diff = (next.timestamp - current.timestamp).num_seconds();
+        let time_diff = (next.received_at - current.received_at).num_seconds();
 
         if time_diff >= GAP_THRESHOLD_SECONDS {
             // Calculate distance covered during the gap
@@ -1013,8 +1013,8 @@ pub async fn get_flight_gaps(
             let avg_climb_rate_10_after = calculate_avg_climb_rate(fixes_after);
 
             gaps.push(FlightGap {
-                gap_start: current.timestamp.to_rfc3339(),
-                gap_end: next.timestamp.to_rfc3339(),
+                gap_start: current.received_at.to_rfc3339(),
+                gap_end: next.received_at.to_rfc3339(),
                 duration_seconds: time_diff,
                 distance_meters,
                 callsign_before,

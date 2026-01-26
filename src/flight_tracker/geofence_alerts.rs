@@ -95,7 +95,7 @@ pub async fn process_geofence_exits(
                 geofence.id,
                 flight_id,
                 fix.aircraft_id,
-                fix.timestamp,
+                fix.received_at,
                 fix.latitude,
                 fix.longitude,
                 fix.altitude_msl_feet,
