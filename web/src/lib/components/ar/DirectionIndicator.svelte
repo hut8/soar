@@ -1,10 +1,21 @@
 <script lang="ts">
-	import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, X } from '@lucide/svelte';
+	import { ChevronUp, X } from '@lucide/svelte';
 	import type { ARAircraftPosition, ARDeviceOrientation, ARSettings } from '$lib/ar/types';
 
 	// Hysteresis factor to prevent flickering at FOV edges (0.9 = 90% of FOV edge)
 	// Using a slightly smaller threshold than actual FOV prevents rapid on/off toggling
 	const FOV_EDGE_HYSTERESIS = 0.9;
+
+	type Direction =
+		| 'in-view'
+		| 'up'
+		| 'down'
+		| 'left'
+		| 'right'
+		| 'up-left'
+		| 'up-right'
+		| 'down-left'
+		| 'down-right';
 
 	let { targetAircraft, deviceOrientation, settings, onDismiss } = $props<{
 		targetAircraft: ARAircraftPosition;
@@ -29,7 +40,8 @@
 
 	// Determine which direction to show based on relative bearing and elevation
 	// Use FOV settings for accurate thresholds
-	const direction = $derived(() => {
+	// Supports diagonal directions when both horizontal and vertical are off-screen
+	const direction = $derived((): Direction => {
 		const rb = relativeBearing();
 		const elev = adjustedElevation();
 		const hFovHalf = settings.fovHorizontal / 2;
@@ -49,22 +61,53 @@
 			return 'in-view';
 		}
 
-		// If within horizontal FOV but outside vertical, show up/down
+		// Determine horizontal and vertical direction components
+		const horizontalDir = rb > 0 ? 'right' : 'left';
+		const verticalDir = elev > 0 ? 'up' : 'down';
+
+		// If within horizontal FOV but outside vertical, show up/down only
 		if (withinHorizontalFov) {
-			return elev > 0 ? 'up' : 'down';
+			return verticalDir;
 		}
 
-		// Otherwise show left/right
-		return rb > 0 ? 'right' : 'left';
+		// If within vertical FOV but outside horizontal, show left/right only
+		if (withinVerticalFov) {
+			return horizontalDir;
+		}
+
+		// Both are outside FOV - show diagonal direction
+		return `${verticalDir}-${horizontalDir}` as Direction;
+	});
+
+	// Calculate the arrow rotation angle for diagonal/angled directions
+	// Returns angle in degrees (0 = up, 90 = right, etc.)
+	const arrowAngle = $derived(() => {
+		const rb = relativeBearing();
+		const elev = adjustedElevation();
+
+		// Calculate angle from center to target position
+		// atan2 gives angle in radians, convert to degrees
+		// Note: In our coordinate system, positive rb = right, positive elev = up
+		// We want 0° to be "up", so we adjust the atan2 parameters
+		const angleRad = Math.atan2(rb, elev);
+		return angleRad * (180 / Math.PI);
 	});
 
 	// Calculate how far off-screen (for intensity of indicator)
 	const intensity = $derived(() => {
 		const rb = Math.abs(relativeBearing());
+		const elev = Math.abs(adjustedElevation());
 		const hFovHalf = settings.fovHorizontal / 2;
-		if (rb < hFovHalf) return 0;
-		if (rb < hFovHalf * 2) return 1;
-		if (rb < hFovHalf * 3) return 2;
+		const vFovHalf = settings.fovVertical / 2;
+
+		// Use the larger of horizontal or vertical offset for intensity
+		const hOffset = rb / hFovHalf;
+		const vOffset = elev / vFovHalf;
+		const maxOffset = Math.max(hOffset, vOffset);
+
+		if (maxOffset < 1) return 0;
+		if (maxOffset < 2) return 1;
+		if (maxOffset < 3) return 2;
 		return 3;
 	});
 
@@ -75,20 +118,10 @@
 
 {#if direction() !== 'in-view'}
 	<div class="direction-indicator {direction()}" class:intense={intensity() >= 2}>
-		<div class="indicator-content">
-			{#if direction() === 'up'}
-				<ChevronUp size={40} class="arrow" />
-				<ChevronUp size={40} class="arrow arrow-2" />
-			{:else if direction() === 'down'}
-				<ChevronDown size={40} class="arrow" />
-				<ChevronDown size={40} class="arrow arrow-2" />
-			{:else if direction() === 'left'}
-				<ChevronLeft size={40} class="arrow" />
-				<ChevronLeft size={40} class="arrow arrow-2" />
-			{:else if direction() === 'right'}
-				<ChevronRight size={40} class="arrow" />
-				<ChevronRight size={40} class="arrow arrow-2" />
-			{/if}
+		<div class="indicator-content" style:--arrow-angle="{arrowAngle()}deg">
+			<!-- Use ChevronUp rotated to point in the actual direction -->
+			<ChevronUp size={40} class="arrow rotated-arrow" />
+			<ChevronUp size={40} class="arrow rotated-arrow arrow-2" />
 		</div>
 
 		<div class="target-info">
@@ -117,6 +150,7 @@
 		animation: pulse-glow 1.5s ease-in-out infinite;
 	}
 
+	/* Cardinal directions - positioned at edges */
 	.direction-indicator.up {
 		top: 7rem;
 		left: 50%;
@@ -145,6 +179,31 @@
 		flex-direction: row-reverse;
 	}
 
+	/* Diagonal directions - positioned at corners */
+	.direction-indicator.up-left {
+		top: 7rem;
+		left: 1rem;
+		flex-direction: column;
+	}
+
+	.direction-indicator.up-right {
+		top: 7rem;
+		right: 1rem;
+		flex-direction: column;
+	}
+
+	.direction-indicator.down-left {
+		bottom: 8rem;
+		left: 1rem;
+		flex-direction: column-reverse;
+	}
+
+	.direction-indicator.down-right {
+		bottom: 8rem;
+		right: 1rem;
+		flex-direction: column-reverse;
+	}
+
 	.direction-indicator.intense {
 		background: rgba(var(--color-primary-500), 1);
 	}
@@ -156,8 +215,10 @@
 		justify-content: center;
 	}
 
-	.indicator-content :global(.arrow) {
+	/* Rotate arrows to point in the actual direction */
+	.indicator-content :global(.rotated-arrow) {
 		opacity: 0.9;
+		transform: rotate(var(--arrow-angle, 0deg));
 	}
 
 	.indicator-content :global(.arrow-2) {
@@ -166,20 +227,11 @@
 		animation: arrow-pulse 1s ease-in-out infinite;
 	}
 
-	.direction-indicator.up :global(.arrow-2) {
-		transform: translateY(-8px);
-	}
-
-	.direction-indicator.down :global(.arrow-2) {
-		transform: translateY(8px);
-	}
-
-	.direction-indicator.left :global(.arrow-2) {
-		transform: translateX(-8px);
-	}
-
-	.direction-indicator.right :global(.arrow-2) {
-		transform: translateX(8px);
+	/* Secondary arrow offset - animates outward in the direction of the arrow */
+	.indicator-content :global(.arrow-2.rotated-arrow) {
+		/* Use transform to offset in the direction the arrow points */
+		/* The arrow points "up" by default, so we translate along the rotated Y axis */
+		transform: rotate(var(--arrow-angle, 0deg)) translateY(-8px);
 	}
 
 	.target-info {
