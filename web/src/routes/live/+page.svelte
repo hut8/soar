@@ -27,6 +27,12 @@
 	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
 	import { serverCall } from '$lib/api/server';
 	import {
+		getAircraftIconUrl,
+		getAircraftIconName,
+		getAllIconShapes,
+		ALTITUDE_COLORS
+	} from '$lib/utils/aircraftIcons';
+	import {
 		AirspaceLayerManager,
 		AirportLayerManager,
 		ReceiverLayerManager,
@@ -242,7 +248,8 @@
 				isActive: fix.active,
 				timestamp: fix.timestamp,
 				aircraftModel: aircraft.aircraftModel || '',
-				iconName: getAircraftIconNameForAltitude(fix.altitudeMslFeet)
+				aircraftCategory: aircraft.aircraftCategory || null,
+				iconName: getAircraftIconName(aircraft.aircraftCategory, fix.altitudeMslFeet)
 			}
 		};
 	}
@@ -330,61 +337,42 @@
 		}
 	}
 
-	// Create aircraft icon SVG as a data URL for MapLibre
-	function createAircraftIconDataUrl(color: string): string {
-		const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="${color}">
-			<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-		</svg>`;
-		return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-	}
-
-	// Get icon name based on altitude (discrete color bands)
-	function getAircraftIconNameForAltitude(altitude: number | null | undefined): string {
-		if (altitude === null || altitude === undefined) {
-			return 'aircraft-icon-gray';
-		}
-		// Map altitude ranges to icon colors
-		// Range: 500 ft (red) to 18000 ft (blue)
-		if (altitude < 2000) return 'aircraft-icon-red';
-		if (altitude < 4000) return 'aircraft-icon-orange';
-		if (altitude < 6000) return 'aircraft-icon-amber';
-		if (altitude < 8000) return 'aircraft-icon-yellow';
-		if (altitude < 10000) return 'aircraft-icon-lime';
-		if (altitude < 12000) return 'aircraft-icon-green';
-		if (altitude < 15000) return 'aircraft-icon-cyan';
-		return 'aircraft-icon-blue';
-	}
-
 	// Add aircraft icon images to the map
+	// Loads PNG icons for all shape+color combinations (7 shapes × 9 colors = 63 icons)
 	async function addAircraftIcons() {
 		if (!map) return;
 
-		// Create icons for different altitude-based colors
-		const iconColors = [
-			{ name: 'aircraft-icon-red', color: '#ef4444' },
-			{ name: 'aircraft-icon-orange', color: '#f97316' },
-			{ name: 'aircraft-icon-amber', color: '#f59e0b' },
-			{ name: 'aircraft-icon-yellow', color: '#eab308' },
-			{ name: 'aircraft-icon-lime', color: '#84cc16' },
-			{ name: 'aircraft-icon-green', color: '#22c55e' },
-			{ name: 'aircraft-icon-cyan', color: '#06b6d4' },
-			{ name: 'aircraft-icon-blue', color: '#3b82f6' },
-			{ name: 'aircraft-icon-gray', color: '#6b7280' }
-		];
+		const shapes = getAllIconShapes();
+		const loadPromises: Promise<void>[] = [];
 
-		for (const { name, color } of iconColors) {
-			const img = new Image(48, 48);
-			img.src = createAircraftIconDataUrl(color);
-			await new Promise<void>((resolve) => {
-				img.onload = () => {
-					if (map && !map.hasImage(name)) {
-						map.addImage(name, img, { sdf: false });
-					}
-					resolve();
-				};
-				img.onerror = () => resolve();
-			});
+		for (const shape of shapes) {
+			for (const { name: colorName } of ALTITUDE_COLORS) {
+				const iconName = `aircraft-${shape}-${colorName}`;
+				const iconUrl = getAircraftIconUrl(shape, colorName);
+
+				loadPromises.push(
+					new Promise<void>((resolve) => {
+						const img = new Image();
+						img.onload = () => {
+							if (map && !map.hasImage(iconName)) {
+								map.addImage(iconName, img, { sdf: false });
+							}
+							resolve();
+						};
+						img.onerror = () => {
+							logger.warn('[AIRCRAFT] Failed to load icon: {iconName}', { iconName });
+							resolve();
+						};
+						img.src = iconUrl;
+					})
+				);
+			}
 		}
+
+		await Promise.all(loadPromises);
+		logger.debug('[AIRCRAFT] Registered {count} aircraft icons', {
+			count: shapes.length * ALTITUDE_COLORS.length
+		});
 	}
 
 	// Add aircraft layers to map

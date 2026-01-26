@@ -1,10 +1,7 @@
-import { browser } from '$app/environment';
-import { dev } from '$app/environment';
+import { browser, dev } from '$app/environment';
 import { loading } from '$lib/stores/loading';
-import { backendMode } from '$lib/stores/backend';
 import { auth } from '$lib/stores/auth';
 import { toaster } from '$lib/toaster';
-import { get } from 'svelte/store';
 
 // Get the API base URL based on environment and backend mode
 export function getApiBase(): string {
@@ -13,9 +10,19 @@ export function getApiBase(): string {
 		return '/data';
 	}
 
-	// In development, check the backend mode setting
-	const mode = get(backendMode);
-	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://staging.glider.flights/data';
+	// In development, read directly from localStorage to avoid race condition
+	// where API calls happen before the store is initialized
+	const mode = browser ? localStorage.getItem('backendMode') : null;
+	switch (mode) {
+		case 'dev':
+			return 'http://localhost:1337/data';
+		case 'staging':
+			return 'https://staging.glider.flights/data';
+		case 'prod':
+			return 'https://glider.flights/data';
+		default:
+			return 'https://staging.glider.flights/data';
+	}
 }
 
 // Legacy export for compatibility - but prefer using getApiBase()
