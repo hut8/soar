@@ -112,7 +112,7 @@ pub(crate) async fn process_state_transition(
         // Add fix to history (if not the initial fix that created the state)
         if state.recent_fixes.len() > 1
             || (state.recent_fixes.len() == 1
-                && state.recent_fixes.back().unwrap().timestamp != fix.timestamp)
+                && state.recent_fixes.back().unwrap().received_at != fix.received_at)
         {
             state.add_fix(&fix, is_active);
         }
@@ -167,7 +167,7 @@ pub(crate) async fn process_state_transition(
                     ctx.aircraft_states.get(&fix.aircraft_id)
                 {
                     if let Some(prev_fix_time) = state.previous_fix_timestamp() {
-                        let gap_seconds = (fix.timestamp - prev_fix_time).num_seconds();
+                        let gap_seconds = (fix.received_at - prev_fix_time).num_seconds();
 
                         // Only check if gap is significant (>30 minutes)
                         if gap_seconds > 1800 {
@@ -251,11 +251,11 @@ pub(crate) async fn process_state_transition(
                     if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
                         && let Some(last_fix_time) = state.last_fix_timestamp()
                     {
-                        let gap_seconds = (fix.timestamp - last_fix_time).num_seconds() as i32;
+                        let gap_seconds = (fix.received_at - last_fix_time).num_seconds() as i32;
                         fix.time_gap_seconds = Some(gap_seconds);
                     }
 
-                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
+                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                 }
 
                 // Check for tow release (towtugs only)
@@ -281,7 +281,7 @@ pub(crate) async fn process_state_transition(
                     if let Some(altitude_ft) = fix.altitude_msl_feet {
                         let _ = ctx
                             .flights_repo
-                            .update_tow_release(glider_flight_id, altitude_ft, fix.timestamp)
+                            .update_tow_release(glider_flight_id, altitude_ft, fix.received_at)
                             .await;
                     }
 
@@ -313,13 +313,13 @@ pub(crate) async fn process_state_transition(
             if let Some((timed_out_flight_id, timed_out_callsign, timed_out_at)) = timed_out_info {
                 // Calculate gap from when it timed out
                 let gap_seconds = if let Some(timed_out_time) = timed_out_at {
-                    (fix.timestamp - timed_out_time).num_seconds()
+                    (fix.received_at - timed_out_time).num_seconds()
                 } else {
                     // No timeout timestamp - use last fix timestamp
                     if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
                         && let Some(last_fix_time) = state.last_fix_timestamp()
                     {
-                        (fix.timestamp - last_fix_time).num_seconds()
+                        (fix.received_at - last_fix_time).num_seconds()
                     } else {
                         i64::MAX // Unknown - don't resume
                     }
@@ -430,7 +430,7 @@ pub(crate) async fn process_state_transition(
                     // Clear timeout and update last_fix_at in database
                     let _ = ctx
                         .flights_repo
-                        .resume_timed_out_flight(timed_out_flight_id, fix.timestamp)
+                        .resume_timed_out_flight(timed_out_flight_id, fix.received_at)
                         .await;
 
                     // Update state - move from timed_out to current
@@ -554,10 +554,10 @@ pub(crate) async fn process_state_transition(
                         && let Some(last_fix_time) = state.last_fix_timestamp()
                     {
                         fix.time_gap_seconds =
-                            Some((fix.timestamp - last_fix_time).num_seconds() as i32);
+                            Some((fix.received_at - last_fix_time).num_seconds() as i32);
                     }
 
-                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
+                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                 }
                 _ => {
                     // Low altitude or unknown - check for 5 consecutive inactive
@@ -587,7 +587,7 @@ pub(crate) async fn process_state_transition(
                     } else {
                         // Not yet 5 inactive - keep flight active
                         fix.flight_id = Some(flight_id);
-                        update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
+                        update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                     }
                 }
             }

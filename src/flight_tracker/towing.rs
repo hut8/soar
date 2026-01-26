@@ -129,7 +129,7 @@ async fn find_towed_glider(
                 return Ok(Some(TowingInfo {
                     glider_device_id: glider_aircraft_id,
                     glider_flight_id,
-                    tow_started: towplane_fix.timestamp,
+                    tow_started: towplane_fix.received_at,
                 }));
             }
             n => {
@@ -256,7 +256,7 @@ pub fn check_tow_release(state: &super::AircraftState, current_climb_fpm: Option
         .recent_fixes
         .iter()
         .rev()
-        .filter_map(|f| Some((f.timestamp, f.altitude_msl_ft?)))
+        .filter_map(|f| Some((f.received_at, f.altitude_msl_ft?)))
         .take(5)
         .collect();
 

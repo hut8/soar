@@ -553,13 +553,13 @@ async fn test_no_active_fixes_should_not_create_flight() {
             bool,
         )> = fixes::table
             .select((
-                fixes::timestamp,
+                fixes::received_at,
                 fixes::altitude_msl_feet,
                 fixes::altitude_agl_feet,
                 fixes::ground_speed_knots,
                 fixes::is_active,
             ))
-            .order(fixes::timestamp.asc())
+            .order(fixes::received_at.asc())
             .load(&mut conn)
             .expect("Failed to query fix details");
 

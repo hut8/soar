@@ -79,7 +79,7 @@ pub(crate) async fn create_flight_fast(
             find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
 
         let mut flight =
-            Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.timestamp);
+            Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.received_at);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
 
@@ -164,7 +164,7 @@ fn spawn_flight_enrichment_on_creation(
                 &runways_repo,
                 &magnetic_service,
                 &aircraft,
-                fix.timestamp,
+                fix.received_at,
                 fix.latitude,
                 fix.longitude,
                 departure_airport_id,
@@ -492,7 +492,7 @@ async fn complete_flight_in_background(
 
     // Check if this is a spurious flight
     if let Some(takeoff_time) = flight.takeoff_time {
-        let duration_seconds = (fix.timestamp - takeoff_time).num_seconds();
+        let duration_seconds = (fix.received_at - takeoff_time).num_seconds();
 
         let altitude_range = if !flight_fixes.is_empty() {
             let altitudes: Vec<i32> = flight_fixes
@@ -604,7 +604,7 @@ async fn complete_flight_in_background(
             let clear_start =
                 takeoff_time - chrono::Duration::minutes(FIXES_TIME_RANGE_START_BUFFER_MINUTES);
             let clear_end =
-                fix.timestamp + chrono::Duration::minutes(FIXES_TIME_RANGE_END_BUFFER_MINUTES);
+                fix.received_at + chrono::Duration::minutes(FIXES_TIME_RANGE_END_BUFFER_MINUTES);
             if let Err(e) = fixes_repo
                 .clear_flight_id(flight_id, clear_start, clear_end)
                 .await
@@ -639,7 +639,7 @@ async fn complete_flight_in_background(
     flights_repo
         .update_flight_landing(
             flight_id,
-            fix.timestamp, // landing_time
+            fix.received_at, // landing_time
             arrival_airport_id,
             None, // landing_location_id - will be enriched in background
             None, // end_location_id - will be enriched in background
@@ -647,8 +647,8 @@ async fn complete_flight_in_background(
             None, // landing_runway_ident - will be enriched in background
             total_distance_meters,
             maximum_displacement_meters,
-            None,                // runways_inferred - will be enriched in background
-            Some(fix.timestamp), // last_fix_at
+            None,                  // runways_inferred - will be enriched in background
+            Some(fix.received_at), // last_fix_at
         )
         .await?;
 
@@ -940,7 +940,7 @@ fn spawn_flight_enrichment_on_completion_direct(
                 &runways_repo,
                 &magnetic_service,
                 &aircraft,
-                fix.timestamp,
+                fix.received_at,
                 fix.latitude,
                 fix.longitude,
                 arrival_airport_id,
