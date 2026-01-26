@@ -637,7 +637,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         info!("Spawning Beast client for {}:{}", server, port);
 
         tokio::spawn(async move {
-            let mut client = BeastClient::new(config);
+            let client = BeastClient::new(config);
 
             // The Beast client's start_with_envelope_queue creates protobuf envelopes
             // with timestamps captured at receive time
@@ -671,7 +671,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         info!("Spawning SBS client for {}:{}", server, port);
 
         tokio::spawn(async move {
-            let mut client = SbsClient::new(config);
+            let client = SbsClient::new(config);
 
             // The SBS client's start_with_envelope_queue creates protobuf envelopes
             // with timestamps captured at receive time
