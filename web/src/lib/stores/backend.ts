@@ -26,14 +26,7 @@ function createBackendStore() {
 		init: () => {
 			if (browser) {
 				const stored = localStorage.getItem('backendMode') as BackendMode | null;
-				// Migrate old 'prod' values that pointed to staging
-				if (stored === 'prod') {
-					localStorage.setItem('backendMode', 'staging');
-					set('staging');
-				} else {
-					// Default to staging if not set
-					set(stored || 'staging');
-				}
+				set(stored || 'staging');
 			}
 		},
 		// Set specific backend mode and reload
