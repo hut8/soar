@@ -2370,32 +2370,10 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(queue_ogn_segments_created_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "OGN Created",
+          "expr": "rate(queue_ingest_segments_created_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+          "legendFormat": "Segments Created",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(queue_adsb_beast_segments_created_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "ADS-B Beast Created",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(queue_adsb_sbs_segments_created_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "ADS-B SBS Created",
-          "range": true,
-          "refId": "C"
         }
       ],
       "title": "Queue Segments Created per Minute",
@@ -2487,32 +2465,10 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(queue_ogn_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "OGN Deleted",
+          "expr": "rate(queue_ingest_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+          "legendFormat": "Segments Deleted",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(queue_adsb_beast_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "ADS-B Beast Deleted",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "rate(queue_adsb_sbs_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
-          "legendFormat": "ADS-B SBS Deleted",
-          "range": true,
-          "refId": "C"
         }
       ],
       "title": "Queue Segments Deleted per Minute",
