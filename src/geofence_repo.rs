@@ -4,7 +4,6 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::sql_query;
 use diesel::sql_types;
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
@@ -13,15 +12,12 @@ use crate::geofence::{
     AircraftGeofence, CreateGeofenceRequest, Geofence, GeofenceExitEvent, GeofenceLayer,
     GeofenceSubscriber, UpdateGeofenceRequest,
 };
+use crate::postgis_functions::{st_make_point, st_set_srid, st_x, st_y};
 use crate::schema::{aircraft_geofences, geofence_exit_events, geofence_subscribers, geofences};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 // Database record types
-
-// Note: We don't use a simple GeofenceRecord struct because the `center` column
-// is a Geography type that requires raw SQL to extract lat/lon coordinates.
-// All queries use GeofenceWithCoords instead.
 
 #[derive(Queryable, Selectable, Insertable, Debug, Clone)]
 #[diesel(table_name = geofence_subscribers)]
@@ -84,104 +80,70 @@ pub struct GeofenceExitEventRecord {
     pub created_at: DateTime<Utc>,
 }
 
-// Query result type for geofence with coordinates
-#[derive(QueryableByName, Debug)]
-struct GeofenceWithCoords {
-    #[diesel(sql_type = sql_types::Uuid)]
-    id: Uuid,
-    #[diesel(sql_type = sql_types::Text)]
-    name: String,
-    #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
-    description: Option<String>,
-    #[diesel(sql_type = sql_types::Double)]
-    center_latitude: f64,
-    #[diesel(sql_type = sql_types::Double)]
-    center_longitude: f64,
-    #[diesel(sql_type = sql_types::Double)]
-    max_radius_meters: f64,
-    #[diesel(sql_type = sql_types::Jsonb)]
-    layers: JsonValue,
-    #[diesel(sql_type = sql_types::Uuid)]
-    owner_user_id: Uuid,
-    #[diesel(sql_type = sql_types::Nullable<sql_types::Uuid>)]
-    club_id: Option<Uuid>,
-    #[diesel(sql_type = sql_types::Timestamptz)]
-    created_at: DateTime<Utc>,
-    #[diesel(sql_type = sql_types::Timestamptz)]
-    updated_at: DateTime<Utc>,
+/// Type alias for the select expression that extracts geofence data with coordinates
+type GeofenceSelectExpr = (
+    geofences::id,
+    geofences::name,
+    geofences::description,
+    st_y<geofences::center>,
+    st_x<geofences::center>,
+    geofences::max_radius_meters,
+    geofences::layers,
+    geofences::owner_user_id,
+    geofences::club_id,
+    geofences::created_at,
+    geofences::updated_at,
+);
+
+/// Row type returned by GeofenceSelectExpr
+type GeofenceRow = (
+    Uuid,
+    String,
+    Option<String>,
+    f64,
+    f64,
+    f64,
+    JsonValue,
+    Uuid,
+    Option<Uuid>,
+    DateTime<Utc>,
+    DateTime<Utc>,
+);
+
+/// Build the select expression for geofences with coordinate extraction
+fn geofence_select() -> GeofenceSelectExpr {
+    use crate::schema::geofences::dsl;
+    (
+        dsl::id,
+        dsl::name,
+        dsl::description,
+        st_y(dsl::center),
+        st_x(dsl::center),
+        dsl::max_radius_meters,
+        dsl::layers,
+        dsl::owner_user_id,
+        dsl::club_id,
+        dsl::created_at,
+        dsl::updated_at,
+    )
 }
 
-impl GeofenceWithCoords {
-    fn into_geofence(self) -> Result<Geofence> {
-        let layers: Vec<GeofenceLayer> = serde_json::from_value(self.layers)?;
-        Ok(Geofence {
-            id: self.id,
-            name: self.name,
-            description: self.description,
-            center_latitude: self.center_latitude,
-            center_longitude: self.center_longitude,
-            max_radius_meters: self.max_radius_meters,
-            layers,
-            owner_user_id: self.owner_user_id,
-            club_id: self.club_id,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        })
-    }
-}
-
-// Query result for geofence with counts
-#[derive(QueryableByName, Debug)]
-struct GeofenceWithCoordsAndCounts {
-    #[diesel(sql_type = sql_types::Uuid)]
-    id: Uuid,
-    #[diesel(sql_type = sql_types::Text)]
-    name: String,
-    #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
-    description: Option<String>,
-    #[diesel(sql_type = sql_types::Double)]
-    center_latitude: f64,
-    #[diesel(sql_type = sql_types::Double)]
-    center_longitude: f64,
-    #[diesel(sql_type = sql_types::Double)]
-    max_radius_meters: f64,
-    #[diesel(sql_type = sql_types::Jsonb)]
-    layers: JsonValue,
-    #[diesel(sql_type = sql_types::Uuid)]
-    owner_user_id: Uuid,
-    #[diesel(sql_type = sql_types::Nullable<sql_types::Uuid>)]
-    club_id: Option<Uuid>,
-    #[diesel(sql_type = sql_types::Timestamptz)]
-    created_at: DateTime<Utc>,
-    #[diesel(sql_type = sql_types::Timestamptz)]
-    updated_at: DateTime<Utc>,
-    #[diesel(sql_type = sql_types::BigInt)]
-    aircraft_count: i64,
-    #[diesel(sql_type = sql_types::BigInt)]
-    subscriber_count: i64,
-}
-
-impl GeofenceWithCoordsAndCounts {
-    fn into_geofence_with_counts(self) -> Result<(Geofence, i64, i64)> {
-        let layers: Vec<GeofenceLayer> = serde_json::from_value(self.layers)?;
-        Ok((
-            Geofence {
-                id: self.id,
-                name: self.name,
-                description: self.description,
-                center_latitude: self.center_latitude,
-                center_longitude: self.center_longitude,
-                max_radius_meters: self.max_radius_meters,
-                layers,
-                owner_user_id: self.owner_user_id,
-                club_id: self.club_id,
-                created_at: self.created_at,
-                updated_at: self.updated_at,
-            },
-            self.aircraft_count,
-            self.subscriber_count,
-        ))
-    }
+/// Convert a row to a Geofence
+fn row_to_geofence(row: GeofenceRow) -> Result<Geofence> {
+    let layers: Vec<GeofenceLayer> = serde_json::from_value(row.6)?;
+    Ok(Geofence {
+        id: row.0,
+        name: row.1,
+        description: row.2,
+        center_latitude: row.3,
+        center_longitude: row.4,
+        max_radius_meters: row.5,
+        layers,
+        owner_user_id: row.7,
+        club_id: row.8,
+        created_at: row.9,
+        updated_at: row.10,
+    })
 }
 
 #[derive(Clone)]
@@ -200,63 +162,59 @@ impl GeofenceRepository {
         owner_user_id: Uuid,
         request: CreateGeofenceRequest,
     ) -> Result<Geofence> {
+        use geofences::dsl;
+
         let pool = self.pool.clone();
         let layers_json = serde_json::to_value(&request.layers)?;
         let max_radius = request.max_radius_meters();
+        let lat = request.center_latitude;
+        let lon = request.center_longitude;
 
         tokio::task::spawn_blocking(move || -> Result<Geofence> {
             let mut conn = pool.get()?;
 
-            // Use raw SQL to insert with geography point
-            let result: GeofenceWithCoords = sql_query(
-                r#"
-                INSERT INTO geofences (name, description, center, max_radius_meters, layers, owner_user_id, club_id)
-                VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography, $5, $6, $7, $8)
-                RETURNING id, name, description,
-                          ST_Y(center::geometry) as center_latitude,
-                          ST_X(center::geometry) as center_longitude,
-                          max_radius_meters, layers, owner_user_id, club_id,
-                          created_at, updated_at
-                "#,
-            )
-            .bind::<sql_types::Text, _>(&request.name)
-            .bind::<sql_types::Nullable<sql_types::Text>, _>(request.description.as_deref())
-            .bind::<sql_types::Double, _>(request.center_longitude)
-            .bind::<sql_types::Double, _>(request.center_latitude)
-            .bind::<sql_types::Double, _>(max_radius)
-            .bind::<sql_types::Jsonb, _>(&layers_json)
-            .bind::<sql_types::Uuid, _>(owner_user_id)
-            .bind::<sql_types::Nullable<sql_types::Uuid>, _>(request.club_id)
-            .get_result(&mut conn)?;
+            // Insert using query builder with PostGIS functions
+            let id: Uuid = diesel::insert_into(dsl::geofences)
+                .values((
+                    dsl::name.eq(&request.name),
+                    dsl::description.eq(&request.description),
+                    dsl::center.eq(st_set_srid(st_make_point(lon, lat), 4326)),
+                    dsl::max_radius_meters.eq(max_radius),
+                    dsl::layers.eq(&layers_json),
+                    dsl::owner_user_id.eq(owner_user_id),
+                    dsl::club_id.eq(request.club_id),
+                ))
+                .returning(dsl::id)
+                .get_result(&mut conn)?;
 
-            result.into_geofence()
+            // Fetch the complete record with coordinates
+            let row: GeofenceRow = dsl::geofences
+                .filter(dsl::id.eq(id))
+                .select(geofence_select())
+                .first(&mut conn)?;
+
+            row_to_geofence(row)
         })
         .await?
     }
 
     /// Get a geofence by ID
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Geofence>> {
+        use geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Option<Geofence>> {
             let mut conn = pool.get()?;
 
-            let result: Option<GeofenceWithCoords> = sql_query(
-                r#"
-                SELECT id, name, description,
-                       ST_Y(center::geometry) as center_latitude,
-                       ST_X(center::geometry) as center_longitude,
-                       max_radius_meters, layers, owner_user_id, club_id,
-                       created_at, updated_at
-                FROM geofences
-                WHERE id = $1 AND deleted_at IS NULL
-                "#,
-            )
-            .bind::<sql_types::Uuid, _>(id)
-            .get_result(&mut conn)
-            .optional()?;
+            let row: Option<GeofenceRow> = dsl::geofences
+                .filter(dsl::id.eq(id))
+                .filter(dsl::deleted_at.is_null())
+                .select(geofence_select())
+                .first(&mut conn)
+                .optional()?;
 
-            result.map(|r| r.into_geofence()).transpose()
+            row.map(row_to_geofence).transpose()
         })
         .await?
     }
@@ -265,18 +223,52 @@ impl GeofenceRepository {
     pub async fn get_for_user(
         &self,
         user_id: Uuid,
-        club_id: Option<Uuid>,
+        user_club_id: Option<Uuid>,
     ) -> Result<Vec<(Geofence, i64, i64)>> {
+        use diesel::sql_query;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<(Geofence, i64, i64)>> {
             let mut conn = pool.get()?;
 
-            let results: Vec<GeofenceWithCoordsAndCounts> = sql_query(
+            // For counts, we still need a more complex query
+            // Using raw SQL for the aggregation but type-safe binding
+            #[derive(QueryableByName, Debug)]
+            struct GeofenceWithCounts {
+                #[diesel(sql_type = sql_types::Uuid)]
+                id: Uuid,
+                #[diesel(sql_type = sql_types::Text)]
+                name: String,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                description: Option<String>,
+                #[diesel(sql_type = sql_types::Double)]
+                center_latitude: f64,
+                #[diesel(sql_type = sql_types::Double)]
+                center_longitude: f64,
+                #[diesel(sql_type = sql_types::Double)]
+                max_radius_meters: f64,
+                #[diesel(sql_type = sql_types::Jsonb)]
+                layers: JsonValue,
+                #[diesel(sql_type = sql_types::Uuid)]
+                owner_user_id: Uuid,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Uuid>)]
+                club_id: Option<Uuid>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                created_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                updated_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::BigInt)]
+                aircraft_count: i64,
+                #[diesel(sql_type = sql_types::BigInt)]
+                subscriber_count: i64,
+            }
+
+            let results: Vec<GeofenceWithCounts> = sql_query(
                 r#"
                 SELECT g.id, g.name, g.description,
-                       ST_Y(g.center::geometry) as center_latitude,
-                       ST_X(g.center::geometry) as center_longitude,
+                       ST_Y(g.center) as center_latitude,
+                       ST_X(g.center) as center_longitude,
                        g.max_radius_meters, g.layers, g.owner_user_id, g.club_id,
                        g.created_at, g.updated_at,
                        COALESCE(ac.aircraft_count, 0) as aircraft_count,
@@ -293,34 +285,85 @@ impl GeofenceRepository {
                     GROUP BY geofence_id
                 ) sc ON sc.geofence_id = g.id
                 WHERE g.deleted_at IS NULL
-                  AND (g.owner_user_id = $1 OR ($2 IS NOT NULL AND g.club_id = $2))
+                  AND (g.owner_user_id = $1 OR g.club_id = $2)
                 ORDER BY g.name
                 "#,
             )
             .bind::<sql_types::Uuid, _>(user_id)
-            .bind::<sql_types::Nullable<sql_types::Uuid>, _>(club_id)
+            .bind::<sql_types::Nullable<sql_types::Uuid>, _>(user_club_id)
             .load(&mut conn)?;
 
             results
                 .into_iter()
-                .map(|r| r.into_geofence_with_counts())
+                .map(|r| {
+                    let layers: Vec<GeofenceLayer> = serde_json::from_value(r.layers)?;
+                    Ok((
+                        Geofence {
+                            id: r.id,
+                            name: r.name,
+                            description: r.description,
+                            center_latitude: r.center_latitude,
+                            center_longitude: r.center_longitude,
+                            max_radius_meters: r.max_radius_meters,
+                            layers,
+                            owner_user_id: r.owner_user_id,
+                            club_id: r.club_id,
+                            created_at: r.created_at,
+                            updated_at: r.updated_at,
+                        },
+                        r.aircraft_count,
+                        r.subscriber_count,
+                    ))
+                })
                 .collect()
         })
         .await?
     }
 
-    /// Get geofences for a specific club
+    /// Get geofences for a club
     pub async fn get_for_club(&self, club_id: Uuid) -> Result<Vec<(Geofence, i64, i64)>> {
+        use diesel::sql_query;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<(Geofence, i64, i64)>> {
             let mut conn = pool.get()?;
 
-            let results: Vec<GeofenceWithCoordsAndCounts> = sql_query(
+            #[derive(QueryableByName, Debug)]
+            struct GeofenceWithCounts {
+                #[diesel(sql_type = sql_types::Uuid)]
+                id: Uuid,
+                #[diesel(sql_type = sql_types::Text)]
+                name: String,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
+                description: Option<String>,
+                #[diesel(sql_type = sql_types::Double)]
+                center_latitude: f64,
+                #[diesel(sql_type = sql_types::Double)]
+                center_longitude: f64,
+                #[diesel(sql_type = sql_types::Double)]
+                max_radius_meters: f64,
+                #[diesel(sql_type = sql_types::Jsonb)]
+                layers: JsonValue,
+                #[diesel(sql_type = sql_types::Uuid)]
+                owner_user_id: Uuid,
+                #[diesel(sql_type = sql_types::Nullable<sql_types::Uuid>)]
+                club_id: Option<Uuid>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                created_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::Timestamptz)]
+                updated_at: DateTime<Utc>,
+                #[diesel(sql_type = sql_types::BigInt)]
+                aircraft_count: i64,
+                #[diesel(sql_type = sql_types::BigInt)]
+                subscriber_count: i64,
+            }
+
+            let results: Vec<GeofenceWithCounts> = sql_query(
                 r#"
                 SELECT g.id, g.name, g.description,
-                       ST_Y(g.center::geometry) as center_latitude,
-                       ST_X(g.center::geometry) as center_longitude,
+                       ST_Y(g.center) as center_latitude,
+                       ST_X(g.center) as center_longitude,
                        g.max_radius_meters, g.layers, g.owner_user_id, g.club_id,
                        g.created_at, g.updated_at,
                        COALESCE(ac.aircraft_count, 0) as aircraft_count,
@@ -345,7 +388,26 @@ impl GeofenceRepository {
 
             results
                 .into_iter()
-                .map(|r| r.into_geofence_with_counts())
+                .map(|r| {
+                    let layers: Vec<GeofenceLayer> = serde_json::from_value(r.layers)?;
+                    Ok((
+                        Geofence {
+                            id: r.id,
+                            name: r.name,
+                            description: r.description,
+                            center_latitude: r.center_latitude,
+                            center_longitude: r.center_longitude,
+                            max_radius_meters: r.max_radius_meters,
+                            layers,
+                            owner_user_id: r.owner_user_id,
+                            club_id: r.club_id,
+                            created_at: r.created_at,
+                            updated_at: r.updated_at,
+                        },
+                        r.aircraft_count,
+                        r.subscriber_count,
+                    ))
+                })
                 .collect()
         })
         .await?
@@ -357,169 +419,173 @@ impl GeofenceRepository {
         id: Uuid,
         request: UpdateGeofenceRequest,
     ) -> Result<Option<Geofence>> {
+        use geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Option<Geofence>> {
             let mut conn = pool.get()?;
 
-            // Use COALESCE for optional updates - simpler than dynamic query building
-            let layers_json = request
-                .layers
-                .as_ref()
-                .and_then(|l| serde_json::to_value(l).ok());
-            let max_radius = request.max_radius_meters();
+            // Check if geofence exists
+            let exists: bool = diesel::select(diesel::dsl::exists(
+                dsl::geofences
+                    .filter(dsl::id.eq(id))
+                    .filter(dsl::deleted_at.is_null()),
+            ))
+            .get_result(&mut conn)?;
 
-            let result: Option<GeofenceWithCoords> = sql_query(
-                r#"
-                UPDATE geofences SET
-                    name = COALESCE($2, name),
-                    description = COALESCE($3, description),
-                    center = CASE
-                        WHEN $4::float8 IS NOT NULL AND $5::float8 IS NOT NULL
-                        THEN ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography
-                        ELSE center
-                    END,
-                    layers = COALESCE($6, layers),
-                    max_radius_meters = COALESCE($7, max_radius_meters),
-                    updated_at = NOW()
-                WHERE id = $1 AND deleted_at IS NULL
-                RETURNING id, name, description,
-                          ST_Y(center::geometry) as center_latitude,
-                          ST_X(center::geometry) as center_longitude,
-                          max_radius_meters, layers, owner_user_id, club_id,
-                          created_at, updated_at
-                "#,
-            )
-            .bind::<sql_types::Uuid, _>(id)
-            .bind::<sql_types::Nullable<sql_types::Text>, _>(request.name.as_deref())
-            .bind::<sql_types::Nullable<sql_types::Text>, _>(request.description.as_deref())
-            .bind::<sql_types::Nullable<sql_types::Double>, _>(request.center_longitude)
-            .bind::<sql_types::Nullable<sql_types::Double>, _>(request.center_latitude)
-            .bind::<sql_types::Nullable<sql_types::Jsonb>, _>(layers_json.as_ref())
-            .bind::<sql_types::Nullable<sql_types::Double>, _>(max_radius)
-            .get_result(&mut conn)
-            .optional()?;
+            if !exists {
+                return Ok(None);
+            }
 
-            result.map(|r| r.into_geofence()).transpose()
+            // Build dynamic update
+            // Note: Diesel's AsChangeset doesn't work well with optional PostGIS expressions,
+            // so we update fields individually when present
+            if let Some(ref name) = request.name {
+                diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                    .set(dsl::name.eq(name))
+                    .execute(&mut conn)?;
+            }
+
+            if request.description.is_some() {
+                diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                    .set(dsl::description.eq(&request.description))
+                    .execute(&mut conn)?;
+            }
+
+            if let (Some(lon), Some(lat)) = (request.center_longitude, request.center_latitude) {
+                diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                    .set(dsl::center.eq(st_set_srid(st_make_point(lon, lat), 4326)))
+                    .execute(&mut conn)?;
+            }
+
+            if let Some(ref layers) = request.layers {
+                let layers_json = serde_json::to_value(layers)?;
+                let max_radius = request.max_radius_meters();
+                diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                    .set((
+                        dsl::layers.eq(&layers_json),
+                        dsl::max_radius_meters.eq(max_radius.unwrap_or(0.0)),
+                    ))
+                    .execute(&mut conn)?;
+            }
+
+            // Update timestamp
+            diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                .set(dsl::updated_at.eq(Utc::now()))
+                .execute(&mut conn)?;
+
+            // Fetch updated record
+            let row: GeofenceRow = dsl::geofences
+                .filter(dsl::id.eq(id))
+                .select(geofence_select())
+                .first(&mut conn)?;
+
+            Ok(Some(row_to_geofence(row)?))
         })
         .await?
     }
 
     /// Soft delete a geofence
     pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        use geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(geofences::table)
-                .filter(geofences::id.eq(id))
-                .filter(geofences::deleted_at.is_null())
-                .set(geofences::deleted_at.eq(Some(Utc::now())))
+            let rows_affected = diesel::update(dsl::geofences.filter(dsl::id.eq(id)))
+                .set(dsl::deleted_at.eq(Some(Utc::now())))
                 .execute(&mut conn)?;
 
-            Ok(rows > 0)
+            Ok(rows_affected > 0)
         })
         .await?
     }
 
     // ==================== Aircraft Links ====================
 
-    /// Link an aircraft to a geofence
-    pub async fn add_aircraft(
-        &self,
-        geofence_id: Uuid,
-        aircraft_id: Uuid,
-    ) -> Result<AircraftGeofence> {
+    /// Add an aircraft to a geofence
+    pub async fn add_aircraft(&self, geofence_id: Uuid, aircraft_id: Uuid) -> Result<()> {
+        use aircraft_geofences::dsl;
+
         let pool = self.pool.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<AircraftGeofence> {
+        tokio::task::spawn_blocking(move || -> Result<()> {
             let mut conn = pool.get()?;
 
-            let record = diesel::insert_into(aircraft_geofences::table)
+            diesel::insert_into(dsl::aircraft_geofences)
                 .values((
-                    aircraft_geofences::geofence_id.eq(geofence_id),
-                    aircraft_geofences::aircraft_id.eq(aircraft_id),
+                    dsl::geofence_id.eq(geofence_id),
+                    dsl::aircraft_id.eq(aircraft_id),
                 ))
-                .on_conflict((
-                    aircraft_geofences::aircraft_id,
-                    aircraft_geofences::geofence_id,
-                ))
-                .do_nothing()
-                .get_result::<AircraftGeofenceRecord>(&mut conn)
-                .optional()?;
+                .on_conflict_do_nothing()
+                .execute(&mut conn)?;
 
-            // If we got nothing back (conflict), fetch the existing record
-            let record = match record {
-                Some(r) => r,
-                None => aircraft_geofences::table
-                    .filter(aircraft_geofences::geofence_id.eq(geofence_id))
-                    .filter(aircraft_geofences::aircraft_id.eq(aircraft_id))
-                    .first::<AircraftGeofenceRecord>(&mut conn)?,
-            };
-
-            Ok(record.into())
+            Ok(())
         })
         .await?
     }
 
     /// Remove an aircraft from a geofence
     pub async fn remove_aircraft(&self, geofence_id: Uuid, aircraft_id: Uuid) -> Result<bool> {
+        use aircraft_geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
 
-            let rows = diesel::delete(aircraft_geofences::table)
-                .filter(aircraft_geofences::geofence_id.eq(geofence_id))
-                .filter(aircraft_geofences::aircraft_id.eq(aircraft_id))
-                .execute(&mut conn)?;
+            let rows_affected = diesel::delete(
+                dsl::aircraft_geofences
+                    .filter(dsl::geofence_id.eq(geofence_id))
+                    .filter(dsl::aircraft_id.eq(aircraft_id)),
+            )
+            .execute(&mut conn)?;
 
-            Ok(rows > 0)
+            Ok(rows_affected > 0)
         })
         .await?
     }
 
-    /// Get aircraft linked to a geofence
+    /// Get aircraft IDs linked to a geofence
     pub async fn get_aircraft(&self, geofence_id: Uuid) -> Result<Vec<Uuid>> {
+        use aircraft_geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<Uuid>> {
             let mut conn = pool.get()?;
 
-            let aircraft_ids = aircraft_geofences::table
-                .filter(aircraft_geofences::geofence_id.eq(geofence_id))
-                .select(aircraft_geofences::aircraft_id)
-                .load::<Uuid>(&mut conn)?;
+            let ids: Vec<Uuid> = dsl::aircraft_geofences
+                .filter(dsl::geofence_id.eq(geofence_id))
+                .select(dsl::aircraft_id)
+                .load(&mut conn)?;
 
-            Ok(aircraft_ids)
+            Ok(ids)
         })
         .await?
     }
 
-    /// Get geofences for an aircraft (used by detection logic)
+    /// Get all geofences that an aircraft is linked to
     pub async fn get_geofences_for_aircraft(&self, aircraft_id: Uuid) -> Result<Vec<Geofence>> {
+        use aircraft_geofences::dsl as ag_dsl;
+        use geofences::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<Geofence>> {
             let mut conn = pool.get()?;
 
-            let results: Vec<GeofenceWithCoords> = sql_query(
-                r#"
-                SELECT g.id, g.name, g.description,
-                       ST_Y(g.center::geometry) as center_latitude,
-                       ST_X(g.center::geometry) as center_longitude,
-                       g.max_radius_meters, g.layers, g.owner_user_id, g.club_id,
-                       g.created_at, g.updated_at
-                FROM geofences g
-                INNER JOIN aircraft_geofences ag ON ag.geofence_id = g.id
-                WHERE ag.aircraft_id = $1 AND g.deleted_at IS NULL
-                "#,
-            )
-            .bind::<sql_types::Uuid, _>(aircraft_id)
-            .load(&mut conn)?;
+            let rows: Vec<GeofenceRow> = dsl::geofences
+                .inner_join(ag_dsl::aircraft_geofences.on(ag_dsl::geofence_id.eq(dsl::id)))
+                .filter(ag_dsl::aircraft_id.eq(aircraft_id))
+                .filter(dsl::deleted_at.is_null())
+                .select(geofence_select())
+                .load(&mut conn)?;
 
-            results.into_iter().map(|r| r.into_geofence()).collect()
+            rows.into_iter().map(row_to_geofence).collect()
         })
         .await?
     }
@@ -533,24 +599,24 @@ impl GeofenceRepository {
         user_id: Uuid,
         send_email: bool,
     ) -> Result<GeofenceSubscriber> {
+        use geofence_subscribers::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<GeofenceSubscriber> {
             let mut conn = pool.get()?;
 
-            let record = diesel::insert_into(geofence_subscribers::table)
+            let record: GeofenceSubscriberRecord = diesel::insert_into(dsl::geofence_subscribers)
                 .values((
-                    geofence_subscribers::geofence_id.eq(geofence_id),
-                    geofence_subscribers::user_id.eq(user_id),
-                    geofence_subscribers::send_email.eq(send_email),
+                    dsl::geofence_id.eq(geofence_id),
+                    dsl::user_id.eq(user_id),
+                    dsl::send_email.eq(send_email),
                 ))
-                .on_conflict((
-                    geofence_subscribers::geofence_id,
-                    geofence_subscribers::user_id,
-                ))
+                .on_conflict((dsl::geofence_id, dsl::user_id))
                 .do_update()
-                .set(geofence_subscribers::send_email.eq(send_email))
-                .get_result::<GeofenceSubscriberRecord>(&mut conn)?;
+                .set(dsl::send_email.eq(send_email))
+                .returning(GeofenceSubscriberRecord::as_returning())
+                .get_result(&mut conn)?;
 
             Ok(record.into())
         })
@@ -559,50 +625,58 @@ impl GeofenceRepository {
 
     /// Unsubscribe a user from a geofence
     pub async fn remove_subscriber(&self, geofence_id: Uuid, user_id: Uuid) -> Result<bool> {
+        use geofence_subscribers::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
 
-            let rows = diesel::delete(geofence_subscribers::table)
-                .filter(geofence_subscribers::geofence_id.eq(geofence_id))
-                .filter(geofence_subscribers::user_id.eq(user_id))
-                .execute(&mut conn)?;
+            let rows_affected = diesel::delete(
+                dsl::geofence_subscribers
+                    .filter(dsl::geofence_id.eq(geofence_id))
+                    .filter(dsl::user_id.eq(user_id)),
+            )
+            .execute(&mut conn)?;
 
-            Ok(rows > 0)
+            Ok(rows_affected > 0)
         })
         .await?
     }
 
     /// Get subscribers for a geofence
     pub async fn get_subscribers(&self, geofence_id: Uuid) -> Result<Vec<GeofenceSubscriber>> {
+        use geofence_subscribers::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<GeofenceSubscriber>> {
             let mut conn = pool.get()?;
 
-            let records = geofence_subscribers::table
-                .filter(geofence_subscribers::geofence_id.eq(geofence_id))
-                .order(geofence_subscribers::created_at.asc())
-                .load::<GeofenceSubscriberRecord>(&mut conn)?;
+            let records: Vec<GeofenceSubscriberRecord> = dsl::geofence_subscribers
+                .filter(dsl::geofence_id.eq(geofence_id))
+                .select(GeofenceSubscriberRecord::as_select())
+                .load(&mut conn)?;
 
             Ok(records.into_iter().map(|r| r.into()).collect())
         })
         .await?
     }
 
-    /// Get users who want email notifications for a geofence
+    /// Get subscribers who want email notifications
     pub async fn get_subscribers_for_email(&self, geofence_id: Uuid) -> Result<Vec<Uuid>> {
+        use geofence_subscribers::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<Uuid>> {
             let mut conn = pool.get()?;
 
-            let user_ids = geofence_subscribers::table
-                .filter(geofence_subscribers::geofence_id.eq(geofence_id))
-                .filter(geofence_subscribers::send_email.eq(true))
-                .select(geofence_subscribers::user_id)
-                .load::<Uuid>(&mut conn)?;
+            let user_ids: Vec<Uuid> = dsl::geofence_subscribers
+                .filter(dsl::geofence_id.eq(geofence_id))
+                .filter(dsl::send_email.eq(true))
+                .select(dsl::user_id)
+                .load(&mut conn)?;
 
             Ok(user_ids)
         })
@@ -624,25 +698,28 @@ impl GeofenceRepository {
         exit_altitude_msl_ft: Option<i32>,
         exit_layer: &GeofenceLayer,
     ) -> Result<GeofenceExitEvent> {
+        use geofence_exit_events::dsl;
+
         let pool = self.pool.clone();
         let exit_layer = exit_layer.clone();
 
         tokio::task::spawn_blocking(move || -> Result<GeofenceExitEvent> {
             let mut conn = pool.get()?;
 
-            let record: GeofenceExitEventRecord = diesel::insert_into(geofence_exit_events::table)
+            let record: GeofenceExitEventRecord = diesel::insert_into(dsl::geofence_exit_events)
                 .values((
-                    geofence_exit_events::geofence_id.eq(geofence_id),
-                    geofence_exit_events::flight_id.eq(flight_id),
-                    geofence_exit_events::aircraft_id.eq(aircraft_id),
-                    geofence_exit_events::exit_time.eq(exit_time),
-                    geofence_exit_events::exit_latitude.eq(exit_latitude),
-                    geofence_exit_events::exit_longitude.eq(exit_longitude),
-                    geofence_exit_events::exit_altitude_msl_ft.eq(exit_altitude_msl_ft),
-                    geofence_exit_events::exit_layer_floor_ft.eq(exit_layer.floor_ft),
-                    geofence_exit_events::exit_layer_ceiling_ft.eq(exit_layer.ceiling_ft),
-                    geofence_exit_events::exit_layer_radius_nm.eq(exit_layer.radius_nm),
+                    dsl::geofence_id.eq(geofence_id),
+                    dsl::flight_id.eq(flight_id),
+                    dsl::aircraft_id.eq(aircraft_id),
+                    dsl::exit_time.eq(exit_time),
+                    dsl::exit_latitude.eq(exit_latitude),
+                    dsl::exit_longitude.eq(exit_longitude),
+                    dsl::exit_altitude_msl_ft.eq(exit_altitude_msl_ft),
+                    dsl::exit_layer_floor_ft.eq(exit_layer.floor_ft),
+                    dsl::exit_layer_ceiling_ft.eq(exit_layer.ceiling_ft),
+                    dsl::exit_layer_radius_nm.eq(exit_layer.radius_nm),
                 ))
+                .returning(GeofenceExitEventRecord::as_returning())
                 .get_result(&mut conn)?;
 
             Ok(GeofenceExitEvent {
@@ -666,40 +743,88 @@ impl GeofenceRepository {
         .await?
     }
 
-    /// Update the email notifications sent count
-    pub async fn update_exit_event_email_count(&self, event_id: Uuid, count: i32) -> Result<bool> {
+    /// Update the email count for an exit event
+    pub async fn update_exit_event_email_count(&self, id: Uuid, count: i32) -> Result<()> {
+        use geofence_exit_events::dsl;
+
         let pool = self.pool.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<bool> {
+        tokio::task::spawn_blocking(move || -> Result<()> {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(geofence_exit_events::table)
-                .filter(geofence_exit_events::id.eq(event_id))
-                .set(geofence_exit_events::email_notifications_sent.eq(count))
+            diesel::update(dsl::geofence_exit_events.filter(dsl::id.eq(id)))
+                .set(dsl::email_notifications_sent.eq(count))
                 .execute(&mut conn)?;
 
-            Ok(rows > 0)
+            Ok(())
         })
         .await?
     }
 
-    /// Get exit events for a geofence
+    /// Get exit events for a geofence with optional limit
     pub async fn get_exit_events_for_geofence(
         &self,
         geofence_id: Uuid,
         limit: Option<i64>,
     ) -> Result<Vec<GeofenceExitEvent>> {
+        use geofence_exit_events::dsl;
+
         let pool = self.pool.clone();
-        let limit = limit.unwrap_or(100).min(500);
 
         tokio::task::spawn_blocking(move || -> Result<Vec<GeofenceExitEvent>> {
             let mut conn = pool.get()?;
 
-            let records = geofence_exit_events::table
-                .filter(geofence_exit_events::geofence_id.eq(geofence_id))
-                .order(geofence_exit_events::exit_time.desc())
-                .limit(limit)
-                .load::<GeofenceExitEventRecord>(&mut conn)?;
+            let mut query = dsl::geofence_exit_events
+                .filter(dsl::geofence_id.eq(geofence_id))
+                .order(dsl::exit_time.desc())
+                .into_boxed();
+
+            if let Some(lim) = limit {
+                query = query.limit(lim);
+            }
+
+            let records: Vec<GeofenceExitEventRecord> = query
+                .select(GeofenceExitEventRecord::as_select())
+                .load(&mut conn)?;
+
+            Ok(records
+                .into_iter()
+                .map(|r| GeofenceExitEvent {
+                    id: r.id,
+                    geofence_id: r.geofence_id,
+                    flight_id: r.flight_id,
+                    aircraft_id: r.aircraft_id,
+                    exit_time: r.exit_time,
+                    exit_latitude: r.exit_latitude,
+                    exit_longitude: r.exit_longitude,
+                    exit_altitude_msl_ft: r.exit_altitude_msl_ft,
+                    exit_layer: GeofenceLayer {
+                        floor_ft: r.exit_layer_floor_ft,
+                        ceiling_ft: r.exit_layer_ceiling_ft,
+                        radius_nm: r.exit_layer_radius_nm,
+                    },
+                    email_notifications_sent: r.email_notifications_sent,
+                    created_at: r.created_at,
+                })
+                .collect())
+        })
+        .await?
+    }
+
+    /// Get exit events for a geofence (no limit)
+    pub async fn get_exit_events(&self, geofence_id: Uuid) -> Result<Vec<GeofenceExitEvent>> {
+        use geofence_exit_events::dsl;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<GeofenceExitEvent>> {
+            let mut conn = pool.get()?;
+
+            let records: Vec<GeofenceExitEventRecord> = dsl::geofence_exit_events
+                .filter(dsl::geofence_id.eq(geofence_id))
+                .order(dsl::exit_time.desc())
+                .select(GeofenceExitEventRecord::as_select())
+                .load(&mut conn)?;
 
             Ok(records
                 .into_iter()
@@ -730,15 +855,18 @@ impl GeofenceRepository {
         &self,
         flight_id: Uuid,
     ) -> Result<Vec<GeofenceExitEvent>> {
+        use geofence_exit_events::dsl;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<GeofenceExitEvent>> {
             let mut conn = pool.get()?;
 
-            let records = geofence_exit_events::table
-                .filter(geofence_exit_events::flight_id.eq(flight_id))
-                .order(geofence_exit_events::exit_time.asc())
-                .load::<GeofenceExitEventRecord>(&mut conn)?;
+            let records: Vec<GeofenceExitEventRecord> = dsl::geofence_exit_events
+                .filter(dsl::flight_id.eq(flight_id))
+                .order(dsl::exit_time.asc())
+                .select(GeofenceExitEventRecord::as_select())
+                .load(&mut conn)?;
 
             Ok(records
                 .into_iter()
@@ -760,6 +888,49 @@ impl GeofenceRepository {
                     created_at: r.created_at,
                 })
                 .collect())
+        })
+        .await?
+    }
+
+    /// Check if a user owns a geofence
+    pub async fn is_owner(&self, geofence_id: Uuid, user_id: Uuid) -> Result<bool> {
+        use geofences::dsl;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+
+            let is_owner: bool = diesel::select(diesel::dsl::exists(
+                dsl::geofences
+                    .filter(dsl::id.eq(geofence_id))
+                    .filter(dsl::owner_user_id.eq(user_id))
+                    .filter(dsl::deleted_at.is_null()),
+            ))
+            .get_result(&mut conn)?;
+
+            Ok(is_owner)
+        })
+        .await?
+    }
+
+    /// Get the club ID for a geofence (if any)
+    pub async fn get_club_id(&self, geofence_id: Uuid) -> Result<Option<Uuid>> {
+        use geofences::dsl;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<Uuid>> {
+            let mut conn = pool.get()?;
+
+            let club_id: Option<Option<Uuid>> = dsl::geofences
+                .filter(dsl::id.eq(geofence_id))
+                .filter(dsl::deleted_at.is_null())
+                .select(dsl::club_id)
+                .first(&mut conn)
+                .optional()?;
+
+            Ok(club_id.flatten())
         })
         .await?
     }

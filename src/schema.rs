@@ -614,7 +614,7 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
-        center -> Geography,
+        center -> Geometry,
         max_radius_meters -> Float8,
         layers -> Jsonb,
         owner_user_id -> Uuid,

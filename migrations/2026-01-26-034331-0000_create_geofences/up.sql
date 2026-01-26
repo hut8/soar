@@ -6,8 +6,8 @@ CREATE TABLE geofences (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    -- Center point of all layers (PostGIS geography for accurate distance calculations)
-    center GEOGRAPHY(POINT, 4326) NOT NULL,
+    -- Center point of all layers (PostGIS geometry with SRID 4326)
+    center GEOMETRY(POINT, 4326) NOT NULL,
     -- Maximum radius across all layers (meters) for efficient bounding box queries
     max_radius_meters DOUBLE PRECISION NOT NULL,
     -- Layers stored as JSONB array

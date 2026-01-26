@@ -64,3 +64,27 @@ define_sql_function! {
         srid: diesel::sql_types::Integer
     ) -> postgis_diesel::sql_types::Geometry;
 }
+
+define_sql_function! {
+    /// Returns the X coordinate (longitude) of a Point geometry.
+    ///
+    /// # Arguments
+    /// * `geom` - A Point geometry
+    ///
+    /// # Returns
+    /// The X coordinate as a double precision value
+    #[sql_name = "ST_X"]
+    fn st_x(geom: postgis_diesel::sql_types::Geometry) -> diesel::sql_types::Double;
+}
+
+define_sql_function! {
+    /// Returns the Y coordinate (latitude) of a Point geometry.
+    ///
+    /// # Arguments
+    /// * `geom` - A Point geometry
+    ///
+    /// # Returns
+    /// The Y coordinate as a double precision value
+    #[sql_name = "ST_Y"]
+    fn st_y(geom: postgis_diesel::sql_types::Geometry) -> diesel::sql_types::Double;
+}
