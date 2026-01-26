@@ -12,6 +12,19 @@ import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
 import type { AircraftType } from './generated/AircraftType';
 import type { AircraftCategory } from './generated/AircraftCategory';
 
+// Import auto-generated geofence types from Rust
+import type { Geofence } from './generated/Geofence';
+import type { GeofenceLayer } from './generated/GeofenceLayer';
+import type { GeofenceWithCounts } from './generated/GeofenceWithCounts';
+import type { GeofenceListResponse } from './generated/GeofenceListResponse';
+import type { GeofenceDetailResponse } from './generated/GeofenceDetailResponse';
+import type { CreateGeofenceRequest } from './generated/CreateGeofenceRequest';
+import type { UpdateGeofenceRequest } from './generated/UpdateGeofenceRequest';
+import type { GeofenceSubscriber } from './generated/GeofenceSubscriber';
+import type { AircraftGeofence } from './generated/AircraftGeofence';
+import type { GeofenceExitEvent } from './generated/GeofenceExitEvent';
+import type { GeofenceExitEventsResponse } from './generated/GeofenceExitEventsResponse';
+
 // Re-export them for external use
 export type {
 	Aircraft,
@@ -23,7 +36,19 @@ export type {
 	Fix,
 	AdsbEmitterCategory,
 	AircraftType,
-	AircraftCategory
+	AircraftCategory,
+	// Geofence types
+	Geofence,
+	GeofenceLayer,
+	GeofenceWithCounts,
+	GeofenceListResponse,
+	GeofenceDetailResponse,
+	CreateGeofenceRequest,
+	UpdateGeofenceRequest,
+	GeofenceSubscriber,
+	AircraftGeofence,
+	GeofenceExitEvent,
+	GeofenceExitEventsResponse
 };
 
 // API Response Wrapper Types
@@ -433,135 +458,4 @@ export interface HexReceiversResponse {
 // DeviceOrientationEvent with iOS-specific webkitCompassHeading property
 export interface DeviceOrientationEventWithCompass extends DeviceOrientationEvent {
 	webkitCompassHeading?: number; // iOS-specific: true magnetic heading (0-360 degrees)
-}
-
-// ==================== Geofence Types ====================
-
-/**
- * A single altitude layer with its radius
- * Altitudes are MSL (Mean Sea Level) in feet
- */
-export interface GeofenceLayer {
-	floorFt: number;
-	ceilingFt: number;
-	radiusNm: number;
-}
-
-/**
- * Geofence - "upside-down birthday cake" shaped boundary with multiple altitude layers
- */
-export interface Geofence {
-	id: string;
-	name: string;
-	description?: string;
-	centerLatitude: number;
-	centerLongitude: number;
-	maxRadiusMeters: number;
-	layers: GeofenceLayer[];
-	ownerUserId: string;
-	clubId?: string;
-	createdAt: string;
-	updatedAt: string;
-}
-
-/**
- * Geofence with counts for list display
- */
-export interface GeofenceWithCounts {
-	id: string;
-	name: string;
-	description?: string;
-	centerLatitude: number;
-	centerLongitude: number;
-	maxRadiusMeters: number;
-	layers: GeofenceLayer[];
-	ownerUserId: string;
-	clubId?: string;
-	createdAt: string;
-	updatedAt: string;
-	aircraftCount: number;
-	subscriberCount: number;
-}
-
-/**
- * Response for listing geofences
- */
-export interface GeofenceListResponse {
-	geofences: GeofenceWithCounts[];
-}
-
-/**
- * Response for geofence details
- */
-export interface GeofenceDetailResponse {
-	geofence: Geofence;
-	aircraftCount: number;
-	subscriberCount: number;
-}
-
-/**
- * Request to create a new geofence
- */
-export interface CreateGeofenceRequest {
-	name: string;
-	description?: string;
-	centerLatitude: number;
-	centerLongitude: number;
-	layers: GeofenceLayer[];
-	clubId?: string;
-}
-
-/**
- * Request to update a geofence
- */
-export interface UpdateGeofenceRequest {
-	name?: string;
-	description?: string;
-	centerLatitude?: number;
-	centerLongitude?: number;
-	layers?: GeofenceLayer[];
-}
-
-/**
- * Geofence subscriber
- */
-export interface GeofenceSubscriber {
-	geofenceId: string;
-	userId: string;
-	sendEmail: boolean;
-	createdAt: string;
-	updatedAt: string;
-}
-
-/**
- * Aircraft-geofence link
- */
-export interface AircraftGeofence {
-	aircraftId: string;
-	geofenceId: string;
-	createdAt: string;
-}
-
-/**
- * Geofence exit event - recorded when aircraft exits a geofence boundary
- */
-export interface GeofenceExitEvent {
-	id: string;
-	geofenceId: string;
-	flightId: string;
-	aircraftId: string;
-	exitTime: string;
-	exitLatitude: number;
-	exitLongitude: number;
-	exitAltitudeMslFt?: number;
-	exitLayer: GeofenceLayer;
-	emailNotificationsSent: number;
-	createdAt: string;
-}
-
-/**
- * Response for geofence exit events
- */
-export interface GeofenceExitEventsResponse {
-	events: GeofenceExitEvent[];
 }

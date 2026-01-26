@@ -37,13 +37,13 @@
 		return {
 			id: geofence?.id || 'preview',
 			name: name || 'New Geofence',
-			description: description || undefined,
+			description: description || null,
 			centerLatitude,
 			centerLongitude,
 			maxRadiusMeters: Math.max(...layers.map((l) => l.radiusNm * 1852)),
 			layers,
 			ownerUserId: geofence?.ownerUserId || '',
-			clubId: geofence?.clubId,
+			clubId: geofence?.clubId ?? null,
 			createdAt: geofence?.createdAt || new Date().toISOString(),
 			updatedAt: geofence?.updatedAt || new Date().toISOString()
 		};
@@ -186,10 +186,11 @@
 			// Build request - works for both create and update
 			const request: CreateGeofenceRequest = {
 				name: name.trim(),
-				description: description.trim() || undefined,
+				description: description.trim() || null,
 				centerLatitude,
 				centerLongitude,
-				layers
+				layers,
+				clubId: null
 			};
 			await onSave(request);
 		} catch (err) {

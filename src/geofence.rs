@@ -5,11 +5,13 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 /// A single altitude layer with its radius
 /// Altitudes are MSL (Mean Sea Level) in feet
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceLayer {
     /// Floor altitude in feet MSL
@@ -42,7 +44,8 @@ impl GeofenceLayer {
 }
 
 /// Geofence data for API responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct Geofence {
     pub id: Uuid,
@@ -59,7 +62,8 @@ pub struct Geofence {
 }
 
 /// Request to create a new geofence
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGeofenceRequest {
     pub name: String,
@@ -112,7 +116,8 @@ impl CreateGeofenceRequest {
 }
 
 /// Request to update a geofence
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateGeofenceRequest {
     pub name: Option<String>,
@@ -174,7 +179,8 @@ impl UpdateGeofenceRequest {
 }
 
 /// Geofence subscriber entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceSubscriber {
     pub geofence_id: Uuid,
@@ -197,7 +203,8 @@ fn default_true() -> bool {
 }
 
 /// Aircraft-geofence link
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftGeofence {
     pub aircraft_id: Uuid,
@@ -213,7 +220,8 @@ pub struct LinkAircraftRequest {
 }
 
 /// Geofence exit event - recorded when an aircraft exits a geofence boundary
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceExitEvent {
     pub id: Uuid,
@@ -230,7 +238,8 @@ pub struct GeofenceExitEvent {
 }
 
 /// Geofence with linked aircraft count and subscriber count
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceWithCounts {
     #[serde(flatten)]
@@ -240,14 +249,16 @@ pub struct GeofenceWithCounts {
 }
 
 /// List response for geofences
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceListResponse {
     pub geofences: Vec<GeofenceWithCounts>,
 }
 
 /// Detail response for a single geofence
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceDetailResponse {
     pub geofence: Geofence,
@@ -256,7 +267,8 @@ pub struct GeofenceDetailResponse {
 }
 
 /// Exit events response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct GeofenceExitEventsResponse {
     pub events: Vec<GeofenceExitEvent>,
