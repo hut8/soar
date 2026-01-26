@@ -84,7 +84,6 @@ pub fn adsb_message_to_fix(
     let fix = Fix {
         id: Uuid::now_v7(),
         source: format!("{:06X}", icao_address),
-        timestamp,
         latitude: position.latitude,
         longitude: position.longitude,
         altitude_msl_feet: position.altitude_feet,

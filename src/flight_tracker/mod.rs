@@ -493,7 +493,7 @@ impl FlightTracker {
         // Check for duplicate fixes (within 1 second)
         let is_duplicate = if let Some(state) = self.aircraft_states.get(&fix.aircraft_id) {
             if let Some(last_fix_time) = state.last_fix_timestamp() {
-                let time_diff = fix.timestamp.signed_duration_since(last_fix_time);
+                let time_diff = fix.received_at.signed_duration_since(last_fix_time);
                 time_diff.num_seconds().abs() < 1
             } else {
                 false
@@ -574,7 +574,7 @@ impl FlightTracker {
             metrics::counter!("flight_tracker.fixes_processed_total").increment(1);
             // Update the latest fix timestamp for timeout detection
             // This ensures timeout checks use packet time, not wall clock time
-            self.update_latest_fix_timestamp(fix.timestamp);
+            self.update_latest_fix_timestamp(fix.received_at);
         }
 
         result
@@ -619,11 +619,10 @@ mod tests {
     use chrono::{DateTime, TimeZone, Utc};
 
     // Helper function to create a test fix
-    fn create_test_fix(timestamp: DateTime<Utc>, altitude_msl: Option<i32>) -> Fix {
+    fn create_test_fix(received_at: DateTime<Utc>, altitude_msl: Option<i32>) -> Fix {
         Fix {
             id: Uuid::new_v4(),
             source: "TEST".to_string(),
-            timestamp,
             latitude: 42.0,
             longitude: -122.0,
             altitude_msl_feet: altitude_msl,
@@ -637,7 +636,7 @@ mod tests {
             source_metadata: None,
             flight_id: None,
             aircraft_id: Uuid::new_v4(),
-            received_at: timestamp,
+            received_at,
             is_active: true,
             receiver_id: Some(Uuid::new_v4()),
             raw_message_id: Uuid::new_v4(),

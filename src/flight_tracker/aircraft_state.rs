@@ -23,7 +23,7 @@ impl CompactFix {
     /// Create a CompactFix from a full Fix
     pub fn from_fix(fix: &Fix, is_active: bool) -> Self {
         Self {
-            timestamp: fix.timestamp,
+            timestamp: fix.received_at,
             lat: fix.latitude,
             lng: fix.longitude,
             altitude_msl_ft: fix.altitude_msl_feet,
@@ -81,7 +81,7 @@ impl AircraftState {
             last_timed_out_flight_id: None,
             last_timed_out_callsign: None,
             last_timed_out_at: None,
-            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
+            last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
         }
@@ -100,7 +100,7 @@ impl AircraftState {
             last_timed_out_flight_id: None,
             last_timed_out_callsign: None,
             last_timed_out_at: None,
-            last_update_time: fix.timestamp, // Use fix timestamp, not wall clock
+            last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
         }
@@ -111,7 +111,7 @@ impl AircraftState {
     pub fn add_fix(&mut self, fix: &Fix, is_active: bool) {
         // Use fix timestamp, not wall clock time
         // This is critical for timeout detection when processing old queued messages from soar-ingest
-        self.last_update_time = fix.timestamp;
+        self.last_update_time = fix.received_at;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {
@@ -126,7 +126,7 @@ impl AircraftState {
     pub fn add_fix_for_restore(&mut self, fix: &Fix, is_active: bool) {
         // Use the fix's timestamp, not wall clock time
         // This ensures timeout detection works correctly after restart
-        self.last_update_time = fix.timestamp;
+        self.last_update_time = fix.received_at;
 
         // Keep only last 10 fixes
         if self.recent_fixes.len() >= 10 {

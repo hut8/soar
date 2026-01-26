@@ -129,7 +129,7 @@ async fn find_towed_glider(
                 return Ok(Some(TowingInfo {
                     glider_device_id: glider_aircraft_id,
                     glider_flight_id,
-                    tow_started: towplane_fix.timestamp,
+                    tow_started: towplane_fix.received_at,
                 }));
             }
             n => {

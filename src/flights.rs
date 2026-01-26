@@ -265,7 +265,7 @@ impl Flight {
             end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
-            last_fix_at: fix.timestamp,
+            last_fix_at: fix.received_at,
             callsign: None,
             created_at: now,
             updated_at: now,
@@ -309,9 +309,9 @@ impl Flight {
             end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
-            last_fix_at: fix.timestamp,
+            last_fix_at: fix.received_at,
             callsign: None,
-            created_at: fix.timestamp,
+            created_at: fix.received_at,
             updated_at: now,
         }
     }
@@ -366,9 +366,9 @@ impl Flight {
             end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
-            last_fix_at: fix.timestamp,
+            last_fix_at: fix.received_at,
             callsign: None,
-            created_at: fix.timestamp,
+            created_at: fix.received_at,
             updated_at: now,
         }
     }

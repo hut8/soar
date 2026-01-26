@@ -409,7 +409,6 @@ fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) 
             .values((
                 fixes::aircraft_id.eq(test_device_id),
                 fixes::flight_id.eq(Some(new_flight_id)),
-                fixes::timestamp.eq(fix_time),
                 fixes::latitude.eq(lat),
                 fixes::longitude.eq(lon),
                 fixes::altitude_msl_feet.eq(Some(2000 + (i as i32 * 100))),

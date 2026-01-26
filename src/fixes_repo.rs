@@ -39,7 +39,6 @@ impl From<AddressType> for ForeignAddressType {
 struct FixDslRow {
     id: Uuid,
     source: String,
-    timestamp: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
     altitude_msl_feet: Option<i32>,
@@ -66,7 +65,6 @@ impl From<FixDslRow> for Fix {
         Self {
             id: row.id,
             source: row.source,
-            timestamp: row.timestamp,
             received_at: row.received_at,
             latitude: row.latitude,
             longitude: row.longitude,
@@ -80,7 +78,7 @@ impl From<FixDslRow> for Fix {
             climb_fpm: row.climb_fpm,
             turn_rate_rot: row.turn_rate_rot,
             source_metadata: row.source_metadata,
-            aircraft_id: row.aircraft_id, // Now directly a Uuid
+            aircraft_id: row.aircraft_id,
             is_active: row.is_active,
             receiver_id: row.receiver_id,
             raw_message_id: row.raw_message_id,
@@ -155,7 +153,7 @@ impl FixesRepository {
                                 aircraft::current_fix.eq(fix_json),
                                 aircraft::latitude.eq(new_fix.latitude),
                                 aircraft::longitude.eq(new_fix.longitude),
-                                aircraft::last_fix_at.eq(new_fix.timestamp),
+                                aircraft::last_fix_at.eq(new_fix.received_at),
                             ))
                             .execute(&mut conn);
                     }
@@ -169,7 +167,7 @@ impl FixesRepository {
                     // Duplicate fix on redelivery - this is expected after crashes
                     debug!(
                         "Duplicate fix detected for aircraft {} at {}",
-                        new_fix.aircraft_id, new_fix.timestamp
+                        new_fix.aircraft_id, new_fix.received_at
                     );
                     metrics::counter!("aprs.fixes.duplicate_on_redelivery_total").increment(1);
                     // Not an error - just skip the duplicate

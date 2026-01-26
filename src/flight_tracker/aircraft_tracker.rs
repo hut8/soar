@@ -48,8 +48,8 @@ impl AircraftTracker {
     #[allow(dead_code)]
     pub fn update_position(&mut self, fix: &Fix) {
         self.last_position = Some((fix.latitude, fix.longitude));
-        self.last_position_time = Some(fix.timestamp);
-        self.last_fix_timestamp = Some(fix.timestamp);
+        self.last_position_time = Some(fix.received_at);
+        self.last_fix_timestamp = Some(fix.received_at);
         self.last_update = Utc::now();
     }
 
@@ -57,7 +57,7 @@ impl AircraftTracker {
     #[allow(dead_code)]
     pub fn is_duplicate_fix(&self, fix: &Fix) -> bool {
         if let Some(last_timestamp) = self.last_fix_timestamp {
-            let time_diff = fix.timestamp.signed_duration_since(last_timestamp);
+            let time_diff = fix.received_at.signed_duration_since(last_timestamp);
             time_diff.num_seconds().abs() < 1
         } else {
             false
@@ -90,7 +90,6 @@ mod tests {
         let mut fix = Fix {
             id: uuid::Uuid::now_v7(),
             source: "TEST".to_string(),
-            timestamp: Utc::now(),
             received_at: Utc::now(),
             latitude: 40.0,
             longitude: -74.0,
