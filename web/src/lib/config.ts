@@ -15,6 +15,12 @@ export const CESIUM_ION_TOKEN =
 	import.meta.env.VITE_CESIUM_ION_TOKEN ||
 	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NWVkZmM1Yi1kMWIyLTRmY2QtOWZjNi05M2IyODFhNjBiNzkiLCJpZCI6MzY5OTY1LCJpYXQiOjE3NjU4MjM5Mjh9.W6K21mkvgIjRdfWqc8CQRdrz8Kajb5AVtFc3SWJa06I';
 
+// MapTiler API Key
+// Set via VITE_MAPTILER_API_KEY environment variable
+// Get a free key from https://www.maptiler.com/
+// Free tier: 100,000 requests/month
+export const MAPTILER_API_KEY = import.meta.env.VITE_MAPTILER_API_KEY || '';
+
 // Environment detection
 export function isStaging(): boolean {
 	if (!browser) return false;
