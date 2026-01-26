@@ -8,7 +8,12 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
-	import { backendMode } from '$lib/stores/backend';
+	import {
+		backendMode,
+		BACKEND_LABELS,
+		BACKEND_SHORT_LABELS,
+		type BackendMode
+	} from '$lib/stores/backend';
 	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
@@ -59,6 +64,7 @@
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 	let showDesktopMenu = $state(false);
+	let showBackendDropdown = $state(false);
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -353,17 +359,39 @@
 						-->
 						</nav>
 
-						<!-- Backend Toggle (Dev Only) -->
+						<!-- Backend Selector (Dev Only) -->
 						{#if dev}
-							<button
-								class="preset-tonal-surface-500 btn btn-sm font-mono font-bold"
-								onclick={() => backendMode.toggle()}
-								title={$backendMode === 'dev'
-									? 'Using local backend (localhost:1337) - Click to switch to production'
-									: 'Using production backend (glider.flights) - Click to switch to local'}
-							>
-								{$backendMode === 'dev' ? 'D' : 'P'}
-							</button>
+							<div class="relative">
+								<button
+									class="preset-tonal-surface-500 btn btn-sm font-mono font-bold"
+									onclick={() => (showBackendDropdown = !showBackendDropdown)}
+									title="Select backend environment"
+								>
+									{BACKEND_SHORT_LABELS[$backendMode]}
+								</button>
+								{#if showBackendDropdown}
+									<div
+										class="absolute top-10 right-0 z-50 w-40 card preset-filled-surface-100-900 p-1 shadow-lg"
+									>
+										{#each ['dev', 'staging', 'prod'] as BackendMode[] as mode (mode)}
+											<button
+												class="btn w-full justify-start text-sm {$backendMode === mode
+													? 'preset-filled-primary-500'
+													: 'preset-tonal-surface-500'}"
+												onclick={() => {
+													showBackendDropdown = false;
+													if (mode !== $backendMode) {
+														backendMode.setMode(mode);
+													}
+												}}
+											>
+												<span class="font-mono font-bold">{BACKEND_SHORT_LABELS[mode]}</span>
+												{BACKEND_LABELS[mode]}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
 						{/if}
 
 						<!-- Theme Toggle -->
@@ -589,17 +617,27 @@
 						</div>
 					{/if}
 
-					<!-- Mobile Backend Toggle (Dev Only) -->
+					<!-- Mobile Backend Selector (Dev Only) -->
 					{#if dev}
-						<button
-							class="btn w-full justify-start preset-filled-surface-500"
-							onclick={() => backendMode.toggle()}
-						>
-							<span class="font-mono font-bold">
-								{$backendMode === 'dev' ? 'D' : 'P'}
-							</span>
-							{$backendMode === 'dev' ? 'Local Backend' : 'Production Backend'}
-						</button>
+						<div class="space-y-1">
+							<div class="px-3 py-1 text-xs text-surface-500">Backend</div>
+							{#each ['dev', 'staging', 'prod'] as BackendMode[] as mode (mode)}
+								<button
+									class="btn w-full justify-start {$backendMode === mode
+										? 'preset-filled-primary-500'
+										: 'preset-filled-surface-500'}"
+									onclick={() => {
+										showMobileMenu = false;
+										if (mode !== $backendMode) {
+											backendMode.setMode(mode);
+										}
+									}}
+								>
+									<span class="font-mono font-bold">{BACKEND_SHORT_LABELS[mode]}</span>
+									{BACKEND_LABELS[mode]}
+								</button>
+							{/each}
+						</div>
 					{/if}
 
 					<!-- Mobile Theme Toggle -->

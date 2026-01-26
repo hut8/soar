@@ -103,12 +103,18 @@ export class FixFeed {
 		} else {
 			// Development mode - check backend mode setting
 			const mode = get(backendMode);
-			if (mode === 'dev') {
-				// Dev mode with local backend
-				this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
-			} else {
-				// Dev mode using staging backend
-				this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
+			switch (mode) {
+				case 'dev':
+					this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
+					break;
+				case 'staging':
+					this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
+					break;
+				case 'prod':
+					this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+					break;
+				default:
+					this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
 			}
 		}
 	}
