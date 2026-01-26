@@ -921,8 +921,8 @@ pub async fn handle_run(
     );
 
     // Spawn intake queue processor (only if APRS is enabled)
-    // This task reads raw APRS messages from the intake queue and processes them
-    // Separating NATS consumption from processing allows graceful shutdown
+    // This task reads raw OGN/APRS messages from the intake queue and processes them
+    // Separating socket consumption from processing allows graceful shutdown
     if let Some((_, ogn_intake_rx)) = ogn_intake_opt.as_ref() {
         let intake_router = packet_router.clone();
         let ogn_intake_rx = ogn_intake_rx.clone();
