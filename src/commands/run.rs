@@ -54,40 +54,25 @@ async fn process_aprs_message(
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
     metrics::gauge!("aprs.lag_seconds").set(lag_seconds);
 
-    // The message may still have a timestamp prefix from aprs_client
-    // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
-    // We strip it since we're using the envelope timestamp
-    let actual_message = message
-        .split_once(' ')
-        .map(|(first, rest)| {
-            // Only strip if the first part looks like an RFC3339 timestamp
-            if first.len() >= 20 && first.contains('T') && first.contains('Z') {
-                rest
-            } else {
-                message
-            }
-        })
-        .unwrap_or(message);
-
     // Route server messages (starting with #) differently
     // Server messages don't create PacketContext
-    if actual_message.starts_with('#') {
-        debug!("Server message: {}", actual_message);
+    if message.starts_with('#') {
+        debug!("Server message: {}", message);
         packet_router
-            .process_server_message(actual_message, received_at)
+            .process_server_message(message, received_at)
             .await;
         return;
     }
 
     // Try to parse the message using ogn-parser
-    match ogn_parser::parse(actual_message) {
+    match ogn_parser::parse(message) {
         Ok(parsed) => {
             // Track successful parse
             metrics::counter!("aprs.parse.success_total").increment(1);
 
             // Call PacketRouter to archive, process, and route to queues
             packet_router
-                .process_packet(parsed, actual_message, received_at)
+                .process_packet(parsed, message, received_at)
                 .await;
 
             metrics::counter!("aprs.router.process_packet.called_total").increment(1);
@@ -99,14 +84,14 @@ async fn process_aprs_message(
             let error_str = e.to_string();
             // For OGNFNT sources with common parsing issues, log as debug/trace instead of info
             // These are expected issues with this data source and not actionable
-            if actual_message.contains("OGNFNT")
+            if message.contains("OGNFNT")
                 && (error_str.contains("Invalid Latitude")
                     || error_str.contains("Invalid Longitude")
                     || error_str.contains("Unsupported Position Format"))
             {
-                trace!("Failed to parse APRS message '{actual_message}': {e}");
+                trace!("Failed to parse APRS message '{message}': {e}");
             } else {
-                debug!("Failed to parse APRS message '{actual_message}': {e}");
+                debug!("Failed to parse APRS message '{message}': {e}");
             }
         }
     }
