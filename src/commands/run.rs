@@ -24,7 +24,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 // Queue size constants
-const NATS_INTAKE_QUEUE_SIZE: usize = 5000;
+const OGN_INTAKE_QUEUE_SIZE: usize = 5000;
 const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
 const SBS_INTAKE_QUEUE_SIZE: usize = 1000;
 const AIRCRAFT_QUEUE_SIZE: usize = 5000;
@@ -37,11 +37,10 @@ fn queue_warning_threshold(queue_size: usize) -> usize {
 }
 
 /// Process a received APRS message by parsing and routing through PacketRouter
-/// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
-/// We extract the timestamp and pass it through the processing pipeline
 // Note: Intentionally NOT using #[tracing::instrument] here - it causes trace accumulation
 // in Tempo because spawned tasks inherit trace context and all messages end up in one huge trace.
 async fn process_aprs_message(
+    received_at: DateTime<chrono::Utc>,
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
 ) {
@@ -50,50 +49,30 @@ async fn process_aprs_message(
     // Track that we're processing a message
     metrics::counter!("aprs.process_aprs_message.called_total").increment(1);
 
-    // Extract timestamp from the beginning of the message
-    // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
-    let (received_at, actual_message) = match message.split_once(' ') {
-        Some((timestamp_str, rest)) => match chrono::DateTime::parse_from_rfc3339(timestamp_str) {
-            Ok(timestamp) => (timestamp.with_timezone(&chrono::Utc), rest),
-            Err(e) => {
-                warn!(
-                    timestamp = %timestamp_str,
-                    error = %e,
-                    "Failed to parse timestamp from message - using current time"
-                );
-                (chrono::Utc::now(), message)
-            }
-        },
-        None => {
-            warn!("Message does not contain timestamp prefix - using current time");
-            (chrono::Utc::now(), message)
-        }
-    };
-
     // Calculate and record lag (difference between now and packet timestamp)
     let now = chrono::Utc::now();
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
-    metrics::gauge!("aprs.intake.lag_seconds").set(lag_seconds);
+    metrics::gauge!("aprs.lag_seconds").set(lag_seconds);
 
     // Route server messages (starting with #) differently
     // Server messages don't create PacketContext
-    if actual_message.starts_with('#') {
-        debug!("Server message: {}", actual_message);
+    if message.starts_with('#') {
+        debug!("Server message: {}", message);
         packet_router
-            .process_server_message(actual_message, received_at)
+            .process_server_message(message, received_at)
             .await;
         return;
     }
 
     // Try to parse the message using ogn-parser
-    match ogn_parser::parse(actual_message) {
+    match ogn_parser::parse(message) {
         Ok(parsed) => {
             // Track successful parse
             metrics::counter!("aprs.parse.success_total").increment(1);
 
             // Call PacketRouter to archive, process, and route to queues
             packet_router
-                .process_packet(parsed, actual_message, received_at)
+                .process_packet(parsed, message, received_at)
                 .await;
 
             metrics::counter!("aprs.router.process_packet.called_total").increment(1);
@@ -105,14 +84,14 @@ async fn process_aprs_message(
             let error_str = e.to_string();
             // For OGNFNT sources with common parsing issues, log as debug/trace instead of info
             // These are expected issues with this data source and not actionable
-            if actual_message.contains("OGNFNT")
+            if message.contains("OGNFNT")
                 && (error_str.contains("Invalid Latitude")
                     || error_str.contains("Invalid Longitude")
                     || error_str.contains("Unsupported Position Format"))
             {
-                trace!("Failed to parse APRS message '{actual_message}': {e}");
+                trace!("Failed to parse APRS message '{message}': {e}");
             } else {
-                debug!("Failed to parse APRS message '{actual_message}': {e}");
+                debug!("Failed to parse APRS message '{message}': {e}");
             }
         }
     }
@@ -122,12 +101,12 @@ async fn process_aprs_message(
     metrics::histogram!("aprs.message_processing_latency_ms").record(elapsed_micros);
 }
 
-/// Process a received Beast (ADS-B) message from NATS
-/// The message format is binary: 8-byte timestamp (big-endian i64 microseconds) + Beast frame
+/// Process a received Beast (ADS-B) message
 // Note: Intentionally NOT using #[tracing::instrument] here - it causes trace accumulation
 // in Tempo because spawned tasks inherit trace context and all messages end up in one huge trace.
 async fn process_beast_message(
-    message_bytes: &[u8],
+    received_at: DateTime<chrono::Utc>,
+    raw_frame: &[u8],
     aircraft_repo: &AircraftRepository,
     beast_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
@@ -138,30 +117,21 @@ async fn process_beast_message(
     // Track that we're processing a message
     metrics::counter!("beast.run.process_beast_message.called_total").increment(1);
 
-    // Validate minimum message length (8-byte SOAR timestamp + 11-byte Beast frame minimum)
+    // Validate minimum message length
     // Beast frame minimum: 1 (0x1A) + 1 (type) + 6 (timestamp) + 1 (signal) + 2 (Mode A/C payload) = 11 bytes
-    if message_bytes.len() < 19 {
+    if raw_frame.len() < 11 {
         warn!(
-            "Invalid Beast message: too short ({} bytes, expected at least 19)",
-            message_bytes.len()
+            "Invalid Beast message: too short ({} bytes, expected at least 11)",
+            raw_frame.len()
         );
         metrics::counter!("beast.run.invalid_message_total").increment(1);
         return;
     }
 
-    // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
-    let timestamp_bytes: [u8; 8] = message_bytes[0..8].try_into().unwrap();
-    let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
-    let received_at =
-        DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(chrono::Utc::now);
-
     // Calculate and record lag (difference between now and packet timestamp)
     let now = chrono::Utc::now();
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
-    metrics::gauge!("beast.run.nats.lag_seconds").set(lag_seconds);
-
-    // Extract Beast frame (remaining bytes)
-    let raw_frame = &message_bytes[8..];
+    metrics::gauge!("beast.run.lag_seconds").set(lag_seconds);
 
     // Decode the Beast frame using rs1090
     let decoded = match decode_beast_frame(raw_frame, received_at) {
@@ -329,11 +299,11 @@ fn extract_icao_from_message(message: &rs1090::prelude::Message) -> Result<u32> 
 }
 
 /// Process a received SBS (BaseStation) message
-/// The message format is: 8-byte timestamp (big-endian i64 microseconds) + UTF-8 CSV line
 /// SBS format is text-based CSV, unlike Beast which is binary.
 // Note: Intentionally NOT using #[tracing::instrument] here - it causes trace accumulation
 async fn process_sbs_message(
-    message_bytes: &[u8],
+    received_at: DateTime<chrono::Utc>,
+    csv_bytes: &[u8],
     aircraft_repo: &AircraftRepository,
     sbs_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
@@ -344,30 +314,23 @@ async fn process_sbs_message(
     // Track that we're processing a message
     metrics::counter!("sbs.run.process_sbs_message.called_total").increment(1);
 
-    // Validate minimum message length (8-byte SOAR timestamp + at least some CSV content)
-    // Minimum SBS CSV: "MSG,1,,,A,,,,,," = 11 chars, so at least 8 + 11 = 19 bytes
-    if message_bytes.len() < 19 {
+    // Validate minimum message length
+    // Minimum SBS CSV: "MSG,1,,,A,,,,,," = 11 chars
+    if csv_bytes.len() < 11 {
         warn!(
-            "Invalid SBS message: too short ({} bytes, expected at least 19)",
-            message_bytes.len()
+            "Invalid SBS message: too short ({} bytes, expected at least 11)",
+            csv_bytes.len()
         );
         metrics::counter!("sbs.run.invalid_message_total").increment(1);
         return;
     }
 
-    // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
-    let timestamp_bytes: [u8; 8] = message_bytes[0..8].try_into().unwrap();
-    let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
-    let received_at =
-        DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(chrono::Utc::now);
-
     // Calculate and record lag (difference between now and packet timestamp)
     let now = chrono::Utc::now();
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
-    metrics::gauge!("sbs.run.nats.lag_seconds").set(lag_seconds);
+    metrics::gauge!("sbs.run.lag_seconds").set(lag_seconds);
 
-    // Extract CSV line (remaining bytes as UTF-8)
-    let csv_bytes = &message_bytes[8..];
+    // Decode CSV line as UTF-8
     let csv_line = match std::str::from_utf8(csv_bytes) {
         Ok(line) => line.trim(),
         Err(e) => {
@@ -806,25 +769,26 @@ pub async fn handle_run(
         SERVER_STATUS_QUEUE_SIZE
     );
 
-    // NATS intake queue: buffers raw APRS messages from NATS subscriber
-    // This allows graceful shutdown by stopping NATS reads and draining this queue
+    // OGN intake queue: buffers raw OGN/APRS messages from unix socket
+    // Tuple of (received_at timestamp, message string)
     // Only create if APRS is enabled
-    let aprs_intake_opt = if !no_aprs {
-        let (tx, rx) = flume::bounded::<String>(NATS_INTAKE_QUEUE_SIZE);
+    let ogn_intake_opt = if !no_aprs {
+        let (tx, rx) = flume::bounded::<(DateTime<chrono::Utc>, String)>(OGN_INTAKE_QUEUE_SIZE);
         info!(
-            "Created NATS intake queue with capacity {}",
-            NATS_INTAKE_QUEUE_SIZE
+            "Created OGN intake queue with capacity {}",
+            OGN_INTAKE_QUEUE_SIZE
         );
         Some((tx, rx))
     } else {
-        info!("APRS consumer disabled, skipping NATS intake queue creation");
+        info!("APRS consumer disabled, skipping OGN intake queue creation");
         None
     };
 
     // Beast intake queue: buffers raw Beast messages from socket server
+    // Tuple of (received_at timestamp, raw Beast frame bytes)
     // Only create if ADS-B is enabled
     let beast_intake_opt = if !no_adsb {
-        let (tx, rx) = flume::bounded::<Vec<u8>>(BEAST_INTAKE_QUEUE_SIZE);
+        let (tx, rx) = flume::bounded::<(DateTime<chrono::Utc>, Vec<u8>)>(BEAST_INTAKE_QUEUE_SIZE);
         info!(
             "Created Beast intake queue with capacity {}",
             BEAST_INTAKE_QUEUE_SIZE
@@ -836,10 +800,10 @@ pub async fn handle_run(
     };
 
     // SBS intake queue: buffers raw SBS CSV messages from socket server
-    // SBS uses text-based CSV format (not binary like Beast)
+    // Tuple of (received_at timestamp, raw CSV bytes)
     // Only create if ADS-B is enabled (SBS is an alternative ADS-B source)
     let sbs_intake_opt = if !no_adsb {
-        let (tx, rx) = flume::bounded::<Vec<u8>>(SBS_INTAKE_QUEUE_SIZE);
+        let (tx, rx) = flume::bounded::<(DateTime<chrono::Utc>, Vec<u8>)>(SBS_INTAKE_QUEUE_SIZE);
         info!(
             "Created SBS intake queue with capacity {}",
             SBS_INTAKE_QUEUE_SIZE
@@ -873,34 +837,32 @@ pub async fn handle_run(
     info!("Spawned socket server accept loop");
 
     // Spawn envelope router task
-    let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let ogn_intake_tx_for_router = ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let sbs_intake_tx_for_router = sbs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
     tokio::spawn(async move {
         info!("Envelope router task started");
         while let Ok(envelope) = envelope_rx.recv_async().await {
+            // Convert envelope timestamp to DateTime<Utc>
+            let received_at = DateTime::from_timestamp_micros(envelope.timestamp_micros)
+                .unwrap_or_else(chrono::Utc::now);
+
             match envelope.source() {
                 soar::protocol::IngestSource::Ogn => {
-                    if let Some(aprs_tx) = &aprs_intake_tx_for_router {
+                    if let Some(ogn_tx) = &ogn_intake_tx_for_router {
                         // Decode bytes to String (OGN messages are UTF-8)
                         match String::from_utf8(envelope.data) {
                             Ok(message) => {
-                                // OGN messages already have timestamp prepended by aprs_client
-                                // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <packet>"
-                                // Just pass through without adding another timestamp
-                                if aprs_tx.is_full() {
-                                    metrics::counter!("queue.send_blocked_total", "queue" => "aprs_intake").increment(1);
+                                if ogn_tx.is_full() {
+                                    metrics::counter!("queue.send_blocked_total", "queue" => "ogn_intake").increment(1);
                                 }
-                                if let Err(e) = aprs_tx.send_async(message).await {
-                                    error!(
-                                        "Failed to send OGN message to APRS intake queue: {}",
-                                        e
-                                    );
-                                    metrics::counter!("socket.router.aprs_send_error_total")
+                                if let Err(e) = ogn_tx.send_async((received_at, message)).await {
+                                    error!("Failed to send OGN message to intake queue: {}", e);
+                                    metrics::counter!("socket.router.ogn_send_error_total")
                                         .increment(1);
                                 } else {
-                                    metrics::counter!("socket.router.aprs_routed_total")
+                                    metrics::counter!("socket.router.ogn_routed_total")
                                         .increment(1);
                                 }
                             }
@@ -913,19 +875,10 @@ pub async fn handle_run(
                 }
                 soar::protocol::IngestSource::Beast => {
                     if let Some(beast_tx) = &beast_intake_tx_for_router {
-                        // Reconstruct expected format: 8-byte timestamp + Beast frame
-                        // The envelope stores timestamp separately, but process_beast_message
-                        // expects the old format with timestamp prefix
-                        let mut message_with_timestamp =
-                            Vec::with_capacity(8 + envelope.data.len());
-                        message_with_timestamp
-                            .extend_from_slice(&envelope.timestamp_micros.to_be_bytes());
-                        message_with_timestamp.extend_from_slice(&envelope.data);
-
                         if beast_tx.is_full() {
                             metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").increment(1);
                         }
-                        if let Err(e) = beast_tx.send_async(message_with_timestamp).await {
+                        if let Err(e) = beast_tx.send_async((received_at, envelope.data)).await {
                             error!("Failed to send Beast message to intake queue: {}", e);
                             metrics::counter!("socket.router.beast_send_error_total").increment(1);
                         } else {
@@ -935,20 +888,11 @@ pub async fn handle_run(
                 }
                 soar::protocol::IngestSource::Sbs => {
                     if let Some(sbs_tx) = &sbs_intake_tx_for_router {
-                        // Reconstruct expected format: 8-byte timestamp + CSV line bytes
-                        // The envelope stores timestamp separately, but process_sbs_message
-                        // expects the old format with timestamp prefix
-                        let mut message_with_timestamp =
-                            Vec::with_capacity(8 + envelope.data.len());
-                        message_with_timestamp
-                            .extend_from_slice(&envelope.timestamp_micros.to_be_bytes());
-                        message_with_timestamp.extend_from_slice(&envelope.data);
-
                         if sbs_tx.is_full() {
                             metrics::counter!("queue.send_blocked_total", "queue" => "sbs_intake")
                                 .increment(1);
                         }
-                        if let Err(e) = sbs_tx.send_async(message_with_timestamp).await {
+                        if let Err(e) = sbs_tx.send_async((received_at, envelope.data)).await {
                             error!("Failed to send SBS message to intake queue: {}", e);
                             metrics::counter!("socket.router.sbs_send_error_total").increment(1);
                         } else {
@@ -977,25 +921,25 @@ pub async fn handle_run(
     );
 
     // Spawn intake queue processor (only if APRS is enabled)
-    // This task reads raw APRS messages from the intake queue and processes them
-    // Separating NATS consumption from processing allows graceful shutdown
-    if let Some((_, nats_intake_rx)) = aprs_intake_opt.as_ref() {
+    // This task reads raw OGN/APRS messages from the intake queue and processes them
+    // Separating socket consumption from processing allows graceful shutdown
+    if let Some((_, ogn_intake_rx)) = ogn_intake_opt.as_ref() {
         let intake_router = packet_router.clone();
-        let nats_intake_rx = nats_intake_rx.clone();
+        let ogn_intake_rx = ogn_intake_rx.clone();
         tokio::spawn(async move {
             info!("Intake queue processor started");
             let mut messages_processed = 0u64;
-            while let Ok(message) = nats_intake_rx.recv_async().await {
+            while let Ok((received_at, message)) = ogn_intake_rx.recv_async().await {
                 // Note: No tracing spans here - they cause trace accumulation in Tempo
                 // Use metrics only for observability in the hot path
                 metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
-                process_aprs_message(&message, &intake_router).await;
+                process_aprs_message(received_at, &message, &intake_router).await;
                 messages_processed += 1;
                 metrics::counter!("aprs.intake.processed_total").increment(1);
                 metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
 
                 // Update intake queue depth metric
-                metrics::gauge!("aprs.intake_queue.depth").set(nats_intake_rx.len() as f64);
+                metrics::gauge!("aprs.intake_queue.depth").set(ogn_intake_rx.len() as f64);
             }
             info!(
                 "Intake queue processor stopped after processing {} messages",
@@ -1027,11 +971,12 @@ pub async fn handle_run(
             let beast_intake_rx = beast_intake_rx.clone();
 
             tokio::spawn(async move {
-                while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
+                while let Ok((received_at, raw_frame)) = beast_intake_rx.recv_async().await {
                     // Note: No tracing spans here - they cause trace accumulation in Tempo
                     let start_time = std::time::Instant::now();
                     process_beast_message(
-                        &message_bytes,
+                        received_at,
+                        &raw_frame,
                         &beast_aircraft_repo,
                         &beast_repo_clone,
                         &beast_fix_processor,
@@ -1072,11 +1017,12 @@ pub async fn handle_run(
             let sbs_intake_rx = sbs_intake_rx.clone();
 
             tokio::spawn(async move {
-                while let Ok(message_bytes) = sbs_intake_rx.recv_async().await {
+                while let Ok((received_at, csv_bytes)) = sbs_intake_rx.recv_async().await {
                     // Note: No tracing spans here - they cause trace accumulation in Tempo
                     let start_time = std::time::Instant::now();
                     process_sbs_message(
-                        &message_bytes,
+                        received_at,
+                        &csv_bytes,
                         &sbs_aircraft_repo,
                         &sbs_repo,
                         &sbs_fix_processor,
@@ -1300,7 +1246,7 @@ pub async fn handle_run(
     let shutdown_receiver_status_rx = receiver_status_rx.clone();
     let shutdown_receiver_position_rx = receiver_position_rx.clone();
     let shutdown_server_status_rx = server_status_rx.clone();
-    let shutdown_aprs_intake_opt = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let shutdown_ogn_intake_opt = ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let shutdown_beast_intake_opt = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
 
     tokio::spawn(async move {
@@ -1311,7 +1257,7 @@ pub async fn handle_run(
 
                 // Wait for queues to drain (check every second, max 10 minutes)
                 for i in 1..=600 {
-                    let intake_depth = shutdown_aprs_intake_opt.as_ref().map_or(0, |tx| tx.len());
+                    let intake_depth = shutdown_ogn_intake_opt.as_ref().map_or(0, |tx| tx.len());
                     let beast_intake_depth =
                         shutdown_beast_intake_opt.as_ref().map_or(0, |tx| tx.len());
                     let aircraft_depth = shutdown_aircraft_rx.len();
