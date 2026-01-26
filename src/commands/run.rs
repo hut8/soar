@@ -24,7 +24,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 // Queue size constants
-const NATS_INTAKE_QUEUE_SIZE: usize = 5000;
+const OGN_INTAKE_QUEUE_SIZE: usize = 5000;
 const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
 const SBS_INTAKE_QUEUE_SIZE: usize = 1000;
 const AIRCRAFT_QUEUE_SIZE: usize = 5000;
@@ -806,18 +806,18 @@ pub async fn handle_run(
         SERVER_STATUS_QUEUE_SIZE
     );
 
-    // NATS intake queue: buffers raw APRS messages from NATS subscriber
-    // This allows graceful shutdown by stopping NATS reads and draining this queue
+    // OGN intake queue: buffers raw OGN/APRS messages from unix socket
+    // This allows graceful shutdown by stopping socket reads and draining this queue
     // Only create if APRS is enabled
-    let aprs_intake_opt = if !no_aprs {
-        let (tx, rx) = flume::bounded::<String>(NATS_INTAKE_QUEUE_SIZE);
+    let ogn_intake_opt = if !no_aprs {
+        let (tx, rx) = flume::bounded::<String>(OGN_INTAKE_QUEUE_SIZE);
         info!(
-            "Created NATS intake queue with capacity {}",
-            NATS_INTAKE_QUEUE_SIZE
+            "Created OGN intake queue with capacity {}",
+            OGN_INTAKE_QUEUE_SIZE
         );
         Some((tx, rx))
     } else {
-        info!("APRS consumer disabled, skipping NATS intake queue creation");
+        info!("APRS consumer disabled, skipping OGN intake queue creation");
         None
     };
 
@@ -873,7 +873,7 @@ pub async fn handle_run(
     info!("Spawned socket server accept loop");
 
     // Spawn envelope router task
-    let aprs_intake_tx_for_router = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let ogn_intake_tx_for_router = ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let sbs_intake_tx_for_router = sbs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
@@ -882,7 +882,7 @@ pub async fn handle_run(
         while let Ok(envelope) = envelope_rx.recv_async().await {
             match envelope.source() {
                 soar::protocol::IngestSource::Ogn => {
-                    if let Some(aprs_tx) = &aprs_intake_tx_for_router {
+                    if let Some(aprs_tx) = &ogn_intake_tx_for_router {
                         // Decode bytes to String (OGN messages are UTF-8)
                         match String::from_utf8(envelope.data) {
                             Ok(message) => {
@@ -979,13 +979,13 @@ pub async fn handle_run(
     // Spawn intake queue processor (only if APRS is enabled)
     // This task reads raw APRS messages from the intake queue and processes them
     // Separating NATS consumption from processing allows graceful shutdown
-    if let Some((_, nats_intake_rx)) = aprs_intake_opt.as_ref() {
+    if let Some((_, ogn_intake_rx)) = ogn_intake_opt.as_ref() {
         let intake_router = packet_router.clone();
-        let nats_intake_rx = nats_intake_rx.clone();
+        let ogn_intake_rx = ogn_intake_rx.clone();
         tokio::spawn(async move {
             info!("Intake queue processor started");
             let mut messages_processed = 0u64;
-            while let Ok(message) = nats_intake_rx.recv_async().await {
+            while let Ok(message) = ogn_intake_rx.recv_async().await {
                 // Note: No tracing spans here - they cause trace accumulation in Tempo
                 // Use metrics only for observability in the hot path
                 metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
@@ -995,7 +995,7 @@ pub async fn handle_run(
                 metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
 
                 // Update intake queue depth metric
-                metrics::gauge!("aprs.intake_queue.depth").set(nats_intake_rx.len() as f64);
+                metrics::gauge!("aprs.intake_queue.depth").set(ogn_intake_rx.len() as f64);
             }
             info!(
                 "Intake queue processor stopped after processing {} messages",
@@ -1300,7 +1300,7 @@ pub async fn handle_run(
     let shutdown_receiver_status_rx = receiver_status_rx.clone();
     let shutdown_receiver_position_rx = receiver_position_rx.clone();
     let shutdown_server_status_rx = server_status_rx.clone();
-    let shutdown_aprs_intake_opt = aprs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
+    let shutdown_ogn_intake_opt = ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let shutdown_beast_intake_opt = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
 
     tokio::spawn(async move {
@@ -1311,7 +1311,7 @@ pub async fn handle_run(
 
                 // Wait for queues to drain (check every second, max 10 minutes)
                 for i in 1..=600 {
-                    let intake_depth = shutdown_aprs_intake_opt.as_ref().map_or(0, |tx| tx.len());
+                    let intake_depth = shutdown_ogn_intake_opt.as_ref().map_or(0, |tx| tx.len());
                     let beast_intake_depth =
                         shutdown_beast_intake_opt.as_ref().map_or(0, |tx| tx.len());
                     let aircraft_depth = shutdown_aircraft_rx.len();
