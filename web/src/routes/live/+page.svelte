@@ -27,7 +27,7 @@
 	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
 	import { serverCall } from '$lib/api/server';
 	import {
-		createAircraftIconDataUrl,
+		getAircraftIconUrl,
 		getAircraftIconName,
 		getAllIconShapes,
 		ALTITUDE_COLORS
@@ -338,7 +338,7 @@
 	}
 
 	// Add aircraft icon images to the map
-	// Creates icons for all shape+color combinations (10 shapes × 9 colors = 90 icons)
+	// Loads PNG icons for all shape+color combinations (7 shapes × 9 colors = 63 icons)
 	async function addAircraftIcons() {
 		if (!map) return;
 
@@ -346,20 +346,24 @@
 		const loadPromises: Promise<void>[] = [];
 
 		for (const shape of shapes) {
-			for (const { name: colorName, color } of ALTITUDE_COLORS) {
+			for (const { name: colorName } of ALTITUDE_COLORS) {
 				const iconName = `aircraft-${shape}-${colorName}`;
-				const img = new Image(48, 48);
-				img.src = createAircraftIconDataUrl(shape, color);
+				const iconUrl = getAircraftIconUrl(shape, colorName);
 
 				loadPromises.push(
 					new Promise<void>((resolve) => {
+						const img = new Image();
 						img.onload = () => {
 							if (map && !map.hasImage(iconName)) {
 								map.addImage(iconName, img, { sdf: false });
 							}
 							resolve();
 						};
-						img.onerror = () => resolve();
+						img.onerror = () => {
+							logger.warn('[AIRCRAFT] Failed to load icon: {iconName}', { iconName });
+							resolve();
+						};
+						img.src = iconUrl;
 					})
 				);
 			}
