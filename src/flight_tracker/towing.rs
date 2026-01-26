@@ -256,7 +256,7 @@ pub fn check_tow_release(state: &super::AircraftState, current_climb_fpm: Option
         .recent_fixes
         .iter()
         .rev()
-        .filter_map(|f| Some((f.timestamp, f.altitude_msl_ft?)))
+        .filter_map(|f| Some((f.received_at, f.altitude_msl_ft?)))
         .take(5)
         .collect();
 

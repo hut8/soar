@@ -112,7 +112,7 @@ pub(crate) async fn process_state_transition(
         // Add fix to history (if not the initial fix that created the state)
         if state.recent_fixes.len() > 1
             || (state.recent_fixes.len() == 1
-                && state.recent_fixes.back().unwrap().timestamp != fix.received_at)
+                && state.recent_fixes.back().unwrap().received_at != fix.received_at)
         {
             state.add_fix(&fix, is_active);
         }
