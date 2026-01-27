@@ -154,8 +154,8 @@ python3 infrastructure/dashboards/build.py --verify
 **Editing dashboards:**
 1. Edit individual panel files in `dashboards/panels/{dashboard}/`
 2. Edit panel order/layout in `dashboards/definitions/{dashboard}.json`
-3. Run `python3 infrastructure/dashboards/build.py` to regenerate
-4. Commit both the panel/definition changes AND the generated `grafana-dashboard-*.json` files
+3. Run `python3 infrastructure/dashboards/build.py` to verify your changes build correctly
+4. Commit only the panel/definition source files (built `grafana-dashboard-*.json` files are generated during deployment)
 
 ### Frontend Development Standards
 

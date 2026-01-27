@@ -144,7 +144,11 @@ if [ -d "infrastructure/grafana-provisioning" ]; then
     log_info "Grafana provisioning configuration included"
 fi
 
-# Copy Grafana dashboard files
+# Build and copy Grafana dashboard files
+if [ -f "infrastructure/dashboards/build.py" ]; then
+    log_info "Building Grafana dashboards from source..."
+    python3 infrastructure/dashboards/build.py
+fi
 if compgen -G "infrastructure/grafana-dashboard-*.json" >/dev/null; then
     cp infrastructure/grafana-dashboard-*.json "$DEPLOY_PKG/"
     DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
