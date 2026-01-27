@@ -663,11 +663,8 @@
 			if (map) {
 				// Fetch all fixes in parallel for better performance
 				const fixesPromises = nearbyFlights.map((nearbyFlight) =>
-					serverCall<{
-						fixes: Fix[];
-						count: number;
-					}>(`/flights/${nearbyFlight.id}/fixes`)
-						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
+					serverCall<DataListResponse<Fix>>(`/flights/${nearbyFlight.id}/fixes`)
+						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.data }))
 						.catch((err) => {
 							logger.error('Failed to fetch fixes for nearby flight {id}: {error}', {
 								id: nearbyFlight.id,
@@ -818,22 +815,17 @@
 				: `/flights/${data.flight.id}/fixes`;
 
 			const [flightResponse, fixesResponse] = await Promise.all([
-				serverCall<{
-					flight: typeof data.flight;
-				}>(`/flights/${data.flight.id}`),
-				serverCall<{
-					fixes: Fix[];
-					count: number;
-				}>(fixesUrl)
+				serverCall<DataResponse<Flight>>(`/flights/${data.flight.id}`),
+				serverCall<DataListResponse<Fix>>(fixesUrl)
 			]);
 
 			// Update flight data
-			data.flight = flightResponse.flight;
+			data.flight = flightResponse.data;
 			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
-			if (fixesResponse.fixes.length > 0) {
-				fixes = [...fixesResponse.fixes, ...fixes];
+			if (fixesResponse.data.length > 0) {
+				fixes = [...fixesResponse.data, ...fixes];
 				fixes.length = fixes.length;
 			}
 
@@ -843,7 +835,7 @@
 			}
 
 			// Only update map if we got new fixes (chart updates automatically via FlightProfile component)
-			if (fixesResponse.fixes.length > 0) {
+			if (fixesResponse.data.length > 0) {
 				updateMap();
 			}
 		} catch (err) {

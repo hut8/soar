@@ -5,7 +5,7 @@
 	import { UserPlus, ArrowLeft, Check, X } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { User } from '$lib/types';
+	import type { User, DataListResponse } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'ClubPilots']);
@@ -61,8 +61,8 @@
 		loadingPilots = true;
 
 		try {
-			const response = await serverCall<{ pilots: User[] }>(`/clubs/${clubId}/pilots`);
-			pilots = response.pilots || [];
+			const response = await serverCall<DataListResponse<User>>(`/clubs/${clubId}/pilots`);
+			pilots = response.data || [];
 		} catch (err) {
 			logger.error('Error loading pilots: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load pilots';

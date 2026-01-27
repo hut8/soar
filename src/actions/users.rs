@@ -13,7 +13,7 @@ use crate::users::{CreatePilotRequest, SendInvitationRequest, UpdateUserRequest,
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::UserView};
+use super::{DataListResponse, json_error, views::UserView};
 
 #[derive(Debug, Deserialize)]
 pub struct SetClubRequest {
@@ -216,7 +216,7 @@ pub async fn get_pilots_by_club(
     match users_repo.get_pilots_by_club(club_id).await {
         Ok(pilots) => {
             let pilot_views: Vec<UserView> = pilots.into_iter().map(UserView::from).collect();
-            Json(pilot_views).into_response()
+            Json(DataListResponse { data: pilot_views }).into_response()
         }
         Err(e) => {
             error!("Failed to get pilots for club {}: {}", club_id, e);

@@ -6,7 +6,14 @@
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Receiver, PathPoint, DataListResponse } from '$lib/types';
+	import type {
+		Receiver,
+		PathPoint,
+		DataListResponse,
+		DataResponse,
+		Flight,
+		Fix
+	} from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -296,21 +303,16 @@
 				: `/flights/${data.flight.id}/fixes`;
 
 			const [flightResponse, fixesResponse] = await Promise.all([
-				serverCall<{
-					flight: typeof data.flight;
-				}>(`/flights/${data.flight.id}`),
-				serverCall<{
-					fixes: typeof data.fixes;
-					count: number;
-				}>(fixesUrl)
+				serverCall<DataResponse<Flight>>(`/flights/${data.flight.id}`),
+				serverCall<DataListResponse<Fix>>(fixesUrl)
 			]);
 
-			data.flight = flightResponse.flight;
+			data.flight = flightResponse.data;
 			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
-			if (fixesResponse.fixes.length > 0) {
-				data.fixes = [...fixesResponse.fixes, ...data.fixes];
+			if (fixesResponse.data.length > 0) {
+				data.fixes = [...fixesResponse.data, ...data.fixes];
 				data.fixesCount = data.fixes.length;
 			}
 
@@ -319,7 +321,7 @@
 			}
 
 			// Only update map if we got new fixes (chart will update automatically via reactivity)
-			if (fixesResponse.fixes.length > 0) {
+			if (fixesResponse.data.length > 0) {
 				updateMap();
 			}
 		} catch (err) {

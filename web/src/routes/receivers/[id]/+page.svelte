@@ -306,11 +306,11 @@
 		try {
 			for (const batch of batches) {
 				const idsParam = batch.join(',');
-				const response = await serverCall<{ aircraft: Record<string, Aircraft> }>(
+				const response = await serverCall<DataResponse<Record<string, Aircraft>>>(
 					`/aircraft/bulk?ids=${encodeURIComponent(idsParam)}`
 				);
 				// Merge the aircraft into the map
-				Object.assign(aircraftMap, response.aircraft);
+				Object.assign(aircraftMap, response.data);
 			}
 		} catch (err) {
 			logger.error('Failed to load aircraft information: {error}', { error: err });
