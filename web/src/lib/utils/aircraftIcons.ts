@@ -142,10 +142,8 @@ export function getAllIconShapes(): IconShape[] {
 export function createAircraftIconDataUrl(shape: IconShape, size: number): string {
 	const iconDef = ICON_SHAPES[shape];
 	// White fill with black stroke - will be colored at runtime via icon-color
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${iconDef.viewBox}" width="${size}" height="${size}">
-		<path d="${iconDef.path}" fill="#ffffff" stroke="#000000" stroke-width="1"/>
-	</svg>`;
-	return `data:image/svg+xml;base64,${btoa(svg)}`;
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${iconDef.viewBox}" width="${size}" height="${size}"><path d="${iconDef.path}" fill="#ffffff" stroke="#000000" stroke-width="1"/></svg>`;
+	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /**
