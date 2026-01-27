@@ -11,7 +11,7 @@
 #
 # Services:
 # - postgres: PostgreSQL with PostGIS and pg_partman extensions
-# - nats: NATS messaging server with JetStream enabled
+# - nats: NATS messaging server
 # - mailpit: Email testing service (SMTP + web UI)
 # - soar: Main application container (builds from source)
 #
@@ -48,7 +48,6 @@ services:
     image: nats:2.10-alpine
     container_name: soar-nats-test
     command:
-      - "-js"  # Enable JetStream
       - "-m"   # Enable monitoring
       - "8222" # Monitoring port
     healthcheck:

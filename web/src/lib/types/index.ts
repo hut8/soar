@@ -11,6 +11,14 @@ import type { Fix } from './generated/Fix';
 import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
 import type { AircraftType } from './generated/AircraftType';
 import type { AircraftCategory } from './generated/AircraftCategory';
+import type { FlightView } from './generated/FlightView';
+import type { FlightState } from './generated/FlightState';
+import type { AddressType } from './generated/AddressType';
+import type { UserView } from './generated/UserView';
+import type { ReceiverView } from './generated/ReceiverView';
+import type { AirportView } from './generated/AirportView';
+import type { RunwayView } from './generated/RunwayView';
+import type { RunwayEnd as RunwayEndGenerated } from './generated/RunwayEnd';
 
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
@@ -37,6 +45,13 @@ export type {
 	AdsbEmitterCategory,
 	AircraftType,
 	AircraftCategory,
+	FlightView,
+	FlightState,
+	AddressType,
+	UserView,
+	ReceiverView,
+	AirportView,
+	RunwayView,
 	// Geofence types
 	Geofence,
 	GeofenceLayer,
@@ -50,6 +65,14 @@ export type {
 	GeofenceExitEvent,
 	GeofenceExitEventsResponse
 };
+
+// Type aliases for backward compatibility
+export type Flight = FlightView;
+export type User = UserView;
+export type Receiver = ReceiverView;
+export type Airport = AirportView;
+export type Runway = RunwayView;
+export type RunwayEnd = RunwayEndGenerated;
 
 // API Response Wrapper Types
 export interface DataResponse<T> {
@@ -123,29 +146,6 @@ export interface ComboboxData {
 	label: string;
 	value: string;
 	club: ClubWithSoaring;
-}
-
-export interface Airport {
-	id: number;
-	ident: string;
-	airportType: string;
-	name: string;
-	latitudeDeg: string | null; // BigDecimal serialized as string
-	longitudeDeg: string | null; // BigDecimal serialized as string
-	elevationFt: number | null;
-	continent: string | null;
-	isoCountry: string | null;
-	isoRegion: string | null;
-	municipality: string | null;
-	scheduledService: boolean;
-	icaoCode: string | null;
-	iataCode: string | null;
-	gpsCode: string | null;
-	localCode: string | null;
-	homeLink: string | null;
-	wikipediaLink: string | null;
-	keywords: string | null;
-	runways: Runway[];
 }
 
 // Aircraft registration information (from FAA database)
@@ -234,6 +234,12 @@ export interface FixWithExtras extends Fix {
 	via?: string[]; // APRS via path (from sourceMetadata, used in WebSocket)
 }
 
+// FixWithAircraft type from the backend - fix with optional aircraft data
+// Used by receiver fixes endpoint
+export interface FixWithAircraft extends Fix {
+	aircraft: import('./generated/AircraftView').AircraftView | null;
+}
+
 // Raw message response from /data/raw-messages/{id} endpoint
 export interface RawMessageResponse {
 	id: string;
@@ -242,81 +248,6 @@ export interface RawMessageResponse {
 	receivedAt: string;
 	receiverId: string | null;
 	debugFormat?: string; // Pretty-printed Rust debug format of parsed message
-}
-
-// User authentication and profile (now includes pilot fields)
-export interface User {
-	id: string;
-	firstName: string;
-	lastName: string;
-	email?: string | null; // Nullable - pilots without login don't have email
-	isAdmin: boolean;
-	clubId?: string;
-	emailVerified: boolean;
-	createdAt: string;
-	updatedAt: string;
-	settings: Record<string, unknown>;
-	// Pilot qualification fields
-	isLicensed: boolean;
-	isInstructor: boolean;
-	isTowPilot: boolean;
-	isExaminer: boolean;
-	// Derived fields
-	canLogin: boolean; // True if user has email and password
-	isPilot: boolean; // True if any pilot qualification is true
-}
-
-// Flight interface matching backend FlightView
-export interface Flight {
-	id: string;
-	aircraftId?: string; // UUID foreign key to aircraft table
-	deviceAddress: string; // Hex format like "39D304"
-	deviceAddressType: string; // F, O, I, or empty string
-	takeoffTime?: string; // ISO datetime string - null for flights first seen airborne
-	landingTime?: string; // ISO datetime string - null for flights in progress
-	timedOutAt?: string; // ISO datetime string when flight timed out
-	state: 'active' | 'complete' | 'timed_out'; // Flight state
-	durationSeconds?: number; // Duration in seconds (null if takeoffTime or landingTime is null)
-	departureAirport?: string; // Airport identifier
-	departureAirportId?: number; // Airport ID in database
-	departureAirportCountry?: string; // Country code
-	arrivalAirport?: string; // Airport identifier
-	arrivalAirportId?: number; // Airport ID in database
-	arrivalAirportCountry?: string; // Country code
-	// Geocoded location for flight start
-	startLocationCity?: string;
-	startLocationState?: string;
-	startLocationCountry?: string;
-	// Geocoded location for flight end
-	endLocationCity?: string;
-	endLocationState?: string;
-	endLocationCountry?: string;
-	towedByAircraftId?: string; // UUID of towplane aircraft that towed this glider
-	towedByFlightId?: string; // UUID of towplane flight that towed this glider
-	clubId?: string; // UUID of club that owns the aircraft
-	takeoffAltitudeOffsetFt?: number; // Altitude offset at takeoff
-	landingAltitudeOffsetFt?: number; // Altitude offset at landing
-	takeoffRunwayIdent?: string; // Takeoff runway identifier
-	landingRunwayIdent?: string; // Landing runway identifier
-	totalDistanceMeters?: number; // Total distance flown in meters
-	maximumDisplacementMeters?: number; // Maximum displacement from takeoff point
-	runwaysInferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
-	createdAt: string; // ISO datetime string
-	updatedAt: string; // ISO datetime string
-	// Aircraft information (merged into FlightView from AircraftInfo)
-	aircraftModel?: string;
-	registration?: string;
-	aircraftCategory?: string;
-	aircraftCountryCode?: string;
-	// Latest fix information (for active flights)
-	latestAltitudeMslFeet: number | null;
-	latestAltitudeAglFeet: number | null;
-	latestFixTimestamp: string | null;
-	// Navigation to previous/next flights for the same aircraft (chronologically by takeoff time)
-	previousFlightId?: string;
-	nextFlightId?: string;
-	// Flight callsign (from APRS packets)
-	callsign?: string;
 }
 
 // FlightDetails combines Flight with full Aircraft data
@@ -336,27 +267,6 @@ export interface WatchlistEntry {
 
 export interface WatchlistEntryWithAircraft extends WatchlistEntry {
 	aircraft?: Aircraft;
-}
-
-// Receiver interface matching backend ReceiverView
-export interface Receiver {
-	id: string;
-	callsign: string;
-	description: string | null;
-	contact: string | null;
-	email: string | null;
-	ognDbCountry: string | null;
-	latitude: number | null;
-	longitude: number | null;
-	streetAddress: string | null;
-	city: string | null;
-	region: string | null;
-	country: string | null;
-	postalCode: string | null;
-	createdAt: string;
-	updatedAt: string;
-	latestPacketAt: string | null;
-	fromOgnDb: boolean;
 }
 
 // Airspace interface - GeoJSON Feature format
@@ -384,32 +294,6 @@ export interface Airspace {
 export interface AirspaceFeatureCollection {
 	type: 'FeatureCollection';
 	features: Airspace[];
-}
-
-// Runway endpoint interface
-export interface RunwayEnd {
-	ident: string | null;
-	latitudeDeg: number | null;
-	longitudeDeg: number | null;
-	elevationFt: number | null;
-	headingDegt: number | null;
-	displacedThresholdFt: number | null;
-}
-
-// Runway interface matching backend RunwayView
-export interface Runway {
-	id: number;
-	airportIdent: string;
-	lengthFt: number | null;
-	widthFt: number | null;
-	surface: string | null;
-	lighted: boolean;
-	closed: boolean;
-	low: RunwayEnd;
-	high: RunwayEnd;
-	// Polygon representing the runway rectangle as [lat, lon] coordinates
-	// Array of 4 corner points: [low-left, low-right, high-right, high-left]
-	polyline: [number, number][];
 }
 
 // Coverage map - H3 hexagonal coverage visualization

@@ -80,7 +80,7 @@
 
 			// Sort fixes by timestamp in ascending order (oldest first)
 			// This ensures the timeline plays forward correctly
-			fixes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+			fixes.sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
 
 			// Initialize timeline
 			initializeTimeline();
@@ -98,8 +98,8 @@
 		if (fixes.length === 0) return;
 
 		// Get start and end times from fixes
-		const startTime = CesiumJulianDate.fromIso8601(fixes[0].timestamp);
-		const endTime = CesiumJulianDate.fromIso8601(fixes[fixes.length - 1].timestamp);
+		const startTime = CesiumJulianDate.fromIso8601(fixes[0].receivedAt);
+		const endTime = CesiumJulianDate.fromIso8601(fixes[fixes.length - 1].receivedAt);
 
 		// Configure clock
 		viewer.clock.startTime = startTime.clone();
@@ -111,7 +111,7 @@
 		viewer.clock.shouldAnimate = false; // Start paused
 
 		// Update current time
-		currentTime = new Date(fixes[0].timestamp);
+		currentTime = new Date(fixes[0].receivedAt);
 		currentFixIndex = 0;
 
 		// Create initial playback entity
@@ -134,10 +134,10 @@
 
 		// Find the closest fix to current time
 		let closestIndex = 0;
-		let minDiff = Math.abs(new Date(fixes[0].timestamp).getTime() - currentTimeMillis);
+		let minDiff = Math.abs(new Date(fixes[0].receivedAt).getTime() - currentTimeMillis);
 
 		for (let i = 1; i < fixes.length; i++) {
-			const diff = Math.abs(new Date(fixes[i].timestamp).getTime() - currentTimeMillis);
+			const diff = Math.abs(new Date(fixes[i].receivedAt).getTime() - currentTimeMillis);
 			if (diff < minDiff) {
 				minDiff = diff;
 				closestIndex = i;
@@ -147,7 +147,7 @@
 		// Update playback entity if fix changed
 		if (closestIndex !== currentFixIndex) {
 			currentFixIndex = closestIndex;
-			currentTime = new Date(fixes[closestIndex].timestamp);
+			currentTime = new Date(fixes[closestIndex].receivedAt);
 			updatePlaybackEntity(closestIndex);
 		}
 	}
@@ -245,13 +245,13 @@
 	function resetPlayback(): void {
 		if (fixes.length === 0) return;
 
-		const startTime = CesiumJulianDate.fromIso8601(fixes[0].timestamp);
+		const startTime = CesiumJulianDate.fromIso8601(fixes[0].receivedAt);
 		viewer.clock.currentTime = startTime.clone();
 		viewer.clock.shouldAnimate = false;
 		isPlaying = false;
 
 		currentFixIndex = 0;
-		currentTime = new Date(fixes[0].timestamp);
+		currentTime = new Date(fixes[0].receivedAt);
 		updatePlaybackEntity(0);
 	}
 
@@ -400,10 +400,10 @@
 				<!-- Progress Bar -->
 				<div class="space-y-1">
 					<div class="flex items-center justify-between text-xs opacity-75">
-						<span>{fixes[0] ? new Date(fixes[0].timestamp).toLocaleTimeString() : ''}</span>
+						<span>{fixes[0] ? new Date(fixes[0].receivedAt).toLocaleTimeString() : ''}</span>
 						<span
 							>{fixes[fixes.length - 1]
-								? new Date(fixes[fixes.length - 1].timestamp).toLocaleTimeString()
+								? new Date(fixes[fixes.length - 1].receivedAt).toLocaleTimeString()
 								: ''}</span
 						>
 					</div>

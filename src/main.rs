@@ -158,7 +158,7 @@ enum Commands {
         #[arg(long, default_value = "5")]
         retry_delay: u64,
     },
-    /// Run the main APRS processing service (consumes from JetStream durable queue)
+    /// Run the main APRS processing service
     Run {
         /// Base directory for message archive (optional)
         #[arg(long)]
@@ -168,7 +168,7 @@ enum Commands {
         #[arg(long)]
         archive: bool,
 
-        /// NATS server URL for JetStream consumer and pub/sub
+        /// NATS server URL for pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
 
@@ -805,37 +805,37 @@ async fn main() -> Result<()> {
     // Create separate filter for fmt_layer (console output)
     // Use RUST_LOG if set, otherwise default based on environment
     // Note: async_nats is set to warn to suppress "slow consumers" INFO logs during high load
-    // Note: log=warn suppresses INFO logs from pprof crate ("starting/stopping cpu profiler")
-    //       which uses `log::info!()` with target "log" (not "pprof")
+    // Note: pprof=warn suppresses INFO logs from pprof crate ("starting/stopping cpu profiler")
+    // Note: log=warn suppresses any other log crate messages that might slip through
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
-            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn,log=warn")
+            EnvFilter::new("warn,hyper_util=info,rustls=info,async_nats=warn,pprof=warn,log=warn")
         } else if is_staging {
-            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn,log=warn")
+            EnvFilter::new("info,hyper_util=info,rustls=info,async_nats=warn,pprof=warn,log=warn")
         } else {
             // Development: debug by default, but suppress noisy OpenTelemetry internals
             EnvFilter::new(
-                "debug,hyper_util=info,rustls=info,async_nats=warn,log=warn,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
+                "debug,hyper_util=info,rustls=info,async_nats=warn,pprof=warn,log=warn,opentelemetry_sdk=info,opentelemetry_otlp=info,opentelemetry_http=info",
             )
         }
     });
 
     // Create filter for tokio-console layer (needs tokio=trace,runtime=trace for task visibility)
-    let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace,log=warn");
+    let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace,pprof=warn,log=warn");
 
     // Create filter for OpenTelemetry layer - exclude tokio runtime internals to prevent
     // trace bloat from waker.clone/waker.drop events being attached to every span
-    let otel_filter = EnvFilter::new("info,tokio=off,runtime=off,log=warn");
+    let otel_filter = EnvFilter::new("info,tokio=off,runtime=off,pprof=warn,log=warn");
 
     // Create filter for OpenTelemetry logs layer (Loki export)
     // - Production: info level only (no debug logs to Loki)
     // - Staging/Dev: debug for soar::* packages, info for external packages
     // This filters at the source to avoid sending logs that would be dropped anyway
     let logs_filter = if is_production {
-        EnvFilter::new("info,tokio=off,runtime=off,log=warn")
+        EnvFilter::new("info,tokio=off,runtime=off,pprof=warn,log=warn")
     } else {
         // Allow debug from soar crate, info from everything else
-        EnvFilter::new("info,soar=debug,tokio=off,runtime=off,log=warn")
+        EnvFilter::new("info,soar=debug,tokio=off,runtime=off,pprof=warn,log=warn")
     };
 
     // Helper to create logs layer - bridges tracing events to OpenTelemetry logs for Loki export
@@ -847,8 +847,8 @@ async fn main() -> Result<()> {
     };
 
     // Note: tracing-subscriber's "tracing-log" feature automatically bridges
-    // `log` crate events to tracing. The pprof crate emits logs with target "log",
-    // so we use `log=warn` to suppress its INFO-level "starting/stopping cpu profiler" messages
+    // `log` crate events to tracing. We use both `pprof=warn` and `log=warn` to suppress
+    // the pprof crate's "starting/stopping cpu profiler" INFO-level messages
 
     let registry = tracing_subscriber::registry();
 

@@ -249,7 +249,7 @@
 				altitude: fix.altitudeMslFeet, // Used by altitude color expression (null = gray)
 				track: fix.trackDegrees || 0,
 				isActive: fix.active,
-				timestamp: fix.timestamp,
+				timestamp: fix.receivedAt,
 				aircraftModel: aircraft.aircraftModel || '',
 				aircraftCategory: aircraft.aircraftCategory || null,
 				iconName: getAircraftIconName(shape)

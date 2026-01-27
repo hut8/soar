@@ -8,6 +8,7 @@
 	import { getLogger } from '$lib/logging';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 	import type { TowFeeView } from '$lib/types/generated/TowFeeView';
+	import type { DataResponse, DataListResponse } from '$lib/types';
 
 	const logger = getLogger(['soar', 'ClubTowFeesPage']);
 
@@ -48,7 +49,7 @@
 		error = '';
 
 		try {
-			const response = await serverCall<{ data: ClubView }>(`/clubs/${clubId}`);
+			const response = await serverCall<DataResponse<ClubView>>(`/clubs/${clubId}`);
 			club = response.data;
 		} catch (err) {
 			logger.error('Error loading club: {error}', { error: err });
@@ -62,7 +63,7 @@
 		loadingFees = true;
 
 		try {
-			const response = await serverCall<{ data: TowFeeView[] }>(`/clubs/${clubId}/tow-fees`);
+			const response = await serverCall<DataListResponse<TowFeeView>>(`/clubs/${clubId}/tow-fees`);
 			towFees = response.data || [];
 		} catch (err) {
 			logger.error('Error loading tow fees: {error}', { error: err });

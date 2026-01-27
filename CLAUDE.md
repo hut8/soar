@@ -105,7 +105,7 @@ This ensures config changes are tracked in version control and can be reproduced
   - `grafana-dashboard-run-elevation.json` - Elevation processing and AGL
   - `grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
   - `grafana-dashboard-web.json` - Web server (`web` command)
-  - `grafana-dashboard-nats.json` - NATS/JetStream metrics
+  - `grafana-dashboard-nats.json` - NATS metrics
   - `grafana-dashboard-analytics.json` - Analytics API and cache performance
   - `grafana-dashboard-coverage.json` - Coverage API metrics
 
@@ -154,8 +154,8 @@ python3 infrastructure/dashboards/build.py --verify
 **Editing dashboards:**
 1. Edit individual panel files in `dashboards/panels/{dashboard}/`
 2. Edit panel order/layout in `dashboards/definitions/{dashboard}.json`
-3. Run `python3 infrastructure/dashboards/build.py` to regenerate
-4. Commit both the panel/definition changes AND the generated `grafana-dashboard-*.json` files
+3. Run `python3 infrastructure/dashboards/build.py` to verify your changes build correctly
+4. Commit only the panel/definition source files (built `grafana-dashboard-*.json` files are generated during deployment)
 
 ### Frontend Development Standards
 

@@ -1,11 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::users::User;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct UserView {
     pub id: Uuid,
@@ -17,6 +19,7 @@ pub struct UserView {
     pub email_verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[ts(type = "Record<string, unknown>")]
     pub settings: JsonValue,
     // Pilot qualification fields
     pub is_licensed: bool,

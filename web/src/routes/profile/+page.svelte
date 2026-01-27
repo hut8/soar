@@ -61,7 +61,7 @@
 			// Update local auth state
 			auth.updateUser({
 				...$auth.user,
-				clubId: undefined
+				clubId: null
 			});
 
 			clubName = null;

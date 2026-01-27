@@ -128,9 +128,9 @@
 		}
 	}
 
-	function formatCoordinates(lat: string | null, lng: string | null): string {
-		if (!lat || !lng) return 'Not available';
-		return `${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`;
+	function formatCoordinates(lat: number | null, lng: number | null): string {
+		if (lat == null || lng == null) return 'Not available';
+		return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 	}
 
 	function generateGoogleMapsUrl(airport: Airport): string {

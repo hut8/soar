@@ -179,7 +179,7 @@
 			const url = timestampHint
 				? `/raw-messages/${rawMessageId}?timestamp=${encodeURIComponent(timestampHint)}`
 				: `/raw-messages/${rawMessageId}`;
-			const response = await serverCall<{ data: RawMessageResponse }>(url);
+			const response = await serverCall<DataResponse<RawMessageResponse>>(url);
 			fixRawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';
@@ -306,11 +306,11 @@
 		try {
 			for (const batch of batches) {
 				const idsParam = batch.join(',');
-				const response = await serverCall<{ aircraft: Record<string, Aircraft> }>(
+				const response = await serverCall<DataResponse<Record<string, Aircraft>>>(
 					`/aircraft/bulk?ids=${encodeURIComponent(idsParam)}`
 				);
 				// Merge the aircraft into the map
-				Object.assign(aircraftMap, response.aircraft);
+				Object.assign(aircraftMap, response.data);
 			}
 		} catch (err) {
 			logger.error('Failed to load aircraft information: {error}', { error: err });
@@ -1267,9 +1267,9 @@
 															: ''}"
 													>
 														<td class="text-xs">
-															<div>{formatDateTime(fix.timestamp)}</div>
+															<div>{formatDateTime(fix.receivedAt)}</div>
 															<div class="text-surface-500-400-token">
-																{formatRelativeTime(fix.timestamp)}
+																{formatRelativeTime(fix.receivedAt)}
 															</div>
 														</td>
 														<td>
@@ -1339,9 +1339,9 @@
 										<div class="card p-4">
 											<div class="mb-3 flex items-start justify-between gap-2">
 												<div class="text-xs">
-													<div class="font-semibold">{formatDateTime(fix.timestamp)}</div>
+													<div class="font-semibold">{formatDateTime(fix.receivedAt)}</div>
 													<div class="text-surface-500-400-token">
-														{formatRelativeTime(fix.timestamp)}
+														{formatRelativeTime(fix.receivedAt)}
 													</div>
 												</div>
 											</div>

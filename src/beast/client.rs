@@ -52,7 +52,7 @@ impl Default for BeastClientConfig {
 }
 
 /// Beast client that connects to a Beast-format ADS-B server via TCP
-/// Publishes raw Beast messages to JetStream for processing
+/// Publishes raw Beast messages for processing
 pub struct BeastClient {
     config: BeastClientConfig,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
@@ -101,7 +101,7 @@ impl BeastClient {
         // Create bounded channel for raw Beast messages from TCP socket
         let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
         info!(
-            "Created raw message queue with capacity {} for JetStream publishing",
+            "Created raw message queue with capacity {}",
             RAW_MESSAGE_QUEUE_SIZE
         );
 
@@ -153,14 +153,14 @@ impl BeastClient {
                                     // Warn if publish took more than 100ms
                                     if publish_duration.as_millis() > 100 {
                                         warn!(
-                                            "Slow JetStream publish: {}ms",
+                                            "Slow publish: {}ms",
                                             publish_duration.as_millis()
                                         );
                                         metrics::counter!("beast.nats.slow_publish_total").increment(1);
                                     }
                                 }
                                 Err(_) => {
-                                    error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
+                                    error!("Publish timed out after 5 seconds");
                                     metrics::counter!("beast.nats.publish_timeout_total").increment(1);
 
                                     // Report timeout to Sentry (throttled)
@@ -1040,7 +1040,7 @@ impl BeastClient {
     }
 
     /// Process an established Beast connection
-    /// Reads raw Beast frames and publishes them to JetStream
+    /// Reads raw Beast frames and publishes them to the message queue
     #[tracing::instrument(skip(stream, raw_message_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
     async fn process_connection(
         mut stream: TcpStream,
@@ -1237,7 +1237,7 @@ impl BeastClient {
         }
     }
 
-    /// Publish a Beast frame to JetStream with timestamp
+    /// Publish a Beast frame to the message queue with timestamp
     /// Format: 8-byte Unix timestamp (microseconds as i64) + raw Beast frame bytes
     async fn publish_frame(raw_message_tx: &flume::Sender<Vec<u8>>, frame: Vec<u8>) {
         if frame.is_empty() {

@@ -4,6 +4,7 @@ use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::Fix;
@@ -11,7 +12,8 @@ use crate::aircraft::{AddressType, Aircraft};
 use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spline_path};
 
 /// Flight state enum representing the current status of a flight
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "snake_case")]
 pub enum FlightState {
     /// Flight is currently active (no landing_time, no timed_out_at, last_fix_at within 10 minutes)

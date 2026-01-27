@@ -665,9 +665,9 @@
 									</div>
 									<div class="col-span-2">
 										<dd>
-											Last seen {formatTimestamp(positionFix.timestamp).relative}
+											Last seen {formatTimestamp(positionFix.receivedAt).relative}
 											<div class="text-xs text-surface-500 dark:text-surface-500">
-												{formatTimestamp(positionFix.timestamp).absolute}
+												{formatTimestamp(positionFix.receivedAt).absolute}
 											</div>
 										</dd>
 									</div>

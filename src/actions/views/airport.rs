@@ -1,6 +1,7 @@
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
+use ts_rs::TS;
 
 use crate::airports::Airport;
 use crate::runways::Runway;
@@ -35,7 +36,8 @@ fn calculate_endpoint(
     (new_lat, new_lon)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct RunwayEnd {
     pub ident: Option<String>,
@@ -46,7 +48,8 @@ pub struct RunwayEnd {
     pub displaced_threshold_ft: Option<i32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct RunwayView {
     pub id: i32,
@@ -168,14 +171,17 @@ impl From<Runway> for RunwayView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AirportView {
     pub id: i32,
     pub ident: String,
     pub airport_type: String,
     pub name: String,
+    #[ts(type = "number | null")]
     pub latitude_deg: Option<BigDecimal>,
+    #[ts(type = "number | null")]
     pub longitude_deg: Option<BigDecimal>,
     pub elevation_ft: Option<i32>,
     pub continent: Option<String>,

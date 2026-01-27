@@ -2,28 +2,45 @@
 
 This directory contains Grafana dashboard configurations for monitoring SOAR metrics.
 
-## Dashboards
+## Dashboard Sources
 
-### Web & API
-- **grafana-dashboard-web.json** - Web server metrics (HTTP requests, elevation lookups)
-- **grafana-dashboard-analytics.json** - Analytics API and cache performance
+Dashboards are built from modular source files. The built `grafana-dashboard-*.json` files are **not committed to the repository** - they are generated during deployment.
 
-### Ingestion Services
-- **grafana-dashboard-ingest-ogn.json** - OGN/APRS ingestion (`ingest-ogn` command)
-- **grafana-dashboard-ingest-adsb.json** - ADS-B Beast ingestion (`ingest-adsb` command)
+### Source Structure
+- `dashboards/definitions/` - Dashboard definitions (panel order, rows, metadata)
+- `dashboards/panels/{dashboard}/` - Individual panel JSON files
+- `dashboards/common/` - Shared configs (annotations, templating variables)
+- `dashboards/build.py` - Build script
 
-### Run Command (APRS Processing)
-The `soar run` command dashboard has been split into focused sub-dashboards:
+### Available Dashboards
 
-- **grafana-dashboard-run-core.json** - Core system metrics (process, database, NATS publisher, latency)
-- **grafana-dashboard-run-ingestion.json** - Data ingestion pipelines (OGN, Beast/ADS-B)
-- **grafana-dashboard-run-routing.json** - Packet processing and routing (parser, router, queues)
-- **grafana-dashboard-run-flights.json** - Aircraft and flight tracking (active flights, coalesce)
-- **grafana-dashboard-run-geocoding.json** - Pelias geocoding service metrics
-- **grafana-dashboard-run-elevation.json** - Elevation processing and AGL calculations
+| Dashboard | Definition | Description |
+|-----------|------------|-------------|
+| SOAR Ingest | `ingest.json` | OGN/APRS and ADS-B data ingestion |
+| SOAR Run | `run.json` | Main processing service metrics |
+| SOAR Run - Geocoding | `run-geocoding.json` | Pelias geocoding service |
+| SOAR Run - Elevation | `run-elevation.json` | Elevation processing and AGL |
+| SOAR Web | `web.json` | Web server and API metrics |
+| SOAR Analytics | `analytics.json` | Analytics API and cache |
+| SOAR NATS | `nats.json` | NATS messaging metrics |
+| SOAR Coverage | `coverage.json` | Coverage API metrics |
 
-### NATS Messaging
-- **grafana-dashboard-nats.json** - NATS/JetStream metrics
+## Building Dashboards Manually
+
+To build dashboards locally (e.g., for testing changes before deployment):
+
+```bash
+# Build all dashboards
+python3 infrastructure/dashboards/build.py
+
+# Build a specific dashboard
+python3 infrastructure/dashboards/build.py ingest
+
+# Verify all dashboards build correctly (without writing files)
+python3 infrastructure/dashboards/build.py --verify
+```
+
+This generates `grafana-dashboard-*.json` files in the `infrastructure/` directory.
 
 ## Automated Deployment (Recommended)
 

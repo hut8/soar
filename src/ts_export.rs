@@ -5,9 +5,14 @@ mod tests {
     use ts_rs::TS;
 
     use crate::actions::club_tow_fees::TowFeeView;
-    use crate::actions::views::{Aircraft, AircraftView, ClubView};
+    use crate::actions::views::{
+        Aircraft, AircraftView, AirportView, ClubView, FlightView, ReceiverView, RunwayEnd,
+        RunwayView, UserView,
+    };
+    use crate::aircraft::AddressType;
     use crate::aircraft_types::AircraftCategory;
     use crate::fixes::Fix;
+    use crate::flights::FlightState;
     use crate::geofence::{
         AircraftGeofence, CreateGeofenceRequest, Geofence, GeofenceDetailResponse,
         GeofenceExitEvent, GeofenceExitEventsResponse, GeofenceLayer, GeofenceListResponse,
@@ -23,6 +28,14 @@ mod tests {
         AircraftCategory::export().expect("Failed to export AircraftCategory type");
         ClubView::export().expect("Failed to export ClubView type");
         TowFeeView::export().expect("Failed to export TowFeeView type");
+        FlightView::export().expect("Failed to export FlightView type");
+        FlightState::export().expect("Failed to export FlightState type");
+        AddressType::export().expect("Failed to export AddressType type");
+        UserView::export().expect("Failed to export UserView type");
+        ReceiverView::export().expect("Failed to export ReceiverView type");
+        AirportView::export().expect("Failed to export AirportView type");
+        RunwayView::export().expect("Failed to export RunwayView type");
+        RunwayEnd::export().expect("Failed to export RunwayEnd type");
 
         // Geofence types
         GeofenceLayer::export().expect("Failed to export GeofenceLayer type");

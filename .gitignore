@@ -23,6 +23,9 @@ test-results
 infrastructure/grafana-provisioning/alerting/contact-points.yml
 infrastructure/systemd/grafana-server.service.d-smtp.conf
 
+# Built Grafana dashboards (generated during deployment from dashboards/ sources)
+infrastructure/grafana-dashboard-*.json
+
 # OpenTelemetry data directories
 infrastructure/tempo-data/
 infrastructure/loki-data/

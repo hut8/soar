@@ -3,7 +3,7 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { Fix, FixWithExtras, RawMessageResponse } from '$lib/types';
+	import type { Fix, FixWithExtras, RawMessageResponse, DataResponse } from '$lib/types';
 	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
@@ -66,7 +66,7 @@
 			const url = timestampHint
 				? `/raw-messages/${rawMessageId}?timestamp=${encodeURIComponent(timestampHint)}`
 				: `/raw-messages/${rawMessageId}`;
-			const response = await serverCall<{ data: RawMessageResponse }>(url);
+			const response = await serverCall<DataResponse<RawMessageResponse>>(url);
 			rawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';
@@ -167,8 +167,8 @@
 		// If fixes are in reverse chronological order (newest first), previousFix is the later timestamp
 		// We always want to calculate: later timestamp - earlier timestamp for positive intervals
 
-		const current = dayjs(currentFix.timestamp);
-		const previous = dayjs(previousFix.timestamp);
+		const current = dayjs(currentFix.receivedAt);
+		const previous = dayjs(previousFix.receivedAt);
 
 		let diffSeconds: number;
 		if (fixesInChronologicalOrder) {
@@ -196,8 +196,8 @@
 
 	function isIntervalOverHour(currentFix: Fix, previousFix: Fix | undefined): boolean {
 		if (!previousFix) return false;
-		const current = dayjs(currentFix.timestamp);
-		const previous = dayjs(previousFix.timestamp);
+		const current = dayjs(currentFix.receivedAt);
+		const previous = dayjs(previousFix.receivedAt);
 
 		let diffSeconds: number;
 		if (fixesInChronologicalOrder) {
@@ -292,8 +292,8 @@
 								? 'bg-surface-50-900-token'
 								: ''} {!fix.active ? 'opacity-50' : ''}"
 						>
-							<td class="px-3 py-2 text-sm" title={formatDate(fix.timestamp)}>
-								{formatFixTime(fix.timestamp)}
+							<td class="px-3 py-2 text-sm" title={formatDate(fix.receivedAt)}>
+								{formatFixTime(fix.receivedAt)}
 							</td>
 							{#if showTimeIntervals}
 								<td
@@ -368,9 +368,9 @@
 		<div class="space-y-4 md:hidden">
 			{#each fixes as fix, index (fix.id)}
 				<div class="card p-4 {!fix.active ? 'opacity-50' : ''}">
-					<div class="mb-3 text-sm" title={formatDate(fix.timestamp)}>
-						<div class="font-semibold">{formatFixTime(fix.timestamp)}</div>
-						<div class="text-surface-500-400-token text-xs">{formatDate(fix.timestamp)}</div>
+					<div class="mb-3 text-sm" title={formatDate(fix.receivedAt)}>
+						<div class="font-semibold">{formatFixTime(fix.receivedAt)}</div>
+						<div class="text-surface-500-400-token text-xs">{formatDate(fix.receivedAt)}</div>
 						{#if showTimeIntervals}
 							<div
 								class="text-xs {isIntervalOverHour(fix, fixes[index - 1])

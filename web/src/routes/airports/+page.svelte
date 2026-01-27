@@ -49,17 +49,15 @@
 		}, 300);
 	}
 
-	function formatCoordinates(lat: string | null, lng: string | null): string {
-		if (!lat || !lng) return '—';
-		const latNum = parseFloat(lat);
-		const lngNum = parseFloat(lng);
-		const latDir = latNum >= 0 ? 'N' : 'S';
-		const lngDir = lngNum >= 0 ? 'E' : 'W';
-		return `${Math.abs(latNum).toFixed(4)}°${latDir}, ${Math.abs(lngNum).toFixed(4)}°${lngDir}`;
+	function formatCoordinates(lat: number | null, lng: number | null): string {
+		if (lat == null || lng == null) return '—';
+		const latDir = lat >= 0 ? 'N' : 'S';
+		const lngDir = lng >= 0 ? 'E' : 'W';
+		return `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
 	}
 
-	function getGoogleMapsUrl(lat: string | null, lng: string | null): string {
-		if (!lat || !lng) return '#';
+	function getGoogleMapsUrl(lat: number | null, lng: number | null): string {
+		if (lat == null || lng == null) return '#';
 		return `https://www.google.com/maps?q=${lat},${lng}`;
 	}
 

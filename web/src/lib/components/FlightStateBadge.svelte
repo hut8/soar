@@ -1,6 +1,8 @@
 <script lang="ts">
+	import type { FlightState } from '$lib/types';
+
 	interface Props {
-		state: 'active' | 'complete' | 'timed_out';
+		state: FlightState;
 	}
 
 	let { state }: Props = $props();
@@ -12,6 +14,11 @@
 				return {
 					classes: 'bg-green-500 text-white',
 					text: 'Status: Active'
+				};
+			case 'stale':
+				return {
+					classes: 'bg-yellow-500 text-white',
+					text: 'Status: Stale'
 				};
 			case 'complete':
 				return {

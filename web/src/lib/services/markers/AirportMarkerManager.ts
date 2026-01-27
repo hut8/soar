@@ -184,12 +184,12 @@ export class AirportMarkerManager {
 		this.airports.forEach((airport) => {
 			if (!airport.latitudeDeg || !airport.longitudeDeg) return;
 
-			// Convert BigDecimal strings to numbers with validation
-			const lat = parseFloat(airport.latitudeDeg);
-			const lng = parseFloat(airport.longitudeDeg);
+			// Get coordinates (now numbers, no parsing needed)
+			const lat = airport.latitudeDeg;
+			const lng = airport.longitudeDeg;
 
-			// Validate coordinates are valid numbers and within expected ranges
-			if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+			// Validate coordinates are within expected ranges
+			if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
 				logger.warn('Invalid coordinates for airport {ident}: {lat}, {lng}', {
 					ident: airport.ident,
 					lat,
