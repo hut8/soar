@@ -46,6 +46,8 @@ pub mod flight_tracker;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
+pub mod geofence;
+pub mod geofence_repo;
 pub mod geometry;
 pub mod icao;
 pub mod igc;

@@ -220,6 +220,43 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 - **Tailwind CSS**: Use utility-first CSS approach
 - **TypeScript**: Full type safety required
 
+#### TypeScript Type Generation (CRITICAL)
+**All data types returned from the Rust backend to the TypeScript frontend MUST be generated using ts-rs.**
+
+This ensures type safety across the API boundary and prevents drift between backend and frontend types.
+
+**How it works:**
+1. Add `#[derive(TS)]` and `#[ts(export, export_to = "../web/src/lib/types/generated/")]` to Rust structs
+2. Add export call in `src/ts_export.rs`
+3. Run `cargo test ts_export` to generate `.ts` files in `web/src/lib/types/generated/`
+4. Import and re-export from `web/src/lib/types/index.ts`
+
+**Example Rust struct:**
+```rust
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct MyApiResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
+```
+
+**Then in `src/ts_export.rs`:**
+```rust
+use crate::my_module::MyApiResponse;
+
+#[test]
+fn export_types() {
+    MyApiResponse::export().expect("Failed to export MyApiResponse type");
+}
+```
+
+**NEVER manually write TypeScript interfaces for API response types** - always generate them from Rust.
+
 ### Backend Development Standards
 
 #### Rust Code Quality (REQUIRED)

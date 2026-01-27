@@ -1,8 +1,6 @@
 import { browser, dev } from '$app/environment';
 import type { Aircraft, FixWithExtras, AircraftSearchResponse } from '$lib/types';
 import { AircraftRegistry } from './AircraftRegistry';
-import { backendMode } from '$lib/stores/backend';
-import { get } from 'svelte/store';
 import { getLogger } from '$lib/logging';
 
 const logger = getLogger(['soar', 'FixFeed']);
@@ -101,14 +99,20 @@ export class FixFeed {
 			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 			this.websocketUrl = `${protocol}//${window.location.host}/data/fixes/live`;
 		} else {
-			// Development mode - check backend mode setting
-			const mode = get(backendMode);
-			if (mode === 'dev') {
-				// Dev mode with local backend
-				this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
-			} else {
-				// Dev mode using staging backend
-				this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
+			// Development mode - read directly from localStorage to avoid race condition
+			const mode = localStorage.getItem('backendMode');
+			switch (mode) {
+				case 'dev':
+					this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
+					break;
+				case 'staging':
+					this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
+					break;
+				case 'prod':
+					this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+					break;
+				default:
+					this.websocketUrl = 'wss://staging.glider.flights/data/fixes/live';
 			}
 		}
 	}

@@ -13,6 +13,11 @@ mod tests {
     use crate::aircraft_types::AircraftCategory;
     use crate::fixes::Fix;
     use crate::flights::FlightState;
+    use crate::geofence::{
+        AircraftGeofence, CreateGeofenceRequest, Geofence, GeofenceDetailResponse,
+        GeofenceExitEvent, GeofenceExitEventsResponse, GeofenceLayer, GeofenceListResponse,
+        GeofenceSubscriber, GeofenceWithCounts, UpdateGeofenceRequest,
+    };
 
     #[test]
     fn export_types() {
@@ -31,5 +36,19 @@ mod tests {
         AirportView::export().expect("Failed to export AirportView type");
         RunwayView::export().expect("Failed to export RunwayView type");
         RunwayEnd::export().expect("Failed to export RunwayEnd type");
+
+        // Geofence types
+        GeofenceLayer::export().expect("Failed to export GeofenceLayer type");
+        Geofence::export().expect("Failed to export Geofence type");
+        CreateGeofenceRequest::export().expect("Failed to export CreateGeofenceRequest type");
+        UpdateGeofenceRequest::export().expect("Failed to export UpdateGeofenceRequest type");
+        GeofenceSubscriber::export().expect("Failed to export GeofenceSubscriber type");
+        AircraftGeofence::export().expect("Failed to export AircraftGeofence type");
+        GeofenceExitEvent::export().expect("Failed to export GeofenceExitEvent type");
+        GeofenceWithCounts::export().expect("Failed to export GeofenceWithCounts type");
+        GeofenceListResponse::export().expect("Failed to export GeofenceListResponse type");
+        GeofenceDetailResponse::export().expect("Failed to export GeofenceDetailResponse type");
+        GeofenceExitEventsResponse::export()
+            .expect("Failed to export GeofenceExitEventsResponse type");
     }
 }
