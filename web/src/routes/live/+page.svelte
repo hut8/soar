@@ -27,10 +27,11 @@
 	import { loadMapState, saveMapState } from '$lib/utils/mapStatePersistence';
 	import { serverCall } from '$lib/api/server';
 	import {
-		getAircraftIconUrl,
+		createAircraftIconDataUrl,
 		getAircraftIconName,
 		getAllIconShapes,
-		ALTITUDE_COLORS
+		getIconShapeForCategory,
+		createAltitudeColorExpression
 	} from '$lib/utils/aircraftIcons';
 	import {
 		AirspaceLayerManager,
@@ -234,6 +235,8 @@
 
 	// Convert aircraft to GeoJSON feature
 	function aircraftToFeature(aircraft: Aircraft, fix: Fix): GeoJSON.Feature<GeoJSON.Point> {
+		// Get icon shape based on aircraft category
+		const shape = getIconShapeForCategory(aircraft.aircraftCategory);
 		return {
 			type: 'Feature',
 			geometry: {
@@ -243,13 +246,13 @@
 			properties: {
 				id: aircraft.id,
 				registration: aircraft.registration || aircraft.address,
-				altitude: fix.altitudeMslFeet || 0,
+				altitude: fix.altitudeMslFeet, // Used by altitude color expression (null = gray)
 				track: fix.trackDegrees || 0,
 				isActive: fix.active,
 				timestamp: fix.timestamp,
 				aircraftModel: aircraft.aircraftModel || '',
 				aircraftCategory: aircraft.aircraftCategory || null,
-				iconName: getAircraftIconName(aircraft.aircraftCategory, fix.altitudeMslFeet)
+				iconName: getAircraftIconName(shape)
 			}
 		};
 	}
@@ -338,40 +341,40 @@
 	}
 
 	// Add aircraft icon images to the map
-	// Loads PNG icons for all shape+color combinations (7 shapes × 9 colors = 63 icons)
+	// Registers one icon per shape (7 total) - colors are applied at runtime via SDF
 	async function addAircraftIcons() {
 		if (!map) return;
 
 		const shapes = getAllIconShapes();
+		const iconSize = 48; // Icon size in pixels
 		const loadPromises: Promise<void>[] = [];
 
 		for (const shape of shapes) {
-			for (const { name: colorName } of ALTITUDE_COLORS) {
-				const iconName = `aircraft-${shape}-${colorName}`;
-				const iconUrl = getAircraftIconUrl(shape, colorName);
+			const iconName = getAircraftIconName(shape);
+			const iconUrl = createAircraftIconDataUrl(shape, iconSize);
 
-				loadPromises.push(
-					new Promise<void>((resolve) => {
-						const img = new Image();
-						img.onload = () => {
-							if (map && !map.hasImage(iconName)) {
-								map.addImage(iconName, img, { sdf: false });
-							}
-							resolve();
-						};
-						img.onerror = () => {
-							logger.warn('[AIRCRAFT] Failed to load icon: {iconName}', { iconName });
-							resolve();
-						};
-						img.src = iconUrl;
-					})
-				);
-			}
+			loadPromises.push(
+				new Promise<void>((resolve) => {
+					const img = new Image();
+					img.onload = () => {
+						if (map && !map.hasImage(iconName)) {
+							// SDF mode allows runtime coloring via icon-color
+							map.addImage(iconName, img, { sdf: true });
+						}
+						resolve();
+					};
+					img.onerror = () => {
+						logger.warn('[AIRCRAFT] Failed to load icon: {iconName}', { iconName });
+						resolve();
+					};
+					img.src = iconUrl;
+				})
+			);
 		}
 
 		await Promise.all(loadPromises);
 		logger.debug('[AIRCRAFT] Registered {count} aircraft icons', {
-			count: shapes.length * ALTITUDE_COLORS.length
+			count: shapes.length
 		});
 	}
 
@@ -388,7 +391,7 @@
 			data: createAircraftGeoJson()
 		});
 
-		// Add aircraft markers with rotated icons
+		// Add aircraft markers with rotated icons and fluid altitude coloring
 		map.addLayer({
 			id: 'aircraft-markers',
 			type: 'symbol',
@@ -399,6 +402,10 @@
 				'icon-rotate': ['get', 'track'],
 				'icon-rotation-alignment': 'map',
 				'icon-allow-overlap': true
+			},
+			paint: {
+				// Fluid altitude-based coloring (red at ground -> light blue at 40k ft)
+				'icon-color': createAltitudeColorExpression()
 			}
 		});
 

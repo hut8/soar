@@ -506,29 +506,7 @@
 									</div>
 								{/if}
 
-								<div class="grid grid-cols-3 gap-4">
-									<div>
-										<dd class="text-sm">
-											<span
-												class="badge preset-filled-{selectedAircraft.tracked
-													? 'success-500'
-													: 'warning-500'}"
-											>
-												{selectedAircraft.tracked ? 'Tracked' : 'Not tracked'}
-											</span>
-										</dd>
-									</div>
-									<div>
-										<dd class="text-sm">
-											<span
-												class="badge preset-filled-{selectedAircraft.identified
-													? 'success-500'
-													: 'warning-500'}"
-											>
-												{selectedAircraft.identified ? 'Identified' : 'Not identified'}
-											</span>
-										</dd>
-									</div>
+								<div class="grid grid-cols-2 gap-4">
 									<div>
 										<dd class="text-sm">
 											<span
@@ -536,7 +514,18 @@
 													? 'preset-filled-success-500'
 													: 'preset-filled-secondary-500'}"
 											>
-												{selectedAircraft.fromOgnDdb ? 'From OGN DB' : 'Not in OGN DB'}
+												{selectedAircraft.fromOgnDdb ? 'In OGN DB' : 'Not in OGN DB'}
+											</span>
+										</dd>
+									</div>
+									<div>
+										<dd class="text-sm">
+											<span
+												class="badge {selectedAircraft.fromAdsbxDdb
+													? 'preset-filled-success-500'
+													: 'preset-filled-secondary-500'}"
+											>
+												{selectedAircraft.fromAdsbxDdb ? 'In ADSBX DB' : 'Not in ADSBX DB'}
 											</span>
 										</dd>
 									</div>
