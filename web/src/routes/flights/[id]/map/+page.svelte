@@ -6,7 +6,14 @@
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Receiver, PathPoint, DataListResponse } from '$lib/types';
+	import type {
+		Receiver,
+		PathPoint,
+		DataListResponse,
+		DataResponse,
+		Flight,
+		Fix
+	} from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -91,13 +98,13 @@
 
 		if (interval === 0) return indices; // Too few fixes for intervals
 
-		let lastArrowTimestamp = new Date(fixesInOrder[0].timestamp).getTime();
+		let lastArrowTimestamp = new Date(fixesInOrder[0].receivedAt).getTime();
 		const oneMinuteMs = 60 * 1000; // 1 minute in milliseconds
 
 		// Check each 10% marker
 		for (let i = 1; i <= 10; i++) {
 			const candidateIndex = Math.min(i * interval, totalFixes - 1);
-			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].timestamp).getTime();
+			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].receivedAt).getTime();
 
 			// Only add if at least 1 minute has passed since last arrow
 			if (candidateTimestamp - lastArrowTimestamp >= oneMinuteMs) {
@@ -288,7 +295,7 @@
 	async function pollForUpdates() {
 		try {
 			// Get the timestamp of the most recent fix (fixes are in DESC order, so first element is newest)
-			const latestFixTimestamp = data.fixes.length > 0 ? data.fixes[0].timestamp : null;
+			const latestFixTimestamp = data.fixes.length > 0 ? data.fixes[0].receivedAt : null;
 
 			// Build URL with 'after' parameter if we have fixes
 			const fixesUrl = latestFixTimestamp
@@ -296,21 +303,16 @@
 				: `/flights/${data.flight.id}/fixes`;
 
 			const [flightResponse, fixesResponse] = await Promise.all([
-				serverCall<{
-					flight: typeof data.flight;
-				}>(`/flights/${data.flight.id}`),
-				serverCall<{
-					fixes: typeof data.fixes;
-					count: number;
-				}>(fixesUrl)
+				serverCall<DataResponse<Flight>>(`/flights/${data.flight.id}`),
+				serverCall<DataListResponse<Fix>>(fixesUrl)
 			]);
 
-			data.flight = flightResponse.flight;
+			data.flight = flightResponse.data;
 			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
-			if (fixesResponse.fixes.length > 0) {
-				data.fixes = [...fixesResponse.fixes, ...data.fixes];
+			if (fixesResponse.data.length > 0) {
+				data.fixes = [...fixesResponse.data, ...data.fixes];
 				data.fixesCount = data.fixes.length;
 			}
 
@@ -319,7 +321,7 @@
 			}
 
 			// Only update map if we got new fixes (chart will update automatically via reactivity)
-			if (fixesResponse.fixes.length > 0) {
+			if (fixesResponse.data.length > 0) {
 				updateMap();
 			}
 		} catch (err) {
@@ -424,7 +426,7 @@
 				const climbRate = fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 				const groundSpeed =
 					fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
-				const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+				const timestamp = dayjs(fix.receivedAt).format('h:mm:ss A');
 
 				const content = `
 					<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">

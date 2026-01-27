@@ -442,7 +442,7 @@ impl BeastProcessor {
 
 ## Phase 4: Run Command Integration
 
-### Step 4.1: Add Beast JetStream Consumer
+### Step 4.1: Add Beast Message Consumer
 
 **File**: `src/commands/run.rs` (modifications)
 
@@ -465,14 +465,14 @@ let (beast_stream_name, beast_subject) = if is_production {
 
 // Create Beast intake queue
 let (beast_intake_tx, beast_intake_rx) =
-    flume::bounded::<String>(JETSTREAM_INTAKE_QUEUE_SIZE);
+    flume::bounded::<String>(INTAKE_QUEUE_SIZE);
 
 info!(
     "Created Beast intake queue with capacity {}",
-    JETSTREAM_INTAKE_QUEUE_SIZE
+    INTAKE_QUEUE_SIZE
 );
 
-// Spawn Beast JetStream consumer
+// Spawn Beast message consumer
 let beast_consumer_handle = tokio::spawn({
     let nats_client = nats_client.clone();
     let beast_stream_name = beast_stream_name.clone();
@@ -480,7 +480,7 @@ let beast_consumer_handle = tokio::spawn({
     let beast_intake_tx = beast_intake_tx.clone();
 
     async move {
-        consume_beast_jetstream(
+        consume_beast_messages(
             nats_client,
             &beast_stream_name,
             &beast_subject,
@@ -533,16 +533,15 @@ async fn process_beast_intake(
     }
 }
 
-/// Consume Beast messages from JetStream
-async fn consume_beast_jetstream(
+/// Consume Beast messages from the message queue
+async fn consume_beast_messages(
     nats_client: async_nats::Client,
     stream_name: &str,
     subject: &str,
     intake_tx: flume::Sender<String>,
 ) -> Result<()> {
-    // Similar to APRS JetStream consumer
     // Pull from Beast stream, send to intake queue
-    todo!("Implement Beast JetStream consumer")
+    todo!("Implement Beast message consumer")
 }
 ```
 
@@ -727,7 +726,7 @@ impl DeviceRepository {
 ### Integration Tests
 
 **File**: `tests/beast_integration_test.rs`
-- End-to-end: Beast message → JetStream → Database
+- End-to-end: Beast message → Message Queue → Database
 - Verify Fix created with correct fields
 - Verify JSONB metadata structure
 
@@ -770,7 +769,7 @@ impl DeviceRepository {
 ### New Metrics to Add
 
 **Beast Ingestion**:
-- `beast.messages.received` - Total Beast messages from JetStream
+- `beast.messages.received` - Total Beast messages received
 - `beast.frames.decoded` - Successfully decoded frames
 - `beast.parse.failed` - Failed rs1090 decodes
 - `beast.cpr.pending` - Positions waiting for CPR pair

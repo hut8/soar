@@ -152,7 +152,7 @@ export class AircraftRegistry {
 			const existingFix = existing.aircraft.currentFix as Fix;
 			const newFix = currentFix as Fix;
 			// Keep the newer fix
-			if (new Date(existingFix.timestamp) > new Date(newFix.timestamp)) {
+			if (new Date(existingFix.receivedAt) > new Date(newFix.receivedAt)) {
 				currentFix = existing.aircraft.currentFix;
 			}
 		} else if (existing?.aircraft.currentFix && !currentFix) {
@@ -219,7 +219,7 @@ export class AircraftRegistry {
 	public async updateCurrentFix(fix: Fix): Promise<Aircraft | null> {
 		logger.debug('Updating current fix for aircraft: {aircraftId} {timestamp} {lat} {lng}', {
 			aircraftId: fix.aircraftId,
-			timestamp: fix.timestamp,
+			timestamp: fix.receivedAt,
 			lat: fix.latitude,
 			lng: fix.longitude
 		});
@@ -257,8 +257,8 @@ export class AircraftRegistry {
 
 		// Update the current fix (only if newer than existing)
 		const existingFix = cached.aircraft.currentFix as Fix | null;
-		const existingTimestamp = existingFix ? new Date(existingFix.timestamp).getTime() : 0;
-		const newTimestamp = new Date(fix.timestamp).getTime();
+		const existingTimestamp = existingFix ? new Date(existingFix.receivedAt).getTime() : 0;
+		const newTimestamp = new Date(fix.receivedAt).getTime();
 
 		if (newTimestamp >= existingTimestamp) {
 			cached.aircraft = { ...cached.aircraft, currentFix: fix };
@@ -292,7 +292,7 @@ export class AircraftRegistry {
 		return this.getAllAircraft().filter((aircraft) => {
 			const currentFix = aircraft.currentFix as Fix | null;
 			if (!currentFix) return false;
-			return new Date(currentFix.timestamp).getTime() > cutoffTime;
+			return new Date(currentFix.receivedAt).getTime() > cutoffTime;
 		});
 	}
 

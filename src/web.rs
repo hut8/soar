@@ -778,6 +778,47 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             delete(actions::remove_from_watchlist),
         )
         .route("/watchlist/clear", delete(actions::clear_watchlist))
+        // Geofence routes
+        .route("/geofences", get(actions::geofences::list_geofences))
+        .route("/geofences", post(actions::geofences::create_geofence))
+        .route("/geofences/{id}", get(actions::geofences::get_geofence))
+        .route("/geofences/{id}", put(actions::geofences::update_geofence))
+        .route(
+            "/geofences/{id}",
+            delete(actions::geofences::delete_geofence),
+        )
+        .route(
+            "/geofences/{id}/aircraft",
+            get(actions::geofences::get_geofence_aircraft),
+        )
+        .route(
+            "/geofences/{id}/aircraft",
+            post(actions::geofences::add_geofence_aircraft),
+        )
+        .route(
+            "/geofences/{geofence_id}/aircraft/{aircraft_id}",
+            delete(actions::geofences::remove_geofence_aircraft),
+        )
+        .route(
+            "/geofences/{id}/subscribers",
+            get(actions::geofences::get_geofence_subscribers),
+        )
+        .route(
+            "/geofences/{id}/subscribers",
+            post(actions::geofences::subscribe_to_geofence),
+        )
+        .route(
+            "/geofences/{geofence_id}/subscribers/{user_id}",
+            delete(actions::geofences::unsubscribe_from_geofence),
+        )
+        .route(
+            "/geofences/{id}/events",
+            get(actions::geofences::get_geofence_events),
+        )
+        .route(
+            "/flights/{id}/geofence-events",
+            get(actions::geofences::get_flight_geofence_events),
+        )
         // User location tracking
         .route("/user-fix", post(actions::create_user_fix))
         // Analytics routes

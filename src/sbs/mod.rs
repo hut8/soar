@@ -7,7 +7,7 @@ pub use parser::{SbsMessage, SbsMessageType, parse_sbs_message};
 use anyhow::Result;
 
 /// Trait for SBS message publishers
-/// Allows the SBS client to work with both JetStream and plain NATS publishers
+/// Allows the SBS client to work with different publisher implementations
 #[async_trait::async_trait]
 pub trait SbsPublisher: Clone + Send + Sync + 'static {
     /// Publish a message with fire-and-forget semantics

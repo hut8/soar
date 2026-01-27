@@ -8,7 +8,12 @@
 	const logger = getLogger(['soar', 'ReceiverCoverage']);
 	import { Loader, Calendar, Layers, Radio, Filter, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
-	import type { CoverageHexProperties, CoverageGeoJsonResponse, Receiver } from '$lib/types';
+	import type {
+		CoverageHexProperties,
+		CoverageGeoJsonResponse,
+		Receiver,
+		DataListResponse
+	} from '$lib/types';
 	import HexSamplesModal from '$lib/components/HexSamplesModal.svelte';
 
 	let mapContainer: HTMLDivElement;
@@ -67,7 +72,9 @@
 				east: east.toString()
 			});
 
-			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
+			const response = await serverCall<DataListResponse<Receiver>>(
+				`/receivers?${params.toString()}`
+			);
 			receivers = response.data || [];
 			logger.debug('Loaded {count} receivers in current view', { count: receivers.length });
 		} catch (err) {
@@ -443,7 +450,9 @@
 
 		try {
 			const params = new URLSearchParams({ query: query.trim() });
-			const response = await serverCall<{ data: Receiver[] }>(`/receivers?${params.toString()}`);
+			const response = await serverCall<DataListResponse<Receiver>>(
+				`/receivers?${params.toString()}`
+			);
 			receiverSearchResults = response.data || [];
 		} catch (err) {
 			logger.error('Failed to search receivers: {error}', { error: err });

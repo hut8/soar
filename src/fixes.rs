@@ -43,6 +43,7 @@ pub struct Fix {
     /// Protocol-specific metadata stored as JSONB
     /// For APRS: via, aprs_type, snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
     /// For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
+    #[ts(type = "Record<string, unknown> | null")]
     pub source_metadata: Option<serde_json::Value>,
 
     /// Associations

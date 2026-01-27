@@ -11,7 +11,7 @@ pub use decoder::{DecodedBeastMessage, decode_beast_frame};
 use anyhow::Result;
 
 /// Trait for Beast message publishers
-/// Allows the Beast client to work with both JetStream and plain NATS publishers
+/// Allows the Beast client to work with different publisher implementations
 #[async_trait::async_trait]
 pub trait BeastPublisher: Clone + Send + Sync + 'static {
     /// Publish a message with fire-and-forget semantics

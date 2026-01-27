@@ -54,7 +54,6 @@
     "connection-events-2",
     "data-rate",
     "message-rate",
-    "ads-b-frames-published-vs-dropped",
     {
       "row": "Queue Depths"
     },

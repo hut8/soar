@@ -237,13 +237,13 @@
 
 		if (interval === 0) return indices; // Too few fixes for intervals
 
-		let lastArrowTimestamp = new Date(fixesInOrder[0].timestamp).getTime();
+		let lastArrowTimestamp = new Date(fixesInOrder[0].receivedAt).getTime();
 		const oneMinuteMs = 60 * 1000; // 1 minute in milliseconds
 
 		// Check each 10% marker
 		for (let i = 1; i <= 10; i++) {
 			const candidateIndex = Math.min(i * interval, totalFixes - 1);
-			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].timestamp).getTime();
+			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].receivedAt).getTime();
 
 			// Only add if at least 1 minute has passed since last arrow
 			if (candidateTimestamp - lastArrowTimestamp >= oneMinuteMs) {
@@ -341,7 +341,7 @@
 			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
-			const fixTime = new Date(fix.timestamp);
+			const fixTime = new Date(fix.receivedAt);
 			const shouldShowArrow =
 				lastArrowTime === null || fixTime.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
 
@@ -395,7 +395,7 @@
 			const color = getFixColor(i, fix1.altitudeMslFeet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
-			const fix1Time = new Date(fix1.timestamp);
+			const fix1Time = new Date(fix1.receivedAt);
 			const shouldShowArrow =
 				lastArrowTime === null || fix1Time.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
 
@@ -663,11 +663,8 @@
 			if (map) {
 				// Fetch all fixes in parallel for better performance
 				const fixesPromises = nearbyFlights.map((nearbyFlight) =>
-					serverCall<{
-						fixes: Fix[];
-						count: number;
-					}>(`/flights/${nearbyFlight.id}/fixes`)
-						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
+					serverCall<DataListResponse<Fix>>(`/flights/${nearbyFlight.id}/fixes`)
+						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.data }))
 						.catch((err) => {
 							logger.error('Failed to fetch fixes for nearby flight {id}: {error}', {
 								id: nearbyFlight.id,
@@ -810,7 +807,7 @@
 	async function pollForUpdates() {
 		try {
 			// Get the timestamp of the most recent fix (fixes are in DESC order, so first element is newest)
-			const latestFixTimestamp = fixes.length > 0 ? fixes[0].timestamp : null;
+			const latestFixTimestamp = fixes.length > 0 ? fixes[0].receivedAt : null;
 
 			// Build URL with 'after' parameter if we have fixes
 			const fixesUrl = latestFixTimestamp
@@ -818,22 +815,17 @@
 				: `/flights/${data.flight.id}/fixes`;
 
 			const [flightResponse, fixesResponse] = await Promise.all([
-				serverCall<{
-					flight: typeof data.flight;
-				}>(`/flights/${data.flight.id}`),
-				serverCall<{
-					fixes: Fix[];
-					count: number;
-				}>(fixesUrl)
+				serverCall<DataResponse<Flight>>(`/flights/${data.flight.id}`),
+				serverCall<DataListResponse<Fix>>(fixesUrl)
 			]);
 
 			// Update flight data
-			data.flight = flightResponse.flight;
+			data.flight = flightResponse.data;
 			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
-			if (fixesResponse.fixes.length > 0) {
-				fixes = [...fixesResponse.fixes, ...fixes];
+			if (fixesResponse.data.length > 0) {
+				fixes = [...fixesResponse.data, ...fixes];
 				fixes.length = fixes.length;
 			}
 
@@ -843,7 +835,7 @@
 			}
 
 			// Only update map if we got new fixes (chart updates automatically via FlightProfile component)
-			if (fixesResponse.fixes.length > 0) {
+			if (fixesResponse.data.length > 0) {
 				updateMap();
 			}
 		} catch (err) {
@@ -946,7 +938,7 @@
 					const climbRate = fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 					const groundSpeed =
 						fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
-					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+					const timestamp = dayjs(fix.receivedAt).format('h:mm:ss A');
 
 					const content = `
 						<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
@@ -1190,7 +1182,7 @@
 							const climbRate = fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
 							const groundSpeed =
 								fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
-							const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+							const timestamp = dayjs(fix.receivedAt).format('h:mm:ss A');
 
 							const content = `
 							<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
@@ -1418,7 +1410,7 @@
 	const wasDetectedAirborne = $derived(!data.flight.takeoffTime);
 
 	// Format geocoded location
-	function formatLocation(city?: string, state?: string): string | null {
+	function formatLocation(city?: string | null, state?: string | null): string | null {
 		const parts: string[] = [];
 		if (city) parts.push(city);
 		if (state) parts.push(state);
@@ -1803,9 +1795,9 @@
 						<div class="text-surface-600-300-token text-sm">Latest fix</div>
 						<div class="font-semibold">
 							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(fixes[0].timestamp)}</span>
+							<span class="md:hidden">{formatDateTimeMobile(fixes[0].receivedAt)}</span>
 							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(fixes[0].timestamp)}</span>
+							<span class="hidden md:inline">{formatDateTime(fixes[0].receivedAt)}</span>
 						</div>
 						<div class="text-surface-600-300-token text-sm">
 							Most recent position update

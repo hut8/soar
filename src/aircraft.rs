@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tracing::{info, warn};
+use ts_rs::TS;
 
 // Diesel imports
 use chrono::{DateTime, Utc};
@@ -26,7 +27,10 @@ pub enum AircraftSource {
     Flarmnet,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+// Override ts-rs type to match custom serializer output (F, O, I, or empty string)
+#[ts(type = "\"F\" | \"O\" | \"I\" | \"\"")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AddressType")]
 pub enum AddressType {
     Flarm,

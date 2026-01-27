@@ -2,6 +2,8 @@ mod aircraft_state;
 mod aircraft_tracker;
 pub mod altitude;
 mod flight_lifecycle;
+pub mod geofence_alerts;
+pub mod geofence_detector;
 mod geometry;
 mod location;
 mod runway;
@@ -21,8 +23,10 @@ use crate::airports_repo::AirportsRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::geofence_repo::GeofenceRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
+use crate::users_repo::UsersRepository;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -58,6 +62,7 @@ pub(crate) type AircraftLocksMap = Arc<DashMap<Uuid, Arc<Mutex<()>>>>;
 
 /// Context for flight processing operations
 /// Contains all repositories and state needed for flight lifecycle management
+#[allow(dead_code)]
 pub(crate) struct FlightProcessorContext<'a> {
     pub flights_repo: &'a FlightsRepository,
     pub aircraft_repo: &'a AircraftRepository,
@@ -69,6 +74,8 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub magnetic_service: &'a crate::magnetic::MagneticService,
     pub aircraft_states: &'a AircraftStatesMap,
     pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
+    pub geofence_repo: &'a GeofenceRepository,
+    pub users_repo: &'a UsersRepository,
 }
 
 /// Simple flight tracker - just tracks which device is currently on which flight
@@ -80,6 +87,8 @@ pub struct FlightTracker {
     runways_repo: RunwaysRepository,
     fixes_repo: FixesRepository,
     locations_repo: LocationsRepository,
+    geofence_repo: GeofenceRepository,
+    users_repo: UsersRepository,
     elevation_db: ElevationDB,
     magnetic_service: crate::magnetic::MagneticService,
     // Unified aircraft state map: all aircraft seen in last 18 hours
@@ -103,6 +112,8 @@ impl Clone for FlightTracker {
             runways_repo: self.runways_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
             locations_repo: self.locations_repo.clone(),
+            geofence_repo: self.geofence_repo.clone(),
+            users_repo: self.users_repo.clone(),
             elevation_db: self.elevation_db.clone(),
             magnetic_service: self.magnetic_service.clone(),
             aircraft_states: Arc::clone(&self.aircraft_states),
@@ -124,6 +135,8 @@ impl FlightTracker {
             runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
             locations_repo: LocationsRepository::new(pool.clone()),
+            geofence_repo: GeofenceRepository::new(pool.clone()),
+            users_repo: UsersRepository::new(pool.clone()),
             elevation_db,
             magnetic_service,
             aircraft_states: Arc::new(DashMap::new()),
@@ -164,6 +177,8 @@ impl FlightTracker {
             magnetic_service: &self.magnetic_service,
             aircraft_states: &self.aircraft_states,
             pool: self.pool.clone(),
+            geofence_repo: &self.geofence_repo,
+            users_repo: &self.users_repo,
         }
     }
 
@@ -575,9 +590,75 @@ impl FlightTracker {
             // Update the latest fix timestamp for timeout detection
             // This ensures timeout checks use packet time, not wall clock time
             self.update_latest_fix_timestamp(fix.received_at);
+
+            // Check geofences for this aircraft (only if fix has a flight_id)
+            if fix.flight_id.is_some() {
+                self.check_geofences_for_fix(fix).await;
+            }
         }
 
         result
+    }
+
+    /// Check a fix against all geofences for the aircraft and process any exits
+    async fn check_geofences_for_fix(&self, fix: &Fix) {
+        // Get the previous geofence status from aircraft state
+        let previous_status = self
+            .aircraft_states
+            .get(&fix.aircraft_id)
+            .map(|state| state.geofence_status.clone())
+            .unwrap_or_default();
+
+        // Check the fix against all geofences
+        let (exits, new_status) = match geofence_alerts::check_geofences_for_aircraft(
+            fix,
+            &previous_status,
+            &self.geofence_repo,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                // Log but don't fail the fix processing
+                debug!(
+                    "Failed to check geofences for aircraft {}: {}",
+                    fix.aircraft_id, e
+                );
+                return;
+            }
+        };
+
+        // Update the geofence status in aircraft state
+        if !new_status.is_empty()
+            && let Some(mut state) = self.aircraft_states.get_mut(&fix.aircraft_id)
+        {
+            state.geofence_status = new_status;
+        }
+
+        // Process any exits (create events, send alerts)
+        if !exits.is_empty() {
+            // Get aircraft info for email
+            let (registration, model, hex) =
+                match self.device_repo.get_aircraft_by_id(fix.aircraft_id).await {
+                    Ok(Some(aircraft)) => (
+                        aircraft.registration.clone(),
+                        aircraft.aircraft_model.clone(),
+                        format!("{:06X}", aircraft.address),
+                    ),
+                    _ => (None, String::new(), String::new()),
+                };
+
+            geofence_alerts::process_geofence_exits(
+                fix,
+                exits,
+                &self.geofence_repo,
+                &self.users_repo,
+                registration,
+                model,
+                hex,
+            )
+            .await;
+        }
     }
 
     /// Get a flight by its ID

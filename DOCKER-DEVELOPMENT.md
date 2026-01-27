@@ -29,7 +29,7 @@ docker-compose -f docker-compose.dev.yml --env-file .env.docker up
 The Docker development environment includes:
 
 - **PostgreSQL 17 + PostGIS 3.5 + TimescaleDB + H3**: Custom-built database with all required extensions
-- **NATS JetStream**: Message broker for real-time aircraft tracking
+- **NATS**: Message broker for real-time aircraft tracking
 - **Rust Backend**: API server with hot reload via `cargo-watch`
 - **SvelteKit Frontend**: Web UI with Vite hot module replacement
 
@@ -46,7 +46,7 @@ All services are configured to work together out of the box. The database image 
 
 Data is persisted in a Docker volume (`soar_dev_postgres_data`).
 
-### NATS JetStream
+### NATS
 - **Client Port**: 4222
 - **Monitoring**: http://localhost:8222
 - **Connection**: `nats://localhost:4222`

@@ -102,11 +102,11 @@
 
 			for (let i = 0; i < fixesInOrder.length; i++) {
 				const fix = fixesInOrder[i];
-				const timestamp = new Date(fix.timestamp);
+				const timestamp = new Date(fix.receivedAt);
 
 				// Check for large time gap (except for first fix)
 				if (i > 0) {
-					const prevTimestamp = new Date(fixesInOrder[i - 1].timestamp);
+					const prevTimestamp = new Date(fixesInOrder[i - 1].receivedAt);
 					const timeDiff = timestamp.getTime() - prevTimestamp.getTime();
 
 					if (timeDiff > LARGE_GAP_THRESHOLD_MS) {

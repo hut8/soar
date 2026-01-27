@@ -85,6 +85,7 @@ impl From<UserRecord> for User {
     }
 }
 
+#[derive(Clone)]
 pub struct UsersRepository {
     pool: PgPool,
 }

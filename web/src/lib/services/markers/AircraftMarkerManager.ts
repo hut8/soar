@@ -85,7 +85,7 @@ export class AircraftMarkerManager {
 					lat: fix.latitude,
 					lng: fix.longitude,
 					alt: fix.altitudeMslFeet,
-					timestamp: fix.timestamp
+					timestamp: fix.receivedAt
 				},
 				mapExists: !!this.map
 			}
@@ -213,7 +213,7 @@ export class AircraftMarkerManager {
 
 		// Use proper aircraft registration, fallback to address
 		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
-		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
+		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
 		// Use aircraftModel string from aircraft
 		const aircraftModel = aircraft.aircraftModel || null;
 
@@ -250,7 +250,7 @@ export class AircraftMarkerManager {
 		markerContent.appendChild(infoLabel);
 
 		// Create the marker with proper title including aircraft model and full timestamp
-		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
+		const fullTimestamp = dayjs(fix.receivedAt).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = aircraft.aircraftModel
 			? `${tailNumber} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
@@ -347,7 +347,7 @@ export class AircraftMarkerManager {
 			if (tailDiv && altDiv) {
 				// Use proper aircraft registration, fallback to address
 				const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
-				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
+				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
 				// Use aircraftModel string from aircraft
 				const aircraftModel = aircraft.aircraftModel || null;
 
@@ -385,8 +385,8 @@ export class AircraftMarkerManager {
 		this.updateMarkerScale(markerContent, currentZoom);
 
 		// Update the marker title with full timestamp
-		const { altitudeText } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.timestamp);
-		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
+		const { altitudeText } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
+		const fullTimestamp = dayjs(fix.receivedAt).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = aircraft.aircraftModel
 			? `${aircraft.registration || aircraft.address} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${aircraft.registration || aircraft.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;

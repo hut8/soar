@@ -376,7 +376,7 @@
 								<tbody>
 									{#each fixes as fix (fix.id)}
 										<tr>
-											<td class="whitespace-nowrap">{formatTimestamp(fix.timestamp)}</td>
+											<td class="whitespace-nowrap">{formatTimestamp(fix.receivedAt)}</td>
 											<td>
 												{#if fix.aircraftId}
 													<a

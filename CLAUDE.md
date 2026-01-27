@@ -105,7 +105,7 @@ This ensures config changes are tracked in version control and can be reproduced
   - `grafana-dashboard-run-elevation.json` - Elevation processing and AGL
   - `grafana-dashboard-ingest.json` - Data ingestion (`ingest` command) - OGN/APRS and ADS-B
   - `grafana-dashboard-web.json` - Web server (`web` command)
-  - `grafana-dashboard-nats.json` - NATS/JetStream metrics
+  - `grafana-dashboard-nats.json` - NATS metrics
   - `grafana-dashboard-analytics.json` - Analytics API and cache performance
   - `grafana-dashboard-coverage.json` - Coverage API metrics
 
@@ -154,8 +154,8 @@ python3 infrastructure/dashboards/build.py --verify
 **Editing dashboards:**
 1. Edit individual panel files in `dashboards/panels/{dashboard}/`
 2. Edit panel order/layout in `dashboards/definitions/{dashboard}.json`
-3. Run `python3 infrastructure/dashboards/build.py` to regenerate
-4. Commit both the panel/definition changes AND the generated `grafana-dashboard-*.json` files
+3. Run `python3 infrastructure/dashboards/build.py` to verify your changes build correctly
+4. Commit only the panel/definition source files (built `grafana-dashboard-*.json` files are generated during deployment)
 
 ### Frontend Development Standards
 
@@ -219,6 +219,43 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 - **Skeleton UI**: Use `@skeletonlabs/skeleton-svelte` components (Svelte 5 compatible)
 - **Tailwind CSS**: Use utility-first CSS approach
 - **TypeScript**: Full type safety required
+
+#### TypeScript Type Generation (CRITICAL)
+**All data types returned from the Rust backend to the TypeScript frontend MUST be generated using ts-rs.**
+
+This ensures type safety across the API boundary and prevents drift between backend and frontend types.
+
+**How it works:**
+1. Add `#[derive(TS)]` and `#[ts(export, export_to = "../web/src/lib/types/generated/")]` to Rust structs
+2. Add export call in `src/ts_export.rs`
+3. Run `cargo test ts_export` to generate `.ts` files in `web/src/lib/types/generated/`
+4. Import and re-export from `web/src/lib/types/index.ts`
+
+**Example Rust struct:**
+```rust
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct MyApiResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
+```
+
+**Then in `src/ts_export.rs`:**
+```rust
+use crate::my_module::MyApiResponse;
+
+#[test]
+fn export_types() {
+    MyApiResponse::export().expect("Failed to export MyApiResponse type");
+}
+```
+
+**NEVER manually write TypeScript interfaces for API response types** - always generate them from Rust.
 
 ### Backend Development Standards
 

@@ -69,7 +69,7 @@ export function fixToARPosition(
 		altitudeFeet,
 		groundSpeedKnots: fix.groundSpeedKnots ?? null,
 		climbFpm: fix.climbFpm ?? null,
-		timestamp: fix.timestamp,
+		timestamp: fix.receivedAt,
 		distance,
 		bearing,
 		elevation

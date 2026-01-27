@@ -451,7 +451,7 @@ docker-compose -f docker-compose.dev.yml --env-file .env.docker up
 
 **What you get:**
 - ✅ PostgreSQL + PostGIS (no manual install)
-- ✅ NATS JetStream (no manual install)
+- ✅ NATS (no manual install)
 - ✅ Rust backend with hot reload
 - ✅ SvelteKit frontend with hot reload
 - ✅ All services configured and connected
