@@ -73,7 +73,7 @@ export function createAircraftEntity(
 	const color = altitudeToColor(altitude);
 
 	// Format altitude with time
-	const { altitudeText, isOld } = formatAltitudeWithTime(altitude, fix.timestamp);
+	const { altitudeText, isOld } = formatAltitudeWithTime(altitude, fix.receivedAt);
 
 	// Create icon URL with aircraft heading
 	const iconUrl = createAircraftIconSVG(color, fix.trackDegrees || 0);
@@ -115,7 +115,7 @@ export function createAircraftEntity(
 			registration: aircraft.registration,
 			fixId: fix.id,
 			altitude: altitude,
-			timestamp: fix.timestamp,
+			timestamp: fix.receivedAt,
 			isOld: isOld
 		}
 	});
@@ -192,8 +192,8 @@ export function createFlightPathEntity(
  * @returns Cesium Entity configured as airport marker
  */
 export function createAirportEntity(airport: Airport): Entity {
-	const latitude = parseFloat(airport.latitudeDeg || '0');
-	const longitude = parseFloat(airport.longitudeDeg || '0');
+	const latitude = airport.latitudeDeg ?? 0;
+	const longitude = airport.longitudeDeg ?? 0;
 	const elevation = (airport.elevationFt || 0) * FEET_TO_METERS;
 
 	// Create airport icon SVG with runway symbol

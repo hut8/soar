@@ -150,6 +150,7 @@ pub struct AircraftView {
     pub adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
     /// Current fix (latest position data for this aircraft)
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(type = "Fix | null")]
     pub current_fix: Option<serde_json::Value>,
 }
 

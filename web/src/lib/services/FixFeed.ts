@@ -157,7 +157,6 @@ export class FixFeed {
 							id: rawMessage.id,
 							aircraftId: rawMessage.aircraftId,
 							source: rawMessage.source || '',
-							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
 							longitude: rawMessage.longitude,
 							altitudeMslFeet: rawMessage.altitudeMslFeet,

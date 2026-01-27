@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::aircraft::{AddressType, address_type_from_str, address_type_to_str};
@@ -31,7 +32,8 @@ pub struct AircraftInfo {
 }
 
 /// Flight view for API responses with computed fields
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct FlightView {
     pub id: Uuid,
@@ -50,6 +52,7 @@ pub struct FlightView {
     pub state: FlightState,
 
     /// Duration of the flight in seconds (null if takeoff_time or landing_time is null)
+    #[ts(type = "number | null")]
     pub duration_seconds: Option<i64>,
 
     pub departure_airport: Option<String>,
@@ -70,6 +73,11 @@ pub struct FlightView {
     pub end_location_country: Option<String>,
 
     pub club_id: Option<Uuid>,
+
+    // Tow information (for glider flights)
+    pub towed_by_aircraft_id: Option<Uuid>,
+    pub towed_by_flight_id: Option<Uuid>,
+
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
     pub takeoff_runway_ident: Option<String>,
@@ -173,6 +181,8 @@ impl FlightView {
             end_location_state: end_location.state,
             end_location_country: end_location.country,
             club_id: flight.club_id,
+            towed_by_aircraft_id: flight.towed_by_aircraft_id,
+            towed_by_flight_id: flight.towed_by_flight_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,

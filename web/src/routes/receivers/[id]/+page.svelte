@@ -1267,9 +1267,9 @@
 															: ''}"
 													>
 														<td class="text-xs">
-															<div>{formatDateTime(fix.timestamp)}</div>
+															<div>{formatDateTime(fix.receivedAt)}</div>
 															<div class="text-surface-500-400-token">
-																{formatRelativeTime(fix.timestamp)}
+																{formatRelativeTime(fix.receivedAt)}
 															</div>
 														</td>
 														<td>
@@ -1339,9 +1339,9 @@
 										<div class="card p-4">
 											<div class="mb-3 flex items-start justify-between gap-2">
 												<div class="text-xs">
-													<div class="font-semibold">{formatDateTime(fix.timestamp)}</div>
+													<div class="font-semibold">{formatDateTime(fix.receivedAt)}</div>
 													<div class="text-surface-500-400-token">
-														{formatRelativeTime(fix.timestamp)}
+														{formatRelativeTime(fix.receivedAt)}
 													</div>
 												</div>
 											</div>

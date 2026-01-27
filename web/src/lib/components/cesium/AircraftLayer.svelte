@@ -471,7 +471,7 @@
 			}
 
 			// Update label if it exists
-			const { altitudeText } = formatAltitudeWithTime(altitude, fix.timestamp);
+			const { altitudeText } = formatAltitudeWithTime(altitude, fix.receivedAt);
 			const displayName = getAircraftTitle(aircraft);
 			if (existingEntity.label) {
 				existingEntity.label.text = new ConstantProperty(`${displayName}\n${altitudeText}`);

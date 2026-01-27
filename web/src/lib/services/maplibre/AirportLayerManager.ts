@@ -194,11 +194,11 @@ export class AirportLayerManager {
 		for (const airport of this.airports) {
 			if (!airport.latitudeDeg || !airport.longitudeDeg) continue;
 
-			const lat = parseFloat(airport.latitudeDeg);
-			const lng = parseFloat(airport.longitudeDeg);
+			const lat = airport.latitudeDeg;
+			const lng = airport.longitudeDeg;
 
 			// Validate coordinates
-			if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+			if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
 				continue;
 			}
 

@@ -240,7 +240,7 @@
 				altitude: fix.altitudeMslFeet || 0,
 				track: fix.trackDegrees || 0,
 				isActive: fix.active,
-				timestamp: fix.timestamp,
+				timestamp: fix.receivedAt,
 				aircraftModel: aircraft.aircraftModel || '',
 				iconName: getAircraftIconNameForAltitude(fix.altitudeMslFeet)
 			}
