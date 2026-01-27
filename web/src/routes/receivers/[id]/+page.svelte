@@ -179,7 +179,7 @@
 			const url = timestampHint
 				? `/raw-messages/${rawMessageId}?timestamp=${encodeURIComponent(timestampHint)}`
 				: `/raw-messages/${rawMessageId}`;
-			const response = await serverCall<{ data: RawMessageResponse }>(url);
+			const response = await serverCall<DataResponse<RawMessageResponse>>(url);
 			fixRawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';

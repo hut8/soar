@@ -3,7 +3,7 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { Fix, FixWithExtras, RawMessageResponse } from '$lib/types';
+	import type { Fix, FixWithExtras, RawMessageResponse, DataResponse } from '$lib/types';
 	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
@@ -66,7 +66,7 @@
 			const url = timestampHint
 				? `/raw-messages/${rawMessageId}?timestamp=${encodeURIComponent(timestampHint)}`
 				: `/raw-messages/${rawMessageId}`;
-			const response = await serverCall<{ data: RawMessageResponse }>(url);
+			const response = await serverCall<DataResponse<RawMessageResponse>>(url);
 			rawMessagesCache.set(rawMessageId, { data: response.data, loading: false });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch';

@@ -6,7 +6,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
-	import type { User } from '$lib/types';
+	import type { User, DataResponse } from '$lib/types';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 
 	const logger = getLogger(['soar', 'ClubPilotsPage']);
@@ -43,7 +43,7 @@
 		error = '';
 
 		try {
-			const response = await serverCall<{ data: ClubView }>(`/clubs/${clubId}`);
+			const response = await serverCall<DataResponse<ClubView>>(`/clubs/${clubId}`);
 			club = response.data;
 		} catch (err) {
 			logger.error('Error loading club: {error}', { error: err });
