@@ -193,9 +193,7 @@ where
         if let Ok(entries) = std::fs::read_dir(dir_path) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                // Segment files are 16-digit numbers
-                if name.len() == 16
-                    && name.chars().all(|c| c.is_ascii_digit())
+                if Self::is_valid_segment_name(&name)
                     && let Ok(meta) = entry.metadata()
                 {
                     total += meta.len();
@@ -206,6 +204,11 @@ where
         total
     }
 
+    /// Check if a filename is a valid segment name (16-digit number)
+    fn is_valid_segment_name(name: &str) -> bool {
+        name.len() == 16 && name.chars().all(|c| c.is_ascii_digit())
+    }
+
     /// List segment files sorted by name (oldest first)
     fn list_segments(&self) -> Vec<String> {
         let mut segments = Vec::new();
@@ -213,8 +216,7 @@ where
         if let Ok(entries) = std::fs::read_dir(&self.dir_path) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                // Segment files are 16-digit numbers
-                if name.len() == 16 && name.chars().all(|c| c.is_ascii_digit()) {
+                if Self::is_valid_segment_name(&name) {
                     segments.push(name);
                 }
             }
@@ -292,7 +294,10 @@ where
             // Invalidate write segment cache if this is the cached segment
             // (defensive - normally the write segment shouldn't be deleted while cached)
             {
-                let mut write_guard = self.write_segment.lock().unwrap();
+                let mut write_guard = self
+                    .write_segment
+                    .lock()
+                    .expect("write segment mutex poisoned");
                 if let Some(ref state) = *write_guard
                     && state.name == segment_name
                 {
@@ -304,7 +309,7 @@ where
 
             // Update cached total file size
             self.total_file_size_cached
-                .fetch_sub(file_size, Ordering::Relaxed);
+                .fetch_sub(file_size, Ordering::Release);
 
             debug!("Deleted drained segment: {}", segment_name);
             metrics::counter!(format!("queue.{}.segments_deleted_total", self.name)).increment(1);
@@ -737,7 +742,7 @@ where
 
         // Check total size limit using cached value (no directory scan!)
         if let Some(max_size) = self.max_total_size_bytes {
-            let current_size = self.total_file_size_cached.load(Ordering::Relaxed);
+            let current_size = self.total_file_size_cached.load(Ordering::Acquire);
             if current_size >= max_size {
                 anyhow::bail!(
                     "Queue total size limit exceeded: {}",
@@ -747,7 +752,10 @@ where
         }
 
         // Acquire write segment lock (std::sync::Mutex since no await points inside)
-        let mut write_segment_guard = self.write_segment.lock().unwrap();
+        let mut write_segment_guard = self
+            .write_segment
+            .lock()
+            .expect("write segment mutex poisoned");
 
         // Check if we need to rotate segments (current segment would exceed max size)
         let needs_rotation = if let Some(ref state) = *write_segment_guard {
@@ -799,7 +807,7 @@ where
 
         // Update global cached total file size
         self.total_file_size_cached
-            .fetch_add(message_disk_size, Ordering::Relaxed);
+            .fetch_add(message_disk_size, Ordering::Release);
 
         Ok(())
     }
@@ -852,7 +860,7 @@ where
 
         // Update cached total size for the new header
         self.total_file_size_cached
-            .fetch_add(HEADER_SIZE as u64, Ordering::Relaxed);
+            .fetch_add(HEADER_SIZE as u64, Ordering::Release);
 
         metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
 
