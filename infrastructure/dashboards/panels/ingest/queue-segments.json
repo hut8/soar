@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "ms",
+        "axisLabel": "segments/min",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -25,7 +25,7 @@
           "viz": false
         },
         "insertNulls": false,
-        "lineInterpolation": "smooth",
+        "lineInterpolation": "linear",
         "lineWidth": 2,
         "pointSize": 5,
         "scaleDistribution": {
@@ -52,15 +52,46 @@
           }
         ]
       },
-      "unit": "ms"
+      "unit": "short"
     },
-    "overrides": []
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Created"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "green",
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Deleted"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "blue",
+              "mode": "fixed"
+            }
+          }
+        ]
+      }
+    ]
   },
   "options": {
     "legend": {
       "calcs": [
         "lastNotNull",
-        "mean"
+        "sum"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -80,8 +111,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.5\"}",
-      "legendFormat": "P50",
+      "expr": "rate(queue_ingest_segments_created_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+      "legendFormat": "Created",
       "range": true,
       "refId": "A"
     },
@@ -91,12 +122,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.95\"}",
-      "legendFormat": "P95",
+      "expr": "rate(queue_ingest_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}[1m]) * 60",
+      "legendFormat": "Deleted",
       "range": true,
       "refId": "B"
     }
   ],
-  "title": "Socket Send Duration",
+  "title": "Queue Segments per Minute",
   "type": "timeseries"
 }

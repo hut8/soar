@@ -63,5 +63,6 @@
   ],
   "title": "Process Uptime",
   "type": "stat",
+  "_width": 8,
   "_height": 4
 }

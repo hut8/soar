@@ -337,7 +337,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         let send_start = std::time::Instant::now();
 
                         // Send pre-serialized envelope directly to socket
-                        match socket_client.send_serialized(serialized_envelope).await {
+                        match socket_client.send_serialized(&serialized_envelope).await {
                             Ok(_) => {
                                 // Track stats
                                 let send_duration_ms = send_start.elapsed().as_millis() as u64;
@@ -354,6 +354,17 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 // Update metric (no per-source breakdown since envelope is opaque here)
                                 metrics::histogram!("ingest.socket_send_duration_ms")
                                     .record(send_duration_ms as f64);
+
+                                // Calculate and record message lag (time between message creation and send)
+                                if let Ok(envelope) =
+                                    soar::protocol::deserialize_envelope(&serialized_envelope)
+                                {
+                                    let now_micros = chrono::Utc::now().timestamp_micros();
+                                    let lag_seconds = (now_micros - envelope.timestamp_micros)
+                                        as f64
+                                        / 1_000_000.0;
+                                    metrics::gauge!("ingest_message_lag_seconds").set(lag_seconds);
+                                }
 
                                 // Successfully delivered - commit the message
                                 if let Err(e) = queue_for_publisher.commit().await {
@@ -711,6 +722,9 @@ fn initialize_ingest_metrics() {
 
     // Socket send duration histogram
     metrics::histogram!("ingest.socket_send_duration_ms").record(0.0);
+
+    // Message lag (time between message creation and send to processor)
+    metrics::gauge!("ingest_message_lag_seconds").set(0.0);
 
     // Per-source receive rate metrics
     for source in &["OGN", "Beast", "SBS"] {

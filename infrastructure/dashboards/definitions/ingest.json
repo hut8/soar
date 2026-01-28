@@ -23,50 +23,34 @@
     {
       "row": "Process Metrics"
     },
-    "version",
-    "build-details",
     "process-uptime",
-    "process-status",
+    "cpu-usage",
     "process-memory-usage",
+    "process-status",
+    "ogn-connected",
+    "adsb-connected",
     {
-      "row": "OGN/APRS Connection"
+      "row": "Connections"
     },
-    "aprs-connection-status",
-    "connection-events",
-    "keepalive-messages-per-minute",
-    "connection-ingestion-errors",
+    "connection-events-combined",
+    "seconds-between-keepalives",
     {
-      "row": "OGN/APRS Message Processing"
+      "row": "Message Processing"
     },
     "messages-received-per-second",
     "messages-queued-per-second",
     {
-      "row": "Socket Publishing"
+      "row": "Publishing"
     },
-    "messages-sent-to-socket-per-minute",
+    "messages-sent-to-processor-per-second",
     "socket-send-errors",
     "socket-send-duration",
-    "slow-socket-sends-per-minute",
     {
-      "row": "ADS-B Connection & Data"
-    },
-    "ads-b-connection-status",
-    "connection-events-2",
-    "data-rate",
-    "message-rate",
-    {
-      "row": "Queue Depths"
+      "row": "Queue Status"
     },
     "memory-queue-depth",
     "disk-queue-size",
-    {
-      "row": "Queue Segments"
-    },
-    "queue-segments-created-per-minute",
-    "queue-segments-deleted-per-minute",
-    {
-      "row": "Backpressure Events"
-    },
-    "queue-capacity-pauses-backpressure-events"
+    "message-lag",
+    "queue-segments"
   ]
 }

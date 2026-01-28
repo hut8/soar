@@ -8,31 +8,42 @@
       "color": {
         "mode": "thresholds"
       },
-      "mappings": [],
+      "mappings": [
+        {
+          "options": {
+            "0": {
+              "color": "red",
+              "index": 1,
+              "text": "Disconnected"
+            },
+            "1": {
+              "color": "green",
+              "index": 0,
+              "text": "Connected"
+            }
+          },
+          "type": "value"
+        }
+      ],
       "thresholds": {
         "mode": "absolute",
         "steps": [
           {
-            "color": "green",
-            "value": 0
-          },
-          {
-            "color": "yellow",
-            "value": 524288000
-          },
-          {
             "color": "red",
-            "value": 1073741824
+            "value": null
+          },
+          {
+            "color": "green",
+            "value": 1
           }
         ]
-      },
-      "unit": "bytes"
+      }
     },
     "overrides": []
   },
   "options": {
-    "colorMode": "value",
-    "graphMode": "area",
+    "colorMode": "background",
+    "graphMode": "none",
     "justifyMode": "auto",
     "orientation": "auto",
     "percentChangeColorMode": "standard",
@@ -55,13 +66,13 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "process_memory_bytes{component=\"ingest\",environment=~\"$environment\"}",
-      "legendFormat": "SOAR Ingest OGN",
+      "expr": "aprs_connection_connected{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "__auto",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Process Memory Usage",
+  "title": "OGN Connected",
   "type": "stat",
   "_width": 8,
   "_height": 4

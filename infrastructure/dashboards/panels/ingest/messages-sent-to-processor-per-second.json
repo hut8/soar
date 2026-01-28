@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "ms",
+        "axisLabel": "msg/s",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -52,7 +52,7 @@
           }
         ]
       },
-      "unit": "ms"
+      "unit": "short"
     },
     "overrides": []
   },
@@ -80,23 +80,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.5\"}",
-      "legendFormat": "P50",
+      "expr": "rate(socket_client_messages_sent_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "legendFormat": "Messages sent to processor",
       "range": true,
       "refId": "A"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.95\"}",
-      "legendFormat": "P95",
-      "range": true,
-      "refId": "B"
     }
   ],
-  "title": "Socket Send Duration",
+  "title": "Messages Sent to Processor per Second",
   "type": "timeseries"
 }

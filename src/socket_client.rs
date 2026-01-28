@@ -81,14 +81,14 @@ impl SocketClient {
 
         // Serialize and send
         let payload = serialize_envelope(&envelope)?;
-        self.send_serialized(payload).await
+        self.send_serialized(&payload).await
     }
 
     /// Send a pre-serialized envelope to soar-run
     ///
     /// Use this when you have already-serialized protobuf data (e.g., from a queue
     /// where the envelope was created at ingest time to preserve the receive timestamp).
-    pub async fn send_serialized(&mut self, payload: Vec<u8>) -> Result<()> {
+    pub async fn send_serialized(&mut self, payload: &[u8]) -> Result<()> {
         let start = std::time::Instant::now();
 
         let length = payload.len() as u32;
@@ -105,7 +105,7 @@ impl SocketClient {
             .await
             .context("Failed to write length prefix")?;
         stream
-            .write_all(&payload)
+            .write_all(payload)
             .await
             .context("Failed to write payload")?;
         stream.flush().await.context("Failed to flush socket")?;

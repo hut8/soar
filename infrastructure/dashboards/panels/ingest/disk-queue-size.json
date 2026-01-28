@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "bytes",
+        "axisLabel": "",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "drawStyle": "line",
@@ -25,7 +25,7 @@
         },
         "insertNulls": false,
         "lineInterpolation": "linear",
-        "lineWidth": 1,
+        "lineWidth": 2,
         "pointSize": 5,
         "scaleDistribution": {
           "type": "linear"
@@ -52,7 +52,24 @@
       },
       "unit": "bytes"
     },
-    "overrides": []
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Segments"
+        },
+        "properties": [
+          {
+            "id": "custom.axisPlacement",
+            "value": "right"
+          },
+          {
+            "id": "unit",
+            "value": "short"
+          }
+        ]
+      }
+    ]
   },
   "options": {
     "legend": {
@@ -76,10 +93,21 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "ingest_queue_depth_bytes{type=\"data\",component=\"ingest\",environment=~\"$environment\"}",
-      "legendFormat": "data bytes",
+      "expr": "ingest_queue_depth_bytes{type=\"file\",component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "Disk Bytes",
       "range": true,
       "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "queue_ingest_segments_created_total{component=\"ingest\",environment=~\"$environment\"} - queue_ingest_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "Segments",
+      "range": true,
+      "refId": "B"
     }
   ],
   "title": "Disk Queue Size",

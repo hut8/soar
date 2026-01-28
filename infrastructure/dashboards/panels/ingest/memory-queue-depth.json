@@ -77,7 +77,7 @@
       },
       "editorMode": "code",
       "expr": "ingest_queue_depth{type=\"memory\",environment=~\"$environment\"}",
-      "legendFormat": "memory",
+      "legendFormat": "Messages",
       "range": true,
       "refId": "A"
     }

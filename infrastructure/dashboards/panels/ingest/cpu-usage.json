@@ -18,15 +18,17 @@
           },
           {
             "color": "yellow",
-            "value": 524288000
+            "value": 50
           },
           {
             "color": "red",
-            "value": 1073741824
+            "value": 80
           }
         ]
       },
-      "unit": "bytes"
+      "unit": "percent",
+      "min": 0,
+      "max": 100
     },
     "overrides": []
   },
@@ -55,13 +57,13 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "process_memory_bytes{component=\"ingest\",environment=~\"$environment\"}",
-      "legendFormat": "SOAR Ingest OGN",
+      "expr": "process_cpu_percent{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "__auto",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Process Memory Usage",
+  "title": "CPU Usage",
   "type": "stat",
   "_width": 8,
   "_height": 4

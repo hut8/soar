@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "ms",
+        "axisLabel": "seconds",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -52,7 +52,7 @@
           }
         ]
       },
-      "unit": "ms"
+      "unit": "s"
     },
     "overrides": []
   },
@@ -80,23 +80,13 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.5\"}",
-      "legendFormat": "P50",
+      "expr": "600 / (rate(aprs_keepalive_sent_total{component=\"ingest\",environment=~\"$environment\"}[10m]) * 600 + 0.001)",
+      "legendFormat": "Seconds between keepalives",
       "range": true,
       "refId": "A"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "ingest_socket_send_duration_ms{component=\"ingest\",environment=~\"$environment\",quantile=\"0.95\"}",
-      "legendFormat": "P95",
-      "range": true,
-      "refId": "B"
     }
   ],
-  "title": "Socket Send Duration",
-  "type": "timeseries"
+  "title": "Seconds Between Keepalives",
+  "type": "timeseries",
+  "description": "Average time between keepalive messages sent to APRS-IS server (10 minute average)"
 }

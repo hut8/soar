@@ -74,5 +74,7 @@
     }
   ],
   "title": "Process Status",
-  "type": "gauge"
+  "type": "gauge",
+  "_width": 8,
+  "_height": 4
 }

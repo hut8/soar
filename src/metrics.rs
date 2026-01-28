@@ -394,9 +394,13 @@ async fn heap_profile_handler(
 }
 
 /// Background task to update process metrics
-/// Updates uptime and memory usage metrics every 5 seconds
+/// Updates uptime, CPU usage, and memory usage metrics every 5 seconds
 pub async fn process_metrics_task() {
     let start_time = Instant::now();
+
+    // Track previous CPU time for calculating usage percentage
+    #[cfg(target_os = "linux")]
+    let mut prev_cpu_time: Option<(u64, Instant)> = None;
 
     loop {
         // Update uptime (in seconds)
@@ -406,9 +410,10 @@ pub async fn process_metrics_task() {
         // Set "is up" metric to 1 (binary indicator)
         metrics::gauge!("process.is_up").set(1.0);
 
-        // Get memory usage using procfs (Linux-specific)
+        // Get memory and CPU usage using procfs (Linux-specific)
         #[cfg(target_os = "linux")]
         {
+            // Memory usage from /proc/self/status
             if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
                 for line in status.lines() {
                     if line.starts_with("VmRSS:") {
@@ -420,6 +425,39 @@ pub async fn process_metrics_task() {
                             metrics::gauge!("process.memory.bytes").set(bytes);
                         }
                         break;
+                    }
+                }
+            }
+
+            // CPU usage from /proc/self/stat
+            // Fields 14 (utime) and 15 (stime) are user and system CPU time in clock ticks
+            if let Ok(stat) = std::fs::read_to_string("/proc/self/stat") {
+                // Parse stat file - fields are space-separated, but comm (field 2) may contain spaces
+                // so we find the closing paren and parse from there
+                if let Some(after_comm) = stat.rfind(')') {
+                    let fields: Vec<&str> = stat[after_comm + 2..].split_whitespace().collect();
+                    // utime is field 14 (index 11 after comm), stime is field 15 (index 12)
+                    if fields.len() > 12
+                        && let (Ok(utime), Ok(stime)) =
+                            (fields[11].parse::<u64>(), fields[12].parse::<u64>())
+                    {
+                        let total_cpu_ticks = utime + stime;
+                        let now = Instant::now();
+
+                        // Calculate CPU percentage based on delta since last reading
+                        if let Some((prev_ticks, prev_time)) = prev_cpu_time {
+                            let elapsed_secs = now.duration_since(prev_time).as_secs_f64();
+                            if elapsed_secs > 0.0 {
+                                let tick_delta = total_cpu_ticks.saturating_sub(prev_ticks);
+                                // Clock ticks per second (typically 100 on Linux)
+                                let ticks_per_sec = 100.0;
+                                let cpu_seconds = tick_delta as f64 / ticks_per_sec;
+                                let cpu_percent = (cpu_seconds / elapsed_secs) * 100.0;
+                                metrics::gauge!("process_cpu_percent").set(cpu_percent);
+                            }
+                        }
+
+                        prev_cpu_time = Some((total_cpu_ticks, now));
                     }
                 }
             }

@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "",
+        "axisLabel": "msg/s",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -25,8 +25,8 @@
           "viz": false
         },
         "insertNulls": false,
-        "lineInterpolation": "linear",
-        "lineWidth": 1,
+        "lineInterpolation": "smooth",
+        "lineWidth": 2,
         "pointSize": 5,
         "scaleDistribution": {
           "type": "linear"
@@ -59,7 +59,8 @@
   "options": {
     "legend": {
       "calcs": [
-        "lastNotNull"
+        "lastNotNull",
+        "mean"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -79,8 +80,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_raw_message_queued_server_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
-      "legendFormat": "Server Messages/sec",
+      "expr": "rate(queue_ingest_messages_buffered_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "legendFormat": "Total (queued)",
       "range": true,
       "refId": "A"
     },
@@ -91,9 +92,31 @@
       },
       "editorMode": "code",
       "expr": "rate(aprs_raw_message_queued_aprs_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
-      "legendFormat": "APRS Messages/sec",
+      "legendFormat": "APRS",
       "range": true,
       "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(beast_frames_published_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "legendFormat": "Beast",
+      "range": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(sbs_frames_published_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "legendFormat": "SBS",
+      "range": true,
+      "refId": "D"
     }
   ],
   "title": "Messages Queued per Second",
