@@ -50,7 +50,8 @@
           }
         ]
       },
-      "unit": "bytes"
+      "unit": "bytes",
+      "min": 0
     },
     "overrides": [
       {
@@ -66,6 +67,14 @@
           {
             "id": "unit",
             "value": "short"
+          },
+          {
+            "id": "min",
+            "value": 0
+          },
+          {
+            "id": "decimals",
+            "value": 0
           }
         ]
       }
