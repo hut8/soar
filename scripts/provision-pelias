@@ -345,28 +345,33 @@ EOF
 chown pelias:pelias /opt/pelias/docker/pelias.json
 
 # Create .env file for Docker
+# Note: DOCKER_USER is deprecated and ignored by newer pelias images.
+# Containers now run as 1000:1000 by default, so data directories must be writable by that user.
 cat > /opt/pelias/docker/.env <<EOF
 DATA_DIR=/opt/pelias/docker/data
-DOCKER_USER=$(id -u pelias):$(id -g pelias)
 EOF
 
 chown pelias:pelias /opt/pelias/docker/.env
 
+# Ensure data directories are writable by the container user (1000:1000)
+# Newer pelias docker images ignore DOCKER_USER and default to 1000:1000
+echo -e "${BLUE}Setting data directory permissions for container access...${NC}"
+chown -R 1000:1000 /opt/pelias/docker/data
+
 # Create docker-compose.yml for data import
+# Note: user directive removed - newer pelias images ignore DOCKER_USER and run as 1000:1000
 echo -e "${BLUE}Creating docker-compose.yml for Pelias data import...${NC}"
 cat > /opt/pelias/docker/docker-compose.yml <<'EOF'
 services:
   schema:
     image: pelias/schema:master
     container_name: pelias_schema
-    user: "${DOCKER_USER}"
     network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
   whosonfirst:
     image: pelias/whosonfirst:master
     container_name: pelias_whosonfirst
-    user: "${DOCKER_USER}"
     network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
@@ -374,7 +379,6 @@ services:
   openaddresses:
     image: pelias/openaddresses:master
     container_name: pelias_openaddresses
-    user: "${DOCKER_USER}"
     network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
@@ -382,7 +386,6 @@ services:
   placeholder:
     image: pelias/placeholder:master
     container_name: pelias_placeholder
-    user: "${DOCKER_USER}"
     network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
@@ -460,12 +463,16 @@ else
 fi
 
 # Build Placeholder data (administrative area relationships)
+# Uses ./pelias prepare placeholder which extracts WOF data and builds the sqlite database
 PLACEHOLDER_DB="/opt/pelias/docker/data/placeholder/store.sqlite3"
-if [ -f "$PLACEHOLDER_DB" ]; then
+if [ -f "$PLACEHOLDER_DB" ] && [ "$(stat -c%s "$PLACEHOLDER_DB" 2>/dev/null || echo 0)" -gt 1000000 ]; then
     echo -e "${BLUE}Placeholder data already built (skipping)${NC}"
+    du -sh "$PLACEHOLDER_DB" | awk '{print "  Database size: " $1}'
 else
     echo -e "${BLUE}Building Placeholder database from Who's on First data...${NC}"
-    su - pelias -c "cd /opt/pelias/docker && docker compose run --rm placeholder npm run build"
+    echo -e "${YELLOW}This may take 5-10 minutes...${NC}"
+    rm -f "$PLACEHOLDER_DB"  # Remove empty/corrupt database if present
+    cd /opt/pelias/docker && ./pelias prepare placeholder
     echo -e "${GREEN}Placeholder database built${NC}"
 fi
 
