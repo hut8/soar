@@ -103,6 +103,9 @@ where
     /// Cached write segment state - keeps file handle open for efficient writes
     /// Uses std::sync::Mutex since operations inside don't await
     write_segment: Arc<WriteSegmentMutex>,
+    /// Cached read segment name - avoids directory scans on every read
+    /// Invalidated when the segment is deleted
+    read_segment: Arc<std::sync::Mutex<Option<String>>>,
     /// Cached total file size across all segments (updated incrementally)
     /// Avoids expensive directory scans on every write
     total_file_size_cached: Arc<AtomicU64>,
@@ -177,6 +180,7 @@ where
             created_at,
             file_lock: Arc::new(Mutex::new(())),
             write_segment: Arc::new(std::sync::Mutex::new(None)),
+            read_segment: Arc::new(std::sync::Mutex::new(None)),
             total_file_size_cached: Arc::new(AtomicU64::new(initial_total_size)),
         };
 
@@ -245,10 +249,23 @@ where
         format!("{:016}", timestamp)
     }
 
-    /// Get the current write segment (create if needed)
     /// Get the oldest segment for reading (returns None if no segments)
+    /// Uses cached value if available to avoid directory scans
     fn get_read_segment(&self) -> Option<String> {
-        self.list_segments().first().cloned()
+        let mut guard = self
+            .read_segment
+            .lock()
+            .expect("read segment mutex poisoned");
+
+        // Return cached value if present
+        if let Some(ref name) = *guard {
+            return Some(name.clone());
+        }
+
+        // Cache miss - scan directory and cache the result
+        let segment = self.list_segments().first().cloned();
+        *guard = segment.clone();
+        segment
     }
 
     /// Read the offsets from a segment file header
@@ -302,6 +319,20 @@ where
                     && state.name == segment_name
                 {
                     *write_guard = None;
+                }
+            }
+
+            // Invalidate read segment cache if this is the cached segment
+            // This forces a rescan to find the next oldest segment
+            {
+                let mut read_guard = self
+                    .read_segment
+                    .lock()
+                    .expect("read segment mutex poisoned");
+                if let Some(ref name) = *read_guard
+                    && name == segment_name
+                {
+                    *read_guard = None;
                 }
             }
 
