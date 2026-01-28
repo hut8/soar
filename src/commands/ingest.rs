@@ -504,20 +504,26 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 "done".to_string()
             };
 
-            // Format queue info with data size (not file size)
+            // Format queue info with data size (not file size) and drain ETA
             let queue_info = if queue_depth.disk_data_bytes == 0 && queue_depth.disk_file_bytes == 0
             {
-                format!("mem:{}", queue_depth.memory)
+                format!(
+                    "mem:{} drain_eta={}",
+                    queue_depth.memory, drain_time_estimate
+                )
             } else if queue_depth.disk_data_bytes == queue_depth.disk_file_bytes {
                 format!(
-                    "mem:{} data:{}B",
-                    queue_depth.memory, queue_depth.disk_data_bytes
+                    "mem:{} data:{}B drain_eta={}",
+                    queue_depth.memory, queue_depth.disk_data_bytes, drain_time_estimate
                 )
             } else {
                 // Show both data and file size when different (indicates need for compaction)
                 format!(
-                    "mem:{} data:{}B file:{}B",
-                    queue_depth.memory, queue_depth.disk_data_bytes, queue_depth.disk_file_bytes
+                    "mem:{} data:{}B file:{}B drain_eta={}",
+                    queue_depth.memory,
+                    queue_depth.disk_data_bytes,
+                    queue_depth.disk_file_bytes,
+                    drain_time_estimate
                 )
             };
 
@@ -579,13 +585,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             let read_section = if read_parts.is_empty() {
                 String::new()
             } else {
-                format!(" | read: {}", read_parts.join(" "))
+                format!(" read: {}", read_parts.join(" "))
             };
 
             // Log comprehensive stats
             info!(
-                "stats: sent={} | drain_eta={} | queue={{{}}}{}",
-                sent_stats, drain_time_estimate, queue_info, read_section
+                "stats: sent={} queue={{{}}}{}",
+                sent_stats, queue_info, read_section
             );
         }
     });

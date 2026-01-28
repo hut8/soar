@@ -2,7 +2,7 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft::{AddressType, Aircraft, AircraftModel, NewAircraft};
@@ -166,6 +166,7 @@ impl AircraftRepository {
 
         // Extract tail number from ICAO address if it's a US aircraft
         let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type);
+        let registration_for_logging = registration.clone();
 
         let new_aircraft = NewAircraft {
             address,
@@ -209,7 +210,15 @@ impl AircraftRepository {
             .do_update()
             .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
             .returning(AircraftModel::as_returning())
-            .get_result(&mut conn)?;
+            .get_result(&mut conn)
+            .map_err(|e| {
+                error!(
+                    "get_or_insert_aircraft_by_address failed: address={:06X}, address_type={:?}, \
+                     registration={:?}, error={}",
+                    address, address_type, registration_for_logging, e
+                );
+                e
+            })?;
 
         Ok(model)
     }
@@ -317,7 +326,15 @@ impl AircraftRepository {
                     aircraft::country_code.eq(&country_code),
                 ))
                 .returning(AircraftModel::as_returning())
-                .get_result(&mut conn)?;
+                .get_result(&mut conn)
+                .map_err(|e| {
+                    error!(
+                        "aircraft_for_fix upsert failed: address={:06X}, address_type={:?}, \
+                         packet_registration={:?}, computed_registration={:?}, error={}",
+                        address, address_type, packet_fields.registration, registration, e
+                    );
+                    e
+                })?;
 
             Ok::<AircraftModel, anyhow::Error>(model)
         })
