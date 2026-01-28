@@ -144,11 +144,11 @@ impl LocationsRepository {
 
     /// Find or create a location by address (atomic operation)
     pub async fn find_or_create(&self, params: LocationParams) -> Result<Location> {
-        use crate::schema::locations::dsl::locations as locations_table;
+        use crate::schema::locations::dsl::*;
 
         let pool = self.pool.clone();
 
-        // Clone values for the closure, normalizing country_code to uppercase
+        // Clone and normalize values for the closure
         let param_street1 = params.street1;
         let param_street2 = params.street2;
         let param_city = params.city;
@@ -157,54 +157,61 @@ impl LocationsRepository {
         let param_country_code = params.country_code.map(|c| c.to_uppercase());
         let param_geolocation = params.geolocation;
 
+        let new_location = Location::new(
+            param_street1.clone(),
+            param_street2.clone(),
+            param_city.clone(),
+            param_state.clone(),
+            param_zip_code.clone(),
+            param_country_code.clone(),
+            param_geolocation,
+        );
+
+        let new_location_model: NewLocationModel = new_location.into();
+        let generated_id = new_location_model.id;
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // First, try to insert the new location using ON CONFLICT DO NOTHING
-            let new_location = Location::new(
-                param_street1.clone(),
-                param_street2.clone(),
-                param_city.clone(),
-                param_state.clone(),
-                param_zip_code.clone(),
-                param_country_code.clone(),
-                param_geolocation,
-            );
-
-            let new_location_model: NewLocationModel = new_location.into();
-
-            // Use INSERT ... ON CONFLICT DO NOTHING for atomic upsert
-            diesel::insert_into(locations_table)
+            // Try to insert with ON CONFLICT DO NOTHING (no table bloat from no-op updates)
+            let rows_affected = diesel::insert_into(locations)
                 .values(&new_location_model)
                 .on_conflict_do_nothing()
                 .execute(&mut conn)?;
 
-            // Now select the location (either the one we just created or the existing one)
-            // Use COALESCE to match the expression-based unique index
-            use diesel::sql_types::Text;
-
-            // Use raw SQL with COALESCE to match the unique index exactly
-            let location_model: LocationModel = diesel::sql_query(
-                r#"
-                SELECT id, street1, street2, city, state, zip_code, country_code,
-                       geolocation, created_at, updated_at
-                FROM locations
-                WHERE COALESCE(street1, '') = COALESCE($1, '')
-                  AND COALESCE(street2, '') = COALESCE($2, '')
-                  AND COALESCE(city, '') = COALESCE($3, '')
-                  AND COALESCE(state, '') = COALESCE($4, '')
-                  AND COALESCE(zip_code, '') = COALESCE($5, '')
-                  AND COALESCE(country_code, '') = COALESCE($6, '')
-                LIMIT 1
-                "#,
-            )
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_street1)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_street2)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_city)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_state)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_zip_code)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_country_code)
-            .get_result::<LocationModel>(&mut conn)?;
+            let location_model: LocationModel = if rows_affected > 0 {
+                // We inserted successfully - fetch by our generated ID (fast PK lookup)
+                locations
+                    .filter(id.eq(generated_id))
+                    .select(LocationModel::as_select())
+                    .first(&mut conn)?
+            } else {
+                // Conflict occurred - find existing location by address fields
+                // Use IS NOT DISTINCT FROM for NULL-safe equality matching
+                diesel::sql_query(
+                    r#"
+                    SELECT id, street1, street2, city, state, zip_code, country_code,
+                           geolocation, created_at, updated_at, geocode_attempted_at
+                    FROM locations
+                    WHERE street1 IS NOT DISTINCT FROM $1
+                      AND street2 IS NOT DISTINCT FROM $2
+                      AND city IS NOT DISTINCT FROM $3
+                      AND state IS NOT DISTINCT FROM $4
+                      AND zip_code IS NOT DISTINCT FROM $5
+                      AND country_code IS NOT DISTINCT FROM $6
+                    LIMIT 1
+                    "#,
+                )
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&param_street1)
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&param_street2)
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&param_city)
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&param_state)
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&param_zip_code)
+                .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(
+                    &param_country_code,
+                )
+                .get_result::<LocationModel>(&mut conn)?
+            };
 
             Ok::<Location, anyhow::Error>(location_model.into())
         })
@@ -300,30 +307,46 @@ impl LocationsRepository {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Location>> {
+        use crate::schema::aircraft_registrations::dsl as ar_dsl;
+        use crate::schema::airports::dsl as airports_dsl;
+        use crate::schema::clubs::dsl as clubs_dsl;
+        use crate::schema::flights::dsl as flights_dsl;
+        use crate::schema::locations::dsl::*;
+        use diesel::dsl::{exists, not};
+
         let pool = self.pool.clone();
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let location_models: Vec<LocationModel> = diesel::sql_query(
-                r#"
-                SELECT l.id, l.street1, l.street2, l.city, l.state, l.zip_code,
-                       l.country_code, l.geolocation, l.created_at, l.updated_at
-                FROM locations l
-                WHERE NOT EXISTS (SELECT 1 FROM aircraft_registrations WHERE location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM airports WHERE location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM clubs WHERE location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE end_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE landing_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE start_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE takeoff_location_id = l.id)
-                ORDER BY l.created_at DESC
-                LIMIT $1 OFFSET $2
-                "#,
-            )
-            .bind::<diesel::sql_types::BigInt, _>(limit)
-            .bind::<diesel::sql_types::BigInt, _>(offset)
-            .load::<LocationModel>(&mut conn)?;
+            // Build NOT EXISTS subqueries for each referencing table
+            let ar_exists =
+                ar_dsl::aircraft_registrations.filter(ar_dsl::location_id.eq(id.nullable()));
+            let airports_exists =
+                airports_dsl::airports.filter(airports_dsl::location_id.eq(id.nullable()));
+            let clubs_exists = clubs_dsl::clubs.filter(clubs_dsl::location_id.eq(id.nullable()));
+            let flights_end_exists =
+                flights_dsl::flights.filter(flights_dsl::end_location_id.eq(id.nullable()));
+            let flights_landing_exists =
+                flights_dsl::flights.filter(flights_dsl::landing_location_id.eq(id.nullable()));
+            let flights_start_exists =
+                flights_dsl::flights.filter(flights_dsl::start_location_id.eq(id.nullable()));
+            let flights_takeoff_exists =
+                flights_dsl::flights.filter(flights_dsl::takeoff_location_id.eq(id.nullable()));
+
+            let location_models: Vec<LocationModel> = locations
+                .filter(not(exists(ar_exists)))
+                .filter(not(exists(airports_exists)))
+                .filter(not(exists(clubs_exists)))
+                .filter(not(exists(flights_end_exists)))
+                .filter(not(exists(flights_landing_exists)))
+                .filter(not(exists(flights_start_exists)))
+                .filter(not(exists(flights_takeoff_exists)))
+                .order(created_at.desc())
+                .limit(limit)
+                .offset(offset)
+                .select(LocationModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<LocationModel>, anyhow::Error>(location_models)
         })
