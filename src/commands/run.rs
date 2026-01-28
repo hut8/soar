@@ -859,10 +859,10 @@ pub async fn handle_run(
                                 }
                                 if let Err(e) = ogn_tx.send_async((received_at, message)).await {
                                     error!("Failed to send OGN message to intake queue: {}", e);
-                                    metrics::counter!("socket.router.ogn_send_error_total")
+                                    metrics::counter!("socket.router.aprs_send_error_total")
                                         .increment(1);
                                 } else {
-                                    metrics::counter!("socket.router.ogn_routed_total")
+                                    metrics::counter!("socket.router.aprs_routed_total")
                                         .increment(1);
                                 }
                             }
