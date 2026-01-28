@@ -7,6 +7,9 @@ use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
+/// Synchronous mutex for write segment (operations inside don't await)
+type WriteSegmentMutex = std::sync::Mutex<Option<WriteSegmentState>>;
+
 const MAGIC_BYTES: &[u8; 8] = b"SOARQUE1";
 const HEADER_SIZE: usize = 32;
 const DEFAULT_MAX_SEGMENT_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
@@ -39,6 +42,17 @@ pub struct QueueDepth {
     pub disk_data_bytes: u64,
     /// Total file size on disk across all segments
     pub disk_file_bytes: u64,
+}
+
+/// Cached state for the current write segment
+/// Keeps the file handle open to avoid repeated open/close overhead
+struct WriteSegmentState {
+    /// Segment file name (16-digit timestamp)
+    name: String,
+    /// Open file handle for appending
+    file: std::fs::File,
+    /// Current file size in bytes (tracked to know when to rotate)
+    size: u64,
 }
 
 /// A persistent file-backed queue with fast-path memory optimization
@@ -86,6 +100,12 @@ where
     /// Mutex to serialize all file operations (append/read)
     /// Prevents data corruption from concurrent writes to the same segment file
     file_lock: Arc<Mutex<()>>,
+    /// Cached write segment state - keeps file handle open for efficient writes
+    /// Uses std::sync::Mutex since operations inside don't await
+    write_segment: Arc<WriteSegmentMutex>,
+    /// Cached total file size across all segments (updated incrementally)
+    /// Avoids expensive directory scans on every write
+    total_file_size_cached: Arc<AtomicU64>,
 }
 
 impl<T> PersistentQueue<T>
@@ -134,6 +154,9 @@ where
 
         let (memory_tx, memory_rx) = flume::bounded(memory_capacity);
 
+        // Calculate initial total file size from existing segments
+        let initial_total_size = Self::calculate_total_file_size(&dir_path);
+
         let created_at = Instant::now();
         let queue = Self {
             name: name.clone(),
@@ -153,12 +176,37 @@ where
             cached_data_size_time_ms: Arc::new(AtomicU64::new(0)),
             created_at,
             file_lock: Arc::new(Mutex::new(())),
+            write_segment: Arc::new(std::sync::Mutex::new(None)),
+            total_file_size_cached: Arc::new(AtomicU64::new(initial_total_size)),
         };
 
         // Initialize metrics
         metrics::gauge!(format!("queue.{}.state", name)).set(0.0); // 0=disconnected, 1=connected, 2=draining
 
         Ok(queue)
+    }
+
+    /// Calculate total file size across all segments (used for initialization)
+    fn calculate_total_file_size(dir_path: &PathBuf) -> u64 {
+        let mut total = 0u64;
+
+        if let Ok(entries) = std::fs::read_dir(dir_path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if Self::is_valid_segment_name(&name)
+                    && let Ok(meta) = entry.metadata()
+                {
+                    total += meta.len();
+                }
+            }
+        }
+
+        total
+    }
+
+    /// Check if a filename is a valid segment name (16-digit number)
+    fn is_valid_segment_name(name: &str) -> bool {
+        name.len() == 16 && name.chars().all(|c| c.is_ascii_digit())
     }
 
     /// List segment files sorted by name (oldest first)
@@ -168,8 +216,7 @@ where
         if let Ok(entries) = std::fs::read_dir(&self.dir_path) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                // Segment files are 16-digit numbers
-                if name.len() == 16 && name.chars().all(|c| c.is_ascii_digit()) {
+                if Self::is_valid_segment_name(&name) {
                     segments.push(name);
                 }
             }
@@ -199,25 +246,6 @@ where
     }
 
     /// Get the current write segment (create if needed)
-    fn get_or_create_write_segment(&self) -> Result<String> {
-        let segments = self.list_segments();
-
-        if let Some(latest) = segments.last() {
-            // Check if current segment is under size limit
-            let path = self.segment_path(latest);
-            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-
-            if size < self.max_segment_size_bytes {
-                return Ok(latest.clone());
-            }
-            // Current segment is full, create new one
-        }
-
-        // Create new segment
-        let name = self.new_segment_name();
-        Ok(name)
-    }
-
     /// Get the oldest segment for reading (returns None if no segments)
     fn get_read_segment(&self) -> Option<String> {
         self.list_segments().first().cloned()
@@ -256,11 +284,33 @@ where
         }
     }
 
-    /// Delete a segment file
+    /// Delete a segment file and update cached total size
     fn delete_segment(&self, segment_name: &str) -> Result<()> {
         let path = self.segment_path(segment_name);
         if path.exists() {
+            // Get file size before deleting to update cache
+            let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+            // Invalidate write segment cache if this is the cached segment
+            // (defensive - normally the write segment shouldn't be deleted while cached)
+            {
+                let mut write_guard = self
+                    .write_segment
+                    .lock()
+                    .expect("write segment mutex poisoned");
+                if let Some(ref state) = *write_guard
+                    && state.name == segment_name
+                {
+                    *write_guard = None;
+                }
+            }
+
             std::fs::remove_file(&path)?;
+
+            // Update cached total file size
+            self.total_file_size_cached
+                .fetch_sub(file_size, Ordering::Release);
+
             debug!("Deleted drained segment: {}", segment_name);
             metrics::counter!(format!("queue.{}.segments_deleted_total", self.name)).increment(1);
         }
@@ -577,8 +627,14 @@ where
         total
     }
 
-    /// Get the total file size across all segments
+    /// Get the total file size across all segments (uses cached value)
     pub fn total_file_size_bytes(&self) -> u64 {
+        self.total_file_size_cached.load(Ordering::Relaxed)
+    }
+
+    /// Recalculate total file size from disk (expensive - only for verification/recovery)
+    #[allow(dead_code)]
+    fn recalculate_total_file_size(&self) -> u64 {
         let mut total = 0u64;
 
         for segment in self.list_segments() {
@@ -668,6 +724,9 @@ where
     }
 
     /// Append a message to the disk file
+    ///
+    /// Uses cached write segment state to avoid directory scans on every write.
+    /// The file handle is kept open between writes for efficiency.
     async fn append_to_disk(&self, message: T) -> Result<()> {
         use std::io::{Seek, Write};
 
@@ -675,23 +734,15 @@ where
         let data = bincode::serialize(&message)?;
         let data_len = data.len() as u32;
 
-        // Acquire file lock to prevent concurrent writes corrupting the segment file
-        // Multiple producers can call append_to_disk concurrently when memory overflows
-        let _lock = self.file_lock.lock().await;
-
-        // Calculate CRC32
+        // Calculate CRC32 before acquiring lock
         let checksum = crc32fast::hash(&data);
 
         // Message size on disk: 4 bytes length + data + 4 bytes checksum
         let message_disk_size = 4 + data.len() as u64 + 4;
 
-        // Get or create write segment
-        let segment_name = self.get_or_create_write_segment()?;
-        let path = self.segment_path(&segment_name);
-
-        // Check total size limit
+        // Check total size limit using cached value (no directory scan!)
         if let Some(max_size) = self.max_total_size_bytes {
-            let current_size = self.total_file_size_bytes();
+            let current_size = self.total_file_size_cached.load(Ordering::Acquire);
             if current_size >= max_size {
                 anyhow::bail!(
                     "Queue total size limit exceeded: {}",
@@ -700,80 +751,120 @@ where
             }
         }
 
-        // Open file in append mode
+        // Acquire write segment lock (std::sync::Mutex since no await points inside)
+        let mut write_segment_guard = self
+            .write_segment
+            .lock()
+            .expect("write segment mutex poisoned");
+
+        // Check if we need to rotate segments (current segment would exceed max size)
+        let needs_rotation = if let Some(ref state) = *write_segment_guard {
+            state.size + message_disk_size > self.max_segment_size_bytes
+        } else {
+            false
+        };
+
+        if needs_rotation {
+            // Close current segment and create a new one
+            *write_segment_guard = None;
+
+            // Wait a moment to ensure unique timestamp
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+
+        // Get or create write segment state
+        let state = if let Some(ref mut state) = *write_segment_guard {
+            state
+        } else {
+            // Need to initialize write segment
+            // First check if there's an existing segment we can append to
+            let (segment_name, file, initial_size) = self.open_or_create_write_segment()?;
+
+            *write_segment_guard = Some(WriteSegmentState {
+                name: segment_name,
+                file,
+                size: initial_size,
+            });
+
+            write_segment_guard.as_mut().unwrap()
+        };
+
+        // Seek to end (in case file position was changed externally)
+        state.file.seek(std::io::SeekFrom::End(0))?;
+
+        // Write message: length + data + checksum
+        state.file.write_all(&data_len.to_le_bytes())?;
+        state.file.write_all(&data)?;
+        state.file.write_all(&checksum.to_le_bytes())?;
+
+        // Update cached size
+        state.size += message_disk_size;
+
+        // Update write offset in header
+        state.file.seek(std::io::SeekFrom::Start(8))?;
+        state.file.write_all(&state.size.to_le_bytes())?;
+        state.file.flush()?;
+
+        // Update global cached total file size
+        self.total_file_size_cached
+            .fetch_add(message_disk_size, Ordering::Release);
+
+        Ok(())
+    }
+
+    /// Open existing write segment or create a new one
+    /// Returns (segment_name, file_handle, current_size)
+    fn open_or_create_write_segment(&self) -> Result<(String, std::fs::File, u64)> {
+        use std::io::Write;
+
+        // Check for existing segments (one-time directory scan on initialization)
+        let segments = self.list_segments();
+
+        if let Some(latest) = segments.last() {
+            let path = self.segment_path(latest);
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+            // If current segment is under size limit, reuse it
+            if size < self.max_segment_size_bytes {
+                let file = std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&path)?;
+
+                return Ok((latest.clone(), file, size));
+            }
+            // Current segment is full, fall through to create new one
+        }
+
+        // Create new segment
+        let name = self.new_segment_name();
+        let path = self.segment_path(&name);
+
         let mut file = std::fs::OpenOptions::new()
             .create(true)
-            .truncate(false) // Don't truncate - we're appending
+            .truncate(false)
             .read(true)
             .write(true)
             .open(&path)?;
 
-        // If file is empty, write header
-        let file_size = file.metadata()?.len();
-        if file_size == 0 {
-            // Write header: MAGIC + write_offset + read_offset + reserved
-            let header = [
-                MAGIC_BYTES.as_slice(),
-                &(HEADER_SIZE as u64).to_le_bytes(), // write_offset starts after header
-                &(HEADER_SIZE as u64).to_le_bytes(), // read_offset starts after header
-                &0u64.to_le_bytes(),                 // reserved
-            ]
-            .concat();
-            file.write_all(&header)?;
-            metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
-        }
-
-        // Check if this message would exceed segment size
-        let current_file_size = file.metadata()?.len();
-        if current_file_size > 0
-            && current_file_size + message_disk_size > self.max_segment_size_bytes
-        {
-            // Need to rotate to a new segment
-            drop(file);
-
-            // Wait a moment to ensure unique timestamp
-            std::thread::sleep(std::time::Duration::from_millis(1));
-
-            let new_segment = self.new_segment_name();
-            let new_path = self.segment_path(&new_segment);
-
-            let mut new_file = std::fs::OpenOptions::new()
-                .create(true)
-                .truncate(false)
-                .read(true)
-                .write(true)
-                .open(&new_path)?;
-
-            // Write header
-            let header = [
-                MAGIC_BYTES.as_slice(),
-                &(HEADER_SIZE as u64).to_le_bytes(),
-                &(HEADER_SIZE as u64).to_le_bytes(),
-                &0u64.to_le_bytes(),
-            ]
-            .concat();
-            new_file.write_all(&header)?;
-            metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
-
-            file = new_file;
-        }
-
-        // Seek to end
-        file.seek(std::io::SeekFrom::End(0))?;
-
-        // Write message: length + data + checksum
-        file.write_all(&data_len.to_le_bytes())?;
-        file.write_all(&data)?;
-        file.write_all(&checksum.to_le_bytes())?;
+        // Write header: MAGIC + write_offset + read_offset + reserved
+        let header = [
+            MAGIC_BYTES.as_slice(),
+            &(HEADER_SIZE as u64).to_le_bytes(), // write_offset starts after header
+            &(HEADER_SIZE as u64).to_le_bytes(), // read_offset starts after header
+            &0u64.to_le_bytes(),                 // reserved
+        ]
+        .concat();
+        file.write_all(&header)?;
         file.flush()?;
 
-        // Update write offset in header
-        let new_write_offset = file.metadata()?.len();
-        file.seek(std::io::SeekFrom::Start(8))?;
-        file.write_all(&new_write_offset.to_le_bytes())?;
-        file.flush()?;
+        // Update cached total size for the new header
+        self.total_file_size_cached
+            .fetch_add(HEADER_SIZE as u64, Ordering::Release);
 
-        Ok(())
+        metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
+
+        Ok((name, file, HEADER_SIZE as u64))
     }
 
     /// Read a message from the disk file (from oldest segment)
