@@ -60,7 +60,8 @@
     "legend": {
       "calcs": [
         "lastNotNull",
-        "mean"
+        "mean",
+        "max"
       ],
       "displayMode": "table",
       "placement": "bottom",

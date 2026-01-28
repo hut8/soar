@@ -42,6 +42,8 @@ pub struct QueueDepth {
     pub disk_data_bytes: u64,
     /// Total file size on disk across all segments
     pub disk_file_bytes: u64,
+    /// Number of segment files on disk
+    pub segment_count: usize,
 }
 
 /// Cached state for the current write segment
@@ -637,6 +639,7 @@ where
             memory: self.memory_tx.len(),
             disk_data_bytes: self.data_size_bytes(),
             disk_file_bytes: self.total_file_size_bytes(),
+            segment_count: self.segment_count(),
         }
     }
 

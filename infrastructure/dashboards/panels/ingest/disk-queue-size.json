@@ -104,7 +104,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "queue_ingest_segments_created_total{component=\"ingest\",environment=~\"$environment\"} - queue_ingest_segments_deleted_total{component=\"ingest\",environment=~\"$environment\"}",
+      "expr": "ingest_queue_segment_count{component=\"ingest\",environment=~\"$environment\"}",
       "legendFormat": "Segments",
       "range": true,
       "refId": "B"
