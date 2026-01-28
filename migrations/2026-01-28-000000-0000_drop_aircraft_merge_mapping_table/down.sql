@@ -1,0 +1,1 @@
+-- No-op: table was a temporary prep artifact, not needed for rollback

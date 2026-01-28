@@ -31,7 +31,7 @@ otelcol.processor.batch "pipeline" {
 
 // Filter logs based on severity:
 // - TRACE logs (severity 1-4): Always dropped - too verbose for log aggregation
-// - DEBUG logs (severity 5-8): Dropped for production, kept for staging/dev
+// - DEBUG logs (severity 5-8): Always dropped - too verbose for Loki
 // - INFO+ (severity 9+): Always kept
 // This reduces noise and storage costs while keeping useful logs
 otelcol.processor.filter "log_level" {
@@ -40,10 +40,9 @@ otelcol.processor.filter "log_level" {
   logs {
     // OTTL severity_number: TRACE=1-4, DEBUG=5-8, INFO=9-12, WARN=13-16, ERROR=17-20, FATAL=21-24
     log_record = [
-      // Always drop TRACE logs - they include tokio runtime internals and are too noisy
-      "severity_number <= 4",
-      // Drop DEBUG logs from production services (if deployment.environment is set)
-      "severity_number < 9 and resource.attributes[\"deployment.environment\"] == \"production\"",
+      // Drop TRACE and DEBUG logs - they're too verbose for log aggregation
+      // DEBUG logs are still visible in journalctl for debugging
+      "severity_number < 9",
     ]
   }
 
