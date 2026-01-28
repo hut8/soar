@@ -23,37 +23,28 @@
     {
       "row": "Status"
     },
-    "process-status",
-    "ogn-connected",
-    "adsb-connected",
+    ["process-status", "ogn-connected", "adsb-connected"],
     {
       "row": "Process Metrics"
     },
-    "process-uptime",
-    "cpu-usage",
-    "process-memory-usage",
+    ["process-uptime", "cpu-usage", "process-memory-usage"],
     {
       "row": "Connections"
     },
-    "connection-events-combined",
-    "seconds-between-keepalives",
+    ["connection-events-combined", "seconds-between-keepalives"],
     {
       "row": "Message Processing"
     },
-    "messages-received-per-second",
-    "messages-queued-per-second",
+    ["messages-received-per-second", "messages-queued-per-second"],
     {
       "row": "Publishing"
     },
     "messages-sent-to-processor-per-second",
-    "socket-send-errors",
-    "socket-send-duration",
+    ["socket-send-errors", "socket-send-duration"],
     {
       "row": "Queue Status"
     },
-    "memory-queue-depth",
-    "disk-queue-size",
-    "message-lag",
-    "queue-segments"
+    ["memory-queue-depth", "disk-queue-size"],
+    ["message-lag", "queue-segments"]
   ]
 }
