@@ -57,6 +57,26 @@ struct WriteSegmentState {
     size: u64,
 }
 
+/// Tracks pending delivery commit information
+enum PendingCommit {
+    /// Individual read mode - update read_offset in segment file on commit
+    Individual {
+        segment_name: String,
+        new_read_offset: u64,
+    },
+    /// Bulk read mode - delete segment only when last message is committed
+    Bulk { segment_name: String, is_last: bool },
+}
+
+/// Buffer for bulk segment reading during drain
+/// Holds all deserialized messages from a single full segment
+struct BulkDrainBuffer<T> {
+    /// The segment name this buffer was loaded from
+    segment_name: String,
+    /// Messages ready for delivery (FIFO order)
+    messages: std::collections::VecDeque<T>,
+}
+
 /// A persistent file-backed queue with fast-path memory optimization
 ///
 /// States:
@@ -85,10 +105,9 @@ where
     state: Arc<RwLock<QueueState>>,
     memory_tx: flume::Sender<T>,
     memory_rx: flume::Receiver<T>,
-    /// Pending read offset - set when message is read, committed when delivery succeeds
-    /// This ensures at-most-once delivery: offset only advances after successful send
-    /// Format: (segment_name, new_read_offset)
-    pending_commit: Arc<RwLock<Option<(String, u64)>>>,
+    /// Pending commit info - set when message is read, committed when delivery succeeds
+    /// This ensures at-least-once delivery for bulk reads, at-most-once for individual reads
+    pending_commit: Arc<RwLock<Option<PendingCommit>>>,
     /// Track whether we've logged the spillover warning (to avoid spamming logs)
     /// Set to true on first spillover to disk, reset to false after drain completes
     overflow_warned: Arc<AtomicBool>,
@@ -111,6 +130,9 @@ where
     /// Cached total file size across all segments (updated incrementally)
     /// Avoids expensive directory scans on every write
     total_file_size_cached: Arc<AtomicU64>,
+    /// Buffer for bulk segment reading during drain
+    /// When Some, recv() pops from this buffer instead of reading from disk
+    bulk_drain_buffer: Arc<RwLock<Option<BulkDrainBuffer<T>>>>,
 }
 
 impl<T> PersistentQueue<T>
@@ -184,6 +206,7 @@ where
             write_segment: Arc::new(std::sync::Mutex::new(None)),
             read_segment: Arc::new(std::sync::Mutex::new(None)),
             total_file_size_cached: Arc::new(AtomicU64::new(initial_total_size)),
+            bulk_drain_buffer: Arc::new(RwLock::new(None)),
         };
 
         // Initialize metrics
@@ -477,7 +500,68 @@ where
                 Ok(message)
             }
             QueueState::Draining { .. } => {
-                // Drain mode: try to read from disk first
+                // PRIORITY 1: Check bulk buffer first (already loaded segment)
+                {
+                    let mut buffer_guard = self.bulk_drain_buffer.write().await;
+                    if let Some(ref mut buffer) = *buffer_guard
+                        && let Some(message) = buffer.messages.pop_front()
+                    {
+                        // Track that we're delivering from bulk buffer
+                        let is_last = buffer.messages.is_empty();
+                        let segment_name = buffer.segment_name.clone();
+
+                        let mut pending = self.pending_commit.write().await;
+                        *pending = Some(PendingCommit::Bulk {
+                            segment_name,
+                            is_last,
+                        });
+
+                        metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
+                            .increment(1);
+                        return Ok(message);
+                    }
+                    // Buffer exhausted or empty - segment will be cleaned up on commit
+                }
+
+                // PRIORITY 2: Check for full segments to bulk-read
+                let segments = self.list_segments();
+
+                // Full segments = all except the last one (which is the write segment)
+                if segments.len() > 1 {
+                    let oldest_full = &segments[0];
+
+                    // Acquire file lock for reading
+                    let _lock = self.file_lock.lock().await;
+
+                    match self.bulk_read_segment(oldest_full) {
+                        Ok(Some(buffer)) => {
+                            let mut buffer_guard = self.bulk_drain_buffer.write().await;
+                            *buffer_guard = Some(buffer);
+                            drop(buffer_guard);
+                            drop(_lock);
+
+                            // Recursive call to pop from the newly-loaded buffer
+                            return Box::pin(self.recv()).await;
+                        }
+                        Ok(None) => {
+                            // Segment was empty or already drained - delete and try next
+                            drop(_lock);
+                            self.delete_segment(oldest_full)?;
+                            return Box::pin(self.recv()).await;
+                        }
+                        Err(e) => {
+                            // Error reading segment - log and try individual read
+                            warn!("Failed to bulk read segment {}: {}", oldest_full, e);
+                            metrics::counter!(format!("queue.{}.bulk_read_error_total", self.name))
+                                .increment(1);
+                            drop(_lock);
+                            // Fall through to individual read
+                        }
+                    }
+                }
+
+                // PRIORITY 3: Only write segment remains (or bulk read failed)
+                // Use individual reads for the write segment (existing behavior)
                 if let Some(message) = self.read_from_disk().await? {
                     metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
                         .increment(1);
@@ -501,8 +585,8 @@ where
 
     /// Commit a message delivery - marks it as consumed so it won't be replayed
     ///
-    /// IMPORTANT: Must be called after successful delivery to ensure at-most-once semantics
-    /// If crash occurs between recv() and commit(), message will be replayed
+    /// For individual reads: Updates read_offset in segment file (at-most-once)
+    /// For bulk reads: Deletes segment only when last message is committed (at-least-once)
     pub async fn commit(&self) -> Result<()> {
         use std::io::{Seek, Write};
 
@@ -512,58 +596,102 @@ where
             pending.take()
         };
 
-        if let Some((segment_name, new_read_offset)) = commit_info {
-            let path = self.segment_path(&segment_name);
+        match commit_info {
+            Some(PendingCommit::Individual {
+                segment_name,
+                new_read_offset,
+            }) => {
+                // INDIVIDUAL READ MODE: Update read_offset in segment file
+                let path = self.segment_path(&segment_name);
 
-            // Check if segment still exists (might have been deleted in a race)
-            if !path.exists() {
-                return Ok(());
-            }
+                // Check if segment still exists (might have been deleted in a race)
+                if !path.exists() {
+                    return Ok(());
+                }
 
-            // Get write_offset to check if segment is fully drained
-            let (write_offset, _) = self
-                .read_segment_offsets(&segment_name)
-                .ok_or_else(|| anyhow::anyhow!("Failed to read segment offsets"))?;
+                // Get write_offset to check if segment is fully drained
+                let (write_offset, _) = self
+                    .read_segment_offsets(&segment_name)
+                    .ok_or_else(|| anyhow::anyhow!("Failed to read segment offsets"))?;
 
-            // If this commit drains the segment, we may be able to delete it
-            if new_read_offset >= write_offset {
-                // Only delete if this is NOT the newest segment (the write segment).
-                // If it's the newest, concurrent appends may be writing to it, and
-                // we'd race with append_to_disk() which writes data before updating
-                // the header's write_offset. Deleting based on stale write_offset
-                // would drop those concurrent writes.
-                let segments = self.list_segments();
-                let is_write_segment = segments.last().map(|s| s == &segment_name).unwrap_or(true);
+                // If this commit drains the segment, we may be able to delete it
+                if new_read_offset >= write_offset {
+                    // Only delete if this is NOT the newest segment (the write segment).
+                    // If it's the newest, concurrent appends may be writing to it, and
+                    // we'd race with append_to_disk() which writes data before updating
+                    // the header's write_offset. Deleting based on stale write_offset
+                    // would drop those concurrent writes.
+                    let segments = self.list_segments();
+                    let is_write_segment =
+                        segments.last().map(|s| s == &segment_name).unwrap_or(true);
 
-                if is_write_segment {
-                    // Can't delete - this is the current write segment.
-                    // Just update read_offset to mark it as empty.
+                    if is_write_segment {
+                        // Can't delete - this is the current write segment.
+                        // Just update read_offset to mark it as empty.
+                        let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+                        file.seek(std::io::SeekFrom::Start(16))?;
+                        file.write_all(&new_read_offset.to_le_bytes())?;
+                        file.sync_all()?;
+                    } else {
+                        // Safe to delete - writes are going to newer segments
+                        self.delete_segment(&segment_name)?;
+                    }
+                } else {
+                    // Write new read_offset to disk
                     let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
+
                     file.seek(std::io::SeekFrom::Start(16))?;
                     file.write_all(&new_read_offset.to_le_bytes())?;
                     file.sync_all()?;
-                } else {
-                    // Safe to delete - writes are going to newer segments
-                    self.delete_segment(&segment_name)?;
                 }
-            } else {
-                // Write new read_offset to disk
-                let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
 
-                file.seek(std::io::SeekFrom::Start(16))?;
-                file.write_all(&new_read_offset.to_le_bytes())?;
-                file.sync_all()?;
+                metrics::counter!(format!("queue.{}.messages.committed_total", self.name))
+                    .increment(1);
+
+                // Update messages_drained counter if in Draining state
+                let mut state = self.state.write().await;
+                if let QueueState::Draining {
+                    messages_drained, ..
+                } = &mut *state
+                {
+                    *messages_drained += 1;
+                }
             }
 
-            metrics::counter!(format!("queue.{}.messages.committed_total", self.name)).increment(1);
+            Some(PendingCommit::Bulk {
+                segment_name,
+                is_last,
+            }) => {
+                // BULK READ MODE: Only delete segment when buffer is exhausted
+                if is_last {
+                    // All messages from buffer have been delivered and committed
+                    // Safe to delete the segment now
+                    self.delete_segment(&segment_name)?;
 
-            // Update messages_drained counter if in Draining state
-            let mut state = self.state.write().await;
-            if let QueueState::Draining {
-                messages_drained, ..
-            } = &mut *state
-            {
-                *messages_drained += 1;
+                    // Clear the bulk buffer
+                    let mut buffer_guard = self.bulk_drain_buffer.write().await;
+                    *buffer_guard = None;
+
+                    debug!("Bulk drain complete for segment {}", segment_name);
+                }
+                // If not is_last: nothing to write - segment stays on disk as crash recovery
+
+                metrics::counter!(format!("queue.{}.messages.committed_total", self.name))
+                    .increment(1);
+
+                // Update messages_drained counter if in Draining state
+                let mut state = self.state.write().await;
+                if let QueueState::Draining {
+                    messages_drained, ..
+                } = &mut *state
+                {
+                    *messages_drained += 1;
+                }
+            }
+
+            None => {
+                // Nothing pending - this is the memory path (Connected state)
+                // No action needed
             }
         }
 
@@ -1054,16 +1182,158 @@ where
             // Store pending commit info - will be committed after successful delivery
             {
                 let mut pending = self.pending_commit.write().await;
-                *pending = Some((segment_name, new_read_offset));
+                *pending = Some(PendingCommit::Individual {
+                    segment_name,
+                    new_read_offset,
+                });
             }
 
             return Ok(Some(message));
         }
     }
 
+    /// Read an entire segment into memory for bulk draining
+    ///
+    /// Only called for "full" segments (not the write segment).
+    /// Returns None if segment is empty, doesn't exist, or is already drained.
+    fn bulk_read_segment(&self, segment_name: &str) -> Result<Option<BulkDrainBuffer<T>>> {
+        use std::io::{Read, Seek};
+
+        let path = self.segment_path(segment_name);
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let mut file = std::fs::File::open(&path)?;
+
+        // Read header
+        let mut header = [0u8; HEADER_SIZE];
+        file.read_exact(&mut header)?;
+
+        // Verify magic
+        if &header[0..8] != MAGIC_BYTES {
+            anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
+        }
+
+        let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
+        let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
+
+        if read_offset >= write_offset {
+            return Ok(None); // Segment already drained
+        }
+
+        let bytes_remaining = write_offset - read_offset;
+        info!(
+            "Bulk reading segment {} ({} bytes remaining)",
+            segment_name, bytes_remaining
+        );
+
+        // Read all remaining messages into buffer
+        let mut messages = std::collections::VecDeque::new();
+        let mut current_offset = read_offset;
+        file.seek(std::io::SeekFrom::Start(current_offset))?;
+
+        let mut corrupted_count = 0u64;
+
+        while current_offset < write_offset {
+            // Read length
+            let mut len_bytes = [0u8; 4];
+            if file.read_exact(&mut len_bytes).is_err() {
+                warn!(
+                    "Truncated segment {} at offset {}",
+                    segment_name, current_offset
+                );
+                break;
+            }
+            let data_len = u32::from_le_bytes(len_bytes) as usize;
+
+            // Sanity check
+            if data_len > 100 * 1024 * 1024 {
+                warn!(
+                    "Unreasonable data_len {} in segment {} at offset {}, stopping bulk read",
+                    data_len, segment_name, current_offset
+                );
+                break;
+            }
+
+            // Read data
+            let mut data = vec![0u8; data_len];
+            if file.read_exact(&mut data).is_err() {
+                warn!(
+                    "Truncated data in segment {} at offset {}",
+                    segment_name, current_offset
+                );
+                break;
+            }
+
+            // Read checksum
+            let mut checksum_bytes = [0u8; 4];
+            if file.read_exact(&mut checksum_bytes).is_err() {
+                warn!(
+                    "Truncated checksum in segment {} at offset {}",
+                    segment_name, current_offset
+                );
+                break;
+            }
+            let expected_checksum = u32::from_le_bytes(checksum_bytes);
+
+            // Advance offset
+            current_offset += 4 + data_len as u64 + 4;
+
+            // Verify checksum
+            let actual_checksum = crc32fast::hash(&data);
+            if actual_checksum != expected_checksum {
+                warn!(
+                    "Checksum mismatch in segment {} (bulk read), skipping message",
+                    segment_name
+                );
+                corrupted_count += 1;
+                continue;
+            }
+
+            // Deserialize
+            match bincode::deserialize::<T>(&data) {
+                Ok(message) => messages.push_back(message),
+                Err(e) => {
+                    warn!(
+                        "Failed to deserialize message in segment {} (bulk read): {}",
+                        segment_name, e
+                    );
+                    corrupted_count += 1;
+                }
+            }
+        }
+
+        if corrupted_count > 0 {
+            metrics::counter!(format!("queue.{}.bulk_read_corrupted_total", self.name))
+                .increment(corrupted_count);
+        }
+
+        let count = messages.len();
+        if count == 0 {
+            return Ok(None);
+        }
+
+        metrics::counter!(format!("queue.{}.bulk_read_segments_total", self.name)).increment(1);
+        metrics::histogram!(format!("queue.{}.bulk_read_messages", self.name)).record(count as f64);
+
+        debug!("Bulk read {} messages from segment {}", count, segment_name);
+
+        Ok(Some(BulkDrainBuffer {
+            segment_name: segment_name.to_string(),
+            messages,
+        }))
+    }
+
     /// Finish draining (transition from Draining to Connected)
     async fn finish_drain(&self) -> Result<()> {
         let name = self.name.clone();
+
+        // Clear any remaining bulk buffer
+        {
+            let mut buffer_guard = self.bulk_drain_buffer.write().await;
+            *buffer_guard = None;
+        }
 
         // All segments should already be deleted during commit()
         // But clean up any remaining empty segments just in case
