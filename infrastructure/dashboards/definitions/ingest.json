@@ -21,14 +21,17 @@
   ],
   "panels": [
     {
+      "row": "Status"
+    },
+    "process-status",
+    "ogn-connected",
+    "adsb-connected",
+    {
       "row": "Process Metrics"
     },
     "process-uptime",
     "cpu-usage",
     "process-memory-usage",
-    "process-status",
-    "ogn-connected",
-    "adsb-connected",
     {
       "row": "Connections"
     },

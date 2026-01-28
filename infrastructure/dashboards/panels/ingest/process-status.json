@@ -13,41 +13,40 @@
           "options": {
             "0": {
               "color": "red",
-              "index": 0,
-              "text": "DOWN"
+              "index": 1,
+              "text": "Down"
             },
             "1": {
               "color": "green",
-              "index": 1,
-              "text": "UP"
+              "index": 0,
+              "text": "Up"
             }
           },
           "type": "value"
         }
       ],
-      "max": 1,
-      "min": 0,
       "thresholds": {
         "mode": "absolute",
         "steps": [
           {
             "color": "red",
-            "value": 0
+            "value": null
           },
           {
             "color": "green",
             "value": 1
           }
         ]
-      },
-      "unit": "short"
+      }
     },
     "overrides": []
   },
   "options": {
-    "minVizHeight": 75,
-    "minVizWidth": 75,
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "auto",
     "orientation": "auto",
+    "percentChangeColorMode": "standard",
     "reduceOptions": {
       "calcs": [
         "lastNotNull"
@@ -55,9 +54,9 @@
       "fields": "",
       "values": false
     },
-    "showThresholdLabels": false,
-    "showThresholdMarkers": true,
-    "sizing": "auto"
+    "showPercentChange": false,
+    "textMode": "auto",
+    "wideLayout": true
   },
   "pluginVersion": "12.2.1",
   "targets": [
@@ -68,13 +67,13 @@
       },
       "editorMode": "code",
       "expr": "process_is_up{component=\"ingest\",environment=~\"$environment\"}",
-      "legendFormat": "SOAR Ingest OGN",
+      "legendFormat": "__auto",
       "range": true,
       "refId": "A"
     }
   ],
   "title": "Process Status",
-  "type": "gauge",
+  "type": "stat",
   "_width": 8,
   "_height": 4
 }
