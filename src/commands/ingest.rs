@@ -337,23 +337,37 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         let send_start = std::time::Instant::now();
 
                         // Send pre-serialized envelope directly to socket
-                        match socket_client.send_serialized(serialized_envelope).await {
+                        match socket_client.send_serialized(&serialized_envelope).await {
                             Ok(_) => {
-                                // Track stats
-                                let send_duration_ms = send_start.elapsed().as_millis() as u64;
+                                // Track stats - use microseconds for atomics, fractional ms for metrics
+                                let elapsed = send_start.elapsed();
+                                let send_duration_us = elapsed.as_micros() as u64;
+                                let send_duration_ms_float = elapsed.as_secs_f64() * 1000.0;
                                 stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 stats_time_clone.fetch_add(
-                                    send_duration_ms,
+                                    send_duration_us,
                                     std::sync::atomic::Ordering::Relaxed,
                                 );
-                                if send_duration_ms > 100 {
+                                if send_duration_us > 100_000 {
+                                    // >100ms
                                     stats_slow_clone
                                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 }
 
-                                // Update metric (no per-source breakdown since envelope is opaque here)
+                                // Update metric with fractional milliseconds for sub-ms precision
                                 metrics::histogram!("ingest.socket_send_duration_ms")
-                                    .record(send_duration_ms as f64);
+                                    .record(send_duration_ms_float);
+
+                                // Calculate and record message lag (time between message creation and send)
+                                if let Ok(envelope) =
+                                    soar::protocol::deserialize_envelope(&serialized_envelope)
+                                {
+                                    let now_micros = chrono::Utc::now().timestamp_micros();
+                                    let lag_seconds = (now_micros - envelope.timestamp_micros)
+                                        as f64
+                                        / 1_000_000.0;
+                                    metrics::gauge!("ingest_message_lag_seconds").set(lag_seconds);
+                                }
 
                                 // Successfully delivered - commit the message
                                 if let Err(e) = queue_for_publisher.commit().await {
@@ -439,15 +453,22 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             }
 
             // Format sent stats (rate + avg send time combined)
+            // total_send_time is in microseconds
             let sent_stats = if sent_count > 0 {
-                let avg = total_send_time as f64 / sent_count as f64;
+                let avg_us = total_send_time as f64 / sent_count as f64;
+                // Format duration: use µs if < 1000µs, otherwise ms
+                let avg_str = if avg_us < 1000.0 {
+                    format!("{:.1}µs", avg_us)
+                } else {
+                    format!("{:.2}ms", avg_us / 1000.0)
+                };
                 if slow_count > 0 {
                     format!(
-                        "{{rate:{:.1}/s avg:{:.1}ms ({} >100ms)}}",
-                        sent_per_sec, avg, slow_count
+                        "{{rate:{:.1}/s avg:{} ({} >100ms)}}",
+                        sent_per_sec, avg_str, slow_count
                     )
                 } else {
-                    format!("{{rate:{:.1}/s avg:{:.1}ms}}", sent_per_sec, avg)
+                    format!("{{rate:{:.1}/s avg:{}}}", sent_per_sec, avg_str)
                 }
             } else {
                 format!("{{rate:{:.1}/s}}", sent_per_sec)
@@ -463,6 +484,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 .set(queue_depth.disk_data_bytes as f64);
             metrics::gauge!("ingest.queue_depth_bytes", "type" => "file")
                 .set(queue_depth.disk_file_bytes as f64);
+            metrics::gauge!("ingest.queue_segment_count").set(queue_depth.segment_count as f64);
 
             // Calculate estimated drain time based on send rate
             let drain_time_estimate = if sent_per_sec > 0.0 && queue_depth.disk_data_bytes > 0 {
@@ -712,6 +734,9 @@ fn initialize_ingest_metrics() {
     // Socket send duration histogram
     metrics::histogram!("ingest.socket_send_duration_ms").record(0.0);
 
+    // Message lag (time between message creation and send to processor)
+    metrics::gauge!("ingest_message_lag_seconds").set(0.0);
+
     // Per-source receive rate metrics
     for source in &["OGN", "Beast", "SBS"] {
         metrics::gauge!("ingest.messages_per_second", "source" => *source).set(0.0);
@@ -722,6 +747,7 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.queue_depth", "type" => "memory").set(0.0);
     metrics::gauge!("ingest.queue_depth_bytes", "type" => "data").set(0.0);
     metrics::gauge!("ingest.queue_depth_bytes", "type" => "file").set(0.0);
+    metrics::gauge!("ingest.queue_segment_count").set(0.0);
 
     // Connection health metrics
     metrics::gauge!("ingest.health.ogn_connected").set(0.0);

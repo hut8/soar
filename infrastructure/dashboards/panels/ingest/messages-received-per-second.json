@@ -25,8 +25,8 @@
           "viz": false
         },
         "insertNulls": false,
-        "lineInterpolation": "linear",
-        "lineWidth": 1,
+        "lineInterpolation": "smooth",
+        "lineWidth": 2,
         "pointSize": 5,
         "scaleDistribution": {
           "type": "linear"
@@ -59,7 +59,9 @@
   "options": {
     "legend": {
       "calcs": [
-        "lastNotNull"
+        "lastNotNull",
+        "mean",
+        "max"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -79,8 +81,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_raw_message_received_server_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
-      "legendFormat": "Server Messages/sec",
+      "expr": "aprs_message_rate{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "APRS - aprs.glidernet.org",
       "range": true,
       "refId": "A"
     },
@@ -90,8 +92,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_raw_message_received_aprs_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
-      "legendFormat": "APRS Messages/sec",
+      "expr": "beast_message_rate{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "BEAST - radar:30005",
       "range": true,
       "refId": "B"
     },
@@ -101,8 +103,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "aprs_message_rate{component=\"ingest\",environment=\"$environment\"}",
-      "legendFormat": "Total",
+      "expr": "sbs_message_rate{component=\"ingest\",environment=~\"$environment\"}",
+      "legendFormat": "SBS",
       "range": true,
       "refId": "C"
     }

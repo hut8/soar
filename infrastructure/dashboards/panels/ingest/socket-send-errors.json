@@ -12,7 +12,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "",
+        "axisLabel": "errors/s",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -26,7 +26,7 @@
         },
         "insertNulls": false,
         "lineInterpolation": "linear",
-        "lineWidth": 1,
+        "lineWidth": 2,
         "pointSize": 5,
         "scaleDistribution": {
           "type": "linear"
@@ -49,6 +49,10 @@
           {
             "color": "green",
             "value": 0
+          },
+          {
+            "color": "red",
+            "value": 1
           }
         ]
       },
@@ -59,7 +63,8 @@
   "options": {
     "legend": {
       "calcs": [
-        "lastNotNull"
+        "lastNotNull",
+        "sum"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -79,12 +84,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "(rate(ingest_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m]) or vector(0)) * 60",
-      "legendFormat": "{{source}}",
+      "expr": "rate(ingest_socket_send_error_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "legendFormat": "Socket send errors",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Socket Send Errors",
+  "title": "Socket Send Errors per Second",
   "type": "timeseries"
 }

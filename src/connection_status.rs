@@ -95,7 +95,7 @@ impl ConnectionStatusPublisher {
     }
 
     /// Publish current status immediately
-    pub async fn publish_now(&self) {
+    async fn publish_internal(&self, log_on_success: bool) {
         let status = self.current_status.read().await.clone();
         let topic = get_status_topic();
 
@@ -103,7 +103,7 @@ impl ConnectionStatusPublisher {
             Ok(payload) => {
                 if let Err(e) = self.nats_client.publish(topic, payload.into()).await {
                     warn!("Failed to publish connection status: {}", e);
-                } else {
+                } else if log_on_success {
                     info!(
                         "Published connection status: ogn={}, adsb={}",
                         status.ogn_connected, status.adsb_connected
@@ -114,13 +114,18 @@ impl ConnectionStatusPublisher {
         }
     }
 
-    /// Start periodic publishing (every 60 seconds)
+    /// Publish current status immediately (with logging)
+    pub async fn publish_now(&self) {
+        self.publish_internal(true).await;
+    }
+
+    /// Start periodic publishing (every 60 seconds, without logging)
     pub fn start_periodic_publish(self: Arc<Self>) {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                self.publish_now().await;
+                self.publish_internal(false).await;
             }
         });
     }
