@@ -13,6 +13,7 @@ type WriteSegmentMutex = std::sync::Mutex<Option<WriteSegmentState>>;
 const MAGIC_BYTES: &[u8; 8] = b"SOARQUE1";
 const HEADER_SIZE: usize = 32;
 const DEFAULT_MAX_SEGMENT_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+const MAX_MESSAGE_SIZE: usize = 100 * 1024 * 1024; // 100 MB sanity limit
 
 /// State of the persistent queue
 #[derive(Debug, Clone)]
@@ -500,80 +501,89 @@ where
                 Ok(message)
             }
             QueueState::Draining { .. } => {
-                // PRIORITY 1: Check bulk buffer first (already loaded segment)
-                {
-                    let mut buffer_guard = self.bulk_drain_buffer.write().await;
-                    if let Some(ref mut buffer) = *buffer_guard
-                        && let Some(message) = buffer.messages.pop_front()
+                // Loop to handle bulk segment reads without recursion
+                loop {
+                    // PRIORITY 1: Check bulk buffer first (already loaded segment)
                     {
-                        // Track that we're delivering from bulk buffer
-                        let is_last = buffer.messages.is_empty();
-                        let segment_name = buffer.segment_name.clone();
+                        let mut buffer_guard = self.bulk_drain_buffer.write().await;
+                        if let Some(ref mut buffer) = *buffer_guard
+                            && let Some(message) = buffer.messages.pop_front()
+                        {
+                            // Track that we're delivering from bulk buffer
+                            let is_last = buffer.messages.is_empty();
+                            let segment_name = buffer.segment_name.clone();
 
-                        let mut pending = self.pending_commit.write().await;
-                        *pending = Some(PendingCommit::Bulk {
-                            segment_name,
-                            is_last,
-                        });
+                            let mut pending = self.pending_commit.write().await;
+                            *pending = Some(PendingCommit::Bulk {
+                                segment_name,
+                                is_last,
+                            });
 
+                            metrics::counter!(format!(
+                                "queue.{}.messages.drained_total",
+                                self.name
+                            ))
+                            .increment(1);
+                            return Ok(message);
+                        }
+                        // Buffer exhausted or empty - segment will be cleaned up on commit
+                    }
+
+                    // PRIORITY 2: Check for full segments to bulk-read
+                    let segments = self.list_segments();
+
+                    // Full segments = all except the last one (which is the write segment)
+                    if segments.len() > 1 {
+                        let oldest_full = segments[0].clone();
+
+                        // Acquire file lock for reading
+                        let _lock = self.file_lock.lock().await;
+
+                        match self.bulk_read_segment(&oldest_full) {
+                            Ok(Some(buffer)) => {
+                                let mut buffer_guard = self.bulk_drain_buffer.write().await;
+                                *buffer_guard = Some(buffer);
+                                drop(buffer_guard);
+                                drop(_lock);
+
+                                // Continue loop to pop from the newly-loaded buffer
+                                continue;
+                            }
+                            Ok(None) => {
+                                // Segment was empty or already drained - delete and try next
+                                drop(_lock);
+                                self.delete_segment(&oldest_full)?;
+                                continue;
+                            }
+                            Err(e) => {
+                                // Error reading segment - log and try individual read
+                                warn!("Failed to bulk read segment {}: {}", oldest_full, e);
+                                metrics::counter!(format!(
+                                    "queue.{}.bulk_read_error_total",
+                                    self.name
+                                ))
+                                .increment(1);
+                                drop(_lock);
+                                // Fall through to individual read
+                            }
+                        }
+                    }
+
+                    // PRIORITY 3: Only write segment remains (or bulk read failed)
+                    // Use individual reads for the write segment (existing behavior)
+                    if let Some(message) = self.read_from_disk().await? {
                         metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
                             .increment(1);
                         return Ok(message);
+                    } else {
+                        // Backlog exhausted, switch to connected mode
+                        self.finish_drain().await?;
+                        // Now receive from memory
+                        let message = self.memory_rx.recv_async().await?;
+                        metrics::counter!(format!("queue.{}.messages.received_total", self.name))
+                            .increment(1);
+                        return Ok(message);
                     }
-                    // Buffer exhausted or empty - segment will be cleaned up on commit
-                }
-
-                // PRIORITY 2: Check for full segments to bulk-read
-                let segments = self.list_segments();
-
-                // Full segments = all except the last one (which is the write segment)
-                if segments.len() > 1 {
-                    let oldest_full = &segments[0];
-
-                    // Acquire file lock for reading
-                    let _lock = self.file_lock.lock().await;
-
-                    match self.bulk_read_segment(oldest_full) {
-                        Ok(Some(buffer)) => {
-                            let mut buffer_guard = self.bulk_drain_buffer.write().await;
-                            *buffer_guard = Some(buffer);
-                            drop(buffer_guard);
-                            drop(_lock);
-
-                            // Recursive call to pop from the newly-loaded buffer
-                            return Box::pin(self.recv()).await;
-                        }
-                        Ok(None) => {
-                            // Segment was empty or already drained - delete and try next
-                            drop(_lock);
-                            self.delete_segment(oldest_full)?;
-                            return Box::pin(self.recv()).await;
-                        }
-                        Err(e) => {
-                            // Error reading segment - log and try individual read
-                            warn!("Failed to bulk read segment {}: {}", oldest_full, e);
-                            metrics::counter!(format!("queue.{}.bulk_read_error_total", self.name))
-                                .increment(1);
-                            drop(_lock);
-                            // Fall through to individual read
-                        }
-                    }
-                }
-
-                // PRIORITY 3: Only write segment remains (or bulk read failed)
-                // Use individual reads for the write segment (existing behavior)
-                if let Some(message) = self.read_from_disk().await? {
-                    metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
-                        .increment(1);
-                    Ok(message)
-                } else {
-                    // Backlog exhausted, switch to connected mode
-                    self.finish_drain().await?;
-                    // Now receive from memory
-                    let message = self.memory_rx.recv_async().await?;
-                    metrics::counter!(format!("queue.{}.messages.received_total", self.name))
-                        .increment(1);
-                    Ok(message)
                 }
             }
             QueueState::Disconnected { .. } => {
@@ -1110,8 +1120,8 @@ where
             }
             let data_len = u32::from_le_bytes(len_bytes) as usize;
 
-            // Sanity check: data_len should be reasonable (< 100MB)
-            if data_len > 100 * 1024 * 1024 {
+            // Sanity check: data_len should be reasonable
+            if data_len > MAX_MESSAGE_SIZE {
                 warn!(
                     "Unreasonable data_len {} in segment {}, likely corruption",
                     data_len, segment_name
@@ -1238,17 +1248,17 @@ where
         while current_offset < write_offset {
             // Read length
             let mut len_bytes = [0u8; 4];
-            if file.read_exact(&mut len_bytes).is_err() {
+            if let Err(e) = file.read_exact(&mut len_bytes) {
                 warn!(
-                    "Truncated segment {} at offset {}",
-                    segment_name, current_offset
+                    "Truncated segment {} at offset {}: {}",
+                    segment_name, current_offset, e
                 );
                 break;
             }
             let data_len = u32::from_le_bytes(len_bytes) as usize;
 
             // Sanity check
-            if data_len > 100 * 1024 * 1024 {
+            if data_len > MAX_MESSAGE_SIZE {
                 warn!(
                     "Unreasonable data_len {} in segment {} at offset {}, stopping bulk read",
                     data_len, segment_name, current_offset
@@ -1258,20 +1268,20 @@ where
 
             // Read data
             let mut data = vec![0u8; data_len];
-            if file.read_exact(&mut data).is_err() {
+            if let Err(e) = file.read_exact(&mut data) {
                 warn!(
-                    "Truncated data in segment {} at offset {}",
-                    segment_name, current_offset
+                    "Truncated data in segment {} at offset {}: {}",
+                    segment_name, current_offset, e
                 );
                 break;
             }
 
             // Read checksum
             let mut checksum_bytes = [0u8; 4];
-            if file.read_exact(&mut checksum_bytes).is_err() {
+            if let Err(e) = file.read_exact(&mut checksum_bytes) {
                 warn!(
-                    "Truncated checksum in segment {} at offset {}",
-                    segment_name, current_offset
+                    "Truncated checksum in segment {} at offset {}: {}",
+                    segment_name, current_offset, e
                 );
                 break;
             }
