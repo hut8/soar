@@ -1,0 +1,112 @@
+#!/bin/bash
+#
+# SOAR Grafana Dashboard Deployment Script
+#
+# Builds and deploys Grafana dashboards without touching the backend binary.
+# This is useful for quick dashboard updates during development.
+#
+# Usage:
+#   ./scripts/deploy-dashboards           # Build and deploy all dashboards
+#   ./scripts/deploy-dashboards ingest    # Build and deploy specific dashboard
+#
+# Prerequisites:
+#   - Script must be run from the project root directory
+#   - User must have sudo access
+#   - Python 3 must be installed (for dashboard builder)
+#
+
+set -e
+set -u
+set -o pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_step() {
+    echo -e "\n${BLUE}==>${NC} ${BLUE}$1${NC}\n"
+}
+
+# Check if we're in the project root
+if [ ! -f "Cargo.toml" ] || [ ! -d "infrastructure/dashboards" ]; then
+    log_error "This script must be run from the project root directory"
+    exit 1
+fi
+
+# Check for dashboard builder
+if [ ! -f "infrastructure/dashboards/build.py" ]; then
+    log_error "Dashboard builder not found at infrastructure/dashboards/build.py"
+    exit 1
+fi
+
+# Build dashboards
+log_step "Building Grafana dashboards"
+
+if [ $# -gt 0 ]; then
+    # Build specific dashboard
+    DASHBOARD="$1"
+    log_info "Building dashboard: $DASHBOARD"
+    if ! python3 infrastructure/dashboards/build.py "$DASHBOARD"; then
+        log_error "Failed to build dashboard: $DASHBOARD"
+        exit 1
+    fi
+else
+    # Build all dashboards
+    log_info "Building all dashboards..."
+    if ! python3 infrastructure/dashboards/build.py; then
+        log_error "Failed to build dashboards"
+        exit 1
+    fi
+fi
+
+# Verify dashboards were generated
+if ! compgen -G "infrastructure/grafana-dashboard-*.json" >/dev/null; then
+    log_error "No dashboard files were generated"
+    exit 1
+fi
+
+# Count dashboards
+DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+log_info "Built $DASHBOARD_COUNT dashboard(s)"
+
+# Deploy dashboards
+log_step "Deploying dashboards to Grafana"
+
+GRAFANA_DASHBOARD_DIR="/etc/grafana/dashboards"
+
+if [ ! -d "$GRAFANA_DASHBOARD_DIR" ]; then
+    log_error "Grafana dashboard directory not found: $GRAFANA_DASHBOARD_DIR"
+    log_error "Is Grafana installed and configured?"
+    exit 1
+fi
+
+log_info "Copying dashboards to $GRAFANA_DASHBOARD_DIR..."
+sudo cp infrastructure/grafana-dashboard-*.json "$GRAFANA_DASHBOARD_DIR/"
+sudo chown grafana:grafana "$GRAFANA_DASHBOARD_DIR"/*.json
+sudo chmod 644 "$GRAFANA_DASHBOARD_DIR"/*.json
+
+# Restart Grafana to pick up changes
+log_info "Restarting Grafana..."
+if sudo systemctl restart grafana-server; then
+    log_info "Grafana restarted successfully"
+else
+    log_warn "Failed to restart Grafana - dashboards may not update until manual restart"
+fi
+
+log_step "Dashboard deployment complete!"
+log_info "Deployed $DASHBOARD_COUNT dashboard(s) to $GRAFANA_DASHBOARD_DIR"
