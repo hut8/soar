@@ -624,9 +624,9 @@ async fn complete_flight_in_background(
                 .archive_spurious_flight(flight_id, reason_enums, reason_descriptions)
                 .await?;
 
-            metrics::counter!("flight_tracker.spurious_flights_deleted_total").increment(1);
+            metrics::counter!("flight_tracker.spurious_flights_archived_total").increment(1);
 
-            return Ok(false); // Return false to indicate flight was deleted as spurious
+            return Ok(false); // Return false to indicate flight was archived as spurious
         }
     }
 
