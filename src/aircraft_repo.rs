@@ -214,7 +214,7 @@ impl AircraftRepository {
             .map_err(|e| {
                 error!(
                     "get_or_insert_aircraft_by_address failed: address={:06X}, address_type={:?}, \
-                     registration={:?}, error={}",
+                     computed_registration={:?}, error={}",
                     address, address_type, registration_for_logging, e
                 );
                 e

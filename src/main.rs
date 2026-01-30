@@ -742,12 +742,12 @@ async fn main() -> Result<()> {
                 sentry::ClientOptions {
                     release: Some(std::borrow::Cow::Borrowed(env!("VERGEN_GIT_DESCRIBE"))),
                     environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
-                    // Capture errors and warnings
+                    // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
                     ..Default::default()
                 },
             ));
-            eprintln!("Sentry initialized for environment: {}", soar_env);
+            info!("Sentry initialized for environment: {}", soar_env);
             Some(guard)
         } else {
             None
