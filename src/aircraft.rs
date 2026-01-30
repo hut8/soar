@@ -125,9 +125,13 @@ pub enum RegistrationCountry {
 pub struct Aircraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<uuid::Uuid>,
+    // DDB deserialization fields — these are used to parse DDB JSON responses
+    // which send a single device_type + device_id pair.
+    // These do NOT map to database columns (they're routed to typed columns in NewAircraft).
     #[serde(
         alias = "device_type",
         rename(serialize = "address_type"),
+        default,
         deserialize_with = "address_type_from_str",
         serialize_with = "address_type_to_str"
     )]
@@ -135,10 +139,20 @@ pub struct Aircraft {
     #[serde(
         alias = "device_id",
         rename(serialize = "address"),
+        default,
         deserialize_with = "hex_to_u32",
         serialize_with = "u32_to_hex"
     )]
     pub address: u32,
+    // Typed address columns (map to database)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icao_address: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flarm_address: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ogn_address: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub other_address: Option<u32>,
     pub aircraft_model: String,
     pub registration: Option<String>,
     /// Competition number (glider contest ID). Serializes as "competition_number".
@@ -200,9 +214,35 @@ pub struct Aircraft {
 }
 
 impl Aircraft {
-    /// Convert device address to canonical 6-character uppercase hex format
-    pub fn aircraft_address_hex(&self) -> String {
-        format!("{:06X}", self.address)
+    /// Convert the primary device address to canonical 6-character uppercase hex format.
+    /// Prefers ICAO, then Flarm, then OGN, then Other. Falls back to the legacy `address` field.
+    pub fn aircraft_address_hex(&self) -> Option<String> {
+        self.icao_address
+            .or(self.flarm_address)
+            .or(self.ogn_address)
+            .or(self.other_address)
+            .map(|a| format!("{:06X}", a))
+            .or_else(|| {
+                if self.address != 0 {
+                    Some(format!("{:06X}", self.address))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Returns the AddressType for the primary address.
+    /// Used for flights denormalization (device_address_type on the flights table).
+    pub fn primary_address_type(&self) -> AddressType {
+        if self.icao_address.is_some() {
+            AddressType::Icao
+        } else if self.flarm_address.is_some() {
+            AddressType::Flarm
+        } else if self.ogn_address.is_some() {
+            AddressType::Ogn
+        } else {
+            AddressType::Unknown
+        }
     }
 }
 
@@ -221,8 +261,10 @@ impl Aircraft {
 #[diesel(table_name = crate::schema::aircraft)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftModel {
-    pub address: i32,
-    pub address_type: AddressType,
+    pub icao_address: Option<i32>,
+    pub flarm_address: Option<i32>,
+    pub ogn_address: Option<i32>,
+    pub other_address: Option<i32>,
     pub aircraft_model: String,
     pub registration: Option<String>,
     pub competition_number: String,
@@ -257,9 +299,24 @@ pub struct AircraftModel {
 }
 
 impl AircraftModel {
-    /// Convert device address to canonical 6-character uppercase hex format
-    pub fn aircraft_address_hex(&self) -> String {
-        format!("{:06X}", self.address)
+    pub fn aircraft_address_hex(&self) -> Option<String> {
+        self.icao_address
+            .or(self.flarm_address)
+            .or(self.ogn_address)
+            .or(self.other_address)
+            .map(|a| format!("{:06X}", a as u32))
+    }
+
+    pub fn primary_address_type(&self) -> AddressType {
+        if self.icao_address.is_some() {
+            AddressType::Icao
+        } else if self.flarm_address.is_some() {
+            AddressType::Flarm
+        } else if self.ogn_address.is_some() {
+            AddressType::Ogn
+        } else {
+            AddressType::Unknown
+        }
     }
 }
 
@@ -267,8 +324,10 @@ impl AircraftModel {
 #[derive(Debug, Insertable, AsChangeset)]
 #[diesel(table_name = crate::schema::aircraft)]
 pub struct NewAircraft {
-    pub address: i32,
-    pub address_type: AddressType,
+    pub icao_address: Option<i32>,
+    pub flarm_address: Option<i32>,
+    pub ogn_address: Option<i32>,
+    pub other_address: Option<i32>,
     pub aircraft_model: String,
     pub registration: Option<String>,
     pub competition_number: String,
@@ -299,14 +358,54 @@ pub struct NewAircraft {
     pub images: Option<serde_json::Value>,
 }
 
+impl NewAircraft {
+    /// Returns a hex string for the primary address (for logging).
+    pub fn address_hex(&self) -> String {
+        self.icao_address
+            .or(self.flarm_address)
+            .or(self.ogn_address)
+            .or(self.other_address)
+            .map(|a| format!("{:06X}", a as u32))
+            .unwrap_or_else(|| "??????".to_string())
+    }
+}
+
 impl From<Aircraft> for NewAircraft {
     fn from(device: Aircraft) -> Self {
+        // Determine typed addresses: if already set, use them; otherwise route from DDB fields
+        let (icao_address, flarm_address, ogn_address, other_address) =
+            if device.icao_address.is_some()
+                || device.flarm_address.is_some()
+                || device.ogn_address.is_some()
+                || device.other_address.is_some()
+            {
+                (
+                    device.icao_address.map(|a| a as i32),
+                    device.flarm_address.map(|a| a as i32),
+                    device.ogn_address.map(|a| a as i32),
+                    device.other_address.map(|a| a as i32),
+                )
+            } else {
+                // Route from legacy DDB address/address_type fields
+                let addr = device.address as i32;
+                match device.address_type {
+                    AddressType::Icao => (Some(addr), None, None, None),
+                    AddressType::Flarm => (None, Some(addr), None, None),
+                    AddressType::Ogn => (None, None, Some(addr), None),
+                    AddressType::Unknown => {
+                        (None, None, None, if addr != 0 { Some(addr) } else { None })
+                    }
+                }
+            };
+
         // Extract country code from ICAO address or registration if not already present
         let country_code = device
             .country_code
             .or_else(|| {
                 // Try ICAO address first
-                Aircraft::extract_country_code_from_icao(device.address, device.address_type)
+                icao_address.and_then(|addr| {
+                    Aircraft::extract_country_code_from_icao(addr as u32, AddressType::Icao)
+                })
             })
             .or_else(|| {
                 // Fall back to extracting from registration if available
@@ -317,8 +416,10 @@ impl From<Aircraft> for NewAircraft {
             });
 
         Self {
-            address: device.address as i32,
-            address_type: device.address_type,
+            icao_address,
+            flarm_address,
+            ogn_address,
+            other_address,
             aircraft_model: device.aircraft_model,
             registration: device.registration,
             competition_number: device.competition_number,
@@ -357,8 +458,26 @@ impl From<AircraftModel> for Aircraft {
     fn from(model: AircraftModel) -> Self {
         Self {
             id: Some(model.id),
-            address_type: model.address_type,
-            address: model.address as u32,
+            // Legacy fields: populate from primary address for backward compat with DDB code
+            address_type: if model.icao_address.is_some() {
+                AddressType::Icao
+            } else if model.flarm_address.is_some() {
+                AddressType::Flarm
+            } else if model.ogn_address.is_some() {
+                AddressType::Ogn
+            } else {
+                AddressType::Unknown
+            },
+            address: model
+                .icao_address
+                .or(model.flarm_address)
+                .or(model.ogn_address)
+                .or(model.other_address)
+                .unwrap_or(0) as u32,
+            icao_address: model.icao_address.map(|a| a as u32),
+            flarm_address: model.flarm_address.map(|a| a as u32),
+            ogn_address: model.ogn_address.map(|a| a as u32),
+            other_address: model.other_address.map(|a| a as u32),
             aircraft_model: model.aircraft_model,
             registration: model.registration,
             competition_number: model.competition_number,
@@ -631,6 +750,10 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 id: None, // Will be set by database
                                 address_type: AddressType::Flarm,
                                 address,
+                                icao_address: None,
+                                flarm_address: None,
+                                ogn_address: None,
+                                other_address: None,
                                 aircraft_model: record.plane_type,
                                 registration,
                                 competition_number: record.call_sign,
@@ -844,6 +967,10 @@ impl AircraftFetcher {
                                     id: None, // Will be set by database
                                     address_type: AddressType::Flarm,
                                     address,
+                                    icao_address: None,
+                                    flarm_address: None,
+                                    ogn_address: None,
+                                    other_address: None,
                                     aircraft_model: record.plane_type,
                                     registration,
                                     competition_number: record.call_sign,
@@ -1014,6 +1141,10 @@ impl AircraftFetcher {
                         id: None, // Merged devices from external sources don't have our database ID
                         address_type: glidernet_device.address_type,
                         address: glidernet_device.address,
+                        icao_address: None,
+                        flarm_address: None,
+                        ogn_address: None,
+                        other_address: None,
                         aircraft_model: if !glidernet_device.aircraft_model.is_empty() {
                             glidernet_device.aircraft_model.clone()
                         } else {
@@ -1125,6 +1256,10 @@ mod tests {
             id: None, // Test device without database ID
             address_type: AddressType::Flarm,
             address: 0x000000,
+            icao_address: None,
+            flarm_address: None,
+            ogn_address: None,
+            other_address: None,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
             registration: Some("HA-4403".to_string()),
             competition_number: "J".to_string(),
@@ -1469,6 +1604,10 @@ mod tests {
             id: None, // Test devices don't have database IDs
             address_type: AddressType::Flarm,
             address: 0x123456,
+            icao_address: None,
+            flarm_address: None,
+            ogn_address: None,
+            other_address: None,
             aircraft_model: "Test Aircraft".to_string(),
             registration: Some(registration.to_string()),
             competition_number: "T".to_string(),

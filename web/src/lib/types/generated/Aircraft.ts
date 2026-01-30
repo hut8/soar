@@ -9,8 +9,22 @@ import type { Fix } from './Fix';
  */
 export type Aircraft = {
 	id: string;
-	addressType: string;
-	address: string;
+	/**
+	 * ICAO transponder address (hex-formatted), if known
+	 */
+	icaoAddress: string | null;
+	/**
+	 * Flarm transponder address (hex-formatted), if known
+	 */
+	flarmAddress: string | null;
+	/**
+	 * OGN device address (hex-formatted), if known
+	 */
+	ognAddress: string | null;
+	/**
+	 * Other/unknown device address (hex-formatted), if known
+	 */
+	otherAddress: string | null;
 	aircraftModel: string;
 	registration: string | null;
 	competitionNumber: string;

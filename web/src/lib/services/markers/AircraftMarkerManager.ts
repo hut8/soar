@@ -8,6 +8,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { getLogger } from '$lib/logging';
 import { getMarkerColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
+import { formatPrimaryAddress } from '$lib/formatters';
 import type { Aircraft, Fix } from '$lib/types';
 import dayjs from 'dayjs';
 
@@ -173,7 +174,7 @@ export class AircraftMarkerManager {
 			params: {
 				aircraftId: aircraft.id,
 				registration: aircraft.registration,
-				address: aircraft.address,
+				icaoAddress: aircraft.icaoAddress,
 				position: { lat: fix.latitude, lng: fix.longitude },
 				track: fix.trackDegrees
 			}
@@ -212,7 +213,7 @@ export class AircraftMarkerManager {
 		infoLabel.style.borderColor = markerColor;
 
 		// Use proper aircraft registration, fallback to address
-		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
+		const tailNumber = aircraft.registration || formatPrimaryAddress(aircraft);
 		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
 		// Use aircraftModel string from aircraft
 		const aircraftModel = aircraft.aircraftModel || null;
@@ -346,7 +347,7 @@ export class AircraftMarkerManager {
 
 			if (tailDiv && altDiv) {
 				// Use proper aircraft registration, fallback to address
-				const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
+				const tailNumber = aircraft.registration || formatPrimaryAddress(aircraft);
 				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
 				// Use aircraftModel string from aircraft
 				const aircraftModel = aircraft.aircraftModel || null;
@@ -387,9 +388,10 @@ export class AircraftMarkerManager {
 		// Update the marker title with full timestamp
 		const { altitudeText } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
 		const fullTimestamp = dayjs(fix.receivedAt).format('YYYY-MM-DD HH:mm:ss UTC');
+		const displayName = aircraft.registration || formatPrimaryAddress(aircraft);
 		const title = aircraft.aircraftModel
-			? `${aircraft.registration || aircraft.address} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
-			: `${aircraft.registration || aircraft.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
+			? `${displayName} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+			: `${displayName} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		marker.title = title;
 		logger.debug('[MARKER] Updated marker title: {title}', { title });

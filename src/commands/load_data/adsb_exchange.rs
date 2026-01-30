@@ -95,8 +95,8 @@ fn build_aircraft_model(manufacturer: Option<&String>, model: Option<&String>) -
 #[derive(Debug, Insertable)]
 #[diesel(table_name = aircraft)]
 struct NewAircraftAdsb {
-    address: i32,
-    address_type: AddressType,
+    icao_address: Option<i32>,
+    other_address: Option<i32>,
     registration: Option<String>,
     aircraft_model: String,
     competition_number: String,
@@ -244,9 +244,14 @@ pub async fn load_adsb_exchange_data(
                 .filter(|y| !y.is_empty())
                 .and_then(|y| y.parse::<i16>().ok());
 
+            let (icao_address, other_address) = match address_type {
+                AddressType::Icao => (Some(address), None),
+                _ => (None, Some(address)),
+            };
+
             batch_inserts.push(NewAircraftAdsb {
-                address,
-                address_type,
+                icao_address,
+                other_address,
                 registration,
                 aircraft_model,
                 competition_number: String::new(),
@@ -266,19 +271,15 @@ pub async fn load_adsb_exchange_data(
             });
         }
 
-        // Insert/update batch
+        // Insert/update batch — split by address type since ON CONFLICT target differs
         if !batch_inserts.is_empty() {
             let pool = diesel_pool.clone();
             match tokio::task::spawn_blocking(move || {
                 let mut conn = pool.get()?;
 
-                // Use ON CONFLICT to handle existing records
-                // Only update fields if they're currently NULL or empty (preserve more authoritative sources)
-                let result = diesel::insert_into(aircraft::table)
-                    .values(&batch_inserts)
-                    .on_conflict((aircraft::address_type, aircraft::address))
-                    .do_update()
-                    .set((
+                // Common DO UPDATE set for ADS-B Exchange records
+                macro_rules! adsbx_upsert_set {
+                    () => {(
                         // Only update registration if current value is NULL or empty string
                         aircraft::registration.eq(diesel::dsl::sql(
                             "CASE WHEN (aircraft.registration IS NULL OR aircraft.registration = '')
@@ -313,12 +314,36 @@ pub async fn load_adsb_exchange_data(
                         aircraft::year.eq(diesel::dsl::sql("COALESCE(aircraft.year, excluded.year)")),
                         aircraft::is_military.eq(diesel::dsl::sql("COALESCE(aircraft.is_military, excluded.is_military)")),
                         aircraft::from_adsbx_ddb.eq(diesel::dsl::sql("true")),
-                        aircraft::address_type.eq(diesel::dsl::sql("excluded.address_type")),
                         aircraft::updated_at.eq(diesel::dsl::now),
-                    ))
-                    .execute(&mut conn)?;
+                    )}
+                }
 
-                Ok::<usize, anyhow::Error>(result)
+                // Split into ICAO and Other address types (need different ON CONFLICT targets)
+                let (icao_batch, other_batch): (Vec<_>, Vec<_>) = batch_inserts
+                    .into_iter()
+                    .partition(|r| r.icao_address.is_some());
+
+                let mut total = 0usize;
+
+                if !icao_batch.is_empty() {
+                    total += diesel::insert_into(aircraft::table)
+                        .values(&icao_batch)
+                        .on_conflict(aircraft::icao_address)
+                        .do_update()
+                        .set(adsbx_upsert_set!())
+                        .execute(&mut conn)?;
+                }
+
+                if !other_batch.is_empty() {
+                    total += diesel::insert_into(aircraft::table)
+                        .values(&other_batch)
+                        .on_conflict(aircraft::other_address)
+                        .do_update()
+                        .set(adsbx_upsert_set!())
+                        .execute(&mut conn)?;
+                }
+
+                Ok::<usize, anyhow::Error>(total)
             })
             .await
             {

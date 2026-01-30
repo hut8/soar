@@ -271,7 +271,6 @@ fn create_test_pilots(conn: &mut PgConnection, club_id_value: Uuid, count: usize
 }
 
 fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid>> {
-    use soar::aircraft::AddressType;
     use soar::schema::aircraft::dsl::*;
 
     let mut device_ids = Vec::new();
@@ -290,8 +289,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
         let result = diesel::insert_into(aircraft)
             .values((
                 id.eq(aircraft_id),
-                address.eq(addr_int),
-                address_type.eq(AddressType::Icao),
+                icao_address.eq(addr_int),
                 registration.eq(reg),
                 aircraft_model.eq(model),
                 competition_number.eq(""),
@@ -301,7 +299,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
-            .on_conflict((address_type, address))
+            .on_conflict(icao_address)
             .do_update()
             .set((
                 registration.eq(reg),
@@ -315,8 +313,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                 info!("Created/updated test device: {} ({})", reg, addr);
                 // Query back the actual device ID after upsert
                 let actual_device_id: Uuid = aircraft
-                    .filter(address_type.eq(AddressType::Icao))
-                    .filter(address.eq(addr_int))
+                    .filter(icao_address.eq(addr_int))
                     .select(id)
                     .first(conn)
                     .expect("Failed to query device ID after upsert");
@@ -345,8 +342,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
         diesel::insert_into(aircraft)
             .values((
                 id.eq(aircraft_id),
-                address.eq(addr_int),
-                address_type.eq(AddressType::Icao),
+                icao_address.eq(addr_int),
                 registration.eq(reg_number.clone()),
                 aircraft_model.eq(model),
                 competition_number.eq(""),
@@ -356,7 +352,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
-            .on_conflict((address_type, address))
+            .on_conflict(icao_address)
             .do_update()
             .set((
                 registration.eq(reg_number),

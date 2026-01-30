@@ -22,7 +22,8 @@
 	} from '$lib/types';
 	import {
 		formatTitleCase,
-		formatAircraftAddress,
+		formatPrimaryAddress,
+		getAllAddresses,
 		getStatusCodeDescription,
 		getAircraftCategoryDescription,
 		getAircraftCategoryColor,
@@ -389,8 +390,7 @@
 					<div>
 						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-surface-600 dark:text-surface-400">
-							{selectedAircraft.registration ||
-								formatAircraftAddress(selectedAircraft.addressType, selectedAircraft.address)}
+							{selectedAircraft.registration || formatPrimaryAddress(selectedAircraft)}
 							{#if selectedAircraft.aircraftModel}
 								• {selectedAircraft.aircraftModel}
 							{/if}
@@ -447,17 +447,16 @@
 											{selectedAircraft.registration || 'Unknown'}
 										</dd>
 									</div>
-									<div>
-										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
-											Address
-										</dt>
-										<dd class="font-mono text-sm">
-											{formatAircraftAddress(
-												selectedAircraft.addressType,
-												selectedAircraft.address
-											)}
-										</dd>
-									</div>
+									{#each getAllAddresses(selectedAircraft) as addr (addr.label)}
+										<div>
+											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+												{addr.label} Address
+											</dt>
+											<dd class="font-mono text-sm">
+												{addr.hex}
+											</dd>
+										</div>
+									{/each}
 								</div>
 
 								<div class="grid grid-cols-2 gap-4">

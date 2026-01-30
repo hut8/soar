@@ -104,7 +104,7 @@ pub async fn get_aircraft_images(
         match client
             .fetch_from_source(
                 source,
-                Some(&mode_s_hex),
+                mode_s_hex.as_deref(),
                 aircraft.registration.as_deref(),
                 5, // Request 5 images per source
             )

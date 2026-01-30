@@ -7,7 +7,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
-	import { getAddressTypeLabel } from '$lib/formatters';
+	import { formatPrimaryAddress } from '$lib/formatters';
 	import type { Aircraft, DataListResponse, DataResponse, Club } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
@@ -246,8 +246,10 @@
 					id: entry.aircraftId,
 					registration: 'Unknown',
 					aircraftModel: 'Unknown',
-					addressType: 'Unknown',
-					address: 'Unknown',
+					icaoAddress: null,
+					flarmAddress: null,
+					ognAddress: null,
+					otherAddress: null,
 					competitionNumber: '',
 					tracked: false,
 					identified: false,
@@ -269,8 +271,7 @@
 					latitude: null,
 					longitude: null,
 					adsbEmitterCategory: null,
-					currentFix: null,
-					fixes: null
+					currentFix: null
 				}
 			};
 		})
@@ -819,8 +820,7 @@
 															{/if}
 															<div class="text-xs text-surface-600 dark:text-surface-400">
 																<div class="truncate">
-																	{getAddressTypeLabel(entry.aircraft.addressType)}: {entry.aircraft
-																		.address}
+																	{formatPrimaryAddress(entry.aircraft)}
 																</div>
 																<div class="mt-1 flex flex-wrap gap-1">
 																	{#if entry.aircraft.tracked}

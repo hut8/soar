@@ -702,10 +702,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))
         .route("/aircraft", get(actions::search_aircraft))
         .route("/aircraft/bulk", get(actions::get_aircraft_bulk))
-        .route(
-            "/aircraft/issues",
-            get(actions::aircraft::get_aircraft_issues),
-        )
         .route("/aircraft/{id}", get(actions::get_aircraft_by_id))
         .route("/aircraft/{id}/fixes", get(actions::get_aircraft_fixes))
         .route("/aircraft/{id}/flights", get(actions::get_aircraft_flights))

@@ -42,7 +42,9 @@ impl AircraftRepository {
     }
 
     /// Upsert aircraft into the database
-    /// This will insert new aircraft or update existing ones based on aircraft_id
+    /// This will insert new aircraft or update existing ones based on typed address columns.
+    /// Each DDB record has a single address type, so we branch on which typed address column
+    /// is populated to determine the ON CONFLICT target.
     pub async fn upsert_aircraft<I>(&self, aircraft_iter: I) -> Result<usize>
     where
         I: IntoIterator<Item = Aircraft>,
@@ -53,60 +55,91 @@ impl AircraftRepository {
         // Convert aircraft to NewAircraft structs for insertion
         let new_aircraft: Vec<NewAircraft> = aircraft_iter.into_iter().map(|d| d.into()).collect();
 
+        // Common DO UPDATE set fields used by all address type branches
+        macro_rules! ddb_upsert_set {
+            () => {(
+                // Update fields from DDB, but preserve existing values if DDB value is empty
+                // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
+                aircraft::aircraft_model.eq(diesel::dsl::sql(
+                    "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), aircraft.aircraft_model)"
+                )),
+                aircraft::registration.eq(diesel::dsl::sql(
+                    "COALESCE(NULLIF(EXCLUDED.registration, ''), aircraft.registration)"
+                )),
+                aircraft::competition_number.eq(diesel::dsl::sql(
+                    "COALESCE(NULLIF(EXCLUDED.competition_number, ''), aircraft.competition_number)"
+                )),
+                aircraft::tracked.eq(excluded(aircraft::tracked)),
+                aircraft::identified.eq(excluded(aircraft::identified)),
+                aircraft::from_ogn_ddb.eq(excluded(aircraft::from_ogn_ddb)),
+                // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
+                aircraft::frequency_mhz.eq(diesel::dsl::sql(
+                    "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
+                )),
+                aircraft::pilot_name.eq(diesel::dsl::sql(
+                    "COALESCE(EXCLUDED.pilot_name, aircraft.pilot_name)"
+                )),
+                aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
+                    "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
+                )),
+                aircraft::country_code.eq(diesel::dsl::sql(
+                    "COALESCE(EXCLUDED.country_code, aircraft.country_code)"
+                )),
+                aircraft::updated_at.eq(diesel::dsl::now),
+                // NOTE: We do NOT update the following fields because they come from real-time packets:
+                // - aircraft_category (from OGN packets)
+                // - icao_model_code (from ADSB packets)
+                // - adsb_emitter_category (from ADSB packets)
+                // - tracker_device_type (from tracker packets)
+                // - last_fix_at (managed by fix processing)
+                // - club_id (managed by club assignment logic)
+            )}
+        }
+
         for new_aircraft_entry in new_aircraft {
-            let result = diesel::insert_into(aircraft::table)
-                .values(&new_aircraft_entry)
-                .on_conflict((aircraft::address_type, aircraft::address))
-                .do_update()
-                .set((
-                    // Update fields from DDB, but preserve existing values if DDB value is empty
-                    // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
-                    aircraft::address_type.eq(excluded(aircraft::address_type)),
-                    aircraft::aircraft_model.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), aircraft.aircraft_model)"
-                    )),
-                    aircraft::registration.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.registration, ''), aircraft.registration)"
-                    )),
-                    aircraft::competition_number.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.competition_number, ''), aircraft.competition_number)"
-                    )),
-                    aircraft::tracked.eq(excluded(aircraft::tracked)),
-                    aircraft::identified.eq(excluded(aircraft::identified)),
-                    aircraft::from_ogn_ddb.eq(excluded(aircraft::from_ogn_ddb)),
-                    // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
-                    aircraft::frequency_mhz.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
-                    )),
-                    aircraft::pilot_name.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.pilot_name, aircraft.pilot_name)"
-                    )),
-                    aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
-                    )),
-                    aircraft::country_code.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.country_code, aircraft.country_code)"
-                    )),
-                    aircraft::updated_at.eq(diesel::dsl::now),
-                    // NOTE: We do NOT update the following fields because they come from real-time packets:
-                    // - aircraft_category (from OGN packets)
-                    // - icao_model_code (from ADSB packets)
-                    // - adsb_emitter_category (from ADSB packets)
-                    // - tracker_device_type (from tracker packets)
-                    // - last_fix_at (managed by fix processing)
-                    // - club_id (managed by club assignment logic)
-                ))
-                .execute(&mut conn);
+            let address_hex = new_aircraft_entry.address_hex();
+
+            // Branch on which typed address column is populated to determine ON CONFLICT target.
+            // Diesel requires the conflict column to be known at compile time.
+            let result = if new_aircraft_entry.icao_address.is_some() {
+                diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft_entry)
+                    .on_conflict(aircraft::icao_address)
+                    .do_update()
+                    .set(ddb_upsert_set!())
+                    .execute(&mut conn)
+            } else if new_aircraft_entry.flarm_address.is_some() {
+                diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft_entry)
+                    .on_conflict(aircraft::flarm_address)
+                    .do_update()
+                    .set(ddb_upsert_set!())
+                    .execute(&mut conn)
+            } else if new_aircraft_entry.ogn_address.is_some() {
+                diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft_entry)
+                    .on_conflict(aircraft::ogn_address)
+                    .do_update()
+                    .set(ddb_upsert_set!())
+                    .execute(&mut conn)
+            } else if new_aircraft_entry.other_address.is_some() {
+                diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft_entry)
+                    .on_conflict(aircraft::other_address)
+                    .do_update()
+                    .set(ddb_upsert_set!())
+                    .execute(&mut conn)
+            } else {
+                warn!("Skipping aircraft with no address columns set");
+                continue;
+            };
 
             match result {
                 Ok(_) => {
                     upserted_count += 1;
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to upsert aircraft {}: {}",
-                        new_aircraft_entry.address, e
-                    );
+                    warn!("Failed to upsert aircraft {}: {}", address_hex, e);
                     // Continue with other aircraft rather than failing the entire batch
                 }
             }
@@ -123,30 +156,71 @@ impl AircraftRepository {
         Ok(count)
     }
 
-    /// Get an aircraft by its address
-    /// Address is unique across all aircraft
-    pub async fn get_aircraft_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
+    /// Get an aircraft by its address and type.
+    /// Uses the specific typed address column for lookup.
+    pub async fn get_aircraft_by_address(
+        &self,
+        address: u32,
+        address_type: AddressType,
+    ) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
-        let model = aircraft::table
-            .filter(aircraft::address.eq(address as i32))
-            .select(AircraftModel::as_select())
-            .first(&mut conn)
-            .optional()?;
+        let addr = address as i32;
+        let model = match address_type {
+            AddressType::Icao => aircraft::table
+                .filter(aircraft::icao_address.eq(addr))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Flarm => aircraft::table
+                .filter(aircraft::flarm_address.eq(addr))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Ogn => aircraft::table
+                .filter(aircraft::ogn_address.eq(addr))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Unknown => aircraft::table
+                .filter(aircraft::other_address.eq(addr))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+        };
 
         Ok(model.map(|model| model.into()))
     }
 
-    /// Get an aircraft model (with UUID) by address
+    /// Get an aircraft model (with UUID) by address and type.
+    /// Uses the specific typed address column for lookup.
     pub async fn get_aircraft_model_by_address(
         &self,
         address: i32,
+        address_type: AddressType,
     ) -> Result<Option<AircraftModel>> {
         let mut conn = self.get_connection()?;
-        let model = aircraft::table
-            .filter(aircraft::address.eq(address))
-            .select(AircraftModel::as_select())
-            .first(&mut conn)
-            .optional()?;
+        let model = match address_type {
+            AddressType::Icao => aircraft::table
+                .filter(aircraft::icao_address.eq(address))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Flarm => aircraft::table
+                .filter(aircraft::flarm_address.eq(address))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Ogn => aircraft::table
+                .filter(aircraft::ogn_address.eq(address))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+            AddressType::Unknown => aircraft::table
+                .filter(aircraft::other_address.eq(address))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?,
+        };
         Ok(model)
     }
 
@@ -177,9 +251,19 @@ impl AircraftRepository {
                 Aircraft::extract_tail_number_from_icao(address as u32, address_type)
                     .unwrap_or_default();
 
+            // Route address to the correct typed column
+            let (icao_address, flarm_address, ogn_address, other_address) = match address_type {
+                AddressType::Icao => (Some(address), None, None, None),
+                AddressType::Flarm => (None, Some(address), None, None),
+                AddressType::Ogn => (None, None, Some(address), None),
+                AddressType::Unknown => (None, None, None, Some(address)),
+            };
+
             let new_aircraft = NewAircraft {
-                address,
-                address_type,
+                icao_address,
+                flarm_address,
+                ogn_address,
+                other_address,
                 aircraft_model: String::new(),
                 // Always insert with NULL registration to avoid violating the
                 // idx_aircraft_registration_unique constraint. The DO UPDATE clause
@@ -216,22 +300,46 @@ impl AircraftRepository {
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
             // This ensures we always get an aircraft_id, even if concurrent inserts happen
-            // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
-            let mut model = diesel::insert_into(aircraft::table)
-                .values(&new_aircraft)
-                .on_conflict((aircraft::address_type, aircraft::address))
-                .do_update()
-                .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
-                .returning(AircraftModel::as_returning())
-                .get_result(&mut conn)
-                .map_err(|e| {
-                    error!(
-                        "get_or_insert_aircraft_by_address upsert failed: address={:06X}, \
-                         address_type={:?}, computed_registration={:?}, error={}",
-                        address, address_type, registration, e
-                    );
-                    e
-                })?;
+            // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict.
+            // Branch on address_type because Diesel requires static ON CONFLICT target columns.
+            let mut model = match address_type {
+                AddressType::Icao => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::icao_address)
+                    .do_update()
+                    .set(aircraft::icao_address.eq(excluded(aircraft::icao_address)))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Flarm => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::flarm_address)
+                    .do_update()
+                    .set(aircraft::flarm_address.eq(excluded(aircraft::flarm_address)))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Ogn => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::ogn_address)
+                    .do_update()
+                    .set(aircraft::ogn_address.eq(excluded(aircraft::ogn_address)))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Unknown => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::other_address)
+                    .do_update()
+                    .set(aircraft::other_address.eq(excluded(aircraft::other_address)))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+            }
+            .map_err(|e| {
+                error!(
+                    "get_or_insert_aircraft_by_address upsert failed: address={:06X}, \
+                     address_type={:?}, computed_registration={:?}, error={}",
+                    address, address_type, registration, e
+                );
+                e
+            })?;
 
             // If we have a computed registration and the aircraft doesn't already have one,
             // try to set it — but only if no other aircraft already owns that registration.
@@ -302,9 +410,19 @@ impl AircraftRepository {
                 .or_else(|| Aircraft::extract_tail_number_from_icao(address as u32, address_type))
                 .unwrap_or_default();
 
+            // Route address to the correct typed column
+            let (icao_address, flarm_address, ogn_address, other_address) = match address_type {
+                AddressType::Icao => (Some(address), None, None, None),
+                AddressType::Flarm => (None, Some(address), None, None),
+                AddressType::Ogn => (None, None, Some(address), None),
+                AddressType::Unknown => (None, None, None, Some(address)),
+            };
+
             let new_aircraft = NewAircraft {
-                address,
-                address_type,
+                icao_address,
+                flarm_address,
+                ogn_address,
+                other_address,
                 aircraft_model: packet_fields.aircraft_model.clone().unwrap_or_default(),
                 // Always insert with NULL registration to avoid violating the
                 // idx_aircraft_registration_unique constraint. The DO UPDATE clause
@@ -364,17 +482,16 @@ impl AircraftRepository {
             // Note: latitude, longitude, and last_fix_at are updated in fixes_repo.insert()
             // which is called at the end of the pipeline for all data sources (APRS, Beast, SBS).
             // This function only updates APRS-specific metadata fields.
-            let model = diesel::insert_into(aircraft::table)
-                .values(&new_aircraft)
-                .on_conflict((aircraft::address_type, aircraft::address))
-                .do_update()
-                .set((
+            //
+            // Common DO UPDATE set for all address type branches
+            macro_rules! fix_upsert_set {
+                () => {(
                     aircraft::aircraft_category.eq(packet_fields.aircraft_category),
                     // Only update icao_model_code if current value is NULL (preserve data from authoritative sources)
                     aircraft::icao_model_code.eq(diesel::dsl::sql("COALESCE(aircraft.icao_model_code, excluded.icao_model_code)")),
                     // Only update adsb_emitter_category if current value is NULL (preserve data from authoritative sources)
                     aircraft::adsb_emitter_category.eq(diesel::dsl::sql("COALESCE(aircraft.adsb_emitter_category, excluded.adsb_emitter_category)")),
-                    aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    aircraft::tracker_device_type.eq(&packet_fields.tracker_device_type),
                     // Only update aircraft_model if current value is NULL or empty string
                     aircraft::aircraft_model.eq(diesel::dsl::sql(
                         "CASE WHEN (aircraft.aircraft_model IS NULL OR aircraft.aircraft_model = '') \
@@ -383,17 +500,48 @@ impl AircraftRepository {
                     )),
                     aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>(&registration_sql)),
                     aircraft::country_code.eq(&country_code),
-                ))
-                .returning(AircraftModel::as_returning())
-                .get_result(&mut conn)
-                .map_err(|e| {
-                    error!(
-                        "aircraft_for_fix upsert failed: address={:06X}, address_type={:?}, \
-                         packet_registration={:?}, computed_registration={:?}, error={}",
-                        address, address_type, packet_fields.registration, registration, e
-                    );
-                    e
-                })?;
+                )}
+            }
+
+            // Branch on address_type because Diesel requires static ON CONFLICT target columns
+            let model = match address_type {
+                AddressType::Icao => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::icao_address)
+                    .do_update()
+                    .set(fix_upsert_set!())
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Flarm => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::flarm_address)
+                    .do_update()
+                    .set(fix_upsert_set!())
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Ogn => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::ogn_address)
+                    .do_update()
+                    .set(fix_upsert_set!())
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+                AddressType::Unknown => diesel::insert_into(aircraft::table)
+                    .values(&new_aircraft)
+                    .on_conflict(aircraft::other_address)
+                    .do_update()
+                    .set(fix_upsert_set!())
+                    .returning(AircraftModel::as_returning())
+                    .get_result(&mut conn),
+            }
+            .map_err(|e| {
+                error!(
+                    "aircraft_for_fix upsert failed: address={:06X}, address_type={:?}, \
+                     packet_registration={:?}, computed_registration={:?}, error={}",
+                    address, address_type, packet_fields.registration, registration, e
+                );
+                e
+            })?;
 
             // Log a warning if the registration from the packet was not applied
             // because another aircraft already has it
@@ -439,12 +587,19 @@ impl AircraftRepository {
         Ok(models.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Search aircraft by address
-    /// Returns a single aircraft since address is unique
+    /// Search aircraft by address across all typed address columns.
+    /// Returns the first match (an address value should only exist in one column).
     pub async fn search_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
+        let addr = address as i32;
         let model = aircraft::table
-            .filter(aircraft::address.eq(address as i32))
+            .filter(
+                aircraft::icao_address
+                    .eq(addr)
+                    .or(aircraft::flarm_address.eq(addr))
+                    .or(aircraft::ogn_address.eq(addr))
+                    .or(aircraft::other_address.eq(addr)),
+            )
             .select(AircraftModel::as_select())
             .first(&mut conn)
             .optional()?;
@@ -655,73 +810,6 @@ impl AircraftRepository {
             warn!("No aircraft found with ID {}", aircraft_id);
             Ok(false)
         }
-    }
-
-    /// Query for aircraft that have duplicate addresses with pagination
-    /// Optionally filter by hex address substring (case-insensitive)
-    /// Returns (results, total_count)
-    pub async fn get_duplicate_aircraft_paginated(
-        &self,
-        page: i64,
-        per_page: i64,
-        hex_search: Option<String>,
-    ) -> Result<(Vec<AircraftModel>, i64)> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Find addresses that appear more than once with different address types
-            // Optionally filter by hex address substring
-            let mut duplicate_query = aircraft::table
-                .select(aircraft::address)
-                .group_by(aircraft::address)
-                .having(diesel::dsl::sql::<diesel::sql_types::Bool>(
-                    "COUNT(DISTINCT address_type) > 1",
-                ))
-                .into_boxed();
-
-            // Apply hex search filter if provided
-            if let Some(ref search) = hex_search
-                && !search.trim().is_empty()
-            {
-                // Convert search to lowercase for case-insensitive matching
-                let search_lower = search.trim().to_lowercase();
-                // Filter where hex representation of address contains the search string
-                duplicate_query =
-                    duplicate_query.filter(diesel::dsl::sql::<diesel::sql_types::Bool>(&format!(
-                        "LOWER(to_hex(address)) LIKE '%{}%'",
-                        search_lower.replace('\'', "''") // Escape single quotes
-                    )));
-            }
-
-            let duplicate_addresses: Vec<i32> = duplicate_query.load(&mut conn)?;
-
-            if duplicate_addresses.is_empty() {
-                return Ok((Vec::new(), 0));
-            }
-
-            // Get total count of aircraft with duplicate addresses
-            let total_count = aircraft::table
-                .filter(aircraft::address.eq_any(duplicate_addresses.clone()))
-                .count()
-                .get_result::<i64>(&mut conn)?;
-
-            // Calculate offset
-            let offset = (page - 1) * per_page;
-
-            // Fetch paginated results
-            let duplicate_aircraft = aircraft::table
-                .filter(aircraft::address.eq_any(duplicate_addresses))
-                .order((aircraft::address.asc(), aircraft::address_type.asc()))
-                .limit(per_page)
-                .offset(offset)
-                .select(AircraftModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<(Vec<AircraftModel>, i64), anyhow::Error>((duplicate_aircraft, total_count))
-        })
-        .await?
     }
 }
 

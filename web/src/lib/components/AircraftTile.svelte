@@ -5,7 +5,7 @@
 		getAircraftCategoryDescription,
 		getAircraftCategoryColor,
 		getAircraftTitle,
-		formatAircraftAddress,
+		formatPrimaryAddress,
 		getFlagPath
 	} from '$lib/formatters';
 	import type { Aircraft } from '$lib/types';
@@ -34,19 +34,15 @@
 	});
 
 	// Get country code for flag display
-	// Prefer countryCode (from FAA registry), only use addressCountry if addressType is ICAO ("I")
+	// Prefer countryCode (from FAA registry), then addressCountry (derived from ICAO address)
 	const countryCode = $derived(() => {
 		// First preference: countryCode from FAA registry
 		const code = aircraft.countryCode;
 		if (code && code.trim() !== '') {
 			return code.toUpperCase();
 		}
-		// Fallback: addressCountry, but only if addressType is ICAO
-		if (
-			aircraft.addressType === 'I' &&
-			aircraft.addressCountry &&
-			aircraft.addressCountry.trim() !== ''
-		) {
+		// Fallback: addressCountry (derived from ICAO address on backend)
+		if (aircraft.addressCountry && aircraft.addressCountry.trim() !== '') {
 			return aircraft.addressCountry.toUpperCase();
 		}
 		return null;
@@ -92,7 +88,7 @@
 				<div>
 					<p class="text-surface-600-300-token text-xs">Address</p>
 					<p class="font-mono text-sm">
-						{formatAircraftAddress(aircraft.addressType, aircraft.address)}
+						{formatPrimaryAddress(aircraft)}
 					</p>
 				</div>
 			</div>

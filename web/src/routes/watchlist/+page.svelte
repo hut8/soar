@@ -4,6 +4,7 @@
 	import { watchlist } from '$lib/stores/watchlist';
 	import { Bell, BellOff, Trash2, Plus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
+	import { formatPrimaryAddress } from '$lib/formatters';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'Watchlist']);
@@ -105,11 +106,11 @@
 									href="/aircraft/{entry.aircraftId}"
 									class="font-semibold text-primary-500 hover:underline"
 								>
-									{entry.aircraft.registration || entry.aircraft.address}
+									{entry.aircraft.registration || formatPrimaryAddress(entry.aircraft)}
 								</a>
-								{#if entry.aircraft.registration && entry.aircraft.registration !== entry.aircraft.address}
+								{#if entry.aircraft.registration}
 									<p class="text-surface-600-300-token text-sm">
-										{entry.aircraft.address}
+										{formatPrimaryAddress(entry.aircraft)}
 									</p>
 								{/if}
 							{:else}

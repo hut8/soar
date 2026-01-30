@@ -265,7 +265,12 @@
 			},
 			properties: {
 				id: aircraft.id,
-				registration: aircraft.registration || aircraft.address,
+				registration:
+					aircraft.registration ||
+					aircraft.icaoAddress ||
+					aircraft.flarmAddress ||
+					aircraft.ognAddress ||
+					aircraft.id,
 				altitude: fix.altitudeMslFeet, // Used by altitude color expression (null = gray)
 				track: fix.trackDegrees || 0,
 				isActive: fix.active,

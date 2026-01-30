@@ -245,7 +245,7 @@ impl Flight {
         let now = Utc::now();
         info!(
             "Creating flight for {} from fix {} with climb: {:?} alt: {:?} speed: {:?}",
-            device.aircraft_address_hex(),
+            device.aircraft_address_hex().unwrap_or_default(),
             fix.id,
             fix.climb_fpm,
             fix.altitude_msl_feet,
@@ -254,8 +254,8 @@ impl Flight {
         Self {
             id: Uuid::now_v7(),
             aircraft_id: fix.aircraft_id.into(),
-            device_address: device.aircraft_address_hex(),
-            device_address_type: device.address_type,
+            device_address: device.aircraft_address_hex().unwrap_or_default(),
+            device_address_type: device.primary_address_type(),
             takeoff_time,
             landing_time: None,
             departure_airport_id: None,
@@ -298,8 +298,8 @@ impl Flight {
         Self {
             id: flight_id,
             aircraft_id: fix.aircraft_id.into(),
-            device_address: device.aircraft_address_hex(),
-            device_address_type: device.address_type,
+            device_address: device.aircraft_address_hex().unwrap_or_default(),
+            device_address_type: device.primary_address_type(),
             takeoff_time: None,
             landing_time: None,
             departure_airport_id: None,
@@ -355,8 +355,8 @@ impl Flight {
         Self {
             id: flight_id,
             aircraft_id: fix.aircraft_id.into(),
-            device_address: device.aircraft_address_hex(),
-            device_address_type: device.address_type,
+            device_address: device.aircraft_address_hex().unwrap_or_default(),
+            device_address_type: device.primary_address_type(),
             takeoff_time: Some(takeoff_time),
             landing_time: None,
             departure_airport_id: None,
@@ -480,13 +480,17 @@ impl Flight {
                 }
                 (false, false) => {
                     // Neither available, fall back to ICAO-XXYYZZ format
-                    let type_prefix = match device.address_type {
+                    let type_prefix = match device.primary_address_type() {
                         crate::aircraft::AddressType::Icao => "ICAO",
                         crate::aircraft::AddressType::Flarm => "FLARM",
                         crate::aircraft::AddressType::Ogn => "OGN",
                         crate::aircraft::AddressType::Unknown => "Unknown",
                     };
-                    format!("{}-{}", type_prefix, device.aircraft_address_hex())
+                    format!(
+                        "{}-{}",
+                        type_prefix,
+                        device.aircraft_address_hex().unwrap_or_default()
+                    )
                 }
             }
         } else {

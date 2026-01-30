@@ -41,7 +41,7 @@
 	import FixesList from '$lib/components/FixesList.svelte';
 	import {
 		formatTitleCase,
-		formatAircraftAddress,
+		getAllAddresses,
 		getStatusCodeDescription,
 		getAircraftCategoryDescription,
 		getAircraftCategoryColor,
@@ -126,7 +126,12 @@
 						'@type': 'Vehicle',
 						name: aircraft.registration || undefined,
 						model: aircraft.aircraftModel || undefined,
-						vehicleIdentificationNumber: aircraft.address || undefined,
+						vehicleIdentificationNumber:
+							aircraft.icaoAddress ||
+							aircraft.flarmAddress ||
+							aircraft.ognAddress ||
+							aircraft.otherAddress ||
+							undefined,
 						category: aircraft.aircraftCategory || 'Aircraft'
 					}
 				: undefined
@@ -440,9 +445,11 @@
 										ICAO Model Code: <span class="font-mono">{aircraft.icaoModelCode}</span>
 									</p>
 								{/if}
-								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {formatAircraftAddress(aircraft.addressType, aircraft.address)}
-								</p>
+								{#each getAllAddresses(aircraft) as addr (addr.label)}
+									<p class="text-surface-600-300-token font-mono text-sm">
+										{addr.label}: {addr.hex}
+									</p>
+								{/each}
 							</div>
 						</div>
 

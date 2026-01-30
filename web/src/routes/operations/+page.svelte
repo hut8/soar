@@ -183,7 +183,12 @@
 	// Handle aircraft marker click
 	function handleAircraftClick(aircraft: Aircraft) {
 		logger.debug('[AIRCRAFT CLICK] Aircraft clicked: {registration}', {
-			registration: aircraft.registration || aircraft.address
+			registration:
+				aircraft.registration ||
+				aircraft.icaoAddress ||
+				aircraft.flarmAddress ||
+				aircraft.ognAddress ||
+				aircraft.id
 		});
 		selectedAircraft = aircraft;
 		showAircraftStatusModal = true;
