@@ -1,7 +1,6 @@
 <script lang="ts">
 	import {
 		Search,
-		Radio,
 		Plane,
 		Antenna,
 		Building2,
@@ -229,7 +228,7 @@
 	<!-- Header -->
 	<header class="space-y-2 text-center">
 		<h1 class="flex items-center justify-center gap-2 h1">
-			<Radio class="h-8 w-8" />
+			<Plane class="h-8 w-8" />
 			Aircraft
 		</h1>
 	</header>

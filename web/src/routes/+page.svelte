@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Users, Radar, Radio, Antenna, MapPin, Plane, Camera, Globe } from '@lucide/svelte';
+	import { Users, Radar, Antenna, MapPin, Plane, Camera, Globe } from '@lucide/svelte';
 	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
@@ -128,7 +128,7 @@
 							<div
 								class="rounded-full bg-tertiary-500/20 p-4 transition-colors group-hover:bg-tertiary-500/30"
 							>
-								<Radio size={48} class="text-white drop-shadow-lg" />
+								<Plane size={48} class="text-white drop-shadow-lg" />
 							</div>
 						</div>
 						<div class="space-y-2">

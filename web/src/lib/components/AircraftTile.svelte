@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Radio, Plane, Antenna, Check, Activity, Map, Navigation } from '@lucide/svelte';
+	import { Plane, Antenna, Check, Activity, Map, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import {
 		getAircraftCategoryDescription,
@@ -70,7 +70,7 @@
 				{#if flagUrl()}
 					<img src={flagUrl()} alt="" class="inline-block h-5 rounded-sm" />
 				{:else}
-					<Radio class="h-5 w-5 text-primary-500" />
+					<Plane class="h-5 w-5 text-primary-500" />
 				{/if}
 				<h3 class="text-lg font-semibold">{getAircraftTitle(aircraft)}</h3>
 			</div>
@@ -112,7 +112,7 @@
 			{#if aircraft.fromOgnDdb}
 				<span class="badge preset-filled-success-500 text-xs">
 					<Check class="mr-1 h-3 w-3" />
-					OGN DB
+					Unified DDB
 				</span>
 			{/if}
 			{#if aircraft.aircraftCategory}

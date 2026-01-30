@@ -99,6 +99,7 @@
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
+	let clubName: string | null = null;
 	let aircraftImages: AircraftImage[] = [];
 	let loadingImages = true;
 	let isFixesCollapsed = true;
@@ -175,16 +176,20 @@
 				selectedClubId = aircraft.clubId;
 			}
 
-			// Load aircraft registration and model data in parallel
-			const [registrationResponse, modelResponse] = await Promise.all([
+			// Load aircraft registration, model, and club data in parallel
+			const [registrationResponse, modelResponse, clubResponse] = await Promise.all([
 				serverCall<DataResponse<AircraftRegistration>>(
 					`/aircraft/${aircraftId}/registration`
 				).catch(() => null),
-				serverCall<DataResponse<AircraftModel>>(`/aircraft/${aircraftId}/model`).catch(() => null)
+				serverCall<DataResponse<AircraftModel>>(`/aircraft/${aircraftId}/model`).catch(() => null),
+				aircraft.clubId
+					? serverCall<DataResponse<Club>>(`/clubs/${aircraft.clubId}`).catch(() => null)
+					: Promise.resolve(null)
 			]);
 
 			aircraftRegistration = registrationResponse?.data || null;
 			aircraftModel = modelResponse?.data || null;
+			clubName = clubResponse?.data?.name || null;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load aircraft: ${errorMessage}`;
@@ -457,8 +462,14 @@
 								>
 									{aircraft.identified ? 'Identified' : 'Unidentified'}
 								</span>
-								<span class="badge preset-filled-success-500">In OGN DB</span>
 							{/if}
+							<span
+								class="badge {aircraft.fromOgnDdb
+									? 'preset-filled-success-500'
+									: 'preset-filled-secondary-500'}"
+							>
+								{aircraft.fromOgnDdb ? 'In Unified DDB' : 'Not in Unified DDB'}
+							</span>
 							<span
 								class="badge {aircraft.fromAdsbxDdb
 									? 'preset-filled-success-500'
@@ -827,6 +838,18 @@
 								<div>
 									<dt class="text-surface-600-300-token mb-1 font-medium">Registrant Type</dt>
 									<dd>{aircraftRegistration.registrantType}</dd>
+								</div>
+							{/if}
+
+							<!-- Club -->
+							{#if aircraft?.clubId && clubName}
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Club</dt>
+									<dd>
+										<a href={resolve(`/clubs/${aircraft.clubId}`)} class="anchor">
+											{clubName}
+										</a>
+									</dd>
 								</div>
 							{/if}
 
