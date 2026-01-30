@@ -464,14 +464,16 @@ impl AprsClient {
                                     }
                                 };
 
-                                // Send envelope to channel
-                                match timeout(
-                                    Duration::from_secs(10),
-                                    envelope_tx.send_async(envelope_bytes),
-                                )
-                                .await
-                                {
-                                    Ok(Ok(())) => {
+                                // Send envelope to channel (blocking - backpressure
+                                // from the queue will stall reads from the socket,
+                                // which is preferable to disconnecting)
+                                if envelope_tx.is_full() {
+                                    metrics::counter!("aprs.envelope_channel.blocked_total")
+                                        .increment(1);
+                                    warn!("Envelope channel full, blocking until space available");
+                                }
+                                match envelope_tx.send_async(envelope_bytes).await {
+                                    Ok(()) => {
                                         if !is_server_message {
                                             metrics::counter!("aprs.raw_message.queued.aprs_total")
                                                 .increment(1);
@@ -514,20 +516,10 @@ impl AprsClient {
                                             }
                                         }
                                     }
-                                    Ok(Err(flume::SendError(_))) => {
+                                    Err(flume::SendError(_)) => {
                                         info!("Envelope channel closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Envelope channel closed"
-                                        ));
-                                    }
-                                    Err(_) => {
-                                        error!(
-                                            "Queue send blocked for 10+ seconds - disconnecting"
-                                        );
-                                        metrics::counter!("aprs.queue_send_timeout_total")
-                                            .increment(1);
-                                        return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                                            "Queue send timeout - will reconnect when drained"
                                         ));
                                     }
                                 }

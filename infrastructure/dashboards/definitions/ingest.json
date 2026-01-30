@@ -45,6 +45,7 @@
       "row": "Queue Status"
     },
     ["memory-queue-depth", "disk-queue-size"],
+    ["envelope-channel-depth", "envelope-channel-blocked"],
     ["message-lag", "queue-segments"]
   ]
 }

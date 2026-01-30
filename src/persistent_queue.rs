@@ -295,6 +295,8 @@ where
     }
 
     /// Read the offsets from a segment file header
+    /// Returns (file_size, read_offset) - file_size is used as the write offset
+    /// since we always append to the end of the file.
     fn read_segment_offsets(&self, segment_name: &str) -> Option<(u64, u64)> {
         use std::io::Read;
 
@@ -302,6 +304,8 @@ where
         if !path.exists() {
             return None;
         }
+
+        let file_size = std::fs::metadata(&path).ok()?.len();
 
         let mut file = std::fs::File::open(&path).ok()?;
         let mut header = [0u8; HEADER_SIZE];
@@ -312,10 +316,9 @@ where
             return None;
         }
 
-        let write_offset = u64::from_le_bytes(header[8..16].try_into().ok()?);
         let read_offset = u64::from_le_bytes(header[16..24].try_into().ok()?);
 
-        Some((write_offset, read_offset))
+        Some((file_size, read_offset))
     }
 
     /// Check if a segment is fully drained
@@ -374,9 +377,9 @@ where
         Ok(())
     }
 
-    /// Mark a segment as fully read by setting read_offset = write_offset
+    /// Mark a segment as fully read by setting read_offset = file_size
     /// Used to skip corrupted/truncated segments
-    fn mark_segment_as_read(&self, segment_name: &str, write_offset: u64) -> Result<()> {
+    fn mark_segment_as_read(&self, segment_name: &str, file_size: u64) -> Result<()> {
         use std::io::{Seek, Write};
 
         let path = self.segment_path(segment_name);
@@ -386,8 +389,7 @@ where
 
         let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
         file.seek(std::io::SeekFrom::Start(16))?;
-        file.write_all(&write_offset.to_le_bytes())?;
-        file.sync_all()?;
+        file.write_all(&file_size.to_le_bytes())?;
 
         debug!(
             "Marked segment {} as fully read (skipping corrupted data)",
@@ -619,18 +621,15 @@ where
                     return Ok(());
                 }
 
-                // Get write_offset to check if segment is fully drained
-                let (write_offset, _) = self
+                // Get file size to check if segment is fully drained
+                let (file_size, _) = self
                     .read_segment_offsets(&segment_name)
                     .ok_or_else(|| anyhow::anyhow!("Failed to read segment offsets"))?;
 
                 // If this commit drains the segment, we may be able to delete it
-                if new_read_offset >= write_offset {
+                if new_read_offset >= file_size {
                     // Only delete if this is NOT the newest segment (the write segment).
-                    // If it's the newest, concurrent appends may be writing to it, and
-                    // we'd race with append_to_disk() which writes data before updating
-                    // the header's write_offset. Deleting based on stale write_offset
-                    // would drop those concurrent writes.
+                    // If it's the newest, concurrent appends may be writing to it.
                     let segments = self.list_segments();
                     let is_write_segment =
                         segments.last().map(|s| s == &segment_name).unwrap_or(true);
@@ -641,7 +640,6 @@ where
                         let mut file = std::fs::OpenOptions::new().write(true).open(&path)?;
                         file.seek(std::io::SeekFrom::Start(16))?;
                         file.write_all(&new_read_offset.to_le_bytes())?;
-                        file.sync_all()?;
                     } else {
                         // Safe to delete - writes are going to newer segments
                         self.delete_segment(&segment_name)?;
@@ -652,7 +650,6 @@ where
 
                     file.seek(std::io::SeekFrom::Start(16))?;
                     file.write_all(&new_read_offset.to_le_bytes())?;
-                    file.sync_all()?;
                 }
 
                 metrics::counter!(format!("queue.{}.messages.committed_total", self.name))
@@ -972,11 +969,6 @@ where
         // Update cached size
         state.size += message_disk_size;
 
-        // Update write offset in header
-        state.file.seek(std::io::SeekFrom::Start(8))?;
-        state.file.write_all(&state.size.to_le_bytes())?;
-        state.file.flush()?;
-
         // Update global cached total file size
         self.total_file_size_cached
             .fetch_add(message_disk_size, Ordering::Release);
@@ -1019,10 +1011,10 @@ where
             .write(true)
             .open(&path)?;
 
-        // Write header: MAGIC + write_offset + read_offset + reserved
+        // Write header: MAGIC + reserved + read_offset + reserved
         let header = [
             MAGIC_BYTES.as_slice(),
-            &(HEADER_SIZE as u64).to_le_bytes(), // write_offset starts after header
+            &0u64.to_le_bytes(),                 // unused (formerly write_offset)
             &(HEADER_SIZE as u64).to_le_bytes(), // read_offset starts after header
             &0u64.to_le_bytes(),                 // reserved
         ]
@@ -1062,6 +1054,7 @@ where
                 return Ok(None);
             }
 
+            let file_size = std::fs::metadata(&path)?.len();
             let mut file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -1076,12 +1069,11 @@ where
                 anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
             }
 
-            // Read offsets
-            let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
+            // Read offset from header; use file size as write boundary
             let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
 
             // Check if we've read everything in this segment
-            if read_offset >= write_offset {
+            if read_offset >= file_size {
                 // Segment is drained - only delete if it's NOT the write segment
                 // to avoid race with concurrent appends (same fix as in commit())
                 drop(file);
@@ -1114,7 +1106,7 @@ where
                 metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
                 drop(file);
                 // Mark this segment as fully read to skip it
-                self.mark_segment_as_read(&segment_name, write_offset)?;
+                self.mark_segment_as_read(&segment_name, file_size)?;
                 // Loop to try the next segment
                 continue;
             }
@@ -1128,7 +1120,7 @@ where
                 );
                 metrics::counter!(format!("queue.{}.corruption_total", self.name)).increment(1);
                 drop(file);
-                self.mark_segment_as_read(&segment_name, write_offset)?;
+                self.mark_segment_as_read(&segment_name, file_size)?;
                 // Loop to try the next segment
                 continue;
             }
@@ -1143,7 +1135,7 @@ where
                 );
                 metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
                 drop(file);
-                self.mark_segment_as_read(&segment_name, write_offset)?;
+                self.mark_segment_as_read(&segment_name, file_size)?;
                 // Loop to try the next segment
                 continue;
             }
@@ -1157,7 +1149,7 @@ where
                 );
                 metrics::counter!(format!("queue.{}.truncated_read_total", self.name)).increment(1);
                 drop(file);
-                self.mark_segment_as_read(&segment_name, write_offset)?;
+                self.mark_segment_as_read(&segment_name, file_size)?;
                 // Loop to try the next segment
                 continue;
             }
@@ -1214,6 +1206,7 @@ where
             return Ok(None);
         }
 
+        let file_size = std::fs::metadata(&path)?.len();
         let mut file = std::fs::File::open(&path)?;
 
         // Read header
@@ -1225,14 +1218,13 @@ where
             anyhow::bail!("Invalid queue file magic bytes in segment {}", segment_name);
         }
 
-        let write_offset = u64::from_le_bytes(header[8..16].try_into()?);
         let read_offset = u64::from_le_bytes(header[16..24].try_into()?);
 
-        if read_offset >= write_offset {
+        if read_offset >= file_size {
             return Ok(None); // Segment already drained
         }
 
-        let bytes_remaining = write_offset - read_offset;
+        let bytes_remaining = file_size - read_offset;
         info!(
             "Bulk reading segment {} ({} bytes remaining)",
             segment_name, bytes_remaining
@@ -1245,7 +1237,7 @@ where
 
         let mut corrupted_count = 0u64;
 
-        while current_offset < write_offset {
+        while current_offset < file_size {
             // Read length
             let mut len_bytes = [0u8; 4];
             if let Err(e) = file.read_exact(&mut len_bytes) {
