@@ -214,37 +214,14 @@ impl AircraftRepository {
                 images: None,
             };
 
-            // Prepare registration SQL expression.
-            // Only set registration if no OTHER aircraft already has this registration.
-            // This prevents unique constraint violations from computed registrations
-            // that collide with existing records (e.g., ICAO-derived N-numbers).
-            let registration_sql = if !registration.is_empty() {
-                let escaped = registration.replace('\'', "''");
-                format!(
-                    "CASE WHEN NOT EXISTS (\
-                        SELECT 1 FROM aircraft a2 \
-                        WHERE a2.registration = '{escaped}' \
-                        AND a2.id != aircraft.id\
-                    ) THEN '{escaped}'::text \
-                    ELSE aircraft.registration END"
-                )
-            } else {
-                "aircraft.registration".to_string()
-            };
-
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
             // This ensures we always get an aircraft_id, even if concurrent inserts happen
-            // The DO UPDATE with registration handling ensures RETURNING gives us the existing row
-            let model = diesel::insert_into(aircraft::table)
+            // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
+            let mut model = diesel::insert_into(aircraft::table)
                 .values(&new_aircraft)
                 .on_conflict((aircraft::address_type, aircraft::address))
                 .do_update()
-                .set((
-                    aircraft::address.eq(excluded(aircraft::address)), // No-op update to trigger RETURNING
-                    aircraft::registration.eq(diesel::dsl::sql::<
-                        diesel::sql_types::Nullable<diesel::sql_types::Text>,
-                    >(&registration_sql)),
-                ))
+                .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
                 .returning(AircraftModel::as_returning())
                 .get_result(&mut conn)
                 .map_err(|e| {
@@ -256,17 +233,32 @@ impl AircraftRepository {
                     e
                 })?;
 
-            // Log a warning if the computed registration was not applied
-            // because another aircraft already has it
-            if !registration.is_empty() {
-                let model_reg = model.registration.as_deref().unwrap_or("");
-                if model_reg != registration {
+            // If we have a computed registration and the aircraft doesn't already have one,
+            // try to set it — but only if no other aircraft already owns that registration.
+            if !registration.is_empty() && model.registration.as_deref().unwrap_or("").is_empty() {
+                let duplicate_exists = diesel::dsl::select(diesel::dsl::exists(
+                    aircraft::table
+                        .filter(aircraft::registration.eq(&registration))
+                        .filter(aircraft::id.ne(model.id)),
+                ))
+                .get_result::<bool>(&mut conn)?;
+
+                if duplicate_exists {
                     warn!(
                         "Skipped duplicate registration: address={:06X}, address_type={:?}, \
                          computed_registration={:?}, kept_registration={:?} \
                          (another aircraft already has {:?})",
-                        address, address_type, registration, model_reg, registration
+                        address,
+                        address_type,
+                        registration,
+                        model.registration.as_deref().unwrap_or(""),
+                        registration
                     );
+                } else {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
+                        .set(aircraft::registration.eq(&registration))
+                        .execute(&mut conn)?;
+                    model.registration = Some(registration);
                 }
             }
 
