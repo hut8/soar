@@ -514,7 +514,7 @@
 													? 'preset-filled-success-500'
 													: 'preset-filled-secondary-500'}"
 											>
-												{selectedAircraft.fromOgnDdb ? 'In OGN DB' : 'Not in OGN DB'}
+												{selectedAircraft.fromOgnDdb ? 'In Unified DDB' : 'Not in Unified DDB'}
 											</span>
 										</dd>
 									</div>

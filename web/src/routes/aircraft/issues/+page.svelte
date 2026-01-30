@@ -164,7 +164,7 @@
 								<th class="p-3 text-left font-semibold">Address Type</th>
 								<th class="p-3 text-left font-semibold">Registration</th>
 								<th class="p-3 text-left font-semibold">Aircraft Model</th>
-								<th class="p-3 text-left font-semibold">From DDB</th>
+								<th class="p-3 text-left font-semibold">In Unified DDB</th>
 								<th class="p-3 text-left font-semibold">Tracked</th>
 								<th class="p-3 text-left font-semibold">Last Fix</th>
 							</tr>
