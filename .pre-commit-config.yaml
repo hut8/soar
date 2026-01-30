@@ -94,6 +94,17 @@ repos:
         pass_filenames: false
         stages: [pre-commit, pre-push]
 
+  # Migration safety checks (matching CI test-rust diesel-guard step)
+  - repo: local
+    hooks:
+      - id: diesel-guard
+        name: Check migrations for unsafe operations
+        entry: diesel-guard check migrations/
+        language: system
+        files: ^migrations/.*\.sql$
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
