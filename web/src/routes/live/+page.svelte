@@ -92,6 +92,10 @@
 
 	// Debounce timers
 	let viewportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let areaSubscriptionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Area subscription debug state
+	let debugAreaSubscriptionCount = $state(0);
 
 	// Aircraft data - using SvelteMap for reactivity (SvelteMap is already reactive)
 	const aircraftMap = new SvelteMap<string, { aircraft: Aircraft; fix: Fix }>();
@@ -231,6 +235,22 @@
 		const widthMiles = lngDiff * milesPerDegLng;
 
 		return heightMiles * widthMiles;
+	}
+
+	// Check if a fix position falls within the current map viewport
+	function isFixInViewport(fix: Fix): boolean {
+		if (!map) return false;
+
+		const bounds = map.getBounds();
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		return (
+			fix.latitude >= sw.lat &&
+			fix.latitude <= ne.lat &&
+			fix.longitude >= sw.lng &&
+			fix.longitude <= ne.lng
+		);
 	}
 
 	// Convert aircraft to GeoJSON feature
@@ -548,7 +568,15 @@
 			// Update aircraft and cluster maps with fetched data
 			aircraftMap.clear();
 			clusterMap.clear();
+			const wasClustered = isClusteredMode;
 			isClusteredMode = response.clustered;
+
+			// Handle clustered mode transitions for area subscriptions
+			if (isClusteredMode && !wasClustered) {
+				clearAreaSubscriptions();
+			} else if (!isClusteredMode && wasClustered) {
+				updateAreaSubscriptions();
+			}
 
 			let skipped = 0;
 			let hasTrackCount = 0;
@@ -614,7 +642,67 @@
 			runwayLayerManager.checkAndUpdate(viewportArea, currentSettings.showRunwayOverlays);
 
 			fetchAircraftInViewport();
+
+			// Update area subscriptions (always-on when not clustered)
+			updateAreaSubscriptions();
 		}, 300);
+	}
+
+	// Update area subscriptions based on current viewport
+	function updateAreaSubscriptions(): void {
+		if (!map || isClusteredMode) return;
+
+		if (areaSubscriptionDebounceTimer) {
+			clearTimeout(areaSubscriptionDebounceTimer);
+		}
+
+		areaSubscriptionDebounceTimer = setTimeout(() => {
+			areaSubscriptionDebounceTimer = null;
+			sendAreaSubscription();
+		}, 100);
+	}
+
+	// Send area bulk subscription message via WebSocket
+	function sendAreaSubscription(): void {
+		if (!map) return;
+
+		const bounds = map.getBounds();
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		const message = {
+			action: 'subscribe',
+			type: 'area_bulk' as const,
+			bounds: {
+				north: ne.lat,
+				south: sw.lat,
+				east: ne.lng,
+				west: sw.lng
+			}
+		};
+
+		logger.debug('[AREA] Bulk subscribe: {bounds}', { bounds: message.bounds });
+		fixFeed.sendWebSocketMessage(message);
+
+		// Update debug count (approximate 1-degree grid squares)
+		const latMin = Math.floor(sw.lat);
+		const latMax = Math.floor(ne.lat);
+		const lonMin = Math.floor(sw.lng);
+		const lonMax = Math.floor(ne.lng);
+		debugAreaSubscriptionCount = (latMax - latMin + 2) * (lonMax - lonMin + 2);
+	}
+
+	// Clear all area subscriptions
+	function clearAreaSubscriptions(): void {
+		const message = {
+			action: 'unsubscribe',
+			type: 'area_bulk' as const,
+			bounds: { north: 0, south: 0, east: 0, west: 0 }
+		};
+
+		logger.debug('[AREA] Bulk unsubscribe');
+		fixFeed.sendWebSocketMessage(message);
+		debugAreaSubscriptionCount = 0;
 	}
 
 	// Set map projection
@@ -727,10 +815,20 @@
 			if (isClusteredMode) return;
 
 			if (event.type === 'fix_received' && event.fix) {
-				const existing = aircraftMap.get(event.fix.aircraftId);
+				const aircraftId = event.fix.aircraftId;
+				const existing = aircraftMap.get(aircraftId);
+
 				if (existing) {
-					aircraftMap.set(event.fix.aircraftId, {
+					// Update existing aircraft's fix
+					aircraftMap.set(aircraftId, {
 						aircraft: existing.aircraft,
+						fix: event.fix
+					});
+					updateAircraftSource();
+				} else if (event.aircraft && isFixInViewport(event.fix)) {
+					// New aircraft discovered via area subscription - add if in viewport
+					aircraftMap.set(aircraftId, {
+						aircraft: event.aircraft,
 						fix: event.fix
 					});
 					updateAircraftSource();
@@ -796,6 +894,9 @@
 			// Start live feed
 			fixFeed.startLiveFixesFeed();
 			subscribeToAircraftUpdates();
+
+			// Start area subscriptions for real-time updates
+			updateAreaSubscriptions();
 		});
 
 		// Handle viewport changes
@@ -804,6 +905,10 @@
 
 		// Cleanup
 		return () => {
+			clearAreaSubscriptions();
+			if (areaSubscriptionDebounceTimer) {
+				clearTimeout(areaSubscriptionDebounceTimer);
+			}
 			fixFeed.stopLiveFixesFeed();
 			airspaceLayerManager.dispose();
 			airportLayerManager.dispose();
@@ -953,6 +1058,7 @@
 						<div>Aircraft: {debugAircraftCount}</div>
 						<div>Clusters: {clusterMap.size}</div>
 						<div>Mode: {isClusteredMode ? 'Clustered' : 'Individual'}</div>
+						<div>Area Subs: {debugAreaSubscriptionCount}</div>
 						<div>Projection: {currentProjection}</div>
 					</div>
 				{/if}
