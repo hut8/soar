@@ -2,7 +2,7 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft::{AddressType, Aircraft, AircraftModel, NewAircraft};
@@ -166,6 +166,7 @@ impl AircraftRepository {
 
         // Extract tail number from ICAO address if it's a US aircraft
         let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type);
+        let registration_for_logging = registration.clone();
 
         let new_aircraft = NewAircraft {
             address,
@@ -209,7 +210,15 @@ impl AircraftRepository {
             .do_update()
             .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
             .returning(AircraftModel::as_returning())
-            .get_result(&mut conn)?;
+            .get_result(&mut conn)
+            .map_err(|e| {
+                error!(
+                    "get_or_insert_aircraft_by_address failed: address={:06X}, address_type={:?}, \
+                     computed_registration={:?}, error={}",
+                    address, address_type, registration_for_logging, e
+                );
+                e
+            })?;
 
         Ok(model)
     }
@@ -253,7 +262,11 @@ impl AircraftRepository {
                 address,
                 address_type,
                 aircraft_model: packet_fields.aircraft_model.clone().unwrap_or_default(),
-                registration: if registration.is_empty() { None } else { Some(registration.clone()) },
+                // Always insert with NULL registration to avoid violating the
+                // idx_aircraft_registration_unique constraint. The DO UPDATE clause
+                // will safely set the registration (with a duplicate check) on the
+                // next fix for this aircraft.
+                registration: None,
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
@@ -287,8 +300,19 @@ impl AircraftRepository {
             // This eliminates the need for separate async update tasks
 
             // Prepare registration SQL expression
+            // Only set registration if no OTHER aircraft already has this registration.
+            // This prevents unique constraint violations from bad packet data (e.g., ADS-B
+            // packets reporting the wrong registration for an aircraft).
             let registration_sql = if !registration.is_empty() {
-                format!("'{}'::text", registration.replace('\'', "''"))
+                let escaped = registration.replace('\'', "''");
+                format!(
+                    "CASE WHEN NOT EXISTS (\
+                        SELECT 1 FROM aircraft a2 \
+                        WHERE a2.registration = '{escaped}' \
+                        AND a2.id != aircraft.id\
+                    ) THEN '{escaped}'::text \
+                    ELSE aircraft.registration END"
+                )
             } else {
                 "aircraft.registration".to_string()
             };
@@ -317,7 +341,29 @@ impl AircraftRepository {
                     aircraft::country_code.eq(&country_code),
                 ))
                 .returning(AircraftModel::as_returning())
-                .get_result(&mut conn)?;
+                .get_result(&mut conn)
+                .map_err(|e| {
+                    error!(
+                        "aircraft_for_fix upsert failed: address={:06X}, address_type={:?}, \
+                         packet_registration={:?}, computed_registration={:?}, error={}",
+                        address, address_type, packet_fields.registration, registration, e
+                    );
+                    e
+                })?;
+
+            // Log a warning if the registration from the packet was not applied
+            // because another aircraft already has it
+            if !registration.is_empty() {
+                let model_reg = model.registration.as_deref().unwrap_or("");
+                if model_reg != registration {
+                    warn!(
+                        "Skipped duplicate registration: address={:06X}, address_type={:?}, \
+                         packet_registration={:?}, kept_registration={:?} \
+                         (another aircraft already has {:?})",
+                        address, address_type, registration, model_reg, registration
+                    );
+                }
+            }
 
             Ok::<AircraftModel, anyhow::Error>(model)
         })

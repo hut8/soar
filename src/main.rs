@@ -734,6 +734,28 @@ async fn main() -> Result<()> {
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
+    // Initialize Sentry for error tracking (must be done early, guard must stay alive)
+    let _sentry_guard = if let Ok(dsn) = env::var("SENTRY_DSN") {
+        if !dsn.is_empty() {
+            let guard = sentry::init((
+                dsn,
+                sentry::ClientOptions {
+                    release: Some(std::borrow::Cow::Borrowed(env!("VERGEN_GIT_DESCRIBE"))),
+                    environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
+                    // Sample rate for performance tracing (transactions), not error capture
+                    traces_sample_rate: if is_production { 0.01 } else { 0.1 },
+                    ..Default::default()
+                },
+            ));
+            info!("Sentry initialized for environment: {}", soar_env);
+            Some(guard)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Initialize OpenTelemetry for distributed tracing and observability
     // Note: Tracer initialization is deferred until after CLI parsing to get the component name
     // See tracer setup in each subcommand handler below
@@ -850,7 +872,15 @@ async fn main() -> Result<()> {
     // `log` crate events to tracing. We use both `pprof=warn` and `log=warn` to suppress
     // the pprof crate's "starting/stopping cpu profiler" INFO-level messages
 
-    let registry = tracing_subscriber::registry();
+    // Create sentry-tracing layer to forward errors/warnings to Sentry
+    // ERROR -> Sentry events, WARN/INFO -> breadcrumbs for context
+    let sentry_layer = sentry_tracing::layer().event_filter(|metadata| match metadata.level() {
+        &tracing::Level::ERROR => sentry_tracing::EventFilter::Event,
+        &tracing::Level::WARN | &tracing::Level::INFO => sentry_tracing::EventFilter::Breadcrumb,
+        _ => sentry_tracing::EventFilter::Ignore,
+    });
+
+    let registry = tracing_subscriber::registry().with(sentry_layer);
 
     let fmt_layer = filter::Filtered::new(
         tracing_subscriber::fmt::layer().event_format(log_format::TargetFirstFormat),

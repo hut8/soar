@@ -317,8 +317,8 @@ impl FixProcessor {
                     }
                     Err(e) => {
                         error!(
-                            "Failed to get or insert device address {:06X} ({:?}): {}, skipping fix processing",
-                            device_address, address_type, e
+                            "Failed to get or insert device address {:06X} ({:?}): {}, skipping fix processing (packet_registration={:?})",
+                            device_address, address_type, e, registration
                         );
                     }
                 }

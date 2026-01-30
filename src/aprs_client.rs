@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::protocol::{IngestSource, create_serialized_envelope};
 
@@ -428,7 +428,7 @@ impl AprsClient {
                             let line = match String::from_utf8(line_buffer.clone()) {
                                 Ok(valid_line) => valid_line,
                                 Err(_) => {
-                                    warn!("Invalid UTF-8 in stream, skipping");
+                                    debug!("Invalid UTF-8 in stream, skipping");
                                     continue;
                                 }
                             };
