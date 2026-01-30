@@ -181,11 +181,11 @@ impl AircraftRepository {
                 address,
                 address_type,
                 aircraft_model: String::new(),
-                registration: if registration.is_empty() {
-                    None
-                } else {
-                    Some(registration.clone())
-                },
+                // Always insert with NULL registration to avoid violating the
+                // idx_aircraft_registration_unique constraint. The DO UPDATE clause
+                // will safely set the registration (with a duplicate check) on the
+                // next fix for this aircraft.
+                registration: None,
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
