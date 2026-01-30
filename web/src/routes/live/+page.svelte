@@ -689,7 +689,7 @@
 		const latMax = Math.floor(ne.lat);
 		const lonMin = Math.floor(sw.lng);
 		const lonMax = Math.floor(ne.lng);
-		debugAreaSubscriptionCount = (latMax - latMin + 2) * (lonMax - lonMin + 2);
+		debugAreaSubscriptionCount = (latMax - latMin + 1) * (lonMax - lonMin + 1);
 	}
 
 	// Clear all area subscriptions
