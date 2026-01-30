@@ -1,0 +1,50 @@
+CREATE TYPE spurious_flight_reason AS ENUM (
+    'duration_too_short',
+    'altitude_range_insufficient',
+    'max_agl_too_low',
+    'excessive_altitude',
+    'excessive_speed'
+);
+
+CREATE TABLE spurious_flights (
+    -- All columns from flights table (identical schema, no foreign keys)
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    device_address VARCHAR(20) NOT NULL,
+    takeoff_time TIMESTAMPTZ,
+    landing_time TIMESTAMPTZ,
+    club_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    device_address_type address_type NOT NULL,
+    aircraft_id UUID,
+    takeoff_altitude_offset_ft INT4,
+    landing_altitude_offset_ft INT4,
+    takeoff_runway_ident TEXT,
+    landing_runway_ident TEXT,
+    total_distance_meters FLOAT8,
+    maximum_displacement_meters FLOAT8,
+    departure_airport_id INT4,
+    arrival_airport_id INT4,
+    towed_by_aircraft_id UUID,
+    towed_by_flight_id UUID,
+    tow_release_altitude_msl_ft INT4,
+    tow_release_time TIMESTAMPTZ,
+    runways_inferred BOOLEAN,
+    takeoff_location_id UUID,
+    landing_location_id UUID,
+    start_location_id UUID,
+    end_location_id UUID,
+    timed_out_at TIMESTAMPTZ,
+    timeout_phase timeout_phase,
+    last_fix_at TIMESTAMPTZ NOT NULL,
+    tow_release_height_delta_ft INT4,
+    callsign TEXT,
+    min_latitude FLOAT8,
+    max_latitude FLOAT8,
+    min_longitude FLOAT8,
+    max_longitude FLOAT8,
+    -- Spurious flight metadata
+    reasons spurious_flight_reason[] NOT NULL,
+    reason_descriptions TEXT[] NOT NULL,
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -3,7 +3,7 @@ use crate::aircraft::Aircraft;
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::fixes_repo::FixesRepository;
-use crate::flights::{Flight, TimeoutPhase};
+use crate::flights::{Flight, SpuriousFlightReason, TimeoutPhase};
 use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
@@ -559,44 +559,51 @@ async fn complete_flight_in_background(
             || has_excessive_speed;
 
         if is_spurious {
-            // Delete spurious flight
-            let mut reasons = Vec::new();
+            // Archive spurious flight instead of deleting it
+            let mut reason_enums = Vec::new();
+            let mut reason_descriptions = Vec::new();
             if duration_seconds < 120 {
-                reasons.push(format!("duration too short ({}s < 120s)", duration_seconds));
+                reason_enums.push(SpuriousFlightReason::DurationTooShort);
+                reason_descriptions
+                    .push(format!("duration too short ({}s < 120s)", duration_seconds));
             }
             if altitude_range.map(|range| range < 50).unwrap_or(false) {
-                reasons.push(format!(
+                reason_enums.push(SpuriousFlightReason::AltitudeRangeInsufficient);
+                reason_descriptions.push(format!(
                     "altitude range too small ({:?}ft < 50ft)",
                     altitude_range
                 ));
             }
             if max_agl_altitude.map(|agl| agl < 100).unwrap_or(false) {
-                reasons.push(format!(
+                reason_enums.push(SpuriousFlightReason::MaxAglTooLow);
+                reason_descriptions.push(format!(
                     "max AGL too low ({:?}ft < 100ft)",
                     max_agl_altitude
                 ));
             }
             if has_excessive_altitude {
-                reasons.push("excessive altitude (>100,000ft)".to_string());
+                reason_enums.push(SpuriousFlightReason::ExcessiveAltitude);
+                reason_descriptions.push("excessive altitude (>100,000ft)".to_string());
             }
             if has_excessive_speed {
-                reasons.push(format!(
+                reason_enums.push(SpuriousFlightReason::ExcessiveSpeed);
+                reason_descriptions.push(format!(
                     "excessive speed ({:.1} mph > 1000 mph)",
                     average_speed_mph.unwrap()
                 ));
             }
 
             warn!(
-                "Spurious flight {} detected for aircraft {:06X} - reasons: [{}]. Deleting.",
+                "Spurious flight {} detected for aircraft {:06X} - reasons: [{}]. Archiving.",
                 flight_id,
                 device.address,
-                reasons.join(", ")
+                reason_descriptions.join(", ")
             );
 
             // NOTE: current_flight_id is already cleared by the caller (in state_transitions.rs)
             // before spawning this background task, so we don't need to touch aircraft_states here
 
-            // Clear flight_id from all associated fixes before deleting the flight
+            // Clear flight_id from all associated fixes before archiving the flight
             // Use flight's actual time range for partition pruning (not "now - 24h" which
             // fails if processing old queued messages from soar-ingest)
             // This is safe now because the landing fix has already been inserted into the database
@@ -612,12 +619,14 @@ async fn complete_flight_in_background(
                 error!("Failed to clear flight_id from fixes: {}", e);
             }
 
-            // Delete the flight
-            flights_repo.delete_flight(flight_id).await?;
+            // Archive the flight to spurious_flights table, then delete from flights
+            flights_repo
+                .archive_spurious_flight(flight_id, reason_enums, reason_descriptions)
+                .await?;
 
-            metrics::counter!("flight_tracker.spurious_flights_deleted_total").increment(1);
+            metrics::counter!("flight_tracker.spurious_flights_archived_total").increment(1);
 
-            return Ok(false); // Return false to indicate flight was deleted as spurious
+            return Ok(false); // Return false to indicate flight was archived as spurious
         }
     }
 

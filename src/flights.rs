@@ -41,6 +41,18 @@ pub enum TimeoutPhase {
     Unknown,
 }
 
+/// Reason a flight was classified as spurious
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[serde(rename_all = "snake_case")]
+#[db_enum(existing_type_path = "crate::schema::sql_types::SpuriousFlightReason")]
+pub enum SpuriousFlightReason {
+    DurationTooShort,
+    AltitudeRangeInsufficient,
+    MaxAglTooLow,
+    ExcessiveAltitude,
+    ExcessiveSpeed,
+}
+
 /// Calculate the distance between two points using the Haversine formula
 /// Returns distance in meters
 pub(crate) fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
@@ -969,6 +981,90 @@ pub struct NewFlightModel {
     pub last_fix_at: DateTime<Utc>,
     // Note: callsign and tow_release_height_delta_ft are not included in NewFlightModel
     // as they are not set during initial flight creation
+}
+
+/// Insert model for archiving spurious flights
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = crate::schema::spurious_flights)]
+pub struct NewSpuriousFlightModel {
+    pub id: Uuid,
+    pub device_address: String,
+    pub takeoff_time: Option<DateTime<Utc>>,
+    pub landing_time: Option<DateTime<Utc>>,
+    pub club_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub device_address_type: AddressType,
+    pub aircraft_id: Option<Uuid>,
+    pub takeoff_altitude_offset_ft: Option<i32>,
+    pub landing_altitude_offset_ft: Option<i32>,
+    pub takeoff_runway_ident: Option<String>,
+    pub landing_runway_ident: Option<String>,
+    pub total_distance_meters: Option<f64>,
+    pub maximum_displacement_meters: Option<f64>,
+    pub departure_airport_id: Option<i32>,
+    pub arrival_airport_id: Option<i32>,
+    pub towed_by_aircraft_id: Option<Uuid>,
+    pub towed_by_flight_id: Option<Uuid>,
+    pub tow_release_altitude_msl_ft: Option<i32>,
+    pub tow_release_time: Option<DateTime<Utc>>,
+    pub runways_inferred: Option<bool>,
+    pub takeoff_location_id: Option<Uuid>,
+    pub landing_location_id: Option<Uuid>,
+    pub start_location_id: Option<Uuid>,
+    pub end_location_id: Option<Uuid>,
+    pub timed_out_at: Option<DateTime<Utc>>,
+    pub timeout_phase: Option<TimeoutPhase>,
+    pub last_fix_at: DateTime<Utc>,
+    pub tow_release_height_delta_ft: Option<i32>,
+    pub callsign: Option<String>,
+    pub reasons: Vec<Option<SpuriousFlightReason>>,
+    pub reason_descriptions: Vec<Option<String>>,
+}
+
+impl NewSpuriousFlightModel {
+    /// Create from a FlightModel and spurious reason data
+    pub fn from_flight(
+        flight: FlightModel,
+        reasons: Vec<SpuriousFlightReason>,
+        reason_descriptions: Vec<String>,
+    ) -> Self {
+        Self {
+            id: flight.id,
+            device_address: flight.device_address,
+            takeoff_time: flight.takeoff_time,
+            landing_time: flight.landing_time,
+            club_id: flight.club_id,
+            created_at: flight.created_at,
+            updated_at: flight.updated_at,
+            device_address_type: flight.device_address_type,
+            aircraft_id: flight.aircraft_id,
+            takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
+            landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
+            takeoff_runway_ident: flight.takeoff_runway_ident,
+            landing_runway_ident: flight.landing_runway_ident,
+            total_distance_meters: flight.total_distance_meters,
+            maximum_displacement_meters: flight.maximum_displacement_meters,
+            departure_airport_id: flight.departure_airport_id,
+            arrival_airport_id: flight.arrival_airport_id,
+            towed_by_aircraft_id: flight.towed_by_aircraft_id,
+            towed_by_flight_id: flight.towed_by_flight_id,
+            tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
+            tow_release_time: flight.tow_release_time,
+            runways_inferred: flight.runways_inferred,
+            takeoff_location_id: flight.takeoff_location_id,
+            landing_location_id: flight.landing_location_id,
+            start_location_id: flight.start_location_id,
+            end_location_id: flight.end_location_id,
+            timed_out_at: flight.timed_out_at,
+            timeout_phase: flight.timeout_phase,
+            last_fix_at: flight.last_fix_at,
+            tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
+            callsign: flight.callsign,
+            reasons: reasons.into_iter().map(Some).collect(),
+            reason_descriptions: reason_descriptions.into_iter().map(Some).collect(),
+        }
+    }
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)

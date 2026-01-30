@@ -58,6 +58,10 @@ pub mod sql_types {
     pub struct RegistrantType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "spurious_flight_reason"))]
+    pub struct SpuriousFlightReason;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "timeout_phase"))]
     pub struct TimeoutPhase;
 
@@ -850,6 +854,56 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
+    use super::sql_types::AddressType;
+    use super::sql_types::TimeoutPhase;
+    use super::sql_types::SpuriousFlightReason;
+
+    spurious_flights (id) {
+        id -> Uuid,
+        #[max_length = 20]
+        device_address -> Varchar,
+        takeoff_time -> Nullable<Timestamptz>,
+        landing_time -> Nullable<Timestamptz>,
+        club_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        device_address_type -> AddressType,
+        aircraft_id -> Nullable<Uuid>,
+        takeoff_altitude_offset_ft -> Nullable<Int4>,
+        landing_altitude_offset_ft -> Nullable<Int4>,
+        takeoff_runway_ident -> Nullable<Text>,
+        landing_runway_ident -> Nullable<Text>,
+        total_distance_meters -> Nullable<Float8>,
+        maximum_displacement_meters -> Nullable<Float8>,
+        departure_airport_id -> Nullable<Int4>,
+        arrival_airport_id -> Nullable<Int4>,
+        towed_by_aircraft_id -> Nullable<Uuid>,
+        towed_by_flight_id -> Nullable<Uuid>,
+        tow_release_altitude_msl_ft -> Nullable<Int4>,
+        tow_release_time -> Nullable<Timestamptz>,
+        runways_inferred -> Nullable<Bool>,
+        takeoff_location_id -> Nullable<Uuid>,
+        landing_location_id -> Nullable<Uuid>,
+        start_location_id -> Nullable<Uuid>,
+        end_location_id -> Nullable<Uuid>,
+        timed_out_at -> Nullable<Timestamptz>,
+        timeout_phase -> Nullable<TimeoutPhase>,
+        last_fix_at -> Timestamptz,
+        tow_release_height_delta_ft -> Nullable<Int4>,
+        callsign -> Nullable<Text>,
+        min_latitude -> Nullable<Float8>,
+        max_latitude -> Nullable<Float8>,
+        min_longitude -> Nullable<Float8>,
+        max_longitude -> Nullable<Float8>,
+        reasons -> Array<Nullable<SpuriousFlightReason>>,
+        reason_descriptions -> Array<Nullable<Text>>,
+        detected_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
 
     states (code) {
         #[max_length = 2]
@@ -1039,6 +1093,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     runways,
     server_messages,
     spatial_ref_sys,
+    spurious_flights,
     states,
     status_codes,
     type_aircraft,
