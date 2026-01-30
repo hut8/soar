@@ -269,13 +269,25 @@ export class AirspaceLayerManager {
 		this.map.on('click', FILL_LAYER_ID, (e) => {
 			if (!e.features || e.features.length === 0) return;
 
-			// Check if an aircraft was clicked - if so, don't show airspace modal
-			// Aircraft layer has higher priority for click handling
+			// Check if an aircraft or airport was clicked - if so, don't show airspace modal
+			// Aircraft and airport layers have higher priority for click handling
 			const aircraftFeatures = this.map!.queryRenderedFeatures(e.point, {
 				layers: ['aircraft-markers']
 			});
 			if (aircraftFeatures.length > 0) {
 				return; // Aircraft clicked, let aircraft handler deal with it
+			}
+
+			const airportLayers = ['airports-symbols', 'airports-symbols-circle'].filter((id) =>
+				this.map!.getLayer(id)
+			);
+			if (airportLayers.length > 0) {
+				const airportFeatures = this.map!.queryRenderedFeatures(e.point, {
+					layers: airportLayers
+				});
+				if (airportFeatures.length > 0) {
+					return; // Airport clicked, let airport handler deal with it
+				}
 			}
 
 			const feature = e.features[0];

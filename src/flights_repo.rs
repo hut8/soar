@@ -5,7 +5,9 @@ use diesel::prelude::*;
 use diesel::sql_types::Timestamp;
 use uuid::Uuid;
 
-use crate::flights::{Flight, FlightModel, TimeoutPhase};
+use crate::flights::{
+    Flight, FlightModel, NewSpuriousFlightModel, SpuriousFlightReason, TimeoutPhase,
+};
 use crate::web::PgPool;
 
 #[derive(Clone)]
@@ -666,6 +668,47 @@ impl FlightsRepository {
         .await??;
 
         Ok(rows_affected > 0)
+    }
+
+    /// Archive a spurious flight: copy it to spurious_flights with reasons, then delete from flights.
+    pub async fn archive_spurious_flight(
+        &self,
+        flight_id: Uuid,
+        reasons: Vec<SpuriousFlightReason>,
+        reason_descriptions: Vec<String>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl as flights_dsl;
+        use crate::schema::spurious_flights;
+
+        let pool = self.pool.clone();
+
+        let archived = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Read the flight
+                let flight: FlightModel = flights_dsl::flights
+                    .filter(flights_dsl::id.eq(flight_id))
+                    .select(FlightModel::as_select())
+                    .first(conn)?;
+
+                // Insert into spurious_flights
+                let spurious =
+                    NewSpuriousFlightModel::from_flight(flight, reasons, reason_descriptions);
+                diesel::insert_into(spurious_flights::table)
+                    .values(&spurious)
+                    .execute(conn)?;
+
+                // Delete from flights
+                diesel::delete(flights_dsl::flights.filter(flights_dsl::id.eq(flight_id)))
+                    .execute(conn)?;
+
+                Ok(true)
+            })
+        })
+        .await??;
+
+        Ok(archived)
     }
 
     /// Get flights associated with an airport (either departure or arrival) within a time range
