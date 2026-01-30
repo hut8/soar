@@ -41,7 +41,11 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **NEVER add Co-Authored-By lines** - Do not include Claude Code attribution in commits
 - **AVOID raw SQL in Diesel** - Only use raw SQL if absolutely necessary, and ask first before using it
 - Always prefer Diesel's query builder and type-safe methods over raw SQL
-- **NEVER use CREATE INDEX CONCURRENTLY in Diesel migrations** - Diesel migrations run in transactions, which don't support CONCURRENTLY. Use regular CREATE INDEX instead
+- **CREATE INDEX CONCURRENTLY requires a `metadata.toml`** - Diesel migrations run in transactions by default, which don't support CONCURRENTLY. To use CONCURRENTLY, add a `metadata.toml` file to the migration directory with `run_in_transaction = false`. Example:
+  ```toml
+  # migrations/2026-01-30-123456-0000_add_index/metadata.toml
+  run_in_transaction = false
+  ```
 
 ### SERVER ACCESS AND DEPLOYMENT
 - You are running on the staging server. The staging server is named "supervillain". You can always run commands that do not modify anything. Ask before running commands that modify something.

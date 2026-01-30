@@ -1,0 +1,5 @@
+framework = "diesel"
+
+# Skip all existing migrations - only check new ones going forward.
+# This is the timestamp of the latest migration at the time diesel-guard was adopted.
+start_after = "2026-01-30-154531"

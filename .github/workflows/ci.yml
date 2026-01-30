@@ -377,6 +377,20 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --check
 
+      - name: Cache diesel-guard
+        id: cache-diesel-guard
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/diesel-guard
+          key: ${{ runner.os }}-diesel-guard-0.5.0
+
+      - name: Install diesel-guard
+        if: steps.cache-diesel-guard.outputs.cache-hit != 'true'
+        run: cargo install diesel-guard --version 0.5.0
+
+      - name: Check migrations for unsafe operations
+        run: diesel-guard check migrations/
+
       - name: Cache Diesel CLI
         id: cache-diesel
         uses: actions/cache@v5
