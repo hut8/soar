@@ -1,7 +1,9 @@
 use anyhow::Result;
+use dashmap::DashMap;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
+use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -678,6 +680,195 @@ impl AircraftRepository {
             Ok::<(Vec<AircraftModel>, i64), anyhow::Error>((duplicate_aircraft, total_count))
         })
         .await?
+    }
+}
+
+/// In-memory aircraft cache to eliminate DB round trips on the fix processing hot path.
+///
+/// On startup, loads all aircraft with a fix in the last 7 days. On cache hit,
+/// returns the cached Aircraft directly (no DB call). On miss, falls through to
+/// the DB upsert and caches the result.
+///
+/// Keyed by both `(AddressType, address)` (for fix processing lookups) and
+/// `Uuid` (for state transition lookups by aircraft_id).
+#[derive(Clone)]
+pub struct AircraftCache {
+    by_address: Arc<DashMap<(AddressType, i32), Aircraft>>,
+    by_id: Arc<DashMap<Uuid, Aircraft>>,
+    repo: AircraftRepository,
+}
+
+impl AircraftCache {
+    pub fn new(pool: PgPool) -> Self {
+        Self {
+            by_address: Arc::new(DashMap::new()),
+            by_id: Arc::new(DashMap::new()),
+            repo: AircraftRepository::new(pool),
+        }
+    }
+
+    /// Preload all aircraft that have had a fix in the last 7 days.
+    pub async fn preload(&self) -> Result<usize> {
+        let start = std::time::Instant::now();
+        let pool = self.repo.pool.clone();
+
+        let models: Vec<AircraftModel> = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let cutoff = Utc::now() - chrono::Duration::days(7);
+            aircraft::table
+                .filter(aircraft::last_fix_at.gt(cutoff))
+                .select(AircraftModel::as_select())
+                .load(&mut conn)
+                .map_err(|e| anyhow::anyhow!("Failed to preload aircraft cache: {}", e))
+        })
+        .await??;
+
+        let count = models.len();
+        for model in models {
+            let a: Aircraft = model.into();
+            let id = a.id.expect("aircraft from DB must have id");
+            self.by_address
+                .insert((a.address_type, a.address as i32), a.clone());
+            self.by_id.insert(id, a);
+        }
+
+        let elapsed_ms = start.elapsed().as_millis();
+        info!(
+            "Aircraft cache preloaded: {} aircraft in {}ms",
+            count, elapsed_ms
+        );
+        metrics::histogram!("aircraft_cache.preload_ms").record(elapsed_ms as f64);
+        metrics::gauge!("aircraft_cache.size").set(count as f64);
+
+        Ok(count)
+    }
+
+    /// Get or upsert an aircraft for fix processing.
+    ///
+    /// On cache hit: returns immediately, spawns async metadata DB update.
+    /// On cache miss: falls through to DB upsert, caches result.
+    pub async fn get_or_upsert(
+        &self,
+        address: i32,
+        address_type: AddressType,
+        packet_fields: AircraftPacketFields,
+    ) -> Result<Aircraft> {
+        let key = (address_type, address);
+
+        // Fast path: cache hit
+        if let Some(mut entry) = self.by_address.get_mut(&key) {
+            metrics::counter!("aircraft_cache.hit_total", "lookup" => "by_address").increment(1);
+
+            // Apply metadata updates to cached entry in-place
+            let aircraft = entry.value_mut();
+            let mut changed = false;
+
+            if packet_fields.aircraft_category.is_some()
+                && aircraft.aircraft_category != packet_fields.aircraft_category
+            {
+                aircraft.aircraft_category = packet_fields.aircraft_category;
+                changed = true;
+            }
+            if packet_fields.tracker_device_type.is_some()
+                && aircraft.tracker_device_type != packet_fields.tracker_device_type
+            {
+                aircraft.tracker_device_type = packet_fields.tracker_device_type.clone();
+                changed = true;
+            }
+            if packet_fields.icao_model_code.is_some() && aircraft.icao_model_code.is_none() {
+                aircraft.icao_model_code = packet_fields.icao_model_code.clone();
+                changed = true;
+            }
+            if packet_fields.adsb_emitter_category.is_some()
+                && aircraft.adsb_emitter_category.is_none()
+            {
+                aircraft.adsb_emitter_category = packet_fields.adsb_emitter_category;
+                changed = true;
+            }
+            if packet_fields.aircraft_model.is_some() && aircraft.aircraft_model.is_empty() {
+                aircraft.aircraft_model = packet_fields.aircraft_model.clone().unwrap_or_default();
+                changed = true;
+            }
+            // Registration: only update if we have one and aircraft doesn't
+            // (the full duplicate-check logic runs on cache miss via DB upsert)
+            if packet_fields
+                .registration
+                .as_ref()
+                .is_some_and(|r| !r.is_empty())
+                && aircraft.registration.is_none()
+            {
+                aircraft.registration = packet_fields.registration.clone();
+                changed = true;
+            }
+
+            let result = aircraft.clone();
+
+            // Update by_id map too
+            if changed && let Some(id) = result.id {
+                self.by_id.insert(id, result.clone());
+            }
+
+            // Drop the DashMap guard before spawning async work
+            drop(entry);
+
+            // Fire-and-forget async DB metadata update if anything changed.
+            // Reuse the existing aircraft_for_fix() upsert which handles all the
+            // complex SQL (registration duplicate checking, COALESCE logic, etc.)
+            if changed {
+                let repo = self.repo.clone();
+                tokio::spawn(async move {
+                    let _ = repo
+                        .aircraft_for_fix(address, address_type, packet_fields)
+                        .await;
+                });
+            }
+
+            return Ok(result);
+        }
+
+        // Slow path: cache miss — fall through to DB upsert
+        metrics::counter!("aircraft_cache.miss_total", "lookup" => "by_address").increment(1);
+
+        let model = self
+            .repo
+            .aircraft_for_fix(address, address_type, packet_fields)
+            .await?;
+        let aircraft: Aircraft = model.into();
+        let id = aircraft.id.expect("aircraft from DB must have id");
+
+        self.by_address.insert(key, aircraft.clone());
+        self.by_id.insert(id, aircraft.clone());
+
+        self.update_size_gauge();
+
+        Ok(aircraft)
+    }
+
+    /// Get an aircraft by ID from cache, falling back to DB on miss.
+    pub async fn get_by_id(&self, aircraft_id: Uuid) -> Result<Option<Aircraft>> {
+        if let Some(entry) = self.by_id.get(&aircraft_id) {
+            metrics::counter!("aircraft_cache.hit_total", "lookup" => "by_id").increment(1);
+            return Ok(Some(entry.value().clone()));
+        }
+
+        metrics::counter!("aircraft_cache.miss_total", "lookup" => "by_id").increment(1);
+
+        let result = self.repo.get_aircraft_by_id(aircraft_id).await?;
+        if let Some(ref aircraft) = result {
+            let id = aircraft.id.expect("aircraft from DB must have id");
+            self.by_id.insert(id, aircraft.clone());
+            self.by_address.insert(
+                (aircraft.address_type, aircraft.address as i32),
+                aircraft.clone(),
+            );
+            self.update_size_gauge();
+        }
+
+        Ok(result)
+    }
+
+    fn update_size_gauge(&self) {
+        metrics::gauge!("aircraft_cache.size").set(self.by_id.len() as f64);
     }
 }
 

@@ -90,11 +90,11 @@ pub(crate) async fn process_state_transition(
     let is_active = should_be_active(&fix);
     let mut pending_work = PendingBackgroundWork::None;
 
-    // Fetch aircraft
+    // Fetch aircraft (from in-memory cache, falling back to DB on miss)
     let aircraft_lookup_start = std::time::Instant::now();
     let aircraft = ctx
-        .aircraft_repo
-        .get_aircraft_by_id(fix.aircraft_id)
+        .aircraft_cache
+        .get_by_id(fix.aircraft_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Aircraft {} not found", fix.aircraft_id))?;
     metrics::histogram!("aprs.aircraft.aircraft_lookup_ms")

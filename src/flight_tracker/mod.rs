@@ -18,7 +18,7 @@ use state_transitions::PendingBackgroundWork;
 pub use state_transitions::should_be_active;
 
 use crate::Fix;
-use crate::aircraft_repo::AircraftRepository;
+use crate::aircraft_repo::{AircraftCache, AircraftRepository};
 use crate::airports_repo::AirportsRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
@@ -66,6 +66,7 @@ pub(crate) type AircraftLocksMap = Arc<DashMap<Uuid, Arc<Mutex<()>>>>;
 pub(crate) struct FlightProcessorContext<'a> {
     pub flights_repo: &'a FlightsRepository,
     pub aircraft_repo: &'a AircraftRepository,
+    pub aircraft_cache: &'a AircraftCache,
     pub airports_repo: &'a AirportsRepository,
     pub locations_repo: &'a LocationsRepository,
     pub runways_repo: &'a RunwaysRepository,
@@ -83,6 +84,7 @@ pub struct FlightTracker {
     pool: Pool<ConnectionManager<PgConnection>>,
     flights_repo: FlightsRepository,
     device_repo: AircraftRepository,
+    aircraft_cache: AircraftCache,
     airports_repo: AirportsRepository,
     runways_repo: RunwaysRepository,
     fixes_repo: FixesRepository,
@@ -108,6 +110,7 @@ impl Clone for FlightTracker {
             pool: self.pool.clone(),
             flights_repo: self.flights_repo.clone(),
             device_repo: self.device_repo.clone(),
+            aircraft_cache: self.aircraft_cache.clone(),
             airports_repo: self.airports_repo.clone(),
             runways_repo: self.runways_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
@@ -124,13 +127,17 @@ impl Clone for FlightTracker {
 }
 
 impl FlightTracker {
-    pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
+    pub fn new(
+        pool: &Pool<ConnectionManager<PgConnection>>,
+        aircraft_cache: AircraftCache,
+    ) -> Self {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         let magnetic_service = crate::magnetic::MagneticService::new();
         Self {
             pool: pool.clone(),
             flights_repo: FlightsRepository::new(pool.clone()),
             device_repo: AircraftRepository::new(pool.clone()),
+            aircraft_cache,
             airports_repo: AirportsRepository::new(pool.clone()),
             runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
@@ -169,6 +176,7 @@ impl FlightTracker {
         FlightProcessorContext {
             flights_repo: &self.flights_repo,
             aircraft_repo: &self.device_repo,
+            aircraft_cache: &self.aircraft_cache,
             airports_repo: &self.airports_repo,
             locations_repo: &self.locations_repo,
             runways_repo: &self.runways_repo,

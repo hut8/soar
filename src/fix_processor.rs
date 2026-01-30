@@ -4,7 +4,7 @@ use tracing::{debug, error, trace};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::Fix;
-use crate::aircraft_repo::{AircraftPacketFields, AircraftRepository};
+use crate::aircraft_repo::{AircraftCache, AircraftPacketFields};
 use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
@@ -26,7 +26,7 @@ pub enum ElevationMode {
 #[derive(Clone)]
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
-    aircraft_repo: AircraftRepository,
+    aircraft_cache: AircraftCache,
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
@@ -39,12 +39,15 @@ pub struct FixProcessor {
 }
 
 impl FixProcessor {
-    pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
+    pub fn new(
+        diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        aircraft_cache: AircraftCache,
+    ) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_cache: aircraft_cache.clone(),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
-            flight_detection_processor: FlightTracker::new(&diesel_pool),
+            flight_detection_processor: FlightTracker::new(&diesel_pool, aircraft_cache),
             nats_publisher: None,
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
@@ -78,15 +81,16 @@ impl FixProcessor {
     /// Create a new FixProcessor with NATS publisher
     pub async fn new_with_nats(
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        aircraft_cache: AircraftCache,
         nats_url: &str,
     ) -> anyhow::Result<Self> {
         let nats_publisher = NatsFixPublisher::new(nats_url).await?;
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_cache: aircraft_cache.clone(),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
-            flight_detection_processor: FlightTracker::new(&diesel_pool),
+            flight_detection_processor: FlightTracker::new(&diesel_pool, aircraft_cache),
             nats_publisher: Some(nats_publisher),
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
@@ -97,11 +101,12 @@ impl FixProcessor {
     /// Create a new FixProcessor with a custom FlightTracker (for state persistence)
     pub fn with_flight_tracker(
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        aircraft_cache: AircraftCache,
         flight_tracker: FlightTracker,
     ) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_cache,
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
@@ -114,6 +119,7 @@ impl FixProcessor {
     /// Create a new FixProcessor with custom FlightTracker and NATS publisher
     pub async fn with_flight_tracker_and_nats(
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        aircraft_cache: AircraftCache,
         flight_tracker: FlightTracker,
         nats_url: &str,
     ) -> anyhow::Result<Self> {
@@ -121,7 +127,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_cache,
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
@@ -224,6 +230,13 @@ impl FixProcessor {
                     return;
                 }
 
+                // Skip fixes with zero address - these are invalid/garbage data
+                if device_address == 0 {
+                    trace!("Skipping fix with zero device address");
+                    metrics::counter!("aprs.fixes.skipped_zero_address_total").increment(1);
+                    return;
+                }
+
                 let spontaneous_address_type = match tracker_device_type.as_str() {
                     "OGFLR" => crate::aircraft::AddressType::Flarm,
                     "OGADSB" => crate::aircraft::AddressType::Icao,
@@ -267,25 +280,23 @@ impl FixProcessor {
                 let aircraft_lookup_start = std::time::Instant::now();
                 metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_db").increment(1);
                 match self
-                    .aircraft_repo
-                    .aircraft_for_fix(device_address, spontaneous_address_type, packet_fields)
+                    .aircraft_cache
+                    .get_or_upsert(device_address, spontaneous_address_type, packet_fields)
                     .await
                 {
-                    Ok(aircraft_model) => {
+                    Ok(aircraft) => {
                         metrics::counter!("aprs.aircraft.stage_total", "stage" => "after_db")
                             .increment(1);
                         metrics::histogram!("aprs.aircraft.upsert_ms")
                             .record(aircraft_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
-                        // All aircraft fields (including ICAO, ADS-B, tracker type, registration)
-                        // are now updated atomically in aircraft_for_fix - no separate update needed
-
                         // Aircraft exists or was just created, create fix with proper aircraft_id
+                        let aircraft_id = aircraft.id.expect("aircraft must have id");
                         let fix_creation_start = std::time::Instant::now();
                         match Fix::from_aprs_packet(
                             packet,
                             received_at,
-                            aircraft_model.id,
+                            aircraft_id,
                             Some(context.receiver_id),
                             context.raw_message_id,
                         ) {
