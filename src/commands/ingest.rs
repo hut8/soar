@@ -516,7 +516,8 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             let drain_time_estimate = if queue_depth.disk_data_bytes > 0 {
                 let net_drain_rate = sent_per_sec - incoming_per_sec;
                 if net_drain_rate > 0.0 {
-                    // Estimate ~150 bytes per envelope (rough average including protobuf overhead)
+                    // Estimate ~150 bytes per envelope. Observed serialized size of ingest
+                    // Envelope protobufs is typically 110-130 bytes; rounded up to be conservative.
                     let est_messages_remaining = queue_depth.disk_data_bytes / 150;
                     let est_seconds = est_messages_remaining as f64 / net_drain_rate;
                     if est_seconds > 3600.0 {

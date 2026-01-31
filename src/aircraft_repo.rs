@@ -785,7 +785,12 @@ impl AircraftCache {
                 aircraft.adsb_emitter_category = packet_fields.adsb_emitter_category;
                 changed = true;
             }
-            if packet_fields.aircraft_model.is_some() && aircraft.aircraft_model.is_empty() {
+            if packet_fields
+                .aircraft_model
+                .as_ref()
+                .is_some_and(|m| !m.trim().is_empty())
+                && aircraft.aircraft_model.trim().is_empty()
+            {
                 aircraft.aircraft_model = packet_fields.aircraft_model.clone().unwrap_or_default();
                 changed = true;
             }
@@ -817,9 +822,12 @@ impl AircraftCache {
             if changed {
                 let repo = self.repo.clone();
                 tokio::spawn(async move {
-                    let _ = repo
+                    if let Err(e) = repo
                         .aircraft_for_fix(address, address_type, packet_fields)
-                        .await;
+                        .await
+                    {
+                        warn!("Failed to update aircraft metadata: {:#}", e);
+                    }
                 });
             }
 
