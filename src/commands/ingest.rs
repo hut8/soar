@@ -634,6 +634,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
         let queue_for_ogn = queue.clone();
         let aprs_health = aprs_health_shared.clone();
+        let stats_rx = stats_ogn_received.clone();
 
         tokio::spawn(async move {
             let mut client = AprsClient::new(config);
@@ -642,7 +643,11 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             // with timestamps captured at receive time
             loop {
                 match client
-                    .start_with_envelope_queue(queue_for_ogn.clone(), aprs_health.clone())
+                    .start_with_envelope_queue(
+                        queue_for_ogn.clone(),
+                        aprs_health.clone(),
+                        Some(stats_rx.clone()),
+                    )
                     .await
                 {
                     Ok(_) => {
