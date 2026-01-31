@@ -41,6 +41,8 @@ pub struct AircraftRegistrationView {
     pub model: Option<AircraftModelView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aircraft_category: Option<AircraftCategory>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub approved_operations: Vec<String>,
 }
 
 impl From<AircraftDomain> for AircraftRegistrationView {
@@ -71,8 +73,9 @@ impl From<AircraftDomain> for AircraftRegistrationView {
             other_names: aircraft.other_names,
             light_sport_type: aircraft.light_sport_type,
             aircraft_id: aircraft.aircraft_id,
-            model: None,             // Will be set when fetching with model data
-            aircraft_category: None, // Will be set when fetching with device data
+            model: None,                     // Will be set when fetching with model data
+            aircraft_category: None,         // Will be set when fetching with device data
+            approved_operations: Vec::new(), // Loaded separately from aircraft_approved_operations table
         }
     }
 }
@@ -109,6 +112,7 @@ impl From<crate::aircraft_registrations::AircraftRegistrationModel> for Aircraft
             aircraft_id: model.aircraft_id,
             model: None,
             aircraft_category: None,
+            approved_operations: Vec::new(),
         }
     }
 }

@@ -541,8 +541,8 @@ impl AircraftRegistrationsRepository {
     // - get_aircraft_models_by_club_id
     // - get_aircraft_with_models_by_club_id
 
-    /// Get aircraft registration by device ID
-    pub async fn get_aircraft_registration_by_device_id(
+    /// Get aircraft registration by aircraft ID
+    pub async fn get_aircraft_registration_by_aircraft_id(
         &self,
         aircraft_id: Uuid,
     ) -> Result<Option<AircraftRegistrationModel>> {
@@ -572,27 +572,41 @@ impl AircraftRegistrationsRepository {
         Ok(aircraft_model)
     }
 
-    /// Get aircraft registrations for multiple device IDs (batch query)
-    #[tracing::instrument(skip(self, device_ids), fields(device_count = device_ids.len()))]
-    pub async fn get_aircraft_registrations_by_device_ids(
+    /// Get aircraft registrations for multiple aircraft IDs (batch query)
+    #[tracing::instrument(skip(self, aircraft_ids), fields(aircraft_count = aircraft_ids.len()))]
+    pub async fn get_aircraft_registrations_by_aircraft_ids(
         &self,
-        device_ids: &[Uuid],
+        aircraft_ids: &[Uuid],
     ) -> Result<Vec<AircraftRegistrationModel>> {
-        if device_ids.is_empty() {
+        if aircraft_ids.is_empty() {
             return Ok(Vec::new());
         }
 
         tracing::info!(
-            "Querying aircraft registrations for {} devices",
-            device_ids.len()
+            "Querying aircraft registrations for {} aircraft",
+            aircraft_ids.len()
         );
         let mut conn = self.get_connection()?;
         let registrations = aircraft_registrations::table
-            .filter(aircraft_registrations::aircraft_id.eq_any(device_ids))
+            .filter(aircraft_registrations::aircraft_id.eq_any(aircraft_ids))
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
         tracing::info!("Found {} aircraft registrations", registrations.len());
         Ok(registrations)
+    }
+
+    /// Get approved operations for an aircraft registration by registration number
+    pub async fn get_approved_operations_by_registration_id(
+        &self,
+        registration_id: &str,
+    ) -> Result<Vec<String>> {
+        let mut conn = self.get_connection()?;
+        let operations = aircraft_approved_operations::table
+            .filter(aircraft_approved_operations::aircraft_registration_id.eq(registration_id))
+            .select(aircraft_approved_operations::operation)
+            .load::<String>(&mut conn)?;
+
+        Ok(operations)
     }
 }
