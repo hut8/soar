@@ -13,11 +13,13 @@ UPDATE aircraft SET flarm_address = address WHERE address_type = 'flarm';
 UPDATE aircraft SET ogn_address = address WHERE address_type = 'ogn';
 UPDATE aircraft SET other_address = address WHERE address_type = 'unknown' AND address != 0;
 
--- Add partial unique indexes (each address type has its own unique namespace)
-CREATE UNIQUE INDEX idx_aircraft_icao_address ON aircraft(icao_address) WHERE icao_address IS NOT NULL;
-CREATE UNIQUE INDEX idx_aircraft_flarm_address ON aircraft(flarm_address) WHERE flarm_address IS NOT NULL;
-CREATE UNIQUE INDEX idx_aircraft_ogn_address ON aircraft(ogn_address) WHERE ogn_address IS NOT NULL;
-CREATE UNIQUE INDEX idx_aircraft_other_address ON aircraft(other_address) WHERE other_address IS NOT NULL;
+-- Add unique indexes (each address type has its own unique namespace).
+-- Plain unique indexes (not partial) because PostgreSQL treats NULLs as distinct,
+-- and Diesel's on_conflict() cannot infer partial unique indexes.
+CREATE UNIQUE INDEX idx_aircraft_icao_address ON aircraft(icao_address);
+CREATE UNIQUE INDEX idx_aircraft_flarm_address ON aircraft(flarm_address);
+CREATE UNIQUE INDEX idx_aircraft_ogn_address ON aircraft(ogn_address);
+CREATE UNIQUE INDEX idx_aircraft_other_address ON aircraft(other_address);
 
 -- Ensure at least one address is set
 ALTER TABLE aircraft ADD CONSTRAINT chk_at_least_one_address

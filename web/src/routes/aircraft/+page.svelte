@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, Radio, Plane, Antenna, Building2, Activity, Filter } from '@lucide/svelte';
+	import { Search, Plane, Antenna, Building2, Activity, Filter } from '@lucide/svelte';
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
