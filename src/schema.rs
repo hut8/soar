@@ -73,14 +73,11 @@ pub mod sql_types {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
-    use super::sql_types::AddressType;
     use super::sql_types::AdsbEmitterCategory;
     use super::sql_types::AircraftCategory;
     use super::sql_types::EngineType;
 
     aircraft (id) {
-        address -> Int4,
-        address_type -> AddressType,
         aircraft_model -> Text,
         registration -> Nullable<Text>,
         competition_number -> Text,
@@ -115,6 +112,10 @@ diesel::table! {
         is_military -> Nullable<Bool>,
         current_fix -> Nullable<Jsonb>,
         images -> Nullable<Jsonb>,
+        icao_address -> Nullable<Int4>,
+        flarm_address -> Nullable<Int4>,
+        ogn_address -> Nullable<Int4>,
+        other_address -> Nullable<Int4>,
     }
 }
 

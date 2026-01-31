@@ -267,17 +267,63 @@ export function formatTransponderCode(transponderCode: number | null | undefined
 }
 
 /**
+ * Get the primary address from an aircraft with typed address fields.
+ * Returns the first non-null address with its type label, preferring ICAO > Flarm > OGN > Other.
+ */
+export function getPrimaryAddress(
+	aircraft: Pick<Aircraft, 'icaoAddress' | 'flarmAddress' | 'ognAddress' | 'otherAddress'>
+): { label: string; hex: string } | null {
+	if (aircraft.icaoAddress) return { label: 'ICAO', hex: aircraft.icaoAddress };
+	if (aircraft.flarmAddress) return { label: 'FLARM', hex: aircraft.flarmAddress };
+	if (aircraft.ognAddress) return { label: 'OGN', hex: aircraft.ognAddress };
+	if (aircraft.otherAddress) return { label: 'OTHER', hex: aircraft.otherAddress };
+	return null;
+}
+
+/**
+ * Format all known addresses for an aircraft (for display in detail views).
+ * Returns an array of { label, hex } for each non-null address.
+ */
+export function getAllAddresses(
+	aircraft: Pick<Aircraft, 'icaoAddress' | 'flarmAddress' | 'ognAddress' | 'otherAddress'>
+): { label: string; hex: string }[] {
+	const addresses: { label: string; hex: string }[] = [];
+	if (aircraft.icaoAddress) addresses.push({ label: 'ICAO', hex: aircraft.icaoAddress });
+	if (aircraft.flarmAddress) addresses.push({ label: 'FLARM', hex: aircraft.flarmAddress });
+	if (aircraft.ognAddress) addresses.push({ label: 'OGN', hex: aircraft.ognAddress });
+	if (aircraft.otherAddress) addresses.push({ label: 'OTHER', hex: aircraft.otherAddress });
+	return addresses;
+}
+
+/**
+ * Format an aircraft's primary address as "LABEL-HEXCODE" (e.g., "ICAO-A59CDC")
+ */
+export function formatPrimaryAddress(
+	aircraft: Pick<Aircraft, 'icaoAddress' | 'flarmAddress' | 'ognAddress' | 'otherAddress'>
+): string {
+	const primary = getPrimaryAddress(aircraft);
+	if (!primary) return 'Unknown';
+	return `${primary.label}-${primary.hex}`;
+}
+
+/**
  * Get the title/display name for an aircraft card
  * Priority:
  * 1. If both registration and aircraftModel: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
  * 3. If aircraft category is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
- * 4. Otherwise: formatted address (e.g., "FLARM-A0B380")
+ * 4. Otherwise: formatted primary address (e.g., "ICAO-A0B380", "FLARM-A0B380", "OGN-A0B380", or "OTHER-A0B380", depending on which address is available)
  */
 export function getAircraftTitle(
 	aircraft: Pick<
 		Aircraft,
-		'registration' | 'aircraftModel' | 'addressType' | 'address' | 'aircraftCategory'
+		| 'registration'
+		| 'aircraftModel'
+		| 'icaoAddress'
+		| 'flarmAddress'
+		| 'ognAddress'
+		| 'otherAddress'
+		| 'aircraftCategory'
 	>
 ): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
@@ -300,12 +346,13 @@ export function getAircraftTitle(
 		aircraft.aircraftCategory !== 'Unknown'
 	) {
 		const typeName = getAircraftCategoryDescription(aircraft.aircraftCategory);
-		const hexCode = aircraft.address.toUpperCase();
+		const primary = getPrimaryAddress(aircraft);
+		const hexCode = primary ? primary.hex : 'Unknown';
 		return `${typeName} (${hexCode})`;
 	}
 
 	// Default to formatted address
-	return formatAircraftAddress(aircraft.address, aircraft.addressType);
+	return formatPrimaryAddress(aircraft);
 }
 
 /**

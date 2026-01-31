@@ -123,8 +123,14 @@ impl From<crate::aircraft_registrations::AircraftRegistrationModel> for Aircraft
 pub struct AircraftView {
     pub id: uuid::Uuid,
 
-    pub address_type: String,
-    pub address: String,
+    /// ICAO transponder address (hex-formatted), if known
+    pub icao_address: Option<String>,
+    /// Flarm transponder address (hex-formatted), if known
+    pub flarm_address: Option<String>,
+    /// OGN device address (hex-formatted), if known
+    pub ogn_address: Option<String>,
+    /// Other/unknown device address (hex-formatted), if known
+    pub other_address: Option<String>,
     pub aircraft_model: String,
     pub registration: Option<String>,
     pub competition_number: String,
@@ -158,37 +164,44 @@ pub struct AircraftView {
     pub current_fix: Option<serde_json::Value>,
 }
 
+/// Helper: format an optional i32 address as 6-digit uppercase hex
+fn fmt_addr(addr: Option<u32>) -> Option<String> {
+    addr.map(|a| format!("{:06X}", a))
+}
+
+fn fmt_addr_i32(addr: Option<i32>) -> Option<String> {
+    addr.map(|a| format!("{:06X}", a as u32))
+}
+
+/// Derive country code from ICAO address hex using flydent
+fn derive_address_country(icao_hex: &Option<String>) -> Option<String> {
+    icao_hex.as_deref().and_then(|hex| {
+        let parser = flydent::Parser::new();
+        parser
+            .parse(hex, false, true)
+            .and_then(|entity| match entity {
+                flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                flydent::EntityResult::Organization { .. } => None,
+            })
+    })
+}
+
 impl AircraftView {
     pub fn from_device(device: crate::aircraft::Aircraft) -> Self {
-        // Format address as 6-digit hex
-        let address_hex = format!("{:06X}", device.address);
-
-        // Address type as single character for backward compatibility
-        let address_type = match device.address_type {
-            crate::aircraft::AddressType::Ogn => "O",
-            crate::aircraft::AddressType::Flarm => "F",
-            crate::aircraft::AddressType::Icao => "I",
-            crate::aircraft::AddressType::Unknown => "",
-        }
-        .to_string();
-
-        // Derive country from address using flydent (always attempt, regardless of address type)
-        let address_country = {
-            let parser = flydent::Parser::new();
-            parser
-                .parse(&address_hex, false, true)
-                .and_then(|entity| match entity {
-                    flydent::EntityResult::Country { iso2, .. } => Some(iso2),
-                    flydent::EntityResult::Organization { .. } => None,
-                })
-        };
+        let icao_address = fmt_addr(device.icao_address);
+        let flarm_address = fmt_addr(device.flarm_address);
+        let ogn_address = fmt_addr(device.ogn_address);
+        let other_address = fmt_addr(device.other_address);
+        let address_country = derive_address_country(&icao_address);
 
         Self {
             id: device
                 .id
                 .expect("Aircraft must have an ID to create AircraftView"),
-            address_type,
-            address: address_hex,
+            icao_address,
+            flarm_address,
+            ogn_address,
+            other_address,
             aircraft_model: device.aircraft_model,
             registration: device.registration,
             competition_number: device.competition_number,
@@ -223,33 +236,18 @@ impl AircraftView {
     }
 
     pub fn from_device_model(device_model: crate::aircraft::AircraftModel) -> Self {
-        // Format address as 6-digit hex
-        let address_hex = format!("{:06X}", device_model.address as u32);
-
-        // Address type as single character for backward compatibility
-        let address_type = match device_model.address_type {
-            crate::aircraft::AddressType::Ogn => "O",
-            crate::aircraft::AddressType::Flarm => "F",
-            crate::aircraft::AddressType::Icao => "I",
-            crate::aircraft::AddressType::Unknown => "",
-        }
-        .to_string();
-
-        // Derive country from address using flydent (always attempt, regardless of address type)
-        let address_country = {
-            let parser = flydent::Parser::new();
-            parser
-                .parse(&address_hex, false, true)
-                .and_then(|entity| match entity {
-                    flydent::EntityResult::Country { iso2, .. } => Some(iso2),
-                    flydent::EntityResult::Organization { .. } => None,
-                })
-        };
+        let icao_address = fmt_addr_i32(device_model.icao_address);
+        let flarm_address = fmt_addr_i32(device_model.flarm_address);
+        let ogn_address = fmt_addr_i32(device_model.ogn_address);
+        let other_address = fmt_addr_i32(device_model.other_address);
+        let address_country = derive_address_country(&icao_address);
 
         Self {
             id: device_model.id,
-            address_type,
-            address: address_hex,
+            icao_address,
+            flarm_address,
+            ogn_address,
+            other_address,
             aircraft_model: device_model.aircraft_model,
             registration: device_model.registration,
             competition_number: device_model.competition_number,

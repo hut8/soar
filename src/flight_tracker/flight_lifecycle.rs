@@ -691,6 +691,7 @@ async fn complete_flight_in_background(
     let pool_clone = pool.clone();
     let device_id_opt = device.id;
     let device_address = device.address;
+    let device_address_type = device.primary_address_type();
 
     let email_span = info_span!(parent: None, "flight_email_notification", %flight_id);
     let _ = email_span.set_parent(opentelemetry::Context::new());
@@ -727,7 +728,9 @@ async fn complete_flight_in_background(
                         crate::airports_repo::AirportsRepository::new(pool_clone.clone());
                     let users_repo = UsersRepository::new(pool_clone.clone());
 
-                    let aircraft = match aircraft_repo.get_aircraft_by_address(device_address).await
+                    let aircraft = match aircraft_repo
+                        .get_aircraft_by_address(device_address, device_address_type)
+                        .await
                     {
                         Ok(Some(d)) => d,
                         _ => {
@@ -779,7 +782,7 @@ async fn complete_flight_in_background(
                         id: aircraft.id.unwrap_or(uuid::Uuid::nil()),
                         registration: aircraft.registration.clone(),
                         aircraft_model: aircraft.aircraft_model.clone(),
-                        hex_address: aircraft.aircraft_address_hex(),
+                        hex_address: aircraft.aircraft_address_hex().unwrap_or_default(),
                     };
 
                     // Build flight email data
@@ -808,7 +811,7 @@ async fn complete_flight_in_background(
                         .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
                         .unwrap_or_else(|| "unknown".to_string());
                     let registration_part = aircraft_email_data.filename_component();
-                    let hex_addr = aircraft.aircraft_address_hex();
+                    let hex_addr = aircraft.aircraft_address_hex().unwrap_or_default();
                     let kml_filename = format!(
                         "flight-{}{}-{}.kml",
                         takeoff_time_str, registration_part, hex_addr

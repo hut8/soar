@@ -6,8 +6,6 @@ use lettre::{Message, SmtpTransport, Transport};
 use std::time::Duration;
 use tracing::{info, warn};
 
-use crate::aircraft::AircraftModel;
-
 /// Get the environment name for display purposes
 /// Returns "Production", "Staging", or "Development"
 fn get_environment_name() -> String {
@@ -108,7 +106,6 @@ pub struct DataLoadReport {
     pub total_duration_secs: f64,
     pub entities: Vec<EntityMetrics>,
     pub overall_success: bool,
-    pub duplicate_devices: Vec<AircraftModel>,
 }
 
 impl Default for DataLoadReport {
@@ -123,7 +120,6 @@ impl DataLoadReport {
             total_duration_secs: 0.0,
             entities: Vec::new(),
             overall_success: true,
-            duplicate_devices: Vec::new(),
         }
     }
 

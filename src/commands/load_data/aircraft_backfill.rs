@@ -97,7 +97,7 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
 
         // First, backfill country codes from ICAO addresses
         let icao_devices: Vec<AircraftModel> = aircraft
-            .filter(address_type.eq(AddressType::Icao))
+            .filter(icao_address.is_not_null())
             .filter(country_code.is_null())
             .select(AircraftModel::as_select())
             .load(&mut conn)?;
@@ -111,10 +111,10 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
 
         // Extract country codes from ICAO addresses
         for device_model in icao_devices {
-            if let Some(extracted_country_code) = Aircraft::extract_country_code_from_icao(
-                device_model.address as u32,
-                AddressType::Icao,
-            ) {
+            let icao_addr = device_model.icao_address.expect("filtered for is_not_null");
+            if let Some(extracted_country_code) =
+                Aircraft::extract_country_code_from_icao(icao_addr as u32, AddressType::Icao)
+            {
                 // Use COALESCE to never overwrite existing country codes
                 match diesel::update(aircraft.filter(id.eq(device_model.id)))
                     .set(country_code.eq(diesel::dsl::sql(&format!(
@@ -203,7 +203,7 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
 
         // Load all US ICAO aircraft without registration
         let devices_to_update: Vec<AircraftModel> = aircraft
-            .filter(address_type.eq(AddressType::Icao))
+            .filter(icao_address.is_not_null())
             .filter(country_code.eq("US"))
             .filter(registration.eq(""))
             .select(AircraftModel::as_select())
@@ -218,10 +218,10 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
 
         // Iterate over each device and extract tail number
         for device_model in devices_to_update {
-            if let Some(tail_number) = Aircraft::extract_tail_number_from_icao(
-                device_model.address as u32,
-                AddressType::Icao,
-            ) {
+            let icao_addr = device_model.icao_address.expect("filtered for is_not_null");
+            if let Some(tail_number) =
+                Aircraft::extract_tail_number_from_icao(icao_addr as u32, AddressType::Icao)
+            {
                 // Update the device with the extracted tail number
                 match diesel::update(aircraft.filter(id.eq(device_model.id)))
                     .set(registration.eq(&tail_number))
@@ -243,8 +243,8 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
                 }
             } else {
                 warn!(
-                    "Could not extract tail number for device {} (address: {:06X})",
-                    device_model.id, device_model.address
+                    "Could not extract tail number for device {} (icao_address: {:06X})",
+                    device_model.id, icao_addr as u32
                 );
             }
         }
@@ -285,7 +285,7 @@ async fn get_us_icao_devices_with_registration_count(pool: &PgPool) -> Result<i6
         let mut conn = pool.get()?;
 
         let count = aircraft
-            .filter(address_type.eq(AddressType::Icao))
+            .filter(icao_address.is_not_null())
             .filter(country_code.eq("US"))
             .filter(registration.ne(""))
             .select(count_star())

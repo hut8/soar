@@ -793,10 +793,14 @@ impl FixesRepository {
 
             #[derive(QueryableByName)]
             struct AircraftRow {
-                #[diesel(sql_type = diesel::sql_types::Int4)]
-                address: i32,
-                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
-                address_type: crate::aircraft::AddressType,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                icao_address: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                flarm_address: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                ogn_address: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                other_address: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 aircraft_model: String,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -861,8 +865,10 @@ impl FixesRepository {
             let aircraft_models: Vec<crate::aircraft::AircraftModel> = aircraft_rows
                 .into_iter()
                 .map(|row| crate::aircraft::AircraftModel {
-                    address: row.address,
-                    address_type: row.address_type,
+                    icao_address: row.icao_address,
+                    flarm_address: row.flarm_address,
+                    ogn_address: row.ogn_address,
+                    other_address: row.other_address,
                     aircraft_model: row.aircraft_model,
                     registration: row.registration,
                     competition_number: row.competition_number,

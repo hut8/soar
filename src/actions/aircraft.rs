@@ -1,9 +1,8 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use serde::Deserialize;
 use tracing::error;
 use uuid::Uuid;
 
@@ -12,29 +11,8 @@ use crate::aircraft_repo::AircraftRepository;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::web::AppState;
 
-use super::views::{AircraftRegistrationView, AircraftView, club::AircraftModelView};
-use super::{
-    DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
-};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AircraftIssuesParams {
-    #[serde(default = "default_page")]
-    pub page: i64,
-    #[serde(default = "default_per_page")]
-    pub per_page: i64,
-    /// Optional hex address search filter (case-insensitive substring match)
-    pub hex_search: Option<String>,
-}
-
-fn default_page() -> i64 {
-    1
-}
-
-fn default_per_page() -> i64 {
-    50
-}
+use super::views::{AircraftRegistrationView, club::AircraftModelView};
+use super::{DataListResponse, DataResponse, json_error};
 
 #[tracing::instrument(skip(state), fields(%club_id))]
 pub async fn get_aircraft_registrations_by_club(
@@ -322,52 +300,6 @@ pub async fn get_aircraft_model(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft model",
-            )
-            .into_response()
-        }
-    }
-}
-
-/// Get aircraft issues including duplicate aircraft addresses
-pub async fn get_aircraft_issues(
-    State(state): State<AppState>,
-    Query(params): Query<AircraftIssuesParams>,
-) -> impl IntoResponse {
-    let aircraft_repo = AircraftRepository::new(state.pool.clone());
-
-    // Ensure page is at least 1
-    let page = params.page.max(1);
-    // Ensure per_page is between 1 and 100
-    let per_page = params.per_page.clamp(1, 100);
-
-    match aircraft_repo
-        .get_duplicate_aircraft_paginated(page, per_page, params.hex_search)
-        .await
-    {
-        Ok((duplicate_aircraft, total_count)) => {
-            let total_pages = (total_count as f64 / per_page as f64).ceil() as i64;
-
-            // Convert AircraftModel to AircraftView to ensure proper address formatting
-            let aircraft_views: Vec<AircraftView> = duplicate_aircraft
-                .into_iter()
-                .map(|model| model.into())
-                .collect();
-
-            Json(PaginatedDataResponse {
-                data: aircraft_views,
-                metadata: PaginationMetadata {
-                    page,
-                    total_pages,
-                    total_count,
-                },
-            })
-            .into_response()
-        }
-        Err(e) => {
-            error!("Failed to get aircraft issues: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft issues",
             )
             .into_response()
         }
