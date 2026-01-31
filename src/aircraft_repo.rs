@@ -154,75 +154,119 @@ impl AircraftRepository {
 
     /// Get or insert an aircraft by address
     /// If the aircraft doesn't exist, it will be created with from_ogn_ddb=false, tracked=true, identified=true
-    /// Uses INSERT ... ON CONFLICT to handle race conditions atomically
+    /// Uses INSERT ... ON CONFLICT to handle race conditions atomically.
+    /// If a registration is computed from the ICAO address, it is only applied when no other
+    /// aircraft already owns that registration (prevents unique constraint violations).
     #[tracing::instrument(skip(self), fields(%address, ?address_type))]
     pub async fn get_or_insert_aircraft_by_address(
         &self,
         address: i32,
         address_type: AddressType,
     ) -> Result<AircraftModel> {
-        let mut conn = self.get_connection()?;
+        let pool = self.pool.clone();
 
-        // Extract country code from ICAO address if applicable
-        let country_code = Aircraft::extract_country_code_from_icao(address as u32, address_type);
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        // Extract tail number from ICAO address if it's a US aircraft
-        let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type);
-        let registration_for_logging = registration.clone();
+            // Extract country code from ICAO address if applicable
+            let country_code =
+                Aircraft::extract_country_code_from_icao(address as u32, address_type);
 
-        let new_aircraft = NewAircraft {
-            address,
-            address_type,
-            aircraft_model: String::new(),
-            registration,
-            competition_number: String::new(),
-            tracked: true,
-            identified: true,
-            from_ogn_ddb: false,
-            from_adsbx_ddb: false,
-            frequency_mhz: None,
-            pilot_name: None,
-            home_base_airport_ident: None,
-            last_fix_at: None,
-            club_id: None,
-            icao_model_code: None,
-            adsb_emitter_category: None,
-            tracker_device_type: None,
-            country_code,
-            latitude: None,
-            longitude: None,
-            owner_operator: None,
-            aircraft_category: None,
-            engine_count: None,
-            engine_type: None,
-            faa_pia: None,
-            faa_ladd: None,
-            year: None,
-            is_military: None,
-            current_fix: None,
-            images: None,
-        };
+            // Extract tail number from ICAO address if it's a US aircraft
+            let registration =
+                Aircraft::extract_tail_number_from_icao(address as u32, address_type)
+                    .unwrap_or_default();
 
-        // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
-        // This ensures we always get a aircraft_id, even if concurrent inserts happen
-        // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
-        let model = diesel::insert_into(aircraft::table)
-            .values(&new_aircraft)
-            .on_conflict((aircraft::address_type, aircraft::address))
-            .do_update()
-            .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
-            .returning(AircraftModel::as_returning())
-            .get_result(&mut conn)
-            .map_err(|e| {
-                error!(
-                    "get_or_insert_aircraft_by_address failed: address={:06X}, address_type={:?}, \
-                     computed_registration={:?}, error={}",
-                    address, address_type, registration_for_logging, e
-                );
-                e
-            })?;
+            let new_aircraft = NewAircraft {
+                address,
+                address_type,
+                aircraft_model: String::new(),
+                // Always insert with NULL registration to avoid violating the
+                // idx_aircraft_registration_unique constraint. The DO UPDATE clause
+                // will safely set the registration (with a duplicate check) on the
+                // next fix for this aircraft.
+                registration: None,
+                competition_number: String::new(),
+                tracked: true,
+                identified: true,
+                from_ogn_ddb: false,
+                from_adsbx_ddb: false,
+                frequency_mhz: None,
+                pilot_name: None,
+                home_base_airport_ident: None,
+                last_fix_at: None,
+                club_id: None,
+                icao_model_code: None,
+                adsb_emitter_category: None,
+                tracker_device_type: None,
+                country_code,
+                latitude: None,
+                longitude: None,
+                owner_operator: None,
+                aircraft_category: None,
+                engine_count: None,
+                engine_type: None,
+                faa_pia: None,
+                faa_ladd: None,
+                year: None,
+                is_military: None,
+                current_fix: None,
+                images: None,
+            };
 
-        Ok(model)
+            // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
+            // This ensures we always get an aircraft_id, even if concurrent inserts happen
+            // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
+            let mut model = diesel::insert_into(aircraft::table)
+                .values(&new_aircraft)
+                .on_conflict((aircraft::address_type, aircraft::address))
+                .do_update()
+                .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
+                .returning(AircraftModel::as_returning())
+                .get_result(&mut conn)
+                .map_err(|e| {
+                    error!(
+                        "get_or_insert_aircraft_by_address upsert failed: address={:06X}, \
+                         address_type={:?}, computed_registration={:?}, error={}",
+                        address, address_type, registration, e
+                    );
+                    e
+                })?;
+
+            // If we have a computed registration and the aircraft doesn't already have one,
+            // try to set it — but only if no other aircraft already owns that registration.
+            if !registration.is_empty() && model.registration.as_deref().unwrap_or("").is_empty() {
+                let duplicate_exists = diesel::dsl::select(diesel::dsl::exists(
+                    aircraft::table
+                        .filter(aircraft::registration.eq(&registration))
+                        .filter(aircraft::id.ne(model.id)),
+                ))
+                .get_result::<bool>(&mut conn)?;
+
+                if duplicate_exists {
+                    warn!(
+                        "Skipped duplicate registration: address={:06X}, address_type={:?}, \
+                         computed_registration={:?}, kept_registration={:?} \
+                         (another aircraft already has {:?})",
+                        address,
+                        address_type,
+                        registration,
+                        model.registration.as_deref().unwrap_or(""),
+                        registration
+                    );
+                } else {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
+                        .set(aircraft::registration.eq(&registration))
+                        .execute(&mut conn)?;
+                    model.registration = Some(registration);
+                }
+            }
+
+            Ok::<AircraftModel, anyhow::Error>(model)
+        })
+        .await?
     }
 
     /// Get or insert an aircraft for fix processing
