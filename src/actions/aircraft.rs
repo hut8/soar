@@ -64,7 +64,7 @@ pub async fn get_aircraft_registrations_by_club(
     for aircraft in aircraft_list {
         // Get aircraft registration if it exists
         let aircraft_registration = match aircraft_repo
-            .get_aircraft_registration_by_device_id(aircraft.id.unwrap())
+            .get_aircraft_registration_by_aircraft_id(aircraft.id.unwrap())
             .await
         {
             Ok(Some(reg)) => reg,
@@ -123,7 +123,7 @@ pub async fn get_aircraft_registrations_by_club(
 }
 
 /// Get aircraft registration for an aircraft by aircraft ID
-pub async fn get_device_aircraft_registration(
+pub async fn get_aircraft_registration(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -132,14 +132,13 @@ pub async fn get_device_aircraft_registration(
 
     // First try to query aircraft_registrations table for a record with the given aircraft_id
     match aircraft_repo
-        .get_aircraft_registration_by_device_id(id)
+        .get_aircraft_registration_by_aircraft_id(id)
         .await
     {
         Ok(Some(aircraft_registration)) => {
-            return Json(DataResponse {
-                data: AircraftRegistrationView::from(aircraft_registration),
-            })
-            .into_response();
+            let mut view = AircraftRegistrationView::from(aircraft_registration);
+            load_approved_operations(&aircraft_repo, &mut view).await;
+            return Json(DataResponse { data: view }).into_response();
         }
         Ok(None) => {
             // Fallback: try to find aircraft and then look up by registration number
@@ -167,10 +166,11 @@ pub async fn get_device_aircraft_registration(
                     .get_aircraft_registration_model_by_n_number(registration)
                     .await
                 {
-                    Ok(Some(aircraft_model)) => Json(DataResponse {
-                        data: AircraftRegistrationView::from(aircraft_model),
-                    })
-                    .into_response(),
+                    Ok(Some(aircraft_model)) => {
+                        let mut view = AircraftRegistrationView::from(aircraft_model);
+                        load_approved_operations(&aircraft_repo, &mut view).await;
+                        Json(DataResponse { data: view }).into_response()
+                    }
                     Ok(None) => (StatusCode::NO_CONTENT).into_response(),
                     Err(e) => {
                         tracing::error!(
@@ -199,9 +199,29 @@ pub async fn get_device_aircraft_registration(
     }
 }
 
+/// Load approved operations for an aircraft registration view
+async fn load_approved_operations(
+    repo: &AircraftRegistrationsRepository,
+    view: &mut AircraftRegistrationView,
+) {
+    match repo
+        .get_approved_operations_by_registration_id(&view.registration_number)
+        .await
+    {
+        Ok(ops) => view.approved_operations = ops,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to load approved operations for {}: {}",
+                view.registration_number,
+                e
+            );
+        }
+    }
+}
+
 /// Get aircraft model for an aircraft by aircraft ID
 /// This joins aircraft_registrations to aircraft_models using manufacturer_code, model_code, and series_code
-pub async fn get_device_aircraft_model(
+pub async fn get_aircraft_model(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -211,7 +231,7 @@ pub async fn get_device_aircraft_model(
 
     // First try to get the aircraft registration for this aircraft by aircraft_id
     let aircraft_registration = match aircraft_repo
-        .get_aircraft_registration_by_device_id(id)
+        .get_aircraft_registration_by_aircraft_id(id)
         .await
     {
         Ok(Some(registration)) => registration,
