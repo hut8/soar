@@ -34,6 +34,7 @@
 	} from '$lib/services/markers';
 	import type { Aircraft, Airport, Airspace, DeviceOrientationEventWithCompass } from '$lib/types';
 	import { ViewportAircraftController } from '$lib/services/ViewportAircraftController';
+	import { formatPrimaryAddress } from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/websocket-status';
 	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
@@ -183,12 +184,7 @@
 	// Handle aircraft marker click
 	function handleAircraftClick(aircraft: Aircraft) {
 		logger.debug('[AIRCRAFT CLICK] Aircraft clicked: {registration}', {
-			registration:
-				aircraft.registration ||
-				aircraft.icaoAddress ||
-				aircraft.flarmAddress ||
-				aircraft.ognAddress ||
-				aircraft.id
+			registration: aircraft.registration || formatPrimaryAddress(aircraft)
 		});
 		selectedAircraft = aircraft;
 		showAircraftStatusModal = true;

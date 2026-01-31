@@ -312,7 +312,7 @@ export function formatPrimaryAddress(
  * 1. If both registration and aircraftModel: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
  * 3. If aircraft category is available: "Type (HexCode)" (e.g., "Hang Glider (012345)")
- * 4. Otherwise: formatted address (e.g., "ICAO-A0B380")
+ * 4. Otherwise: formatted primary address (e.g., "ICAO-A0B380", "FLARM-A0B380", "OGN-A0B380", or "OTHER-A0B380", depending on which address is available)
  */
 export function getAircraftTitle(
 	aircraft: Pick<

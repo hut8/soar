@@ -97,8 +97,6 @@ impl AircraftRepository {
         }
 
         for new_aircraft_entry in new_aircraft {
-            let address_hex = new_aircraft_entry.address_hex();
-
             // Branch on which typed address column is populated to determine ON CONFLICT target.
             // Diesel requires the conflict column to be known at compile time.
             let result = if new_aircraft_entry.icao_address.is_some() {
@@ -139,7 +137,11 @@ impl AircraftRepository {
                     upserted_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to upsert aircraft {}: {}", address_hex, e);
+                    warn!(
+                        "Failed to upsert aircraft {}: {}",
+                        new_aircraft_entry.address_hex(),
+                        e
+                    );
                     // Continue with other aircraft rather than failing the entire batch
                 }
             }

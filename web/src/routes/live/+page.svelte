@@ -21,6 +21,7 @@
 		AircraftCluster
 	} from '$lib/types';
 	import { isAircraftItem, isClusterItem } from '$lib/types';
+	import { formatPrimaryAddress } from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import { isStaging } from '$lib/config';
 	import { getLogger } from '$lib/logging';
@@ -265,12 +266,7 @@
 			},
 			properties: {
 				id: aircraft.id,
-				registration:
-					aircraft.registration ||
-					aircraft.icaoAddress ||
-					aircraft.flarmAddress ||
-					aircraft.ognAddress ||
-					aircraft.id,
+				registration: aircraft.registration || formatPrimaryAddress(aircraft),
 				altitude: fix.altitudeMslFeet, // Used by altitude color expression (null = gray)
 				track: fix.trackDegrees || 0,
 				isActive: fix.active,

@@ -125,9 +125,9 @@ pub enum RegistrationCountry {
 pub struct Aircraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<uuid::Uuid>,
-    // DDB deserialization fields — these are used to parse DDB JSON responses
-    // which send a single device_type + device_id pair.
-    // These do NOT map to database columns (they're routed to typed columns in NewAircraft).
+    // These legacy fields are kept for DDB parsing compatibility and do NOT map directly
+    // to database columns; they are converted into the typed address columns in the
+    // Aircraft → NewAircraft transformation and are not persisted as-is.
     #[serde(
         alias = "device_type",
         rename(serialize = "address_type"),
