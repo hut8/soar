@@ -178,6 +178,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     // Create shared counters for stats tracking (aggregate across all sources)
     let stats_frames_received = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_messages_sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stats_bytes_sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_send_time_total_ms = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_slow_sends = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
@@ -326,6 +327,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     {
         let queue_for_publisher = queue.clone();
         let stats_sent_clone = stats_messages_sent.clone();
+        let stats_bytes_sent_clone = stats_bytes_sent.clone();
         let stats_time_clone = stats_send_time_total_ms.clone();
         let stats_slow_clone = stats_slow_sends.clone();
         tokio::spawn(async move {
@@ -344,6 +346,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 let send_duration_us = elapsed.as_micros() as u64;
                                 let send_duration_ms_float = elapsed.as_secs_f64() * 1000.0;
                                 stats_sent_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                stats_bytes_sent_clone.fetch_add(
+                                    serialized_envelope.len() as u64,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                );
                                 stats_time_clone.fetch_add(
                                     send_duration_us,
                                     std::sync::atomic::Ordering::Relaxed,
@@ -402,6 +408,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let queue_for_stats = queue.clone();
     let stats_frames_rx = stats_frames_received.clone();
     let stats_msgs_sent = stats_messages_sent.clone();
+    let stats_bytes = stats_bytes_sent.clone();
     let stats_send_time = stats_send_time_total_ms.clone();
     let stats_slow = stats_slow_sends.clone();
     let stats_ogn_rx = stats_ogn_received.clone();
@@ -424,6 +431,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
         // EWMA smoothers for send and receive rates (15-minute half-life)
         let mut ewma_sent = soar::metrics::Ewma::new(HALF_LIFE_SECS);
+        let mut ewma_bytes_sent = soar::metrics::Ewma::new(HALF_LIFE_SECS);
         let mut ewma_incoming = soar::metrics::Ewma::new(HALF_LIFE_SECS);
         let mut ewma_ogn = soar::metrics::Ewma::new(HALF_LIFE_SECS);
         let mut ewma_beast = soar::metrics::Ewma::new(HALF_LIFE_SECS);
@@ -435,6 +443,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             // Get and reset counters atomically
             let total_frames = stats_frames_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
             let sent_count = stats_msgs_sent.swap(0, std::sync::atomic::Ordering::Relaxed);
+            let bytes_sent = stats_bytes.swap(0, std::sync::atomic::Ordering::Relaxed);
             let total_send_time = stats_send_time.swap(0, std::sync::atomic::Ordering::Relaxed);
             let slow_count = stats_slow.swap(0, std::sync::atomic::Ordering::Relaxed);
 
@@ -445,12 +454,14 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             // Calculate instantaneous rates (per second) for this window
             let instant_incoming = total_frames as f64 / STATS_INTERVAL_SECS;
             let instant_sent = sent_count as f64 / STATS_INTERVAL_SECS;
+            let instant_bytes_sent = bytes_sent as f64 / STATS_INTERVAL_SECS;
             let instant_ogn = ogn_frames as f64 / STATS_INTERVAL_SECS;
             let instant_beast = beast_frames as f64 / STATS_INTERVAL_SECS;
             let instant_sbs = sbs_frames as f64 / STATS_INTERVAL_SECS;
 
             // Update EWMAs with this window's samples
             ewma_sent.update(instant_sent, STATS_INTERVAL_SECS);
+            ewma_bytes_sent.update(instant_bytes_sent, STATS_INTERVAL_SECS);
             ewma_incoming.update(instant_incoming, STATS_INTERVAL_SECS);
             ewma_ogn.update(instant_ogn, STATS_INTERVAL_SECS);
             ewma_beast.update(instant_beast, STATS_INTERVAL_SECS);
@@ -510,16 +521,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 .set(queue_depth.disk_file_bytes as f64);
             metrics::gauge!("ingest.queue_segment_count").set(queue_depth.segment_count as f64);
 
-            // Calculate estimated drain time accounting for incoming rate
-            // net_drain_rate = send_rate - incoming_rate
-            // If net rate <= 0, queue is growing (show ∞)
+            // Calculate estimated drain time from actual byte throughput.
+            // bytes_sent_per_sec is measured directly from serialized envelope sizes,
+            // so no per-message size estimate is needed.
+            let bytes_sent_per_sec = ewma_bytes_sent.value();
             let drain_time_estimate = if queue_depth.disk_data_bytes > 0 {
-                let net_drain_rate = sent_per_sec - incoming_per_sec;
-                if net_drain_rate > 0.0 {
-                    // Estimate ~150 bytes per envelope. Observed serialized size of ingest
-                    // Envelope protobufs is typically 110-130 bytes; rounded up to be conservative.
-                    let net_bytes_per_sec = net_drain_rate * 150.0;
-                    let est_seconds = queue_depth.disk_data_bytes as f64 / net_bytes_per_sec;
+                if bytes_sent_per_sec > 0.0 {
+                    let est_seconds = queue_depth.disk_data_bytes as f64 / bytes_sent_per_sec;
                     if est_seconds > 3600.0 {
                         format!("{:.1}h", est_seconds / 3600.0)
                     } else if est_seconds > 60.0 {
@@ -527,9 +535,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                     } else {
                         format!("{:.0}s", est_seconds)
                     }
-                } else if sent_per_sec > 0.0 {
-                    // Sending but not fast enough - queue is growing
-                    "∞".to_string()
                 } else {
                     "stalled".to_string()
                 }
