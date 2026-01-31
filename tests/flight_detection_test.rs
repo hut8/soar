@@ -197,7 +197,9 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
         )
         .try_init();
 
-    let fix_processor = FixProcessor::new(pool.clone()).with_sync_elevation(elevation_service);
+    let aircraft_cache = soar::aircraft_repo::AircraftCache::new(pool.clone());
+    let fix_processor =
+        FixProcessor::new(pool.clone(), aircraft_cache).with_sync_elevation(elevation_service);
 
     // Load test messages
     let mut source = TestMessageSource::from_file(
@@ -402,7 +404,9 @@ async fn test_no_active_fixes_should_not_create_flight() {
         )
         .try_init();
 
-    let fix_processor = FixProcessor::new(pool.clone()).with_sync_elevation(elevation_service);
+    let aircraft_cache = soar::aircraft_repo::AircraftCache::new(pool.clone());
+    let fix_processor =
+        FixProcessor::new(pool.clone(), aircraft_cache).with_sync_elevation(elevation_service);
 
     // Load test messages
     let mut source = TestMessageSource::from_file(

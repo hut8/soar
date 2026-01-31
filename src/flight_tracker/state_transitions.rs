@@ -1,7 +1,6 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
 use crate::aircraft_types::AircraftCategory;
-use crate::flights_repo::FlightsRepository;
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, trace};
@@ -32,23 +31,6 @@ pub struct StateTransitionResult {
     pub fix: Fix,
     /// Background work to spawn after the fix is inserted
     pub pending_work: PendingBackgroundWork,
-}
-
-/// Helper function to update last_fix_at timestamp in database
-async fn update_flight_timestamp(
-    flights_repo: &FlightsRepository,
-    flight_id: Uuid,
-    timestamp: chrono::DateTime<chrono::Utc>,
-) {
-    let start = std::time::Instant::now();
-    if let Err(e) = flights_repo.update_last_fix_at(flight_id, timestamp).await {
-        error!(
-            "Failed to update last_fix_at for flight {}: {}",
-            flight_id, e
-        );
-    }
-    metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms")
-        .record(start.elapsed().as_micros() as f64 / 1000.0);
 }
 
 /// Determine if aircraft should be active based on fix data
@@ -90,11 +72,11 @@ pub(crate) async fn process_state_transition(
     let is_active = should_be_active(&fix);
     let mut pending_work = PendingBackgroundWork::None;
 
-    // Fetch aircraft
+    // Fetch aircraft (from in-memory cache, falling back to DB on miss)
     let aircraft_lookup_start = std::time::Instant::now();
     let aircraft = ctx
-        .aircraft_repo
-        .get_aircraft_by_id(fix.aircraft_id)
+        .aircraft_cache
+        .get_by_id(fix.aircraft_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Aircraft {} not found", fix.aircraft_id))?;
     metrics::histogram!("aprs.aircraft.aircraft_lookup_ms")
@@ -254,8 +236,6 @@ pub(crate) async fn process_state_transition(
                         let gap_seconds = (fix.received_at - last_fix_time).num_seconds() as i32;
                         fix.time_gap_seconds = Some(gap_seconds);
                     }
-
-                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                 }
 
                 // Check for tow release (towtugs only)
@@ -556,8 +536,6 @@ pub(crate) async fn process_state_transition(
                         fix.time_gap_seconds =
                             Some((fix.received_at - last_fix_time).num_seconds() as i32);
                     }
-
-                    update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                 }
                 _ => {
                     // Low altitude or unknown - check for 5 consecutive inactive
@@ -587,7 +565,6 @@ pub(crate) async fn process_state_transition(
                     } else {
                         // Not yet 5 inactive - keep flight active
                         fix.flight_id = Some(flight_id);
-                        update_flight_timestamp(ctx.flights_repo, flight_id, fix.received_at).await;
                     }
                 }
             }

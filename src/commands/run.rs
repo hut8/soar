@@ -4,7 +4,7 @@ use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use soar::adsb_accumulator::AdsbAccumulator;
 use soar::aircraft::AddressType;
-use soar::aircraft_repo::AircraftRepository;
+use soar::aircraft_repo::{AircraftCache, AircraftRepository};
 use soar::aircraft_types::AircraftCategory;
 use soar::beast::decode_beast_frame;
 use soar::fix_processor::FixProcessor;
@@ -155,6 +155,12 @@ async fn process_beast_message(
             return;
         }
     };
+
+    // Skip zero ICAO addresses - invalid data
+    if icao_address == 0 {
+        metrics::counter!("beast.run.skipped_zero_address_total").increment(1);
+        return;
+    }
 
     // Get or create aircraft by ICAO address
     let aircraft = match aircraft_repo
@@ -365,6 +371,11 @@ async fn process_sbs_message(
             return;
         }
     };
+
+    if icao_address == 0 {
+        metrics::counter!("sbs.run.skipped_zero_address_total").increment(1);
+        return;
+    }
 
     // Store raw SBS message in database (stored as UTF-8 bytes with 'sbs' source)
     let raw_message_id = match sbs_repo
@@ -596,8 +607,15 @@ pub async fn handle_run(
         }
     );
 
+    // Create and preload aircraft cache (loads aircraft with fixes in last 7 days)
+    let aircraft_cache = AircraftCache::new(diesel_pool.clone());
+    aircraft_cache
+        .preload()
+        .await
+        .context("Failed to preload aircraft cache")?;
+
     // Create FlightTracker
-    let flight_tracker = FlightTracker::new(&diesel_pool);
+    let flight_tracker = FlightTracker::new(&diesel_pool, aircraft_cache.clone());
 
     // Initialize flight tracker from database:
     // 1. Timeout old incomplete flights (last_fix_at older than 1 hour)
@@ -663,6 +681,7 @@ pub async fn handle_run(
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
         diesel_pool.clone(),
+        aircraft_cache.clone(),
         flight_tracker.clone(),
         &nats_url,
     )
@@ -680,10 +699,14 @@ pub async fn handle_run(
                 "Failed to create FixProcessor with NATS ({}), falling back to processor without NATS",
                 e
             );
-            FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
-                .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
-                .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
-                .with_sync_elevation(flight_tracker.elevation_db().clone())
+            FixProcessor::with_flight_tracker(
+                diesel_pool.clone(),
+                aircraft_cache.clone(),
+                flight_tracker.clone(),
+            )
+            .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
+            .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
+            .with_sync_elevation(flight_tracker.elevation_db().clone())
         }
     };
 

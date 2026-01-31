@@ -123,8 +123,9 @@ impl FixesRepository {
         // Note: aircraft_id, receiver_id, and raw_message_id are already populated in the Fix
         // by the generic processor context before Fix creation
 
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+        let insert_pool = pool.clone();
+        let inserted = tokio::task::spawn_blocking(move || {
+            let mut conn = insert_pool.get()?;
 
             match diesel::insert_into(fixes)
                 .values(&new_fix)
@@ -141,24 +142,7 @@ impl FixesRepository {
                         new_fix.latitude,
                         new_fix.longitude
                     );
-
-                    // Update aircraft's current_fix, latitude, longitude, and last_fix_at
-                    // This is the single point where position data is synced to the aircraft table
-                    // for all data sources (APRS, Beast, SBS).
-                    if let Ok(fix_json) = serde_json::to_value(&new_fix) {
-                        use crate::schema::aircraft;
-                        let _ = diesel::update(aircraft::table)
-                            .filter(aircraft::id.eq(new_fix.aircraft_id))
-                            .set((
-                                aircraft::current_fix.eq(fix_json),
-                                aircraft::latitude.eq(new_fix.latitude),
-                                aircraft::longitude.eq(new_fix.longitude),
-                                aircraft::last_fix_at.eq(new_fix.received_at),
-                            ))
-                            .execute(&mut conn);
-                    }
-
-                    Ok(())
+                    Ok::<bool, anyhow::Error>(true)
                 }
                 Err(diesel::result::Error::DatabaseError(
                     diesel::result::DatabaseErrorKind::UniqueViolation,
@@ -171,12 +155,40 @@ impl FixesRepository {
                     );
                     metrics::counter!("aprs.fixes.duplicate_on_redelivery_total").increment(1);
                     // Not an error - just skip the duplicate
-                    Ok(())
+                    Ok::<bool, anyhow::Error>(false)
                 }
                 Err(e) => Err(e.into()),
             }
         })
-        .await?
+        .await??;
+
+        // Schedule async update of aircraft position fields.
+        // This data is only read by web API queries, not the fix processing pipeline,
+        // so a few milliseconds of staleness is acceptable.
+        if inserted {
+            let fix_for_update = fix.clone();
+            tokio::spawn(async move {
+                let _ = tokio::task::spawn_blocking(move || {
+                    if let Ok(fix_json) = serde_json::to_value(&fix_for_update)
+                        && let Ok(mut conn) = pool.get()
+                    {
+                        use crate::schema::aircraft;
+                        let _ = diesel::update(aircraft::table)
+                            .filter(aircraft::id.eq(fix_for_update.aircraft_id))
+                            .set((
+                                aircraft::current_fix.eq(fix_json),
+                                aircraft::latitude.eq(fix_for_update.latitude),
+                                aircraft::longitude.eq(fix_for_update.longitude),
+                                aircraft::last_fix_at.eq(fix_for_update.received_at),
+                            ))
+                            .execute(&mut conn);
+                    }
+                })
+                .await;
+            });
+        }
+
+        Ok(())
     }
 
     /// Update the altitude_agl field for a specific fix

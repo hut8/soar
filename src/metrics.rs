@@ -1,4 +1,47 @@
 use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+
+/// Exponentially Weighted Moving Average (EWMA) for rate smoothing.
+///
+/// Uses a configurable half-life: after `half_life` seconds, a past sample's
+/// contribution decays to 50%. The smoothing factor alpha is computed from the
+/// sample interval: `alpha = 1 - exp(-dt / tau)` where `tau = half_life / ln(2)`.
+#[derive(Debug, Clone)]
+pub struct Ewma {
+    /// Time constant tau = half_life / ln(2)
+    tau: f64,
+    /// Current smoothed value
+    value: f64,
+    /// Whether we've received at least one sample
+    initialized: bool,
+}
+
+impl Ewma {
+    /// Create a new EWMA with the given half-life in seconds.
+    /// The half-life is the time after which a sample's weight decays to 50%.
+    pub fn new(half_life_secs: f64) -> Self {
+        Self {
+            tau: half_life_secs / std::f64::consts::LN_2,
+            value: 0.0,
+            initialized: false,
+        }
+    }
+
+    /// Update the EWMA with a new sample, given the time interval since the last sample.
+    pub fn update(&mut self, sample: f64, dt_secs: f64) {
+        if !self.initialized {
+            self.value = sample;
+            self.initialized = true;
+        } else {
+            let alpha = 1.0 - (-dt_secs / self.tau).exp();
+            self.value = alpha * sample + (1.0 - alpha) * self.value;
+        }
+    }
+
+    /// Get the current smoothed value.
+    pub fn value(&self) -> f64 {
+        self.value
+    }
+}
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use pprof::protos::Message;
 use std::net::SocketAddr;
