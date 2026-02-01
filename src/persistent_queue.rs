@@ -925,10 +925,23 @@ where
         // Pick a segment name that sorts before all existing segments
         let segments = self.list_segments();
         let flush_segment_name = if let Some(earliest) = segments.first() {
-            let ts: u128 = earliest.parse().unwrap_or(1);
+            let ts: u128 = earliest.parse().unwrap_or_else(|e| {
+                warn!(
+                    "Queue '{}': failed to parse segment name '{}' as timestamp: {}",
+                    self.name, earliest, e
+                );
+                1
+            });
             let mut candidate = ts.saturating_sub(1);
             // Ensure uniqueness (extremely unlikely to collide, but be safe)
             while segments.contains(&format!("{:016}", candidate)) {
+                if candidate == 0 {
+                    warn!(
+                        "Queue '{}': could not find unique flush segment name before '{}'",
+                        self.name, earliest
+                    );
+                    break;
+                }
                 candidate = candidate.saturating_sub(1);
             }
             format!("{:016}", candidate)
@@ -943,10 +956,10 @@ where
         // Acquire file lock to prevent races with concurrent writes
         let _lock = self.file_lock.lock().await;
 
-        // Create segment file with header
+        // Create segment file with header (create_new ensures we fail if it
+        // already exists rather than silently appending to a stale file)
         let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
+            .create_new(true)
             .read(true)
             .write(true)
             .open(&path)?;
@@ -2191,8 +2204,9 @@ mod tests {
         // Receive a few messages (memory flushed to disk on first recv, then all from disk)
         let mut received = Vec::new();
 
-        // Drain all flushed memory messages + disk messages
-        for _ in 0..5 {
+        // Drain all flushed memory messages (3) + disk messages (2)
+        let initial_message_count = 3 + 2;
+        for _ in 0..initial_message_count {
             let msg = queue.recv().await.unwrap();
             queue.commit().await.unwrap();
             received.push(msg);
