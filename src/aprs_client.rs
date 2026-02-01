@@ -80,11 +80,12 @@ impl AprsClient {
     /// Start the APRS client with envelope queue
     /// This connects to APRS-IS and sends all messages to the queue as serialized protobuf Envelopes
     /// Each envelope contains: source type (OGN), timestamp (captured at receive time), and raw payload
-    #[tracing::instrument(skip(self, queue, health_state))]
+    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
     pub async fn start_with_envelope_queue(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
     ) -> Result<()> {
         let config = self.config.clone();
 
@@ -97,6 +98,7 @@ impl AprsClient {
 
         // Spawn queue feeding task - reads from channel, sends to persistent queue
         let queue_clone = queue.clone();
+        let stats_counter_clone = stats_counter.clone();
         let queue_handle = tokio::spawn(async move {
             let mut at_capacity_logged = false;
             let mut last_metrics_update = std::time::Instant::now();
@@ -128,6 +130,8 @@ impl AprsClient {
                         if let Err(e) = queue_clone.send(envelope_bytes).await {
                             warn!("Failed to send to persistent queue (will retry): {}", e);
                             metrics::counter!("aprs.queue.send_error_total").increment(1);
+                        } else if let Some(ref counter) = stats_counter_clone {
+                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
 
                         // Update channel depth metric every second
