@@ -37,7 +37,7 @@ google_maps = { version = "3.9.1", features = [
 h3o = { version = "0.9", features = ["geo"] }
 geo = "0.30"
 include_dir = "0.7"
-jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 lettre = { version = "0.11", features = [
     "tokio1-rustls-tls",
     "smtp-transport",
@@ -110,7 +110,7 @@ sha2 = "0.10.9"
 kml = "0.12"
 hex = "0.4.3"
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.120"
+aws-sdk-s3 = "1.121"
 prost = "0.14"
 prost-types = "0.14"
 crc32fast = "1.4"
