@@ -28,11 +28,11 @@ Scripts are numbered sequentially with a short description:
 
 ```bash
 # Always specify the target database explicitly
-python3 scripts/data-migrations/001_cleanup_orphaned_fixes.py soar_staging
-python3 scripts/data-migrations/001_cleanup_orphaned_fixes.py soar
+python3 scripts/data-migrations/001_cleanup_address_zero_aircraft.py soar_staging
+python3 scripts/data-migrations/001_cleanup_address_zero_aircraft.py soar
 
 # Most scripts accept a parallelism argument
-python3 scripts/data-migrations/001_cleanup_orphaned_fixes.py soar_staging 4
+python3 scripts/data-migrations/001_cleanup_address_zero_aircraft.py soar_staging 4
 ```
 
 ## Writing a New Data Migration
