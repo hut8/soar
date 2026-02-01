@@ -80,7 +80,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(queue_ingest_messages_buffered_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
+      "expr": "rate(aprs_raw_message_queued_aprs_total{component=\"ingest\",environment=~\"$environment\"}[1m]) + rate(beast_frames_published_total{component=\"ingest\",environment=~\"$environment\"}[1m])",
       "legendFormat": "Total (queued)",
       "range": true,
       "refId": "A"
