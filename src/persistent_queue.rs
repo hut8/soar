@@ -487,7 +487,12 @@ where
                         };
                         metrics::gauge!(format!("queue.{}.state", self.name)).set(2.0);
                     }
-                    // Now drain from disk first
+                    // Flush memory channel to disk before draining. Memory messages
+                    // are OLDER than the spilled disk messages and must be persisted
+                    // to a segment that sorts before them, both for FIFO ordering
+                    // and crash safety (they'd be lost on restart otherwise).
+                    self.flush_memory_to_disk().await?;
+                    // Now drain from disk (memory messages are in an early segment)
                     if let Some(message) = self.read_from_disk().await? {
                         metrics::counter!(format!("queue.{}.messages.drained_total", self.name))
                             .increment(1);
@@ -890,6 +895,123 @@ where
     /// Get the number of segment files
     pub fn segment_count(&self) -> usize {
         self.list_segments().len()
+    }
+
+    /// Flush all messages from the memory channel to a disk segment that sorts
+    /// before all existing segments.
+    ///
+    /// Called when transitioning from Connected → Draining due to spillover.
+    /// Memory messages are older than spilled disk messages and must be persisted
+    /// ahead of them for both FIFO ordering and crash safety.
+    ///
+    /// Creates a segment with a name that sorts before the earliest existing
+    /// segment, writes all memory messages to it, then invalidates the read
+    /// segment cache so the drain reads this segment first.
+    async fn flush_memory_to_disk(&self) -> Result<u64> {
+        use std::io::Write;
+
+        // Drain memory channel (non-blocking)
+        let mut messages = Vec::new();
+        while let Ok(message) = self.memory_rx.try_recv() {
+            messages.push(message);
+        }
+
+        if messages.is_empty() {
+            return Ok(0);
+        }
+
+        let count = messages.len() as u64;
+
+        // Pick a segment name that sorts before all existing segments
+        let segments = self.list_segments();
+        let flush_segment_name = if let Some(earliest) = segments.first() {
+            let ts: u128 = earliest.parse().unwrap_or_else(|e| {
+                warn!(
+                    "Queue '{}': failed to parse segment name '{}' as timestamp: {}",
+                    self.name, earliest, e
+                );
+                1
+            });
+            let mut candidate = ts.saturating_sub(1);
+            // Ensure uniqueness (extremely unlikely to collide, but be safe)
+            while segments.contains(&format!("{:016}", candidate)) {
+                if candidate == 0 {
+                    warn!(
+                        "Queue '{}': could not find unique flush segment name before '{}'",
+                        self.name, earliest
+                    );
+                    break;
+                }
+                candidate = candidate.saturating_sub(1);
+            }
+            format!("{:016}", candidate)
+        } else {
+            // No existing segments (shouldn't happen since we entered Draining
+            // because segments were detected, but handle gracefully)
+            "0000000000000001".to_string()
+        };
+
+        let path = self.segment_path(&flush_segment_name);
+
+        // Acquire file lock to prevent races with concurrent writes
+        let _lock = self.file_lock.lock().await;
+
+        // Create segment file with header (create_new ensures we fail if it
+        // already exists rather than silently appending to a stale file)
+        let mut file = std::fs::OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&path)?;
+
+        let header = [
+            MAGIC_BYTES.as_slice(),
+            &0u64.to_le_bytes(),                 // reserved
+            &(HEADER_SIZE as u64).to_le_bytes(), // read_offset starts after header
+            &0u64.to_le_bytes(),                 // reserved
+        ]
+        .concat();
+        file.write_all(&header)?;
+
+        let mut total_bytes = HEADER_SIZE as u64;
+
+        // Write all messages
+        for message in messages {
+            let data = bincode::serialize(&message)?;
+            let data_len = data.len() as u32;
+            let checksum = crc32fast::hash(&data);
+
+            file.write_all(&data_len.to_le_bytes())?;
+            file.write_all(&data)?;
+            file.write_all(&checksum.to_le_bytes())?;
+
+            total_bytes += 4 + data.len() as u64 + 4;
+        }
+
+        file.flush()?;
+
+        // Update cached total file size
+        self.total_file_size_cached
+            .fetch_add(total_bytes, Ordering::Release);
+
+        // Invalidate read segment cache so drain picks up this new earliest segment
+        {
+            let mut read_guard = self
+                .read_segment
+                .lock()
+                .expect("read segment mutex poisoned");
+            *read_guard = None;
+        }
+
+        metrics::counter!(format!("queue.{}.segments_created_total", self.name)).increment(1);
+        metrics::counter!(format!("queue.{}.memory_flushed_total", self.name)).increment(count);
+
+        info!(
+            "Queue '{}' flushed {} memory messages to disk segment {} for crash safety",
+            self.name, count, flush_segment_name
+        );
+
+        Ok(count)
     }
 
     /// Append a message to the disk file
@@ -1996,6 +2118,178 @@ mod tests {
             assert_eq!(msg1, "persistent1");
             assert_eq!(msg2, "persistent2");
             assert_eq!(msg3, "persistent3");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_spillover_preserves_fifo_ordering() {
+        // Regression test: when the memory channel is full and messages spill to
+        // disk, the consumer must deliver memory messages (older) before disk
+        // messages (newer) to preserve FIFO ordering.
+        //
+        // Before this fix, the queue would transition to Draining mode and read
+        // from disk first, delivering newer messages before older ones that were
+        // still sitting in the memory channel.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        // Small memory channel capacity (3) so we can easily fill it
+        let queue = PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
+            .unwrap();
+
+        // Connect consumer first (enters Connected state, fast path)
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        // Fill the memory channel: these are the OLDER messages
+        queue.send("mem-0".to_string()).await.unwrap();
+        queue.send("mem-1".to_string()).await.unwrap();
+        queue.send("mem-2".to_string()).await.unwrap();
+
+        // Memory channel is now full (capacity=3).
+        // Next sends will spill to disk: these are the NEWER messages.
+        queue.send("disk-0".to_string()).await.unwrap();
+        queue.send("disk-1".to_string()).await.unwrap();
+        queue.send("disk-2".to_string()).await.unwrap();
+
+        // Verify messages actually spilled to disk
+        assert!(queue.has_segments(), "Messages should have spilled to disk");
+
+        // Now receive all 6 messages. The correct FIFO order is:
+        // mem-0, mem-1, mem-2 (older, from memory), then disk-0, disk-1, disk-2 (newer, from disk)
+        let mut received = Vec::new();
+        for _ in 0..6 {
+            let msg = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+            received.push(msg);
+        }
+
+        assert_eq!(
+            received,
+            vec!["mem-0", "mem-1", "mem-2", "disk-0", "disk-1", "disk-2"],
+            "Messages must be delivered in FIFO order: memory (older) before disk (newer)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_spillover_ordering_with_continued_sends() {
+        // Verify ordering is maintained even when new messages arrive during drain.
+        // The sequence is: memory messages → disk messages → new messages sent during drain.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        let queue = Arc::new(
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
+                .unwrap(),
+        );
+
+        // Connect and fill memory
+        queue
+            .connect_consumer("test-consumer".to_string())
+            .await
+            .unwrap();
+
+        queue.send("mem-0".to_string()).await.unwrap();
+        queue.send("mem-1".to_string()).await.unwrap();
+        queue.send("mem-2".to_string()).await.unwrap();
+
+        // Spill to disk
+        queue.send("disk-0".to_string()).await.unwrap();
+        queue.send("disk-1".to_string()).await.unwrap();
+
+        // Receive a few messages (memory flushed to disk on first recv, then all from disk)
+        let mut received = Vec::new();
+
+        // Drain all flushed memory messages (3) + disk messages (2)
+        let initial_message_count = 3 + 2;
+        for _ in 0..initial_message_count {
+            let msg = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+            received.push(msg);
+        }
+
+        // Now send more while in Draining state (these go to disk)
+        queue.send("new-0".to_string()).await.unwrap();
+        queue.send("new-1".to_string()).await.unwrap();
+
+        // Drain remaining: new-0, new-1
+        for _ in 0..2 {
+            let msg = queue.recv().await.unwrap();
+            queue.commit().await.unwrap();
+            received.push(msg);
+        }
+
+        assert_eq!(
+            received,
+            vec![
+                "mem-0", "mem-1", "mem-2", "disk-0", "disk-1", "new-0", "new-1"
+            ],
+            "Order must be: memory (oldest) → disk (middle) → new sends during drain (newest)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_spillover_memory_messages_survive_restart() {
+        // Verify that memory messages are persisted to disk when spillover occurs,
+        // so they survive a process restart. Before this fix, memory messages would
+        // be lost if the process restarted before the drain completed.
+
+        let temp_dir = TempDir::new().unwrap();
+        let queue_path = temp_dir.path().join("test_queue");
+
+        // First "process": fill memory, spill to disk, call one recv to trigger
+        // the flush, then "crash" (drop the queue).
+        {
+            let queue =
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
+                    .unwrap();
+
+            queue
+                .connect_consumer("test-consumer".to_string())
+                .await
+                .unwrap();
+
+            // Fill memory (older messages)
+            queue.send("mem-0".to_string()).await.unwrap();
+            queue.send("mem-1".to_string()).await.unwrap();
+            queue.send("mem-2".to_string()).await.unwrap();
+
+            // Spill to disk (newer messages)
+            queue.send("disk-0".to_string()).await.unwrap();
+            queue.send("disk-1".to_string()).await.unwrap();
+
+            // First recv triggers Connected → Draining transition, which
+            // flushes memory to disk. Consume one message.
+            let msg = queue.recv().await.unwrap();
+            assert_eq!(msg, "mem-0");
+            queue.commit().await.unwrap();
+
+            // "Crash" here — drop the queue without consuming the rest.
+            // mem-1, mem-2 (flushed to disk), disk-0, disk-1 should survive.
+        }
+
+        // Second "process": recover and verify all messages are present in order.
+        {
+            let queue =
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
+                    .unwrap();
+
+            let mut received = Vec::new();
+            for _ in 0..4 {
+                let msg = queue.recv().await.unwrap();
+                queue.commit().await.unwrap();
+                received.push(msg);
+            }
+
+            assert_eq!(
+                received,
+                vec!["mem-1", "mem-2", "disk-0", "disk-1"],
+                "All messages (including flushed memory messages) must survive restart in order"
+            );
         }
     }
 }
