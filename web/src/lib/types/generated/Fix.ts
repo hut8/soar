@@ -5,69 +5,69 @@
  * This is the unified domain entity for position updates and database storage
  */
 export type Fix = {
-	/**
-	 * Unique identifier for this fix
-	 */
-	id: string;
-	/**
-	 * APRS packet header information
-	 */
-	source: string;
-	/**
-	 * Aircraft position
-	 */
-	latitude: number;
-	longitude: number;
-	altitudeMslFeet: number | null;
-	altitudeAglFeet: number | null;
-	/**
-	 * Flight information
-	 */
-	flightNumber: string | null;
-	squawk: string | null;
-	/**
-	 * Performance data
-	 */
-	groundSpeedKnots: number | null;
-	trackDegrees: number | null;
-	climbFpm: number | null;
-	turnRateRot: number | null;
-	/**
-	 * Protocol-specific metadata stored as JSONB
-	 * For APRS: via, aprs_type, snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
-	 * For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
-	 */
-	sourceMetadata: Record<string, unknown> | null;
-	/**
-	 * Associations
-	 */
-	flightId: string | null;
-	aircraftId: string;
-	/**
-	 * Timestamp when the server received/processed the packet.
-	 * This is the canonical timestamp for the fix and is used for table partitioning.
-	 */
-	receivedAt: string;
-	/**
-	 * Whether the aircraft is considered active (ground_speed >= 25 knots)
-	 */
-	active: boolean;
-	/**
-	 * Receiver that reported this fix (from via array)
-	 * NULL for ADS-B/Beast and SBS data sources which don't have receiver information
-	 */
-	receiverId: string | null;
-	/**
-	 * Reference to the raw message that contains the raw packet data
-	 */
-	rawMessageId: string;
-	/**
-	 * Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
-	 */
-	altitudeAglValid: boolean;
-	/**
-	 * Number of seconds elapsed since the previous fix within the same flight
-	 * NULL for the first fix in a flight or for fixes without a flight_id
-	 */
-	timeGapSeconds: number | null;
+  /**
+   * Unique identifier for this fix
+   */
+  id: string;
+  /**
+   * APRS packet header information
+   */
+  source: string;
+  /**
+   * Aircraft position
+   */
+  latitude: number;
+  longitude: number;
+  altitudeMslFeet: number | null;
+  altitudeAglFeet: number | null;
+  /**
+   * Flight information
+   */
+  flightNumber: string | null;
+  squawk: string | null;
+  /**
+   * Performance data
+   */
+  groundSpeedKnots: number | null;
+  trackDegrees: number | null;
+  climbFpm: number | null;
+  turnRateRot: number | null;
+  /**
+   * Protocol-specific metadata stored as JSONB
+   * For APRS: via, aprs_type, snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
+   * For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
+   */
+  sourceMetadata: Record<string, unknown> | null;
+  /**
+   * Associations
+   */
+  flightId: string | null;
+  aircraftId: string;
+  /**
+   * Timestamp when the server received/processed the packet.
+   * This is the canonical timestamp for the fix and is used for table partitioning.
+   */
+  receivedAt: string;
+  /**
+   * Whether the aircraft is considered active (ground_speed >= 25 knots)
+   */
+  active: boolean;
+  /**
+   * Receiver that reported this fix (from via array)
+   * NULL for ADS-B/Beast and SBS data sources which don't have receiver information
+   */
+  receiverId: string | null;
+  /**
+   * Reference to the raw message that contains the raw packet data
+   */
+  rawMessageId: string;
+  /**
+   * Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
+   */
+  altitudeAglValid: boolean;
+  /**
+   * Number of seconds elapsed since the previous fix within the same flight
+   * NULL for the first fix in a flight or for fixes without a flight_id
+   */
+  timeGapSeconds: number | null;
 };

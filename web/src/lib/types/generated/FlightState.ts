@@ -3,4 +3,4 @@
 /**
  * Flight state enum representing the current status of a flight
  */
-export type FlightState = 'active' | 'stale' | 'complete' | 'timed_out';
+export type FlightState = "active" | "stale" | "complete" | "timed_out";

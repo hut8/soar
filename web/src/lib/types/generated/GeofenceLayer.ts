@@ -5,16 +5,16 @@
  * Altitudes are MSL (Mean Sea Level) in feet
  */
 export type GeofenceLayer = {
-	/**
-	 * Floor altitude in feet MSL
-	 */
-	floorFt: number;
-	/**
-	 * Ceiling altitude in feet MSL
-	 */
-	ceilingFt: number;
-	/**
-	 * Radius from center in nautical miles
-	 */
-	radiusNm: number;
+  /**
+   * Floor altitude in feet MSL
+   */
+  floorFt: number;
+  /**
+   * Ceiling altitude in feet MSL
+   */
+  ceilingFt: number;
+  /**
+   * Radius from center in nautical miles
+   */
+  radiusNm: number;
 };
