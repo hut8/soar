@@ -192,6 +192,16 @@
 		);
 	}
 
+	function formatDistance(meters: number | undefined | null): string {
+		if (meters == null) return '—';
+		const km = meters / 1000;
+		const mi = km * 0.621371;
+		if (mi < 1) return `${mi.toFixed(1)} mi`;
+		return `${Math.round(mi)} mi`;
+	}
+
+	let isLocationSearch = $derived(searchType === 'location');
+
 	function formatAddress(club: ClubWithSoaring): string {
 		if (!club.location) {
 			return 'Address not available';
@@ -472,6 +482,9 @@
 							<th>Club Name</th>
 							<th>Address</th>
 							<th>Airport</th>
+							{#if isLocationSearch}
+								<th>Distance</th>
+							{/if}
 							<th>Actions</th>
 						</tr>
 					</thead>
@@ -508,6 +521,13 @@
 										<span class="text-surface-500">—</span>
 									{/if}
 								</td>
+								{#if isLocationSearch}
+									<td>
+										<span class="text-surface-600-300-token text-sm">
+											{formatDistance(club.distanceMeters)}
+										</span>
+									</td>
+								{/if}
 								<td>
 									<a
 										href={resolve(`/clubs/${club.id}`)}
@@ -575,6 +595,15 @@
 										{club.homeBaseAirportIdent}
 										<ExternalLink class="h-3 w-3" />
 									</a>
+								</span>
+							</div>
+						{/if}
+
+						{#if isLocationSearch && club.distanceMeters != null}
+							<div class="flex items-center gap-2">
+								<MapPinHouse class="h-4 w-4 flex-shrink-0 text-surface-500" />
+								<span class="text-surface-600-300-token">
+									{formatDistance(club.distanceMeters)} away
 								</span>
 							</div>
 						{/if}
