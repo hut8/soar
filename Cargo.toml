@@ -78,7 +78,7 @@ tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "fs", "sync
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
-ts-rs = { version = "11.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl", "format"] }
+ts-rs = { version = "12.0.1", features = ["chrono-impl", "uuid-impl", "serde-json-impl", "format"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
 sentry = { version = "0.46", default-features = false, features = ["backtrace", "contexts", "panic", "tracing", "reqwest", "rustls"] }
