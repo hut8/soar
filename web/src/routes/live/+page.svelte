@@ -920,6 +920,7 @@
 			receiverLayerManager.dispose();
 			runwayLayerManager.dispose();
 			map?.remove();
+			map = null;
 		};
 	});
 </script>
