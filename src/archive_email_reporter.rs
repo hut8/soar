@@ -2,6 +2,8 @@ use anyhow::Result;
 use chrono::{NaiveDate, Utc};
 use std::collections::HashMap;
 
+use crate::flights_repo::SpuriousAircraftRow;
+
 /// Get the environment name for display purposes
 /// Returns "Production", "Staging", or "Development"
 fn get_environment_name() -> String {
@@ -39,11 +41,21 @@ pub struct DailyCount {
 }
 
 #[derive(Debug, Clone)]
+pub struct SpuriousFlightStats {
+    pub total_count: i64,
+    /// (reason_name, count) pairs sorted by count DESC
+    pub reason_counts: Vec<(String, i64)>,
+    /// Top aircraft by spurious flight count
+    pub top_aircraft: Vec<SpuriousAircraftRow>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ArchiveReport {
     pub total_duration_secs: f64,
     pub tables: Vec<TableArchiveMetrics>,
     pub daily_counts: HashMap<String, Vec<DailyCount>>, // table_name -> Vec<DailyCount>
     pub unreferenced_locations_7d: Option<i64>, // Count of unreferenced locations created in last 7 days
+    pub spurious_stats: Option<SpuriousFlightStats>,
 }
 
 impl Default for ArchiveReport {
@@ -59,6 +71,7 @@ impl ArchiveReport {
             tables: Vec::new(),
             daily_counts: HashMap::new(),
             unreferenced_locations_7d: None,
+            spurious_stats: None,
         }
     }
 
@@ -345,6 +358,87 @@ impl ArchiveReport {
             html.push_str("</table>");
         }
 
+        // Add spurious flight statistics section
+        if let Some(ref stats) = self.spurious_stats
+            && stats.total_count > 0
+        {
+            let base_url =
+                std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+            html.push_str(&format!(
+                r#"
+        <h2 style="border-bottom-color: #e67e22;">Spurious Flight Statistics (Last 24h)</h2>
+        <div class="summary">
+            <strong>Total Spurious Flights:</strong> {}
+        </div>
+
+        <h3 style="color: #555; margin-top: 20px;">Reason Breakdown</h3>
+        <table>
+            <tr>
+                <th style="background-color: #e67e22;">Reason</th>
+                <th style="background-color: #e67e22;">Count</th>
+                <th style="background-color: #e67e22;">%</th>
+            </tr>"#,
+                Self::format_count(stats.total_count)
+            ));
+
+            for (reason, count) in &stats.reason_counts {
+                let percentage = if stats.total_count > 0 {
+                    *count as f64 / stats.total_count as f64 * 100.0
+                } else {
+                    0.0
+                };
+                html.push_str(&format!(
+                    r#"
+            <tr>
+                <td>{}</td>
+                <td>{}</td>
+                <td>{:.1}%</td>
+            </tr>"#,
+                    Self::format_reason_name(reason),
+                    Self::format_count(*count),
+                    percentage
+                ));
+            }
+
+            html.push_str("</table>");
+
+            if !stats.top_aircraft.is_empty() {
+                html.push_str(
+                    r#"
+        <h3 style="color: #555; margin-top: 20px;">Top Aircraft by Spurious Flights</h3>
+        <table>
+            <tr>
+                <th style="background-color: #e67e22;">Aircraft</th>
+                <th style="background-color: #e67e22;">Spurious Flights</th>
+            </tr>"#,
+                );
+
+                for aircraft in &stats.top_aircraft {
+                    let name = aircraft.display_name();
+                    let cell = if let Some(id) = aircraft.aircraft_id {
+                        format!(
+                            r#"<a href="{}/aircraft/{}" style="color: #007bff; text-decoration: none;">{}</a>"#,
+                            base_url, id, name
+                        )
+                    } else {
+                        name
+                    };
+                    html.push_str(&format!(
+                        r#"
+            <tr>
+                <td>{}</td>
+                <td>{}</td>
+            </tr>"#,
+                        cell,
+                        Self::format_count(aircraft.spurious_count)
+                    ));
+                }
+
+                html.push_str("</table>");
+            }
+        }
+
         html.push_str(
             r#"
         <div class="footer">
@@ -356,6 +450,25 @@ impl ArchiveReport {
         );
 
         html
+    }
+
+    /// Format a spurious flight reason enum value (e.g., "duration_too_short") into
+    /// a human-readable name (e.g., "Duration Too Short")
+    fn format_reason_name(reason: &str) -> String {
+        reason
+            .split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(c) => {
+                        let upper: String = c.to_uppercase().collect();
+                        upper + chars.as_str()
+                    }
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 

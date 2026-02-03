@@ -1400,10 +1400,134 @@ impl FlightsRepository {
 
         Ok(results)
     }
+
+    /// Get spurious flight reason counts since a given timestamp.
+    /// Returns (reason_name, count) pairs and the total number of spurious flights.
+    /// Uses unnest() to expand the reasons array so each reason is counted individually.
+    pub async fn get_spurious_reason_counts_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<(Vec<(String, i64)>, i64)> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get total count of spurious flights in the period
+            #[derive(QueryableByName)]
+            struct CountRow {
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                total: i64,
+            }
+
+            let total_row = diesel::sql_query(
+                "SELECT COUNT(*) AS total FROM spurious_flights WHERE detected_at >= $1",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(since)
+            .get_result::<CountRow>(&mut conn)?;
+
+            // Get per-reason counts by unnesting the reasons array
+            #[derive(QueryableByName)]
+            struct ReasonCountRow {
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                reason: String,
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                count: i64,
+            }
+
+            let reason_counts = diesel::sql_query(
+                "SELECT reason::text AS reason, COUNT(*) AS count
+                 FROM spurious_flights, unnest(reasons) AS reason
+                 WHERE detected_at >= $1 AND reason IS NOT NULL
+                 GROUP BY reason
+                 ORDER BY count DESC",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(since)
+            .load::<ReasonCountRow>(&mut conn)?;
+
+            let counts: Vec<(String, i64)> = reason_counts
+                .into_iter()
+                .map(|r| (r.reason, r.count))
+                .collect();
+
+            Ok::<_, anyhow::Error>((counts, total_row.total))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get the top N aircraft by spurious flight count since a given timestamp.
+    /// Joins with the aircraft table to get display information.
+    pub async fn get_top_spurious_aircraft_since(
+        &self,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<SpuriousAircraftRow>> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::sql_query(
+                "SELECT sf.aircraft_id, a.registration,
+                        a.aircraft_model,
+                        sf.device_address, COUNT(*) AS spurious_count
+                 FROM spurious_flights sf
+                 LEFT JOIN aircraft a ON a.id = sf.aircraft_id
+                 WHERE sf.detected_at >= $1
+                 GROUP BY sf.aircraft_id, a.registration, a.aircraft_model, sf.device_address
+                 ORDER BY spurious_count DESC
+                 LIMIT $2",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(since)
+            .bind::<diesel::sql_types::BigInt, _>(limit)
+            .load::<SpuriousAircraftRow>(&mut conn)?;
+
+            Ok::<_, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(result)
+    }
 }
 
 #[derive(QueryableByName)]
 struct OnlyId {
     #[diesel(sql_type = diesel::sql_types::Uuid)]
     id: Uuid,
+}
+
+#[derive(Debug, Clone, QueryableByName)]
+pub struct SpuriousAircraftRow {
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    pub aircraft_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub registration: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub aircraft_model: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::VarChar)]
+    pub device_address: String,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    pub spurious_count: i64,
+}
+
+impl SpuriousAircraftRow {
+    /// Get display name for the aircraft, matching frontend getAircraftTitle() logic:
+    /// Model + Registration > Registration > Model > device_address
+    pub fn display_name(&self) -> String {
+        let has_registration = self.registration.as_ref().is_some_and(|r| !r.is_empty());
+        let has_model = self.aircraft_model.as_ref().is_some_and(|m| !m.is_empty());
+
+        match (has_model, has_registration) {
+            (true, true) => format!(
+                "{} - {}",
+                self.aircraft_model.as_ref().unwrap(),
+                self.registration.as_ref().unwrap()
+            ),
+            (false, true) => self.registration.clone().unwrap(),
+            (true, false) => self.aircraft_model.clone().unwrap(),
+            (false, false) => self.device_address.clone(),
+        }
+    }
 }
