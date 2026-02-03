@@ -34,6 +34,8 @@
 	let selectedLatitude = $state<number | null>(null);
 	let selectedLongitude = $state<number | null>(null);
 	let radius = $state('50');
+	let geolocating = $state(false);
+	let geolocateError = $state('');
 
 	// Handle place selection from autocomplete
 	function handlePlaceSelect(event: Event) {
@@ -150,19 +152,44 @@
 	}
 
 	function getCurrentLocation() {
-		if (navigator.geolocation) {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					selectedLatitude = position.coords.latitude;
-					selectedLongitude = position.coords.longitude;
-					// Automatically trigger search after getting location
-					searchClubs();
-				},
-				(error) => {
-					logger.error('Error getting location: {error}', { error });
-				}
-			);
+		if (!navigator.geolocation) {
+			geolocateError = 'Geolocation is not supported by your browser';
+			return;
 		}
+
+		geolocating = true;
+		geolocateError = '';
+		navigator.geolocation.getCurrentPosition(
+			(position) => {
+				selectedLatitude = position.coords.latitude;
+				selectedLongitude = position.coords.longitude;
+				geolocating = false;
+
+				// Display coordinates in the autocomplete input
+				if (autocompleteElement) {
+					const lat = position.coords.latitude.toFixed(4);
+					const lng = position.coords.longitude.toFixed(4);
+					(autocompleteElement as unknown as { value: string }).value = `${lat}, ${lng}`;
+				}
+
+				// Automatically trigger search after getting location
+				searchClubs();
+			},
+			(err) => {
+				geolocating = false;
+				if (err.code === err.PERMISSION_DENIED) {
+					geolocateError =
+						'Location access was denied. Please allow location access and try again.';
+				} else if (err.code === err.POSITION_UNAVAILABLE) {
+					geolocateError = 'Location information is unavailable.';
+				} else if (err.code === err.TIMEOUT) {
+					geolocateError = 'Location request timed out. Please try again.';
+				} else {
+					geolocateError = 'Unable to determine your location.';
+				}
+				logger.error('Error getting location: {error}', { error: err });
+			}
+		);
 	}
 
 	function formatAddress(club: ClubWithSoaring): string {
@@ -276,10 +303,23 @@
 							Search
 						</button>
 
-						<button class="preset-tonal-surface-500 btn w-full" onclick={getCurrentLocation}>
-							<MapPinHouse class="mr-2 h-4 w-4" />
-							Use My Location
+						<button
+							class="preset-tonal-surface-500 btn w-full"
+							onclick={getCurrentLocation}
+							disabled={geolocating}
+						>
+							{#if geolocating}
+								<Progress class="mr-2 h-4 w-4" />
+								Getting location...
+							{:else}
+								<MapPinHouse class="mr-2 h-4 w-4" />
+								Use My Location
+							{/if}
 						</button>
+
+						{#if geolocateError}
+							<p class="text-sm text-error-500">{geolocateError}</p>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -362,11 +402,24 @@
 										<Search class="mr-2 h-4 w-4" />
 										Search
 									</button>
-									<button class="preset-tonal-surface-500 btn" onclick={getCurrentLocation}>
-										<MapPinHouse class="mr-2 h-4 w-4" />
-										Use My Location
+									<button
+										class="preset-tonal-surface-500 btn"
+										onclick={getCurrentLocation}
+										disabled={geolocating}
+									>
+										{#if geolocating}
+											<Progress class="mr-2 h-4 w-4" />
+											Getting location...
+										{:else}
+											<MapPinHouse class="mr-2 h-4 w-4" />
+											Use My Location
+										{/if}
 									</button>
 								</div>
+
+								{#if geolocateError}
+									<p class="text-sm text-error-500">{geolocateError}</p>
+								{/if}
 							</div>
 						{/if}
 					</div>
