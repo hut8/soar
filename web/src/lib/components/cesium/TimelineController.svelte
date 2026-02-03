@@ -196,7 +196,8 @@
 				latitude: null,
 				longitude: null,
 				adsbEmitterCategory: null,
-				currentFix: null
+				currentFix: null,
+				modelData: null
 			},
 			fix
 		);

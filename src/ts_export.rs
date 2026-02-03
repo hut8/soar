@@ -6,8 +6,8 @@ mod tests {
 
     use crate::actions::club_tow_fees::TowFeeView;
     use crate::actions::views::{
-        Aircraft, AircraftView, AirportView, ClubView, FlightView, ReceiverView, RunwayEnd,
-        RunwayView, UserView,
+        Aircraft, AircraftView, AirportView, ClubView, FlightView, ModelDataView, ReceiverView,
+        RunwayEnd, RunwayView, UserView,
     };
     use crate::aircraft::AddressType;
     use crate::aircraft_types::AircraftCategory;
@@ -24,6 +24,7 @@ mod tests {
         // Calling export() generates the .ts files
         Fix::export().expect("Failed to export Fix type");
         AircraftView::export().expect("Failed to export AircraftView type");
+        ModelDataView::export().expect("Failed to export ModelDataView type");
         Aircraft::export().expect("Failed to export Aircraft type");
         AircraftCategory::export().expect("Failed to export AircraftCategory type");
         ClubView::export().expect("Failed to export ClubView type");

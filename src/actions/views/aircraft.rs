@@ -117,6 +117,19 @@ impl From<crate::aircraft_registrations::AircraftRegistrationModel> for Aircraft
     }
 }
 
+/// Aircraft type reference data from the ICAO aircraft types database
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDataView {
+    pub icao_code: String,
+    pub iata_code: String,
+    pub description: String,
+    pub manufacturer: Option<String>,
+    pub wing_type: Option<String>,
+    pub aircraft_category: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
@@ -162,6 +175,9 @@ pub struct AircraftView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(type = "Fix | null")]
     pub current_fix: Option<serde_json::Value>,
+    /// Aircraft type reference data from ICAO types database (matched via icao_model_code)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_data: Option<ModelDataView>,
 }
 
 /// Helper: format an optional i32 address as 6-digit uppercase hex
@@ -232,6 +248,7 @@ impl AircraftView {
             longitude: device.longitude,
             adsb_emitter_category: device.adsb_emitter_category,
             current_fix: device.current_fix,
+            model_data: None,
         }
     }
 
@@ -274,7 +291,73 @@ impl AircraftView {
             longitude: device_model.longitude,
             adsb_emitter_category: device_model.adsb_emitter_category,
             current_fix: device_model.current_fix,
+            model_data: None,
         }
+    }
+
+    /// Populate model_data from the aircraft types lookup cache
+    pub fn enrich_model_data(&mut self, lookup: &AircraftTypesLookup) {
+        if let Some(ref code) = self.icao_model_code
+            && let Some(data) = lookup.get(code)
+        {
+            self.model_data = Some(data.clone());
+        }
+    }
+}
+
+/// In-memory lookup cache for aircraft type reference data, keyed by ICAO model code
+pub type AircraftTypesLookup = std::collections::HashMap<String, ModelDataView>;
+
+/// Load the aircraft types lookup from the database
+pub fn load_aircraft_types_lookup(
+    pool: &crate::web::PgPool,
+) -> anyhow::Result<AircraftTypesLookup> {
+    use crate::schema::aircraft_types;
+    use diesel::prelude::*;
+
+    let mut conn = pool.get()?;
+
+    #[derive(Queryable)]
+    #[diesel(table_name = aircraft_types)]
+    struct AircraftTypeRow {
+        icao_code: String,
+        iata_code: String,
+        description: String,
+        _created_at: chrono::DateTime<chrono::Utc>,
+        _updated_at: chrono::DateTime<chrono::Utc>,
+        manufacturer: Option<String>,
+        wing_type: Option<crate::aircraft_types::WingType>,
+        aircraft_category: Option<crate::aircraft_types::IcaoAircraftCategory>,
+    }
+
+    let rows: Vec<AircraftTypeRow> = aircraft_types::table.load(&mut conn)?;
+
+    let mut lookup = AircraftTypesLookup::new();
+    for row in rows {
+        // Only insert if this icao_code isn't already in the map (first wins)
+        lookup
+            .entry(row.icao_code.clone())
+            .or_insert_with(|| ModelDataView {
+                icao_code: row.icao_code,
+                iata_code: row.iata_code,
+                description: row.description,
+                manufacturer: row.manufacturer,
+                wing_type: row.wing_type.map(|w| w.to_string()),
+                aircraft_category: row.aircraft_category.map(|c| c.to_string()),
+            });
+    }
+
+    tracing::info!(
+        "Loaded {} aircraft type entries into lookup cache",
+        lookup.len()
+    );
+    Ok(lookup)
+}
+
+/// Enrich a slice of AircraftViews with model data from the lookup cache
+pub fn enrich_aircraft_views(views: &mut [AircraftView], lookup: &AircraftTypesLookup) {
+    for view in views.iter_mut() {
+        view.enrich_model_data(lookup);
     }
 }
 
@@ -297,7 +380,7 @@ impl From<crate::aircraft::AircraftModel> for AircraftView {
 #[serde(rename_all = "camelCase")]
 pub struct Aircraft {
     #[serde(flatten)]
-    pub device: AircraftView,
+    pub aircraft: AircraftView,
 }
 
 /// Bounds of a cluster of aircraft

@@ -445,6 +445,27 @@
 										ICAO Model Code: <span class="font-mono">{aircraft.icaoModelCode}</span>
 									</p>
 								{/if}
+								{#if aircraft.modelData}
+									<div class="text-surface-600-300-token mt-1 text-sm">
+										{#if aircraft.modelData.manufacturer}
+											<span>{aircraft.modelData.manufacturer}</span>
+											{#if aircraft.modelData.description}
+												<span class="mx-1">&middot;</span>
+											{/if}
+										{/if}
+										{#if aircraft.modelData.description}
+											<span>{aircraft.modelData.description}</span>
+										{/if}
+										{#if aircraft.modelData.wingType}
+											<span class="mx-1">&middot;</span>
+											<span>{aircraft.modelData.wingType}</span>
+										{/if}
+										{#if aircraft.modelData.aircraftCategory}
+											<span class="mx-1">&middot;</span>
+											<span>{aircraft.modelData.aircraftCategory}</span>
+										{/if}
+									</div>
+								{/if}
 								{#each getAllAddresses(aircraft) as addr (addr.label)}
 									<p class="text-surface-600-300-token font-mono text-sm">
 										{addr.label}: {addr.hex}
@@ -673,7 +694,7 @@
 					<div class="order-2 space-y-4 card p-6">
 						<h2 class="flex items-center gap-2 h2">
 							<Cog class="h-6 w-6" />
-							Aircraft Model Details
+							FAA Aircraft Model Details
 						</h2>
 
 						<!-- Consolidated Model Details -->

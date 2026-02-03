@@ -2,6 +2,7 @@
 import type { AdsbEmitterCategory } from './AdsbEmitterCategory';
 import type { AircraftCategory } from './AircraftCategory';
 import type { Fix } from './Fix';
+import type { ModelDataView } from './ModelDataView';
 
 export type AircraftView = {
 	id: string;
@@ -60,4 +61,8 @@ export type AircraftView = {
 	 * Current fix (latest position data for this aircraft)
 	 */
 	currentFix: Fix | null;
+	/**
+	 * Aircraft type reference data from ICAO types database (matched via icao_model_code)
+	 */
+	modelData: ModelDataView | null;
 };

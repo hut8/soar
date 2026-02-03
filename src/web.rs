@@ -68,6 +68,7 @@ pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub struct AppState {
     pub pool: PgPool,                             // Diesel pool for all operations
     pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
+    pub aircraft_types_lookup: std::sync::Arc<crate::actions::views::AircraftTypesLookup>, // Static reference data cache
 }
 
 async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
@@ -607,9 +608,22 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         }
     };
 
+    // Load aircraft types reference data into memory for enriching API responses
+    let aircraft_types_lookup = match crate::actions::views::load_aircraft_types_lookup(&pool) {
+        Ok(lookup) => std::sync::Arc::new(lookup),
+        Err(e) => {
+            warn!(
+                "Failed to load aircraft types lookup: {}, model_data will be unavailable",
+                e
+            );
+            std::sync::Arc::new(crate::actions::views::AircraftTypesLookup::new())
+        }
+    };
+
     let app_state = AppState {
         pool,
         live_fix_service,
+        aircraft_types_lookup,
     };
 
     // Create CORS layer that allows all origins and methods
