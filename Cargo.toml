@@ -20,7 +20,7 @@ bcrypt = "0.18"
 bigdecimal = { version = "0.4", features = ["serde"] }
 axum = { version = "0.8.8", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.5", features = ["typed-header"] }
-bytes = "1.11"
+bytes = "=1.11.1"
 http-body = "1.0"
 http-body-util = "0.1"
 pin-project = "1.0"
