@@ -40,6 +40,8 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
 	import { watchlist } from '$lib/stores/watchlist';
+	import { auth } from '$lib/stores/auth';
+	import { toaster } from '$lib/toaster';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'AircraftStatusModal']);
@@ -136,6 +138,11 @@
 
 	async function toggleWatchlist() {
 		if (!selectedAircraft) return;
+
+		if (!$auth.isAuthenticated) {
+			toaster.warning({ title: 'Please log in to use watchlist' });
+			return;
+		}
 
 		addingToWatchlist = true;
 		try {
