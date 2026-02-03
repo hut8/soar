@@ -27,12 +27,13 @@ struct CsvRecord {
     #[serde(rename = "Model")]
     model: String,
     #[serde(rename = "Aircraft_Manufacturer")]
-    aircraft_manufacturer: String,
+    _aircraft_manufacturer: String, // Ignored: has (undefined) entries and CSV quoting issues
     #[serde(rename = "WingType")]
     wing_type: String,
     #[serde(rename = "Type")]
     aircraft_type: String,
-    // Note: "Manufacturer" column is ignored (duplicate of Aircraft_Manufacturer)
+    #[serde(rename = "Manufacturer")]
+    manufacturer: String,
 }
 
 /// Processed record ready for database insertion
@@ -120,7 +121,7 @@ fn read_aircraft_types_embedded() -> Result<Vec<AircraftTypeRecord>> {
             icao_code: csv_record.icao_code.trim().to_string(),
             iata_code: normalize_iata_code(&csv_record.iata_code),
             description: csv_record.model.trim().to_string(),
-            manufacturer: normalize_manufacturer(&csv_record.aircraft_manufacturer),
+            manufacturer: normalize_manufacturer(&csv_record.manufacturer),
             wing_type,
             aircraft_category,
         });
