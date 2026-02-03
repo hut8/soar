@@ -116,6 +116,7 @@ diesel::table! {
         flarm_address -> Nullable<Int4>,
         ogn_address -> Nullable<Int4>,
         other_address -> Nullable<Int4>,
+        pending_registration -> Nullable<Text>,
     }
 }
 

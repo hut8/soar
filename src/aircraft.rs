@@ -296,6 +296,7 @@ pub struct AircraftModel {
     pub is_military: Option<bool>,
     pub current_fix: Option<serde_json::Value>,
     pub images: Option<serde_json::Value>,
+    pub pending_registration: Option<String>,
 }
 
 impl AircraftModel {
@@ -356,6 +357,7 @@ pub struct NewAircraft {
     pub is_military: Option<bool>,
     pub current_fix: Option<serde_json::Value>,
     pub images: Option<serde_json::Value>,
+    pub pending_registration: Option<String>,
 }
 
 impl NewAircraft {
@@ -450,6 +452,7 @@ impl From<Aircraft> for NewAircraft {
             is_military: device.is_military,
             current_fix: None, // Will be populated when fixes are processed
             images: None,      // Not provided by DDB
+            pending_registration: None, // Only set during live packet processing
         }
     }
 }

@@ -101,11 +101,26 @@ impl EntityMetrics {
     }
 }
 
+/// Statistics from merging duplicate aircraft, displayed as a separate section
+/// in the email report since it doesn't fit the standard 3-column entity format.
+#[derive(Debug, Clone, Default)]
+pub struct MergeReport {
+    pub duration_secs: f64,
+    pub duplicates_found: usize,
+    pub aircraft_merged: usize,
+    pub aircraft_deleted: usize,
+    pub fixes_reassigned: usize,
+    pub flights_reassigned: usize,
+    pub registrations_claimed: usize,
+    pub errors: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct DataLoadReport {
     pub total_duration_secs: f64,
     pub entities: Vec<EntityMetrics>,
     pub overall_success: bool,
+    pub merge_report: Option<MergeReport>,
 }
 
 impl Default for DataLoadReport {
@@ -120,6 +135,7 @@ impl DataLoadReport {
             total_duration_secs: 0.0,
             entities: Vec::new(),
             overall_success: true,
+            merge_report: None,
         }
     }
 
@@ -296,6 +312,40 @@ impl DataLoadReport {
             r#"
         </table>"#,
         );
+
+        // Render merge report section if present and there was something to merge
+        if let Some(ref merge) = self.merge_report
+            && (merge.duplicates_found > 0 || !merge.errors.is_empty())
+        {
+            html.push_str(&format!(
+                r#"
+        <h2 style="margin-top: 30px; color: #333;">Duplicate Aircraft Merge</h2>
+        <div class="summary">
+            <strong>Duration:</strong> {}<br>
+            <strong>Duplicates Found:</strong> {}<br>
+            <strong>Aircraft Merged:</strong> {}<br>
+            <strong>Aircraft Deleted:</strong> {}<br>
+            <strong>Fixes Reassigned:</strong> {}<br>
+            <strong>Flights Reassigned:</strong> {}<br>
+            <strong>Registrations Claimed:</strong> {}
+        </div>"#,
+                Self::format_duration(merge.duration_secs),
+                merge.duplicates_found,
+                merge.aircraft_merged,
+                merge.aircraft_deleted,
+                merge.fixes_reassigned,
+                merge.flights_reassigned,
+                merge.registrations_claimed,
+            ));
+
+            if !merge.errors.is_empty() {
+                html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
+                for err in &merge.errors {
+                    html.push_str(&format!("<li>{}</li>", err));
+                }
+                html.push_str("</ul></div>");
+            }
+        }
 
         html.push_str(
             r#"

@@ -16,6 +16,18 @@ use chrono::{DateTime, Utc};
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
+/// Statistics from merging duplicate aircraft by pending_registration.
+#[derive(Debug, Clone, Default)]
+pub struct MergeStats {
+    pub duplicates_found: usize,
+    pub aircraft_merged: usize,
+    pub aircraft_deleted: usize,
+    pub fixes_reassigned: usize,
+    pub flights_reassigned: usize,
+    pub registrations_claimed: usize,
+    pub errors: Vec<String>,
+}
+
 /// Fields extracted from packet for device creation/update
 #[derive(Debug, Clone)]
 pub struct AircraftPacketFields {
@@ -263,6 +275,15 @@ impl AircraftRepository {
                 AddressType::Unknown => (None, None, None, Some(address)),
             };
 
+            // If we have a computed registration, try to merge into an existing aircraft
+            // that already has this registration but is missing our address type.
+            if !registration.is_empty()
+                && let Some(model) =
+                    Self::merge_by_registration(&registration, address, address_type, &mut conn)?
+            {
+                return Ok(model);
+            }
+
             let new_aircraft = NewAircraft {
                 icao_address,
                 flarm_address,
@@ -300,6 +321,7 @@ impl AircraftRepository {
                 is_military: None,
                 current_fix: None,
                 images: None,
+                pending_registration: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -356,15 +378,21 @@ impl AircraftRepository {
                 .get_result::<bool>(&mut conn)?;
 
                 if duplicate_exists {
+                    // Store the conflicting registration for async merge
+                    if model.pending_registration.as_deref() != Some(&registration) {
+                        diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
+                            .set(aircraft::pending_registration.eq(&registration))
+                            .execute(&mut conn)?;
+                        model.pending_registration = Some(registration.clone());
+                    }
                     warn!(
-                        "Skipped duplicate registration: address={:06X}, address_type={:?}, \
+                        "Duplicate registration: address={:06X}, address_type={:?}, \
                          computed_registration={:?}, kept_registration={:?} \
-                         (another aircraft already has {:?})",
+                         (set pending_registration for async merge)",
                         address,
                         address_type,
                         registration,
                         model.registration.as_deref().unwrap_or(""),
-                        registration
                     );
                 } else {
                     diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
@@ -422,6 +450,17 @@ impl AircraftRepository {
                 AddressType::Unknown => (None, None, None, Some(address)),
             };
 
+            // If we have a registration, try to merge into an existing aircraft that
+            // already has this registration but is missing our address type.
+            // This handles the case where an aircraft was created from OGN DDB (with
+            // flarm_address) and later appears on an ADSB receiver (with icao_address).
+            if !registration.is_empty()
+                && let Some(model) =
+                    Self::merge_by_registration(&registration, address, address_type, &mut conn)?
+            {
+                return Ok(model);
+            }
+
             let new_aircraft = NewAircraft {
                 icao_address,
                 flarm_address,
@@ -459,6 +498,7 @@ impl AircraftRepository {
                 is_military: None,
                 current_fix: None, // Will be populated when fix is inserted
                 images: None,
+                pending_registration: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -508,7 +548,7 @@ impl AircraftRepository {
             }
 
             // Branch on address_type because Diesel requires static ON CONFLICT target columns
-            let model = match address_type {
+            let mut model = match address_type {
                 AddressType::Icao => diesel::insert_into(aircraft::table)
                     .values(&new_aircraft)
                     .on_conflict(aircraft::icao_address)
@@ -547,21 +587,285 @@ impl AircraftRepository {
                 e
             })?;
 
-            // Log a warning if the registration from the packet was not applied
-            // because another aircraft already has it
+            // If the registration from the packet was not applied because another aircraft
+            // already has it, store it as pending_registration for async merge
             if !registration.is_empty() {
                 let model_reg = model.registration.as_deref().unwrap_or("");
                 if model_reg != registration {
+                    // Store the conflicting registration so a background task can merge later
+                    if model.pending_registration.as_deref() != Some(&registration) {
+                        diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
+                            .set(aircraft::pending_registration.eq(&registration))
+                            .execute(&mut conn)?;
+                        model.pending_registration = Some(registration.clone());
+                    }
                     warn!(
-                        "Skipped duplicate registration: address={:06X}, address_type={:?}, \
+                        "Duplicate registration: address={:06X}, address_type={:?}, \
                          packet_registration={:?}, kept_registration={:?} \
-                         (another aircraft already has {:?})",
-                        address, address_type, registration, model_reg, registration
+                         (set pending_registration for async merge)",
+                        address, address_type, registration, model_reg
                     );
                 }
             }
 
             Ok::<AircraftModel, anyhow::Error>(model)
+        })
+        .await?
+    }
+
+    /// Try to merge a new address into an existing aircraft that already has the given registration.
+    ///
+    /// When an aircraft appears via a different address type (e.g., ICAO) than the one it was
+    /// originally created with (e.g., FLARM from OGN DDB), this method adds the new address
+    /// to the existing record instead of creating a duplicate.
+    ///
+    /// If another aircraft already holds the incoming address (a pre-existing duplicate),
+    /// this method returns `None` and the caller should fall through to the normal
+    /// INSERT...ON CONFLICT path. A background task will be spawned to clean up the duplicate
+    /// (reassigning fixes/flights is too expensive for the hot path).
+    ///
+    /// Returns `Some(model)` if merge succeeded, `None` if no matching aircraft found,
+    /// the target already has the address type, or a conflicting aircraft holds the address.
+    fn merge_by_registration(
+        registration: &str,
+        address: i32,
+        address_type: AddressType,
+        conn: &mut PgConnection,
+    ) -> Result<Option<AircraftModel>> {
+        // First, find the aircraft that owns this registration
+        let target = aircraft::table
+            .filter(aircraft::registration.eq(registration))
+            .select(AircraftModel::as_select())
+            .first(conn)
+            .optional()?;
+
+        let target = match target {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        // Check if the target already has the incoming address type populated
+        let target_has_address = match address_type {
+            AddressType::Icao => target.icao_address.is_some(),
+            AddressType::Flarm => target.flarm_address.is_some(),
+            AddressType::Ogn => target.ogn_address.is_some(),
+            AddressType::Unknown => target.other_address.is_some(),
+        };
+
+        if target_has_address {
+            return Ok(None);
+        }
+
+        // Check if another aircraft currently holds the incoming address
+        // (a pre-existing duplicate created before this merge logic existed)
+        let duplicate_exists = match address_type {
+            AddressType::Icao => aircraft::table
+                .filter(aircraft::icao_address.eq(address))
+                .filter(aircraft::id.ne(target.id))
+                .select(aircraft::id)
+                .first::<Uuid>(conn)
+                .optional()?,
+            AddressType::Flarm => aircraft::table
+                .filter(aircraft::flarm_address.eq(address))
+                .filter(aircraft::id.ne(target.id))
+                .select(aircraft::id)
+                .first::<Uuid>(conn)
+                .optional()?,
+            AddressType::Ogn => aircraft::table
+                .filter(aircraft::ogn_address.eq(address))
+                .filter(aircraft::id.ne(target.id))
+                .select(aircraft::id)
+                .first::<Uuid>(conn)
+                .optional()?,
+            AddressType::Unknown => aircraft::table
+                .filter(aircraft::other_address.eq(address))
+                .filter(aircraft::id.ne(target.id))
+                .select(aircraft::id)
+                .first::<Uuid>(conn)
+                .optional()?,
+        };
+
+        if duplicate_exists.is_some() {
+            // Another aircraft holds this address — can't merge synchronously because
+            // reassigning fixes across hypertable chunks is too expensive for the hot path.
+            // Fall through to normal INSERT...ON CONFLICT and let the duplicate persist
+            // until cleaned up separately.
+            warn!(
+                "Cannot merge address {:06X} ({:?}) into aircraft {} (registration={}): \
+                 another aircraft already holds this address. Duplicate cleanup required.",
+                address as u32, address_type, target.id, registration
+            );
+            return Ok(None);
+        }
+
+        // No conflict — set the address on the target aircraft
+        let model = match address_type {
+            AddressType::Icao => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                .set(aircraft::icao_address.eq(address))
+                .returning(AircraftModel::as_returning())
+                .get_result(conn)?,
+            AddressType::Flarm => {
+                diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                    .set(aircraft::flarm_address.eq(address))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(conn)?
+            }
+            AddressType::Ogn => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                .set(aircraft::ogn_address.eq(address))
+                .returning(AircraftModel::as_returning())
+                .get_result(conn)?,
+            AddressType::Unknown => {
+                diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                    .set(aircraft::other_address.eq(address))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(conn)?
+            }
+        };
+
+        info!(
+            "Merged address {:06X} ({:?}) into existing aircraft {} (registration={})",
+            address as u32, address_type, model.id, registration
+        );
+
+        Ok(Some(model))
+    }
+
+    /// Merge duplicate aircraft that have a pending_registration set.
+    ///
+    /// For each aircraft with `pending_registration IS NOT NULL`:
+    /// 1. Find the "target" aircraft that owns the registration
+    /// 2. Determine which address type(s) the duplicate has that the target lacks
+    /// 3. Reassign fixes and flights from the duplicate to the target
+    /// 4. Copy the address(es) to the target
+    /// 5. Delete the duplicate
+    /// 6. Clear pending_registration
+    ///
+    /// Returns detailed merge statistics.
+    pub async fn merge_pending_registrations(&self) -> Result<MergeStats> {
+        use crate::schema::fixes;
+        use crate::schema::flights;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+
+            // Find all aircraft with a pending registration
+            let duplicates: Vec<AircraftModel> = aircraft::table
+                .filter(aircraft::pending_registration.is_not_null())
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
+
+            let mut stats = MergeStats {
+                duplicates_found: duplicates.len(),
+                ..MergeStats::default()
+            };
+
+            if stats.duplicates_found == 0 {
+                return Ok(stats);
+            }
+
+            info!(
+                "Found {} aircraft with pending registrations to merge",
+                stats.duplicates_found
+            );
+
+            for dup in duplicates {
+                let pending_reg = match dup.pending_registration.as_deref() {
+                    Some(r) => r.to_string(),
+                    None => continue,
+                };
+
+                // Find the target aircraft that owns this registration
+                let target = match aircraft::table
+                    .filter(aircraft::registration.eq(&pending_reg))
+                    .filter(aircraft::id.ne(dup.id))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?
+                {
+                    Some(t) => t,
+                    None => {
+                        // No aircraft owns this registration anymore — clear pending
+                        // and set the registration directly on this aircraft
+                        diesel::update(aircraft::table.filter(aircraft::id.eq(dup.id)))
+                            .set((
+                                aircraft::registration.eq(&pending_reg),
+                                aircraft::pending_registration.eq(None::<String>),
+                            ))
+                            .execute(&mut conn)?;
+                        info!(
+                            "No owner for registration {:?}, assigned directly to aircraft {}",
+                            pending_reg, dup.id
+                        );
+                        stats.registrations_claimed += 1;
+                        continue;
+                    }
+                };
+
+                // Copy addresses from the duplicate to the target (only if target lacks them)
+                if dup.icao_address.is_some() && target.icao_address.is_none() {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                        .set(aircraft::icao_address.eq(dup.icao_address))
+                        .execute(&mut conn)?;
+                }
+                if dup.flarm_address.is_some() && target.flarm_address.is_none() {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                        .set(aircraft::flarm_address.eq(dup.flarm_address))
+                        .execute(&mut conn)?;
+                }
+                if dup.ogn_address.is_some() && target.ogn_address.is_none() {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                        .set(aircraft::ogn_address.eq(dup.ogn_address))
+                        .execute(&mut conn)?;
+                }
+                if dup.other_address.is_some() && target.other_address.is_none() {
+                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                        .set(aircraft::other_address.eq(dup.other_address))
+                        .execute(&mut conn)?;
+                }
+
+                // Reassign fixes from the duplicate to the target
+                let fixes_updated =
+                    diesel::update(fixes::table.filter(fixes::aircraft_id.eq(dup.id)))
+                        .set(fixes::aircraft_id.eq(target.id))
+                        .execute(&mut conn)?;
+                stats.fixes_reassigned += fixes_updated;
+
+                // Reassign flights from the duplicate to the target
+                let flights_updated =
+                    diesel::update(flights::table.filter(flights::aircraft_id.eq(dup.id)))
+                        .set(flights::aircraft_id.eq(target.id))
+                        .execute(&mut conn)?;
+                stats.flights_reassigned += flights_updated;
+
+                // Delete the duplicate (cascade handles geofences, watchlist, etc.)
+                diesel::delete(aircraft::table.filter(aircraft::id.eq(dup.id)))
+                    .execute(&mut conn)?;
+                stats.aircraft_deleted += 1;
+
+                info!(
+                    "Merged aircraft {} into {} (registration={}): \
+                     reassigned {} fixes, {} flights",
+                    dup.id, target.id, pending_reg, fixes_updated, flights_updated
+                );
+
+                stats.aircraft_merged += 1;
+            }
+
+            info!(
+                "Completed pending registration merge: {}/{} aircraft merged, \
+                 {} fixes reassigned, {} flights reassigned, {} deleted",
+                stats.aircraft_merged,
+                stats.duplicates_found,
+                stats.fixes_reassigned,
+                stats.flights_reassigned,
+                stats.aircraft_deleted
+            );
+
+            Ok(stats)
         })
         .await?
     }
