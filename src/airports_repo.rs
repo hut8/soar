@@ -292,6 +292,7 @@ impl AirportsRepository {
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
                        continent, iso_country, iso_region, municipality, scheduled_service,
                        icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       location_id,
                        ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
                 FROM airports
                 WHERE location IS NOT NULL
@@ -338,6 +339,7 @@ impl AirportsRepository {
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
                        continent, iso_country, iso_region, municipality, scheduled_service,
                        icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       location_id,
                        GREATEST(
                            SIMILARITY(UPPER(name), $1),
                            COALESCE(SIMILARITY(UPPER(icao_code), $1), 0),
@@ -460,6 +462,7 @@ impl AirportsRepository {
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
                        continent, iso_country, iso_region, municipality, scheduled_service,
                        icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       location_id,
                        ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
                 FROM airports
                 WHERE location IS NOT NULL
