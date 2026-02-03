@@ -900,6 +900,7 @@ impl FixesRepository {
                     is_military: None,              // Not selected in this query
                     current_fix: row.current_fix,
                     images: None,                   // Not selected in this query
+                    pending_registration: None,     // Not selected in this query
                 })
                 .collect();
 

@@ -385,6 +385,47 @@ pub async fn handle_load_data(
         report.add_entity(metrics);
     }
 
+    // Merge duplicate aircraft by pending_registration
+    // This handles aircraft that were created as duplicates because they appeared
+    // via different address types (e.g., FLARM from OGN DDB, ICAO from ADSB Exchange).
+    {
+        let merge_start = Instant::now();
+        let aircraft_repo = soar::aircraft_repo::AircraftRepository::new(diesel_pool.clone());
+        match aircraft_repo.merge_pending_registrations().await {
+            Ok(stats) => {
+                let duration = merge_start.elapsed().as_secs_f64();
+                info!(
+                    "Duplicate aircraft merge completed in {:.1}s: {} found, {} merged, \
+                     {} deleted, {} fixes reassigned, {} flights reassigned",
+                    duration,
+                    stats.duplicates_found,
+                    stats.aircraft_merged,
+                    stats.aircraft_deleted,
+                    stats.fixes_reassigned,
+                    stats.flights_reassigned,
+                );
+                report.merge_report = Some(soar::email_reporter::MergeReport {
+                    duration_secs: duration,
+                    duplicates_found: stats.duplicates_found,
+                    aircraft_merged: stats.aircraft_merged,
+                    aircraft_deleted: stats.aircraft_deleted,
+                    fixes_reassigned: stats.fixes_reassigned,
+                    flights_reassigned: stats.flights_reassigned,
+                    registrations_claimed: stats.registrations_claimed,
+                    errors: stats.errors,
+                });
+            }
+            Err(e) => {
+                warn!("Failed to merge duplicate aircraft: {:#}", e);
+                report.merge_report = Some(soar::email_reporter::MergeReport {
+                    duration_secs: merge_start.elapsed().as_secs_f64(),
+                    errors: vec![format!("{:#}", e)],
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
     report.total_duration_secs = overall_start.elapsed().as_secs_f64();
 
     // Record overall metrics
@@ -526,7 +567,7 @@ async fn geocode_aircraft_registration_locations(
 
     const BATCH_SIZE: usize = 1000;
     const MAX_TOTAL_GEOCODE: usize = 10_000;
-    const MAX_GOOGLE_MAPS: usize = 100;
+    const MAX_GOOGLE_MAPS: usize = 200;
 
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Geocoding Aircraft Registration Addresses");
