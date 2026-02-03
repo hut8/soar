@@ -257,7 +257,7 @@
 	// Convert aircraft to GeoJSON feature
 	function aircraftToFeature(aircraft: Aircraft, fix: Fix): GeoJSON.Feature<GeoJSON.Point> {
 		// Get icon shape based on aircraft category
-		const shape = getIconShapeForCategory(aircraft.aircraftCategory);
+		const shape = getIconShapeForCategory(aircraft.aircraftCategory, aircraft.adsbEmitterCategory);
 		return {
 			type: 'Feature',
 			geometry: {

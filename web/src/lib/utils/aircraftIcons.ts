@@ -6,7 +6,7 @@
  * with fluid altitude-based color gradients.
  */
 
-import type { AircraftCategory } from '$lib/types';
+import type { AdsbEmitterCategory, AircraftCategory } from '$lib/types';
 import type { ExpressionSpecification } from 'maplibre-gl';
 
 /**
@@ -70,9 +70,22 @@ const ALL_SHAPES: IconShape[] = [
 ];
 
 /**
- * Map AircraftCategory to icon shape
+ * Map AircraftCategory to icon shape, using ADS-B emitter category
+ * to distinguish jets/airliners from small props within fixed-wing categories.
+ *
+ * ADS-B emitter categories (DO-260B):
+ *   A1 = Light (<15,500 lbs)
+ *   A2 = Small (15,500-75,000 lbs) - business jets, regional jets
+ *   A3 = Large (75,000-300,000 lbs) - 737, A320, etc.
+ *   A4 = High vortex large - 757
+ *   A5 = Heavy (>300,000 lbs) - 747, A380, etc.
+ *   A6 = High performance (>5g, >400kt)
+ *   A7 = Rotorcraft
  */
-export function getIconShapeForCategory(category: AircraftCategory | null | undefined): IconShape {
+export function getIconShapeForCategory(
+	category: AircraftCategory | null | undefined,
+	adsbEmitterCategory?: AdsbEmitterCategory | null
+): IconShape {
 	if (!category) return 'unknown';
 
 	switch (category) {
@@ -93,10 +106,10 @@ export function getIconShapeForCategory(category: AircraftCategory | null | unde
 		case 'Gyroplane':
 			return 'helicopter';
 
-		// Tiltrotor uses airliner
+		// Tiltrotor/VTOL (e.g., V-22 Osprey) - use helicopter icon
 		case 'Tiltrotor':
 		case 'Vtol':
-			return 'airliner';
+			return 'helicopter';
 
 		// Balloon/airship
 		case 'Balloon':
@@ -107,13 +120,13 @@ export function getIconShapeForCategory(category: AircraftCategory | null | unde
 		case 'Drone':
 			return 'unknown';
 
-		// Small fixed-wing aircraft
+		// Fixed-wing: use ADS-B emitter category to pick icon
 		case 'Landplane':
 		case 'Seaplane':
 		case 'Amphibian':
 		case 'TowTug':
 		case 'Electric':
-			return 'cessna';
+			return getFixedWingIcon(adsbEmitterCategory);
 
 		// Static obstacles
 		case 'StaticObstacle':
@@ -122,6 +135,31 @@ export function getIconShapeForCategory(category: AircraftCategory | null | unde
 		case 'Unknown':
 		default:
 			return 'unknown';
+	}
+}
+
+/**
+ * Determine the best icon for a fixed-wing aircraft using ADS-B emitter category.
+ * Falls back to 'cessna' when no ADS-B data is available (most OGN/Flarm aircraft).
+ */
+function getFixedWingIcon(adsbEmitterCategory?: AdsbEmitterCategory | null): IconShape {
+	if (!adsbEmitterCategory) return 'cessna';
+
+	switch (adsbEmitterCategory) {
+		// Large, high-vortex large, and heavy aircraft → airliner
+		case 'A3':
+		case 'A4':
+		case 'A5':
+			return 'airliner';
+
+		// Small (15,500-75,000 lbs) and high performance → jet
+		case 'A2':
+		case 'A6':
+			return 'jet';
+
+		// Light and everything else → cessna
+		default:
+			return 'cessna';
 	}
 }
 
