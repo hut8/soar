@@ -1052,7 +1052,6 @@ diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
-diesel::joinable!(spurious_flights -> aircraft (aircraft_id));
 diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
 diesel::joinable!(watchlist -> aircraft (aircraft_id));
@@ -1104,12 +1103,4 @@ diesel::allow_tables_to_appear_in_same_query!(
     user_fixes,
     users,
     watchlist,
-);
-
-// Required for GROUP BY queries that span columns from both tables
-diesel::allow_columns_to_appear_in_same_group_by_clause!(
-    spurious_flights::aircraft_id,
-    spurious_flights::device_address,
-    aircraft::registration,
-    aircraft::aircraft_model,
 );

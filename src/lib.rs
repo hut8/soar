@@ -76,6 +76,7 @@ pub mod runways;
 pub mod runways_repo;
 pub mod sbs;
 pub mod schema;
+pub mod schema_patch;
 pub mod server_messages;
 pub mod server_messages_repo;
 pub mod socket_client;
