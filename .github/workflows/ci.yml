@@ -447,7 +447,7 @@ jobs:
           docker rm postgres || true
 
   build-release:
-    name: Build Release Binary (Static musl)
+    name: Build Release Binary (Native Static musl)
     runs-on: ubuntu-22.04
     needs: test-sveltekit
 
@@ -472,23 +472,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build-musl"
+          shared-key: "release-build-native-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
-      - name: Cache cross
-        id: cache-cross
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cross
-          key: ${{ runner.os }}-cross-0.2.5
-
-      - name: Install cross
-        if: steps.cache-cross.outputs.cache-hit != 'true'
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Install protobuf compiler
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install musl tools and protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y musl-tools protobuf-compiler
 
       - name: Build static release binary
         env:
@@ -498,7 +487,7 @@ jobs:
           # CRITICAL: force-frame-pointers=yes is required for Pyroscope profiling
           # Without frame pointers, flame graphs show unhelpful "[unknown]" frames
           RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static -C force-frame-pointers=yes"
-        run: cross build --release --target x86_64-unknown-linux-musl --features bundled-postgres
+        run: cargo build --release --target x86_64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
         run: |
