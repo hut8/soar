@@ -8,7 +8,16 @@ use uuid::Uuid;
 use crate::flights::{
     Flight, FlightModel, NewSpuriousFlightModel, SpuriousFlightReason, TimeoutPhase,
 };
+use crate::schema::{aircraft, spurious_flights};
 use crate::web::PgPool;
+
+// Diesel needs this to allow GROUP BY with columns from both tables.
+diesel::allow_columns_to_appear_in_same_group_by_clause!(
+    spurious_flights::aircraft_id,
+    spurious_flights::device_address,
+    aircraft::registration,
+    aircraft::aircraft_model,
+);
 
 #[derive(Clone)]
 pub struct FlightsRepository {
@@ -678,7 +687,6 @@ impl FlightsRepository {
         reason_descriptions: Vec<String>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl as flights_dsl;
-        use crate::schema::spurious_flights;
 
         let pool = self.pool.clone();
 
@@ -1400,10 +1408,132 @@ impl FlightsRepository {
 
         Ok(results)
     }
+
+    /// Get spurious flight reason counts since a given timestamp.
+    /// Returns (reason_name, count) pairs and the total number of spurious flights.
+    /// Uses unnest() to expand the reasons array so each reason is counted individually.
+    pub async fn get_spurious_reason_counts_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<(Vec<(String, i64)>, i64)> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Total count uses Diesel query builder
+            let total: i64 = spurious_flights::table
+                .filter(spurious_flights::detected_at.ge(since))
+                .count()
+                .get_result(&mut conn)?;
+
+            // Per-reason counts require raw SQL because Diesel has no support for
+            // PostgreSQL unnest() on array columns. The reasons column is
+            // Array<Nullable<SpuriousFlightReason>> and we need to expand it into
+            // individual rows to count each reason separately.
+            #[derive(QueryableByName)]
+            struct ReasonCountRow {
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                reason: String,
+                #[diesel(sql_type = diesel::sql_types::BigInt)]
+                count: i64,
+            }
+
+            let reason_counts = diesel::sql_query(
+                "SELECT reason::text AS reason, COUNT(*) AS count
+                 FROM spurious_flights, unnest(reasons) AS reason
+                 WHERE detected_at >= $1 AND reason IS NOT NULL
+                 GROUP BY reason
+                 ORDER BY count DESC",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(since)
+            .load::<ReasonCountRow>(&mut conn)?;
+
+            let counts: Vec<(String, i64)> = reason_counts
+                .into_iter()
+                .map(|r| (r.reason, r.count))
+                .collect();
+
+            Ok::<_, anyhow::Error>((counts, total))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get the top N aircraft by spurious flight count since a given timestamp.
+    /// Joins with the aircraft table to get display information.
+    pub async fn get_top_spurious_aircraft_since(
+        &self,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<SpuriousAircraftRow>> {
+        use diesel::dsl::count_star;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = spurious_flights::table
+                .left_join(aircraft::table)
+                .filter(spurious_flights::detected_at.ge(since))
+                .group_by((
+                    spurious_flights::aircraft_id,
+                    aircraft::registration,
+                    aircraft::aircraft_model,
+                    spurious_flights::device_address,
+                ))
+                .select((
+                    spurious_flights::aircraft_id,
+                    aircraft::registration.nullable(),
+                    aircraft::aircraft_model.nullable(),
+                    spurious_flights::device_address,
+                    count_star(),
+                ))
+                .order(count_star().desc())
+                .limit(limit)
+                .load::<SpuriousAircraftRow>(&mut conn)?;
+
+            Ok::<_, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(result)
+    }
 }
 
 #[derive(QueryableByName)]
 struct OnlyId {
     #[diesel(sql_type = diesel::sql_types::Uuid)]
     id: Uuid,
+}
+
+#[derive(Debug, Clone, Queryable)]
+pub struct SpuriousAircraftRow {
+    pub aircraft_id: Option<Uuid>,
+    pub registration: Option<String>,
+    pub aircraft_model: Option<String>,
+    pub device_address: String,
+    pub spurious_count: i64,
+}
+
+impl SpuriousAircraftRow {
+    /// Get display name for the aircraft, matching frontend getAircraftTitle() logic:
+    /// Model + Registration > Registration > Model > device_address
+    pub fn display_name(&self) -> String {
+        let has_registration = self.registration.as_ref().is_some_and(|r| !r.is_empty());
+        let has_model = self.aircraft_model.as_ref().is_some_and(|m| !m.is_empty());
+
+        match (has_model, has_registration) {
+            (true, true) => format!(
+                "{} - {}",
+                self.aircraft_model.as_ref().unwrap(),
+                self.registration.as_ref().unwrap()
+            ),
+            (false, true) => self.registration.clone().unwrap(),
+            (true, false) => self.aircraft_model.clone().unwrap(),
+            (false, false) => self.device_address.clone(),
+        }
+    }
 }

@@ -257,7 +257,7 @@
 	// Convert aircraft to GeoJSON feature
 	function aircraftToFeature(aircraft: Aircraft, fix: Fix): GeoJSON.Feature<GeoJSON.Point> {
 		// Get icon shape based on aircraft category
-		const shape = getIconShapeForCategory(aircraft.aircraftCategory);
+		const shape = getIconShapeForCategory(aircraft.aircraftCategory, aircraft.adsbEmitterCategory);
 		return {
 			type: 'Feature',
 			geometry: {
@@ -426,7 +426,11 @@
 			},
 			paint: {
 				// Fluid altitude-based coloring (red at ground -> light blue at 40k ft)
-				'icon-color': createAltitudeColorExpression()
+				'icon-color': createAltitudeColorExpression(),
+				// Dark halo for contrast against any background
+				'icon-halo-color': 'rgba(0, 0, 0, 0.7)',
+				'icon-halo-width': 2,
+				'icon-halo-blur': 1
 			}
 		});
 
@@ -916,6 +920,7 @@
 			receiverLayerManager.dispose();
 			runwayLayerManager.dispose();
 			map?.remove();
+			map = null;
 		};
 	});
 </script>

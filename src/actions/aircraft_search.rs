@@ -10,8 +10,8 @@ use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::actions::views::{
-    Aircraft, AircraftCluster, AircraftOrCluster, AircraftSearchResponse, AircraftView,
-    AirportInfo, ClusterBounds, FlightView,
+    Aircraft, AircraftCluster, AircraftOrCluster, AircraftSearchResponse, AircraftTypesLookup,
+    AircraftView, AirportInfo, ClusterBounds, FlightView, enrich_aircraft_views,
 };
 use crate::actions::{
     DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
@@ -79,7 +79,8 @@ pub async fn get_aircraft_bulk(
     Query(query): Query<BulkAircraftQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let aircraft_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
+    let lookup = &state.aircraft_types_lookup;
 
     // Parse the comma-separated IDs
     let id_strings: Vec<&str> = query.ids.split(',').map(|s| s.trim()).collect();
@@ -88,7 +89,7 @@ pub async fn get_aircraft_bulk(
     if id_strings.len() > 100 {
         return json_error(
             StatusCode::BAD_REQUEST,
-            "Maximum 100 device IDs allowed per request",
+            "Maximum 100 aircraft IDs allowed per request",
         )
         .into_response();
     }
@@ -112,7 +113,8 @@ pub async fn get_aircraft_bulk(
     let mut aircraft_map = HashMap::new();
     for uuid in uuids {
         if let Ok(Some(aircraft)) = aircraft_repo.get_aircraft_by_id(uuid).await {
-            let aircraft_view: AircraftView = aircraft.into();
+            let mut aircraft_view: AircraftView = aircraft.into();
+            aircraft_view.enrich_model_data(lookup);
             aircraft_map.insert(uuid.to_string(), aircraft_view);
         }
     }
@@ -150,7 +152,8 @@ pub async fn get_aircraft_by_id(
     {
         Ok(Some(aircraft_model)) => {
             // Convert AircraftModel directly to AircraftView to preserve current_fix
-            let aircraft_view: AircraftView = aircraft_model.into();
+            let mut aircraft_view: AircraftView = aircraft_model.into();
+            aircraft_view.enrich_model_data(&state.aircraft_types_lookup);
             Json(DataResponse {
                 data: aircraft_view,
             })
@@ -198,7 +201,7 @@ pub async fn get_aircraft_fixes(
                     .into_response()
                 }
                 Err(e) => {
-                    tracing::error!("Failed to get fixes for device {}: {}", id, e);
+                    tracing::error!("Failed to get fixes for aircraft {}: {}", id, e);
                     json_error(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to get aircraft fixes",
@@ -209,7 +212,7 @@ pub async fn get_aircraft_fixes(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to verify device exists {}: {}", id, e);
+            tracing::error!("Failed to verify aircraft exists {}: {}", id, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to verify aircraft",
@@ -220,6 +223,7 @@ pub async fn get_aircraft_fixes(
 }
 
 /// Search aircraft by bounding box with enriched aircraft data
+#[allow(clippy::too_many_arguments)]
 async fn search_aircraft_by_bbox(
     north: f64,
     south: f64,
@@ -228,6 +232,7 @@ async fn search_aircraft_by_bbox(
     after: Option<DateTime<Utc>>,
     limit: Option<i64>,
     pool: crate::web::PgPool,
+    lookup: &AircraftTypesLookup,
 ) -> impl IntoResponse {
     // Validate limit (hard cap at 1000)
     if let Some(lim) = limit
@@ -374,15 +379,16 @@ async fn search_aircraft_by_bbox(
                 info!("Converting {} aircraft to views", aircraft_models.len());
 
                 // Convert AircraftModel to AircraftView (this preserves all fields including current_fix)
-                let aircraft_views: Vec<AircraftView> = aircraft_models
+                let mut aircraft_views: Vec<AircraftView> = aircraft_models
                     .into_iter()
                     .map(|model| model.into())
                     .collect();
+                enrich_aircraft_views(&mut aircraft_views, lookup);
 
                 // Wrap in Aircraft struct (which just contains AircraftView)
                 let aircraft_list: Vec<Aircraft> = aircraft_views
                     .into_iter()
-                    .map(|view| Aircraft { device: view })
+                    .map(|view| Aircraft { aircraft: view })
                     .collect();
 
                 // Wrap aircraft in AircraftOrCluster enum
@@ -412,21 +418,27 @@ async fn search_aircraft_by_bbox(
     }
 }
 
-/// Search devices by aircraft registration number
-async fn search_devices_by_registration(
+/// Search aircraft by registration number
+async fn search_aircraft_by_registration(
     registration: String,
     pool: crate::web::PgPool,
+    lookup: &AircraftTypesLookup,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(pool);
+    let aircraft_repo = AircraftRepository::new(pool);
 
-    match device_repo.search_by_registration(&registration).await {
-        Ok(devices) => {
-            let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
-            Json(DataListResponse { data: device_views }).into_response()
+    match aircraft_repo.search_by_registration(&registration).await {
+        Ok(results) => {
+            let mut aircraft_views: Vec<AircraftView> =
+                results.into_iter().map(|a| a.into()).collect();
+            enrich_aircraft_views(&mut aircraft_views, lookup);
+            Json(DataListResponse {
+                data: aircraft_views,
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::error!(
-                "Failed to search devices by registration {}: {}",
+                "Failed to search aircraft by registration {}: {}",
                 registration,
                 e
             );
@@ -439,12 +451,13 @@ async fn search_devices_by_registration(
     }
 }
 
-/// Search devices by address
+/// Search aircraft by address
 /// Note: address_type_str is still accepted for backwards compatibility but ignored
-async fn search_devices_by_address(
+async fn search_aircraft_by_address(
     address_str: String,
     _address_type_str: String,
     pool: crate::web::PgPool,
+    lookup: &AircraftTypesLookup,
 ) -> impl IntoResponse {
     // Parse address from hex string
     let address = match u32::from_str_radix(&address_str, 16) {
@@ -458,20 +471,21 @@ async fn search_devices_by_address(
         }
     };
 
-    let device_repo = AircraftRepository::new(pool);
+    let aircraft_repo = AircraftRepository::new(pool);
 
     // Search by address (address is unique now)
-    match device_repo.search_by_address(address).await {
-        Ok(Some(device)) => {
-            let device_view: AircraftView = device.into();
+    match aircraft_repo.search_by_address(address).await {
+        Ok(Some(result)) => {
+            let mut aircraft_view: AircraftView = result.into();
+            aircraft_view.enrich_model_data(lookup);
             Json(DataListResponse {
-                data: vec![device_view],
+                data: vec![aircraft_view],
             })
             .into_response()
         }
         Ok(None) => Json(DataListResponse::<AircraftView> { data: vec![] }).into_response(),
         Err(e) => {
-            tracing::error!("Failed to search devices by address {}: {}", address, e);
+            tracing::error!("Failed to search aircraft by address {}: {}", address, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to search aircraft",
@@ -481,7 +495,7 @@ async fn search_devices_by_address(
     }
 }
 
-/// Search devices by registration, address+type, or bounding box
+/// Search aircraft by registration, address+type, or bounding box
 #[instrument(skip(state), fields(
     has_bbox = query.north.is_some(),
     has_registration = query.registration.is_some(),
@@ -507,7 +521,7 @@ pub async fn search_aircraft(
             query.west,
         ) {
             (Some(north), Some(south), Some(east), Some(west)) => {
-                search_aircraft_by_bbox(north, south, east, west, query.after, query.limit, state.pool).await.into_response()
+                search_aircraft_by_bbox(north, south, east, west, query.after, query.limit, state.pool.clone(), &state.aircraft_types_lookup).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
@@ -517,16 +531,17 @@ pub async fn search_aircraft(
         }
     } else {
         // Route based on registration or address+type parameters
+        let lookup = &state.aircraft_types_lookup;
         match (&query.registration, &query.address, &query.address_type) {
             (Some(registration), None, None) => {
-                search_devices_by_registration(registration.clone(), state.pool).await.into_response()
+                search_aircraft_by_registration(registration.clone(), state.pool.clone(), lookup).await.into_response()
             }
             (None, Some(address_str), Some(address_type_str)) => {
-                search_devices_by_address(address_str.clone(), address_type_str.clone(), state.pool).await.into_response()
+                search_aircraft_by_address(address_str.clone(), address_type_str.clone(), state.pool.clone(), lookup).await.into_response()
             }
             (None, None, None) => {
-                // No search criteria - return 10 most recently heard from devices
-                get_recent_aircraft_response(state.pool, query.aircraft_types).await.into_response()
+                // No search criteria - return 10 most recently heard from aircraft
+                get_recent_aircraft_response(state.pool.clone(), query.aircraft_types, lookup).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
@@ -541,6 +556,7 @@ pub async fn search_aircraft(
 async fn get_recent_aircraft_response(
     pool: crate::web::PgPool,
     aircraft_types: Option<String>,
+    lookup: &AircraftTypesLookup,
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRepository::new(pool);
 
@@ -558,8 +574,9 @@ async fn get_recent_aircraft_response(
         .await
     {
         Ok(aircraft) => {
-            let aircraft_views: Vec<AircraftView> =
+            let mut aircraft_views: Vec<AircraftView> =
                 aircraft.into_iter().map(|a| a.into()).collect();
+            enrich_aircraft_views(&mut aircraft_views, lookup);
             Json(DataListResponse {
                 data: aircraft_views,
             })
@@ -576,20 +593,25 @@ async fn get_recent_aircraft_response(
     }
 }
 
-/// Get all devices for a club by club ID
+/// Get all aircraft for a club by club ID
 pub async fn get_aircraft_by_club(
     Path(club_id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
-    match device_repo.search_by_club_id(club_id).await {
-        Ok(devices) => {
-            let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
-            Json(DataListResponse { data: device_views }).into_response()
+    match aircraft_repo.search_by_club_id(club_id).await {
+        Ok(results) => {
+            let mut aircraft_views: Vec<AircraftView> =
+                results.into_iter().map(|a| a.into()).collect();
+            enrich_aircraft_views(&mut aircraft_views, &state.aircraft_types_lookup);
+            Json(DataListResponse {
+                data: aircraft_views,
+            })
+            .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get devices for club {}: {}", club_id, e);
+            tracing::error!("Failed to get aircraft for club {}: {}", club_id, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft for club",
@@ -599,7 +621,7 @@ pub async fn get_aircraft_by_club(
     }
 }
 
-/// Get all flights for a device by device ID with pagination
+/// Get all flights for an aircraft by ID with pagination
 pub async fn get_aircraft_flights(
     Path(id): Path<Uuid>,
     Query(query): Query<FlightsQuery>,
@@ -665,7 +687,7 @@ pub async fn get_aircraft_flights(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get flights for device {}: {}", id, e);
+            tracing::error!("Failed to get flights for aircraft {}: {}", id, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flights for aircraft",
@@ -676,29 +698,29 @@ pub async fn get_aircraft_flights(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateDeviceClubRequest {
+pub struct UpdateAircraftClubRequest {
     pub club_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateDeviceClubResponse {
+pub struct UpdateAircraftClubResponse {
     pub success: bool,
     pub message: String,
 }
 
-/// Update the club assignment for a device (admin only)
+/// Update the club assignment for an aircraft (admin only)
 pub async fn update_aircraft_club(
     AdminUser(_user): AdminUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
-    Json(payload): Json<UpdateDeviceClubRequest>,
+    Json(payload): Json<UpdateAircraftClubRequest>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
-    match device_repo.update_club_id(id, payload.club_id).await {
+    match aircraft_repo.update_club_id(id, payload.club_id).await {
         Ok(true) => Json(DataResponse {
-            data: UpdateDeviceClubResponse {
+            data: UpdateAircraftClubResponse {
                 success: true,
                 message: "Aircraft club assignment updated successfully".to_string(),
             },
@@ -706,7 +728,7 @@ pub async fn update_aircraft_club(
         .into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to update device club assignment: {}", e);
+            tracing::error!("Failed to update aircraft club assignment: {}", e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update aircraft club assignment",

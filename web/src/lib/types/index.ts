@@ -19,6 +19,7 @@ import type { ReceiverView } from './generated/ReceiverView';
 import type { AirportView } from './generated/AirportView';
 import type { RunwayView } from './generated/RunwayView';
 import type { RunwayEnd as RunwayEndGenerated } from './generated/RunwayEnd';
+import type { ModelDataView } from './generated/ModelDataView';
 
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
@@ -63,7 +64,8 @@ export type {
 	GeofenceSubscriber,
 	AircraftGeofence,
 	GeofenceExitEvent,
-	GeofenceExitEventsResponse
+	GeofenceExitEventsResponse,
+	ModelDataView
 };
 
 // Type aliases for backward compatibility

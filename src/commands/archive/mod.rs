@@ -296,6 +296,38 @@ pub async fn handle_archive(
         }
     }
 
+    // Collect spurious flight statistics for the last 24 hours
+    info!("Collecting spurious flight statistics...");
+    let flights_repo = soar::flights_repo::FlightsRepository::new(pool.clone());
+    let twenty_four_hours_ago = Utc::now() - chrono::Duration::hours(24);
+    match (
+        flights_repo
+            .get_spurious_reason_counts_since(twenty_four_hours_ago)
+            .await,
+        flights_repo
+            .get_top_spurious_aircraft_since(twenty_four_hours_ago, 5)
+            .await,
+    ) {
+        (Ok((reason_counts, total_count)), Ok(top_aircraft)) => {
+            info!(
+                "Found {} spurious flights in last 24h with {} distinct reasons",
+                total_count,
+                reason_counts.len()
+            );
+            report.spurious_stats = Some(soar::archive_email_reporter::SpuriousFlightStats {
+                total_count,
+                reason_counts,
+                top_aircraft,
+            });
+        }
+        (Err(e), _) | (_, Err(e)) => {
+            tracing::warn!(
+                "Failed to collect spurious flight statistics for email report: {}",
+                e
+            );
+        }
+    }
+
     info!("Archive process completed successfully");
 
     // Send email report
