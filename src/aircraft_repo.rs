@@ -744,6 +744,7 @@ impl AircraftRepository {
     pub async fn merge_pending_registrations(&self) -> Result<MergeStats> {
         use crate::schema::fixes;
         use crate::schema::flights;
+        use crate::schema::spurious_flights;
 
         let pool = self.pool.clone();
 
@@ -840,6 +841,13 @@ impl AircraftRepository {
                         .set(flights::aircraft_id.eq(target.id))
                         .execute(&mut conn)?;
                 stats.flights_reassigned += flights_updated;
+
+                // Reassign spurious flights from the duplicate to the target
+                diesel::update(
+                    spurious_flights::table.filter(spurious_flights::aircraft_id.eq(dup.id)),
+                )
+                .set(spurious_flights::aircraft_id.eq(target.id))
+                .execute(&mut conn)?;
 
                 // Delete the duplicate (cascade handles geofences, watchlist, etc.)
                 diesel::delete(aircraft::table.filter(aircraft::id.eq(dup.id)))
