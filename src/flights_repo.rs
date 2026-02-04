@@ -1411,22 +1411,19 @@ impl FlightsRepository {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::spurious_flights;
             let mut conn = pool.get()?;
 
-            // Get total count of spurious flights in the period
-            #[derive(QueryableByName)]
-            struct CountRow {
-                #[diesel(sql_type = diesel::sql_types::BigInt)]
-                total: i64,
-            }
+            // Total count uses Diesel query builder
+            let total: i64 = spurious_flights::table
+                .filter(spurious_flights::detected_at.ge(since))
+                .count()
+                .get_result(&mut conn)?;
 
-            let total_row = diesel::sql_query(
-                "SELECT COUNT(*) AS total FROM spurious_flights WHERE detected_at >= $1",
-            )
-            .bind::<diesel::sql_types::Timestamptz, _>(since)
-            .get_result::<CountRow>(&mut conn)?;
-
-            // Get per-reason counts by unnesting the reasons array
+            // Per-reason counts require raw SQL because Diesel has no support for
+            // PostgreSQL unnest() on array columns. The reasons column is
+            // Array<Nullable<SpuriousFlightReason>> and we need to expand it into
+            // individual rows to count each reason separately.
             #[derive(QueryableByName)]
             struct ReasonCountRow {
                 #[diesel(sql_type = diesel::sql_types::Text)]
@@ -1450,7 +1447,7 @@ impl FlightsRepository {
                 .map(|r| (r.reason, r.count))
                 .collect();
 
-            Ok::<_, anyhow::Error>((counts, total_row.total))
+            Ok::<_, anyhow::Error>((counts, total))
         })
         .await??;
 
@@ -1464,25 +1461,33 @@ impl FlightsRepository {
         since: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<SpuriousAircraftRow>> {
+        use crate::schema::{aircraft, spurious_flights};
+        use diesel::dsl::count_star;
+
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::sql_query(
-                "SELECT sf.aircraft_id, a.registration,
-                        a.aircraft_model,
-                        sf.device_address, COUNT(*) AS spurious_count
-                 FROM spurious_flights sf
-                 LEFT JOIN aircraft a ON a.id = sf.aircraft_id
-                 WHERE sf.detected_at >= $1
-                 GROUP BY sf.aircraft_id, a.registration, a.aircraft_model, sf.device_address
-                 ORDER BY spurious_count DESC
-                 LIMIT $2",
-            )
-            .bind::<diesel::sql_types::Timestamptz, _>(since)
-            .bind::<diesel::sql_types::BigInt, _>(limit)
-            .load::<SpuriousAircraftRow>(&mut conn)?;
+            let rows = spurious_flights::table
+                .left_join(aircraft::table)
+                .filter(spurious_flights::detected_at.ge(since))
+                .group_by((
+                    spurious_flights::aircraft_id,
+                    aircraft::registration,
+                    aircraft::aircraft_model,
+                    spurious_flights::device_address,
+                ))
+                .select((
+                    spurious_flights::aircraft_id,
+                    aircraft::registration.nullable(),
+                    aircraft::aircraft_model.nullable(),
+                    spurious_flights::device_address,
+                    count_star(),
+                ))
+                .order(count_star().desc())
+                .limit(limit)
+                .load::<SpuriousAircraftRow>(&mut conn)?;
 
             Ok::<_, anyhow::Error>(rows)
         })
@@ -1498,17 +1503,12 @@ struct OnlyId {
     id: Uuid,
 }
 
-#[derive(Debug, Clone, QueryableByName)]
+#[derive(Debug, Clone, Queryable)]
 pub struct SpuriousAircraftRow {
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     pub aircraft_id: Option<Uuid>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub registration: Option<String>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub aircraft_model: Option<String>,
-    #[diesel(sql_type = diesel::sql_types::VarChar)]
     pub device_address: String,
-    #[diesel(sql_type = diesel::sql_types::BigInt)]
     pub spurious_count: i64,
 }
 
