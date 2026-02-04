@@ -8,6 +8,7 @@ use crate::aircraft_registrations::{
     Aircraft as AircraftDomain, AirworthinessClass, LightSportType, RegistrantType,
 };
 use crate::aircraft_types::AircraftCategory;
+use crate::fixes::Fix;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -173,7 +174,7 @@ pub struct AircraftView {
     pub adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
     /// Current fix (latest position data for this aircraft)
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(type = "Fix | null")]
+    #[ts(as = "Option<Fix>")]
     pub current_fix: Option<serde_json::Value>,
     /// Aircraft type reference data from ICAO types database (matched via icao_model_code)
     #[serde(skip_serializing_if = "Option::is_none")]

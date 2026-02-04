@@ -5,7 +5,7 @@ import type { Fix } from './Fix';
 import type { ModelDataView } from './ModelDataView';
 
 /**
- * Complete aircraft information with aircraft and latest fix
+ * Complete aircraft information with device and latest fix
  * Registration and model data are fetched separately when needed (e.g., when viewing details)
  */
 export type Aircraft = {
