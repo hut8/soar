@@ -1052,6 +1052,7 @@ diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
+diesel::joinable!(spurious_flights -> aircraft (aircraft_id));
 diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
 diesel::joinable!(watchlist -> aircraft (aircraft_id));

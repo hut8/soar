@@ -8,7 +8,16 @@ use uuid::Uuid;
 use crate::flights::{
     Flight, FlightModel, NewSpuriousFlightModel, SpuriousFlightReason, TimeoutPhase,
 };
+use crate::schema::{aircraft, spurious_flights};
 use crate::web::PgPool;
+
+// Diesel needs this to allow GROUP BY with columns from both tables.
+diesel::allow_columns_to_appear_in_same_group_by_clause!(
+    spurious_flights::aircraft_id,
+    spurious_flights::device_address,
+    aircraft::registration,
+    aircraft::aircraft_model,
+);
 
 #[derive(Clone)]
 pub struct FlightsRepository {
@@ -678,7 +687,6 @@ impl FlightsRepository {
         reason_descriptions: Vec<String>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl as flights_dsl;
-        use crate::schema::spurious_flights;
 
         let pool = self.pool.clone();
 
@@ -1411,7 +1419,6 @@ impl FlightsRepository {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::spurious_flights;
             let mut conn = pool.get()?;
 
             // Total count uses Diesel query builder
@@ -1461,7 +1468,6 @@ impl FlightsRepository {
         since: DateTime<Utc>,
         limit: i64,
     ) -> Result<Vec<SpuriousAircraftRow>> {
-        use crate::schema::{aircraft, spurious_flights};
         use diesel::dsl::count_star;
 
         let pool = self.pool.clone();
