@@ -7,6 +7,13 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+/// Maximum plausible altitude in feet for fix validation.
+/// Fixes above this threshold are rejected as sensor errors or data corruption.
+/// FL600 (60,000 ft) is well above the typical service ceiling of the aircraft types we track
+/// (gliders, light aircraft, commercial aviation). Some military aircraft can exceed this,
+/// but they don't use OGN/FLARM transponders.
+pub const MAX_PLAUSIBLE_ALTITUDE_FT: i32 = 60_000;
+
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
 #[derive(
@@ -134,15 +141,15 @@ impl Fix {
                 let longitude = pos_packet.longitude.as_();
                 let altitude_feet = pos_packet.comment.altitude;
 
-                // Reject fixes with implausible altitude (> 60,000 ft)
+                // Reject fixes with implausible altitude
                 // This catches sensor overflow errors like 0xFFFF meters (~215,000 ft)
-                // FL600 is well above any aircraft's service ceiling
                 if let Some(alt) = altitude_feet
-                    && alt > 60_000
+                    && alt > MAX_PLAUSIBLE_ALTITUDE_FT
                 {
                     tracing::trace!(
-                        "Rejecting fix with implausible altitude: {} ft (> 60,000 ft threshold)",
-                        alt
+                        "Rejecting fix with implausible altitude: {} ft (> {} ft threshold)",
+                        alt,
+                        MAX_PLAUSIBLE_ALTITUDE_FT
                     );
                     metrics::counter!("aprs.fixes.rejected.altitude_implausible_total")
                         .increment(1);
