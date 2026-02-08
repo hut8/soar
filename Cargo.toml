@@ -109,8 +109,8 @@ moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
 kml = "0.12"
 hex = "0.4.3"
-aws-config = { version = "1.5", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.121"
+aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.122"
 prost = "0.14"
 prost-types = "0.14"
 crc32fast = "1.4"
