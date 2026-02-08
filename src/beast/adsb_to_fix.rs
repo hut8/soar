@@ -71,6 +71,20 @@ pub fn adsb_message_to_fix(
         anyhow::anyhow!("Cannot create fix without valid position data (CPR decoding incomplete or no position message)")
     })?;
 
+    // Reject fixes with implausible altitude (> 60,000 ft)
+    // This catches sensor errors and data corruption
+    // FL600 is well above any aircraft's service ceiling
+    if let Some(alt) = position.altitude_feet
+        && alt > 60_000
+    {
+        debug!(
+            "Rejecting ADS-B fix with implausible altitude: {} ft (> 60,000 ft threshold)",
+            alt
+        );
+        metrics::counter!("adsb.fixes.rejected.altitude_implausible_total").increment(1);
+        return Ok(None);
+    }
+
     // Build source_metadata for ADS-B-specific fields
     let source_metadata = build_adsb_metadata(message);
 

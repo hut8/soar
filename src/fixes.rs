@@ -133,6 +133,22 @@ impl Fix {
                 let latitude = pos_packet.latitude.as_();
                 let longitude = pos_packet.longitude.as_();
                 let altitude_feet = pos_packet.comment.altitude;
+
+                // Reject fixes with implausible altitude (> 60,000 ft)
+                // This catches sensor overflow errors like 0xFFFF meters (~215,000 ft)
+                // FL600 is well above any aircraft's service ceiling
+                if let Some(alt) = altitude_feet
+                    && alt > 60_000
+                {
+                    tracing::trace!(
+                        "Rejecting fix with implausible altitude: {} ft (> 60,000 ft threshold)",
+                        alt
+                    );
+                    metrics::counter!("aprs.fixes.rejected.altitude_implausible_total")
+                        .increment(1);
+                    return Ok(None);
+                }
+
                 let ground_speed_knots = pos_packet.comment.speed.map(|s| s as f32);
                 let track_degrees = pos_packet
                     .comment
