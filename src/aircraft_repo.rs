@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dashmap::DashMap;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use diesel::upsert::excluded;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -730,8 +731,8 @@ impl AircraftRepository {
         let model = match model {
             Ok(m) => m,
             Err(e) => {
-                // Check if this is a unique constraint violation
-                if e.to_string().contains("duplicate key") {
+                // Check if this is a unique constraint violation using structured error matching
+                if let DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) = e {
                     warn!(
                         "Race condition in merge_by_registration: address {:06X} ({:?}) was \
                          inserted by another thread before UPDATE completed. Falling back to \
@@ -740,14 +741,13 @@ impl AircraftRepository {
                     );
                     return Ok(None);
                 }
-                // Other errors are unexpected, propagate them
-                return Err(anyhow::anyhow!(
-                    "Failed to update aircraft {} with address {:06X} ({:?}): {}",
-                    target.id,
-                    address as u32,
-                    address_type,
-                    e
-                ));
+                // Other errors are unexpected, propagate them with context
+                return Err(e).with_context(|| {
+                    format!(
+                        "Failed to update aircraft {} with address {:06X} ({:?})",
+                        target.id, address as u32, address_type
+                    )
+                });
             }
         };
 
