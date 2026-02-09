@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dashmap::DashMap;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use diesel::upsert::excluded;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -698,27 +699,55 @@ impl AircraftRepository {
             return Ok(None);
         }
 
-        // No conflict — set the address on the target aircraft
+        // No conflict detected in check above — try to set the address on the target aircraft.
+        // However, due to race conditions, another thread may have inserted an aircraft with this
+        // address between our check and this UPDATE. If that happens, the UPDATE will fail with
+        // a unique constraint violation. We catch that error and return None, which causes the
+        // caller to fall through to the safe INSERT...ON CONFLICT path.
         let model = match address_type {
             AddressType::Icao => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
                 .set(aircraft::icao_address.eq(address))
                 .returning(AircraftModel::as_returning())
-                .get_result(conn)?,
+                .get_result(conn),
             AddressType::Flarm => {
                 diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
                     .set(aircraft::flarm_address.eq(address))
                     .returning(AircraftModel::as_returning())
-                    .get_result(conn)?
+                    .get_result(conn)
             }
             AddressType::Ogn => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
                 .set(aircraft::ogn_address.eq(address))
                 .returning(AircraftModel::as_returning())
-                .get_result(conn)?,
+                .get_result(conn),
             AddressType::Unknown => {
                 diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
                     .set(aircraft::other_address.eq(address))
                     .returning(AircraftModel::as_returning())
-                    .get_result(conn)?
+                    .get_result(conn)
+            }
+        };
+
+        // Handle unique constraint violation from race condition
+        let model = match model {
+            Ok(m) => m,
+            Err(e) => {
+                // Check if this is a unique constraint violation using structured error matching
+                if let DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _) = e {
+                    warn!(
+                        "Race condition in merge_by_registration: address {:06X} ({:?}) was \
+                         inserted by another thread before UPDATE completed. Falling back to \
+                         INSERT...ON CONFLICT path.",
+                        address as u32, address_type
+                    );
+                    return Ok(None);
+                }
+                // Other errors are unexpected, propagate them with context
+                return Err(e).with_context(|| {
+                    format!(
+                        "Failed to update aircraft {} with address {:06X} ({:?})",
+                        target.id, address as u32, address_type
+                    )
+                });
             }
         };
 
