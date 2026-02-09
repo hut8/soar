@@ -1,11 +1,10 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rs1090::prelude::*;
-use tracing::debug;
 use uuid::Uuid;
 
 use crate::beast::cpr_decoder::CprDecoder;
-use crate::fixes::Fix;
+use crate::fixes::{Fix, MAX_PLAUSIBLE_ALTITUDE_FT};
 
 /// Convert a decoded ADS-B message to a Fix if it contains valid position information
 ///
@@ -71,6 +70,20 @@ pub fn adsb_message_to_fix(
         anyhow::anyhow!("Cannot create fix without valid position data (CPR decoding incomplete or no position message)")
     })?;
 
+    // Reject fixes with implausible altitude
+    // This catches sensor errors and data corruption
+    if let Some(alt) = position.altitude_feet
+        && alt > MAX_PLAUSIBLE_ALTITUDE_FT
+    {
+        tracing::debug!(
+            "Rejecting ADS-B fix with implausible altitude: {} ft (> {} ft threshold)",
+            alt,
+            MAX_PLAUSIBLE_ALTITUDE_FT
+        );
+        metrics::counter!("adsb.fixes.rejected.altitude_implausible_total").increment(1);
+        return Ok(None);
+    }
+
     // Build source_metadata for ADS-B-specific fields
     let source_metadata = build_adsb_metadata(message);
 
@@ -120,7 +133,7 @@ fn extract_icao_address(message: &Message) -> Result<u32> {
             .map_err(|e| anyhow::anyhow!("Failed to parse ICAO address '{}': {}", icao_str, e))
     } else {
         // Fallback to CRC for non-ADS-B messages
-        debug!("No icao24 field in message, using CRC: {}", message.crc);
+        tracing::debug!("No icao24 field in message, using CRC: {}", message.crc);
         Ok(message.crc)
     }
 }

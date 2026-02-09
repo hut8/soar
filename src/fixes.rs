@@ -7,6 +7,12 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+/// Maximum plausible altitude in feet for fix validation.
+/// Fixes above this threshold are rejected as sensor errors or data corruption.
+/// 100,000 ft is well above even the highest-flying aircraft (SR-71 at ~85,000 ft).
+/// This threshold catches sensor overflow errors like 0xFFFF meters (~215,000 ft).
+pub const MAX_PLAUSIBLE_ALTITUDE_FT: i32 = 100_000;
+
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
 #[derive(
@@ -133,6 +139,22 @@ impl Fix {
                 let latitude = pos_packet.latitude.as_();
                 let longitude = pos_packet.longitude.as_();
                 let altitude_feet = pos_packet.comment.altitude;
+
+                // Reject fixes with implausible altitude
+                // This catches sensor overflow errors like 0xFFFF meters (~215,000 ft)
+                if let Some(alt) = altitude_feet
+                    && alt > MAX_PLAUSIBLE_ALTITUDE_FT
+                {
+                    tracing::trace!(
+                        "Rejecting fix with implausible altitude: {} ft (> {} ft threshold)",
+                        alt,
+                        MAX_PLAUSIBLE_ALTITUDE_FT
+                    );
+                    metrics::counter!("aprs.fixes.rejected.altitude_implausible_total")
+                        .increment(1);
+                    return Ok(None);
+                }
+
                 let ground_speed_knots = pos_packet.comment.speed.map(|s| s as f32);
                 let track_degrees = pos_packet
                     .comment

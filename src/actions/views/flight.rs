@@ -51,7 +51,9 @@ pub struct FlightView {
     /// Current state of the flight (active, complete, or timed_out)
     pub state: FlightState,
 
-    /// Duration of the flight in seconds (null if takeoff_time or landing_time is null)
+    /// Duration of the flight in seconds (null only if takeoff_time is null)
+    /// For complete flights: landing_time - takeoff_time
+    /// For timed-out/in-progress flights: last_fix_at - takeoff_time
     #[ts(type = "number | null")]
     pub duration_seconds: Option<i64>,
 
@@ -146,9 +148,13 @@ impl FlightView {
         // Calculate state before moving any fields
         let state = flight.state();
 
-        // Calculate duration in seconds if both takeoff and landing times are available
+        // Calculate duration in seconds
+        // - For complete flights: landing_time - takeoff_time
+        // - For timed-out/in-progress flights: last_fix_at - takeoff_time
+        // - If no takeoff_time (first seen airborne): null
         let duration_seconds = match (flight.takeoff_time, flight.landing_time) {
             (Some(takeoff), Some(landing)) => Some((landing - takeoff).num_seconds()),
+            (Some(takeoff), None) => Some((flight.last_fix_at - takeoff).num_seconds()),
             _ => None,
         };
 
