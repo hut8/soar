@@ -9,10 +9,9 @@ use uuid::Uuid;
 
 /// Maximum plausible altitude in feet for fix validation.
 /// Fixes above this threshold are rejected as sensor errors or data corruption.
-/// FL600 (60,000 ft) is well above the typical service ceiling of the aircraft types we track
-/// (gliders, light aircraft, commercial aviation). Some military aircraft can exceed this,
-/// but they don't use OGN/FLARM transponders.
-pub const MAX_PLAUSIBLE_ALTITUDE_FT: i32 = 60_000;
+/// 100,000 ft is well above even the highest-flying aircraft (SR-71 at ~85,000 ft).
+/// This threshold catches sensor overflow errors like 0xFFFF meters (~215,000 ft).
+pub const MAX_PLAUSIBLE_ALTITUDE_FT: i32 = 100_000;
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
