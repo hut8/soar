@@ -397,7 +397,7 @@
 						{#each aircraft as plane (plane.id)}
 							<div class="card p-4">
 								<div class="mb-3 flex flex-wrap items-center gap-2">
-									<h3 class="h3 font-semibold">{plane.registration}</h3>
+									<h3 class="h3 font-semibold">{plane.registration ?? '—'}</h3>
 									{#if plane.aircraftCategory === 'TowTug'}
 										<span
 											class="btn preset-filled-warning-500 btn-sm"
