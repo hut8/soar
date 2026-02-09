@@ -529,18 +529,15 @@ async fn complete_flight_in_background(
             false
         };
 
+        let mut total_distance_meters = 0.0;
+        for i in 1..flight_fixes.len() {
+            let prev = &flight_fixes[i - 1];
+            let curr = &flight_fixes[i];
+            total_distance_meters +=
+                haversine_distance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+        }
+
         let average_speed_mph = if duration_seconds > 0 {
-            let mut total_distance_meters = 0.0;
-            for i in 1..flight_fixes.len() {
-                let prev = &flight_fixes[i - 1];
-                let curr = &flight_fixes[i];
-                total_distance_meters += haversine_distance(
-                    prev.latitude,
-                    prev.longitude,
-                    curr.latitude,
-                    curr.longitude,
-                );
-            }
             let total_distance_miles = total_distance_meters / 1609.34;
             let duration_hours = duration_seconds as f64 / 3600.0;
             Some(total_distance_miles / duration_hours)
@@ -551,6 +548,8 @@ async fn complete_flight_in_background(
         let has_excessive_speed = average_speed_mph
             .map(|speed| speed > 1000.0)
             .unwrap_or(false);
+
+        let has_insufficient_displacement = total_distance_meters < 500.0;
 
         // Check if this flight is from ADS-B/SBS (has explicit on_ground status)
         // For these sources, we skip heuristic-based spurious detection since they
@@ -574,6 +573,7 @@ async fn complete_flight_in_background(
                 || max_agl_altitude.map(|agl| agl < 100).unwrap_or(false)
                 || has_excessive_altitude
                 || has_excessive_speed
+                || has_insufficient_displacement
         };
 
         if is_spurious {
@@ -608,6 +608,13 @@ async fn complete_flight_in_background(
                 reason_descriptions.push(format!(
                     "excessive speed ({:.1} mph > 1000 mph)",
                     average_speed_mph.unwrap()
+                ));
+            }
+            if has_insufficient_displacement {
+                reason_enums.push(SpuriousFlightReason::DisplacementTooLow);
+                reason_descriptions.push(format!(
+                    "displacement too low ({:.0}m < 500m)",
+                    total_distance_meters
                 ));
             }
 
