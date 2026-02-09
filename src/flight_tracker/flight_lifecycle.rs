@@ -549,7 +549,8 @@ async fn complete_flight_in_background(
             .map(|speed| speed > 1000.0)
             .unwrap_or(false);
 
-        let has_insufficient_displacement = total_distance_meters < 500.0;
+        const MIN_DISPLACEMENT_METERS: f64 = 500.0;
+        let has_insufficient_displacement = total_distance_meters < MIN_DISPLACEMENT_METERS;
 
         // Check if this flight is from ADS-B/SBS (has explicit on_ground status)
         // For these sources, we skip heuristic-based spurious detection since they
@@ -613,8 +614,8 @@ async fn complete_flight_in_background(
             if has_insufficient_displacement {
                 reason_enums.push(SpuriousFlightReason::DisplacementTooLow);
                 reason_descriptions.push(format!(
-                    "displacement too low ({:.0}m < 500m)",
-                    total_distance_meters
+                    "displacement too low ({:.0}m < {:.0}m)",
+                    total_distance_meters, MIN_DISPLACEMENT_METERS
                 ));
             }
 
