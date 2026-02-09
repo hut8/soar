@@ -552,11 +552,29 @@ async fn complete_flight_in_background(
             .map(|speed| speed > 1000.0)
             .unwrap_or(false);
 
-        let is_spurious = duration_seconds < 120
-            || altitude_range.map(|range| range < 50).unwrap_or(false)
-            || max_agl_altitude.map(|agl| agl < 100).unwrap_or(false)
-            || has_excessive_altitude
-            || has_excessive_speed;
+        // Check if this flight is from ADS-B/SBS (has explicit on_ground status)
+        // For these sources, we skip heuristic-based spurious detection since they
+        // transmit actual airborne/on-ground status. We only check for data corruption.
+        let is_adsb_or_sbs = fix
+            .source_metadata
+            .as_ref()
+            .and_then(|m| m.get("protocol"))
+            .and_then(|p| p.as_str())
+            .is_some_and(|p| p == "adsb" || p == "sbs");
+
+        // For APRS/OGN: apply heuristic checks (we infer activity from sensor data)
+        // For ADS-B/SBS: only apply data corruption checks (excessive altitude/speed)
+        let is_spurious = if is_adsb_or_sbs {
+            // ADS-B/SBS: only data corruption checks
+            has_excessive_altitude || has_excessive_speed
+        } else {
+            // APRS/OGN: full heuristic checks
+            duration_seconds < 120
+                || altitude_range.map(|range| range < 50).unwrap_or(false)
+                || max_agl_altitude.map(|agl| agl < 100).unwrap_or(false)
+                || has_excessive_altitude
+                || has_excessive_speed
+        };
 
         if is_spurious {
             // Archive spurious flight instead of deleting it
