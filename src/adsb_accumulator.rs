@@ -422,7 +422,7 @@ impl AdsbAccumulator {
 
         // BDS05 contains airborne position with altitude
         if let ME::BDS05 { inner, .. } = &adsb.message {
-            return inner.alt.map(|a| a as i32);
+            return inner.alt;
         }
 
         None
