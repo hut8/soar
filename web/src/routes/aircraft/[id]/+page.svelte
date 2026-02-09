@@ -88,8 +88,8 @@
 	let fixes: Fix[] = [];
 	let flights: Flight[] = [];
 	let loading = true;
-	let loadingFixes = false;
-	let loadingFlights = false;
+	let loadingFixes = true;
+	let loadingFlights = true;
 	let error = '';
 	let fixesPage = 1;
 	let flightsPage = 1;
@@ -158,12 +158,13 @@
 	onMount(async () => {
 		if (aircraftId) {
 			await loadAircraft();
-			await loadFixes();
-			await loadFlights();
-			await loadImages();
-			if (isAdmin) {
-				await loadClubs();
-			}
+			// Load fixes, flights, images, and clubs in parallel after aircraft data is ready
+			await Promise.all([
+				loadFixes(),
+				loadFlights(),
+				loadImages(),
+				...(isAdmin ? [loadClubs()] : [])
+			]);
 		}
 	});
 
@@ -589,9 +590,19 @@
 				</h2>
 
 				{#if loadingFlights}
-					<div class="flex items-center justify-center py-8">
-						<Progress class="h-6 w-6" />
-						<span class="ml-2">Loading flight history...</span>
+					<div class="space-y-3">
+						{#each [0, 1, 2] as i (i)}
+							<div class="animate-pulse card preset-tonal p-4">
+								<div class="flex items-center gap-4">
+									<div class="h-10 w-10 rounded-full bg-surface-300 dark:bg-surface-600"></div>
+									<div class="flex-1 space-y-2">
+										<div class="h-4 w-1/3 rounded bg-surface-300 dark:bg-surface-600"></div>
+										<div class="h-3 w-2/3 rounded bg-surface-300 dark:bg-surface-600"></div>
+									</div>
+									<div class="h-4 w-16 rounded bg-surface-300 dark:bg-surface-600"></div>
+								</div>
+							</div>
+						{/each}
 					</div>
 				{:else if flights.length === 0}
 					<div class="text-surface-600-300-token py-8 text-center">

@@ -51,6 +51,7 @@ pub enum SpuriousFlightReason {
     MaxAglTooLow,
     ExcessiveAltitude,
     ExcessiveSpeed,
+    DisplacementTooLow,
 }
 
 /// Calculate the distance between two points using the Haversine formula
