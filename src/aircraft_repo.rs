@@ -851,48 +851,56 @@ impl AircraftRepository {
                                 aircraft::table.filter(aircraft::id.eq(dup.id)),
                             )
                             .set(aircraft::icao_address.eq(None::<i32>))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("clearing icao_address on duplicate")?;
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(target.id)),
                             )
                             .set(aircraft::icao_address.eq(dup.icao_address))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("setting icao_address on target")?;
                         }
                         if dup.flarm_address.is_some() && target.flarm_address.is_none() {
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(dup.id)),
                             )
                             .set(aircraft::flarm_address.eq(None::<i32>))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("clearing flarm_address on duplicate")?;
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(target.id)),
                             )
                             .set(aircraft::flarm_address.eq(dup.flarm_address))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("setting flarm_address on target")?;
                         }
                         if dup.ogn_address.is_some() && target.ogn_address.is_none() {
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(dup.id)),
                             )
                             .set(aircraft::ogn_address.eq(None::<i32>))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("clearing ogn_address on duplicate")?;
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(target.id)),
                             )
                             .set(aircraft::ogn_address.eq(dup.ogn_address))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("setting ogn_address on target")?;
                         }
                         if dup.other_address.is_some() && target.other_address.is_none() {
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(dup.id)),
                             )
                             .set(aircraft::other_address.eq(None::<i32>))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("clearing other_address on duplicate")?;
                             diesel::update(
                                 aircraft::table.filter(aircraft::id.eq(target.id)),
                             )
                             .set(aircraft::other_address.eq(dup.other_address))
-                            .execute(conn)?;
+                            .execute(conn)
+                            .context("setting other_address on target")?;
                         }
 
                         // Reassign fixes from the duplicate to the target
@@ -900,14 +908,16 @@ impl AircraftRepository {
                             fixes::table.filter(fixes::aircraft_id.eq(dup.id)),
                         )
                         .set(fixes::aircraft_id.eq(target.id))
-                        .execute(conn)?;
+                        .execute(conn)
+                        .context("reassigning fixes")?;
 
                         // Reassign flights from the duplicate to the target
                         let flights_updated = diesel::update(
                             flights::table.filter(flights::aircraft_id.eq(dup.id)),
                         )
                         .set(flights::aircraft_id.eq(target.id))
-                        .execute(conn)?;
+                        .execute(conn)
+                        .context("reassigning flights")?;
 
                         // Reassign spurious flights from the duplicate to the target
                         diesel::update(
@@ -915,13 +925,15 @@ impl AircraftRepository {
                                 .filter(spurious_flights::aircraft_id.eq(dup.id)),
                         )
                         .set(spurious_flights::aircraft_id.eq(target.id))
-                        .execute(conn)?;
+                        .execute(conn)
+                        .context("reassigning spurious flights")?;
 
                         // Delete the duplicate (cascade handles geofences, watchlist, etc.)
                         diesel::delete(
                             aircraft::table.filter(aircraft::id.eq(dup.id)),
                         )
-                        .execute(conn)?;
+                        .execute(conn)
+                        .context("deleting duplicate aircraft")?;
 
                         info!(
                             "Merged aircraft {} into {} (registration={}): \
@@ -948,8 +960,8 @@ impl AircraftRepository {
                             dup.id, pending_reg, e
                         );
                         stats.errors.push(format!(
-                            "aircraft {}: {}",
-                            dup.id, e
+                            "aircraft {} (pending_registration={}): {:#}",
+                            dup.id, pending_reg, e
                         ));
                     }
                 }
