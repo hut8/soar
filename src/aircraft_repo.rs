@@ -778,6 +778,8 @@ impl AircraftRepository {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
+            use diesel::Connection;
+
             let mut conn = pool
                 .get()
                 .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
@@ -808,98 +810,160 @@ impl AircraftRepository {
                     None => continue,
                 };
 
-                // Find the target aircraft that owns this registration
-                let target = match aircraft::table
-                    .filter(aircraft::registration.eq(&pending_reg))
-                    .filter(aircraft::id.ne(dup.id))
-                    .select(AircraftModel::as_select())
-                    .first(&mut conn)
-                    .optional()?
-                {
-                    Some(t) => t,
-                    None => {
-                        // No aircraft owns this registration anymore — clear pending
-                        // and set the registration directly on this aircraft
-                        diesel::update(aircraft::table.filter(aircraft::id.eq(dup.id)))
-                            .set((
-                                aircraft::registration.eq(&pending_reg),
-                                aircraft::pending_registration.eq(None::<String>),
-                            ))
-                            .execute(&mut conn)?;
-                        info!(
-                            "No owner for registration {:?}, assigned directly to aircraft {}",
-                            pending_reg, dup.id
-                        );
-                        stats.registrations_claimed += 1;
-                        continue;
-                    }
-                };
+                // Each merge is wrapped in a transaction so partial merges don't occur,
+                // and errors on one aircraft don't abort the entire batch.
+                // Returns None for "claimed" (no target found), Some(...) for merged.
+                let result: Result<Option<(usize, usize)>, anyhow::Error> =
+                    conn.transaction(|conn| {
+                        // Find the target aircraft that owns this registration
+                        let target = match aircraft::table
+                            .filter(aircraft::registration.eq(&pending_reg))
+                            .filter(aircraft::id.ne(dup.id))
+                            .select(AircraftModel::as_select())
+                            .first(conn)
+                            .optional()?
+                        {
+                            Some(t) => t,
+                            None => {
+                                // No aircraft owns this registration anymore — clear pending
+                                // and set the registration directly on this aircraft
+                                diesel::update(
+                                    aircraft::table.filter(aircraft::id.eq(dup.id)),
+                                )
+                                .set((
+                                    aircraft::registration.eq(&pending_reg),
+                                    aircraft::pending_registration.eq(None::<String>),
+                                ))
+                                .execute(conn)?;
+                                info!(
+                                    "No owner for registration {:?}, assigned directly to aircraft {}",
+                                    pending_reg, dup.id
+                                );
+                                return Ok(None);
+                            }
+                        };
 
-                // Copy addresses from the duplicate to the target (only if target lacks them)
-                if dup.icao_address.is_some() && target.icao_address.is_none() {
-                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
-                        .set(aircraft::icao_address.eq(dup.icao_address))
-                        .execute(&mut conn)?;
-                }
-                if dup.flarm_address.is_some() && target.flarm_address.is_none() {
-                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
-                        .set(aircraft::flarm_address.eq(dup.flarm_address))
-                        .execute(&mut conn)?;
-                }
-                if dup.ogn_address.is_some() && target.ogn_address.is_none() {
-                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
-                        .set(aircraft::ogn_address.eq(dup.ogn_address))
-                        .execute(&mut conn)?;
-                }
-                if dup.other_address.is_some() && target.other_address.is_none() {
-                    diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
-                        .set(aircraft::other_address.eq(dup.other_address))
-                        .execute(&mut conn)?;
-                }
+                        // Copy addresses from the duplicate to the target (only if target
+                        // lacks them). NULL out the address on the duplicate first to avoid
+                        // violating unique constraints (e.g. idx_aircraft_icao_address).
+                        if dup.icao_address.is_some() && target.icao_address.is_none() {
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(dup.id)),
+                            )
+                            .set(aircraft::icao_address.eq(None::<i32>))
+                            .execute(conn)?;
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(target.id)),
+                            )
+                            .set(aircraft::icao_address.eq(dup.icao_address))
+                            .execute(conn)?;
+                        }
+                        if dup.flarm_address.is_some() && target.flarm_address.is_none() {
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(dup.id)),
+                            )
+                            .set(aircraft::flarm_address.eq(None::<i32>))
+                            .execute(conn)?;
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(target.id)),
+                            )
+                            .set(aircraft::flarm_address.eq(dup.flarm_address))
+                            .execute(conn)?;
+                        }
+                        if dup.ogn_address.is_some() && target.ogn_address.is_none() {
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(dup.id)),
+                            )
+                            .set(aircraft::ogn_address.eq(None::<i32>))
+                            .execute(conn)?;
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(target.id)),
+                            )
+                            .set(aircraft::ogn_address.eq(dup.ogn_address))
+                            .execute(conn)?;
+                        }
+                        if dup.other_address.is_some() && target.other_address.is_none() {
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(dup.id)),
+                            )
+                            .set(aircraft::other_address.eq(None::<i32>))
+                            .execute(conn)?;
+                            diesel::update(
+                                aircraft::table.filter(aircraft::id.eq(target.id)),
+                            )
+                            .set(aircraft::other_address.eq(dup.other_address))
+                            .execute(conn)?;
+                        }
 
-                // Reassign fixes from the duplicate to the target
-                let fixes_updated =
-                    diesel::update(fixes::table.filter(fixes::aircraft_id.eq(dup.id)))
+                        // Reassign fixes from the duplicate to the target
+                        let fixes_updated = diesel::update(
+                            fixes::table.filter(fixes::aircraft_id.eq(dup.id)),
+                        )
                         .set(fixes::aircraft_id.eq(target.id))
-                        .execute(&mut conn)?;
-                stats.fixes_reassigned += fixes_updated;
+                        .execute(conn)?;
 
-                // Reassign flights from the duplicate to the target
-                let flights_updated =
-                    diesel::update(flights::table.filter(flights::aircraft_id.eq(dup.id)))
+                        // Reassign flights from the duplicate to the target
+                        let flights_updated = diesel::update(
+                            flights::table.filter(flights::aircraft_id.eq(dup.id)),
+                        )
                         .set(flights::aircraft_id.eq(target.id))
-                        .execute(&mut conn)?;
-                stats.flights_reassigned += flights_updated;
+                        .execute(conn)?;
 
-                // Reassign spurious flights from the duplicate to the target
-                diesel::update(
-                    spurious_flights::table.filter(spurious_flights::aircraft_id.eq(dup.id)),
-                )
-                .set(spurious_flights::aircraft_id.eq(target.id))
-                .execute(&mut conn)?;
+                        // Reassign spurious flights from the duplicate to the target
+                        diesel::update(
+                            spurious_flights::table
+                                .filter(spurious_flights::aircraft_id.eq(dup.id)),
+                        )
+                        .set(spurious_flights::aircraft_id.eq(target.id))
+                        .execute(conn)?;
 
-                // Delete the duplicate (cascade handles geofences, watchlist, etc.)
-                diesel::delete(aircraft::table.filter(aircraft::id.eq(dup.id)))
-                    .execute(&mut conn)?;
-                stats.aircraft_deleted += 1;
+                        // Delete the duplicate (cascade handles geofences, watchlist, etc.)
+                        diesel::delete(
+                            aircraft::table.filter(aircraft::id.eq(dup.id)),
+                        )
+                        .execute(conn)?;
 
-                info!(
-                    "Merged aircraft {} into {} (registration={}): \
-                     reassigned {} fixes, {} flights",
-                    dup.id, target.id, pending_reg, fixes_updated, flights_updated
-                );
+                        info!(
+                            "Merged aircraft {} into {} (registration={}): \
+                             reassigned {} fixes, {} flights",
+                            dup.id, target.id, pending_reg, fixes_updated, flights_updated
+                        );
 
-                stats.aircraft_merged += 1;
+                        Ok(Some((fixes_updated, flights_updated)))
+                    });
+
+                match result {
+                    Ok(None) => {
+                        stats.registrations_claimed += 1;
+                    }
+                    Ok(Some((fixes_updated, flights_updated))) => {
+                        stats.fixes_reassigned += fixes_updated;
+                        stats.flights_reassigned += flights_updated;
+                        stats.aircraft_deleted += 1;
+                        stats.aircraft_merged += 1;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to merge aircraft {} (pending_registration={:?}): {:#}",
+                            dup.id, pending_reg, e
+                        );
+                        stats.errors.push(format!(
+                            "aircraft {}: {}",
+                            dup.id, e
+                        ));
+                    }
+                }
             }
 
             info!(
                 "Completed pending registration merge: {}/{} aircraft merged, \
-                 {} fixes reassigned, {} flights reassigned, {} deleted",
+                 {} fixes reassigned, {} flights reassigned, {} deleted, {} errors",
                 stats.aircraft_merged,
                 stats.duplicates_found,
                 stats.fixes_reassigned,
                 stats.flights_reassigned,
-                stats.aircraft_deleted
+                stats.aircraft_deleted,
+                stats.errors.len()
             );
 
             Ok(stats)
