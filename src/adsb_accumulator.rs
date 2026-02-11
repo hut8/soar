@@ -1,12 +1,14 @@
-//! ADS-B/SBS message accumulator for combining data from multiple message types
+//! ADS-B message accumulator for combining data from multiple message types.
 //!
-//! ADS-B and SBS protocols send different data in separate message types:
-//! - Position messages (ADS-B TC 9-18, SBS MSG,3): lat/lon/altitude
-//! - Velocity messages (ADS-B TC 19, SBS MSG,4): speed, track, climb rate
-//! - Identification messages (ADS-B TC 1-4, SBS MSG,1): callsign
+//! ADS-B data arrives via two wire formats — Beast (binary) and SBS/BaseStation
+//! (CSV text) — but both carry the same Mode S transponder information split
+//! across separate message types:
+//! - Position messages (Beast TC 9-18 / SBS MSG,3): lat/lon/altitude
+//! - Velocity messages (Beast TC 19 / SBS MSG,4): speed, track, climb rate
+//! - Identification messages (Beast TC 1-4 / SBS MSG,1): callsign
 //!
 //! This accumulator maintains per-aircraft state and emits fixes whenever
-//! enough data is available (at minimum: valid position).
+//! enough data is available (at minimum: valid position + known on_ground status).
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -616,10 +618,10 @@ impl AdsbAccumulator {
         trigger
     }
 
-    /// Try to emit a fix if we have enough data
+    /// Try to emit a fix if we have enough data.
     ///
     /// Requires both a valid position AND a known on_ground status.
-    /// ADS-B transponders authoritatively report air/ground status; without it
+    /// Mode S transponders authoritatively report air/ground status; without it
     /// we cannot determine is_active and would create spurious flights.
     fn try_emit_fix(
         &self,

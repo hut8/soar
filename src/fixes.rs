@@ -114,8 +114,13 @@ impl std::ops::DerefMut for FixWithAircraftInfo {
 
 impl Fix {
     /// Check if this fix has authoritative transponder-derived air/ground status.
-    /// Returns true for both ADS-B (Beast binary) and SBS (BaseStation text) protocols,
-    /// which originate from the same Mode S transponder.
+    ///
+    /// ADS-B data arrives via two wire formats:
+    /// - Beast binary (`protocol = "adsb"`)
+    /// - SBS/BaseStation CSV text (`protocol = "sbs"`)
+    ///
+    /// Both carry the same Mode S transponder data including authoritative
+    /// on_ground status, unlike APRS/OGN which requires heuristic inference.
     pub fn has_transponder_data(&self) -> bool {
         self.source_metadata
             .as_ref()
