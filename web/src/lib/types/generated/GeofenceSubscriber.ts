@@ -4,9 +4,9 @@
  * Geofence subscriber entry
  */
 export type GeofenceSubscriber = {
-	geofenceId: string;
-	userId: string;
-	sendEmail: boolean;
-	createdAt: string;
-	updatedAt: string;
+  geofenceId: string;
+  userId: string;
+  sendEmail: boolean;
+  createdAt: string;
+  updatedAt: string;
 };

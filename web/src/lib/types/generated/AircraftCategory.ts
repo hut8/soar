@@ -8,23 +8,23 @@
  * OGN-specific values: Glider, TowTug, Paraglider, HangGlider, Airship, SkydiverParachute, StaticObstacle
  */
 export type AircraftCategory =
-	| 'Landplane'
-	| 'Helicopter'
-	| 'Balloon'
-	| 'Amphibian'
-	| 'Gyroplane'
-	| 'Drone'
-	| 'PoweredParachute'
-	| 'Rotorcraft'
-	| 'Seaplane'
-	| 'Tiltrotor'
-	| 'Vtol'
-	| 'Electric'
-	| 'Glider'
-	| 'TowTug'
-	| 'Paraglider'
-	| 'HangGlider'
-	| 'Airship'
-	| 'SkydiverParachute'
-	| 'StaticObstacle'
-	| 'Unknown';
+  | "Landplane"
+  | "Helicopter"
+  | "Balloon"
+  | "Amphibian"
+  | "Gyroplane"
+  | "Drone"
+  | "PoweredParachute"
+  | "Rotorcraft"
+  | "Seaplane"
+  | "Tiltrotor"
+  | "Vtol"
+  | "Electric"
+  | "Glider"
+  | "TowTug"
+  | "Paraglider"
+  | "HangGlider"
+  | "Airship"
+  | "SkydiverParachute"
+  | "StaticObstacle"
+  | "Unknown";

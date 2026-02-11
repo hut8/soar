@@ -218,17 +218,10 @@ async fn process_beast_message(
     // If we got a partial fix, complete it and process through FixProcessor
     if let Some((partial_fix, trigger)) = fix_result {
         // Determine if aircraft is active (in flight vs on ground)
-        // Use on_ground field from ADS-B capability if available, otherwise fall back to ground speed
-        let is_active = match partial_fix.on_ground {
-            Some(true) => false, // On ground = not active
-            Some(false) => true, // Airborne = active
-            None => {
-                // Fallback: ground speed >= 20 knots indicates active
-                partial_fix
-                    .ground_speed_knots
-                    .is_none_or(|speed| speed >= 20.0)
-            }
-        };
+        // The accumulator guarantees on_ground is set before emitting a fix
+        let is_active = !partial_fix
+            .on_ground
+            .expect("accumulator guarantees on_ground is set");
 
         // Build source metadata with ADS-B-specific fields and trigger
         let mut metadata = serde_json::Map::new();
@@ -427,17 +420,10 @@ async fn process_sbs_message(
         };
 
         // Determine if aircraft is active (in flight vs on ground)
-        // Use on_ground field from SBS if available, otherwise fall back to ground speed
-        let is_active = match partial_fix.on_ground {
-            Some(true) => false, // On ground = not active
-            Some(false) => true, // Airborne = active
-            None => {
-                // Fallback: ground speed >= 20 knots indicates active
-                partial_fix
-                    .ground_speed_knots
-                    .is_none_or(|speed| speed >= 20.0)
-            }
-        };
+        // The accumulator guarantees on_ground is set before emitting a fix
+        let is_active = !partial_fix
+            .on_ground
+            .expect("accumulator guarantees on_ground is set");
 
         // Build source metadata for SBS-specific fields with trigger
         let mut metadata = serde_json::Map::new();
