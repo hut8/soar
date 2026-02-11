@@ -555,12 +555,7 @@ async fn complete_flight_in_background(
         // Check if this flight is from ADS-B/SBS (has explicit on_ground status)
         // For these sources, we skip heuristic-based spurious detection since they
         // transmit actual airborne/on-ground status. We only check for data corruption.
-        let is_adsb_or_sbs = fix
-            .source_metadata
-            .as_ref()
-            .and_then(|m| m.get("protocol"))
-            .and_then(|p| p.as_str())
-            .is_some_and(|p| p == "adsb" || p == "sbs");
+        let is_adsb_or_sbs = fix.is_adsb();
 
         // For APRS/OGN: apply heuristic checks (we infer activity from sensor data)
         // For ADS-B/SBS: only apply data corruption checks (excessive altitude/speed)

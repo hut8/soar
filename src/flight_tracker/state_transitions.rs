@@ -69,7 +69,13 @@ pub(crate) async fn process_state_transition(
     ctx: &FlightProcessorContext<'_>,
     mut fix: Fix,
 ) -> Result<StateTransitionResult> {
-    let is_active = should_be_active(&fix);
+    // ADS-B: trust transponder's on_ground field (already set as is_active = !on_ground)
+    // APRS: use speed/AGL heuristic
+    let is_active = if fix.is_adsb() {
+        fix.is_active
+    } else {
+        should_be_active(&fix)
+    };
     let mut pending_work = PendingBackgroundWork::None;
 
     // Fetch aircraft (from in-memory cache, falling back to DB on miss)
@@ -461,8 +467,15 @@ pub(crate) async fn process_state_transition(
             }
 
             // Create new flight - check if takeoff or mid-flight
-            let is_takeoff = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
-                // Need 4+ fixes to use history-based detection (3 to check + 1 current to skip)
+            let is_takeoff = if fix.is_adsb() {
+                // ADS-B: any prior inactive fix means on_ground→airborne transition = takeoff
+                if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                    state.last_n_inactive(1)
+                } else {
+                    false // No prior state — mid-flight appearance
+                }
+            } else if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                // APRS: Need 4+ fixes to use history-based detection (3 to check + 1 current to skip)
                 if state.recent_fixes.len() >= 4 {
                     // Enough history - check if last 3 fixes before current were inactive
                     state.last_n_inactive(3)
@@ -522,49 +535,64 @@ pub(crate) async fn process_state_transition(
 
         // Case 3: Has active flight BUT fix is inactive -> Check if landing
         (Some(flight_id), false) => {
-            // Calculate AGL to determine if actually landing or just slow at altitude
-            let agl = calculate_altitude_agl(ctx.elevation_db, &fix).await;
-
-            match agl {
-                Some(altitude_agl) if altitude_agl >= 250 => {
-                    // Still airborne - continue flight
-                    fix.flight_id = Some(flight_id);
-
-                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
-                        && let Some(last_fix_time) = state.last_fix_timestamp()
-                    {
-                        fix.time_gap_seconds =
-                            Some((fix.received_at - last_fix_time).num_seconds() as i32);
-                    }
+            if fix.is_adsb() {
+                // ADS-B: transponder on_ground is authoritative — land immediately
+                fix.flight_id = Some(flight_id);
+                pending_work = PendingBackgroundWork::CompleteFlight {
+                    flight_id,
+                    aircraft: Box::new(aircraft.clone()),
+                    fix: Box::new(fix.clone()),
+                };
+                if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                    state.current_flight_id = None;
                 }
-                _ => {
-                    // Low altitude or unknown - check for 5 consecutive inactive
-                    let should_land = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
-                    {
-                        state.has_five_consecutive_inactive()
-                    } else {
-                        false
-                    };
+                metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
+            } else {
+                // APRS: use AGL check + 5-fix debounce (heuristic-based is_active can flicker)
+                let agl = calculate_altitude_agl(ctx.elevation_db, &fix).await;
 
-                    if should_land {
-                        // Landing confirmed - defer background work until after fix insertion
+                match agl {
+                    Some(altitude_agl) if altitude_agl >= 250 => {
+                        // Still airborne - continue flight
                         fix.flight_id = Some(flight_id);
 
-                        pending_work = PendingBackgroundWork::CompleteFlight {
-                            flight_id,
-                            aircraft: Box::new(aircraft.clone()),
-                            fix: Box::new(fix.clone()),
-                        };
-
-                        // Clear current_flight_id
-                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                            state.current_flight_id = None;
+                        if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
+                            && let Some(last_fix_time) = state.last_fix_timestamp()
+                        {
+                            fix.time_gap_seconds =
+                                Some((fix.received_at - last_fix_time).num_seconds() as i32);
                         }
+                    }
+                    _ => {
+                        // Low altitude or unknown - check for 5 consecutive inactive
+                        let should_land =
+                            if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
+                                state.has_five_consecutive_inactive()
+                            } else {
+                                false
+                            };
 
-                        metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
-                    } else {
-                        // Not yet 5 inactive - keep flight active
-                        fix.flight_id = Some(flight_id);
+                        if should_land {
+                            // Landing confirmed - defer background work until after fix insertion
+                            fix.flight_id = Some(flight_id);
+
+                            pending_work = PendingBackgroundWork::CompleteFlight {
+                                flight_id,
+                                aircraft: Box::new(aircraft.clone()),
+                                fix: Box::new(fix.clone()),
+                            };
+
+                            // Clear current_flight_id
+                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                                state.current_flight_id = None;
+                            }
+
+                            metrics::counter!("flight_tracker.flight_ended.landed_total")
+                                .increment(1);
+                        } else {
+                            // Not yet 5 inactive - keep flight active
+                            fix.flight_id = Some(flight_id);
+                        }
                     }
                 }
             }

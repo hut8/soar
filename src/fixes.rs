@@ -113,6 +113,16 @@ impl std::ops::DerefMut for FixWithAircraftInfo {
 }
 
 impl Fix {
+    /// Check if this fix originates from ADS-B (Beast binary or SBS text protocol)
+    pub fn is_adsb(&self) -> bool {
+        self.source_metadata
+            .as_ref()
+            .and_then(|m| m.as_object())
+            .and_then(|m| m.get("protocol"))
+            .and_then(|p| p.as_str())
+            .is_some_and(|p| p == "adsb" || p == "sbs")
+    }
+
     /// Create a Fix from an APRS packet
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
