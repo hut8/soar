@@ -1,6 +1,6 @@
 use num_traits::AsPrimitive;
 use tracing::Instrument;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::Fix;
@@ -359,10 +359,24 @@ impl FixProcessor {
             fix.altitude_agl_feet = agl;
             fix.altitude_agl_valid = true; // Mark as valid even if agl is None (no elevation data available)
 
-            // IMPORTANT: Recalculate is_active now that we have AGL data
-            // This must match the logic in should_be_active() to ensure database field matches
-            // the logic used for flight state transitions
-            fix.is_active = crate::flight_tracker::should_be_active(&fix);
+            // Recalculate is_active now that we have AGL data.
+            // ADS-B fixes use the transponder's on_ground field directly —
+            // skip the speed/AGL heuristic which is designed for APRS.
+            if !fix.has_transponder_data() {
+                fix.is_active = crate::flight_tracker::should_be_active(&fix);
+            }
+
+            // Warn when ADS-B reports on-ground but AGL suggests otherwise
+            if fix.has_transponder_data()
+                && !fix.is_active
+                && let Some(agl) = fix.altitude_agl_feet
+                && agl.abs() >= 100
+            {
+                warn!(
+                    "ADS-B on-ground but AGL={} ft for aircraft {} at ({:.4}, {:.4}), MSL={:?} ft — possible altitude reference mismatch",
+                    agl, fix.aircraft_id, fix.latitude, fix.longitude, fix.altitude_msl_feet
+                );
+            }
 
             metrics::histogram!("aprs.elevation.sync_duration_ms")
                 .record(elevation_start.elapsed().as_micros() as f64 / 1000.0);

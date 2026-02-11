@@ -4,10 +4,10 @@
  * Aircraft type reference data from the ICAO aircraft types database
  */
 export type ModelDataView = {
-	icaoCode: string;
-	iataCode: string;
-	description: string;
-	manufacturer: string | null;
-	wingType: string | null;
-	aircraftCategory: string | null;
+  icaoCode: string;
+  iataCode: string;
+  description: string;
+  manufacturer: string | null;
+  wingType: string | null;
+  aircraftCategory: string | null;
 };

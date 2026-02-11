@@ -4,21 +4,21 @@
  * API view of a receiver with extracted latitude and longitude
  */
 export type ReceiverView = {
-	id: string;
-	callsign: string;
-	description: string | null;
-	contact: string | null;
-	email: string | null;
-	ognDbCountry: string | null;
-	latitude: number | null;
-	longitude: number | null;
-	streetAddress: string | null;
-	city: string | null;
-	region: string | null;
-	country: string | null;
-	postalCode: string | null;
-	createdAt: string;
-	updatedAt: string;
-	latestPacketAt: string | null;
-	fromOgnDb: boolean;
+  id: string;
+  callsign: string;
+  description: string | null;
+  contact: string | null;
+  email: string | null;
+  ognDbCountry: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  streetAddress: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  postalCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestPacketAt: string | null;
+  fromOgnDb: boolean;
 };

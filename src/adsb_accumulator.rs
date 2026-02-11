@@ -1,12 +1,14 @@
-//! ADS-B/SBS message accumulator for combining data from multiple message types
+//! ADS-B message accumulator for combining data from multiple message types.
 //!
-//! ADS-B and SBS protocols send different data in separate message types:
-//! - Position messages (ADS-B TC 9-18, SBS MSG,3): lat/lon/altitude
-//! - Velocity messages (ADS-B TC 19, SBS MSG,4): speed, track, climb rate
-//! - Identification messages (ADS-B TC 1-4, SBS MSG,1): callsign
+//! ADS-B data arrives via two wire formats — Beast (binary) and SBS/BaseStation
+//! (CSV text) — but both carry the same Mode S transponder information split
+//! across separate message types:
+//! - Position messages (Beast TC 9-18 / SBS MSG,3): lat/lon/altitude
+//! - Velocity messages (Beast TC 19 / SBS MSG,4): speed, track, climb rate
+//! - Identification messages (Beast TC 1-4 / SBS MSG,1): callsign
 //!
 //! This accumulator maintains per-aircraft state and emits fixes whenever
-//! enough data is available (at minimum: valid position).
+//! enough data is available (at minimum: valid position + known on_ground status).
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -18,7 +20,7 @@ use rs1090::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 
 use crate::beast::cpr_decoder::CprDecoder;
 use crate::sbs::parser::{SbsMessage, SbsMessageType};
@@ -119,6 +121,12 @@ pub struct AccumulatedAircraftState {
 
     /// Timestamp of last update (for entry expiry)
     pub last_update: DateTime<Utc>,
+
+    /// Count of consecutive messages processed without emitting a fix
+    pub consecutive_no_fix: u32,
+
+    /// Whether we've already logged a warning for consecutive no-fix messages
+    pub warned_no_fix: bool,
 }
 
 impl AccumulatedAircraftState {
@@ -131,6 +139,8 @@ impl AccumulatedAircraftState {
             squawk: None,
             on_ground: None,
             last_update: Utc::now(),
+            consecutive_no_fix: 0,
+            warned_no_fix: false,
         }
     }
 
@@ -185,6 +195,11 @@ pub struct PartialFix {
 
 /// How often to run cleanup (every N messages)
 const CLEANUP_INTERVAL: u64 = 1000;
+
+/// Number of consecutive messages without a fix before logging a warning.
+/// This helps detect situations where an aircraft is sending messages but
+/// we can never emit a fix (e.g., missing on_ground status, CPR decoding issues).
+const NO_FIX_WARNING_THRESHOLD: u32 = 10;
 
 /// Thread-safe accumulator for combining ADS-B/SBS message data
 pub struct AdsbAccumulator {
@@ -243,6 +258,9 @@ impl AdsbAccumulator {
         // Try to emit a fix
         let result = self.try_emit_fix(icao_address, timestamp, trigger);
 
+        // Track consecutive messages without fix emission
+        self.track_no_fix(icao_address, result.is_some());
+
         // Periodic cleanup of expired states (every CLEANUP_INTERVAL messages)
         let count = self.message_count.fetch_add(1, Ordering::Relaxed);
         if count.is_multiple_of(CLEANUP_INTERVAL) {
@@ -281,6 +299,9 @@ impl AdsbAccumulator {
 
         // Try to emit a fix
         let result = self.try_emit_fix(icao_address, timestamp, trigger);
+
+        // Track consecutive messages without fix emission
+        self.track_no_fix(icao_address, result.is_some());
 
         // Periodic cleanup - shares counter with ADS-B processing
         // (already incremented in process_adsb_message, but SBS also increments)
@@ -597,7 +618,11 @@ impl AdsbAccumulator {
         trigger
     }
 
-    /// Try to emit a fix if we have enough data
+    /// Try to emit a fix if we have enough data.
+    ///
+    /// Requires both a valid position AND a known on_ground status.
+    /// Mode S transponders authoritatively report air/ground status; without it
+    /// we cannot determine is_active and would create spurious flights.
     fn try_emit_fix(
         &self,
         icao_address: u32,
@@ -608,6 +633,12 @@ impl AdsbAccumulator {
 
         // Must have valid position to emit a fix
         let position = state.valid_position(timestamp)?;
+
+        // Must have on_ground status to determine is_active
+        if state.on_ground.is_none() {
+            metrics::counter!("adsb_accumulator.fix_skipped_no_on_ground_total").increment(1);
+            return None;
+        }
 
         // Get velocity if available (not expired)
         let velocity = state.valid_velocity(timestamp);
@@ -646,6 +677,32 @@ impl AdsbAccumulator {
             .increment(1);
 
         Some((partial_fix, trigger))
+    }
+
+    /// Track consecutive messages without fix emission for an aircraft.
+    /// Logs an error if too many consecutive messages fail to produce a fix.
+    fn track_no_fix(&self, icao_address: u32, fix_emitted: bool) {
+        if let Some(mut entry) = self.states.get_mut(&icao_address) {
+            let state = entry.value_mut();
+            if fix_emitted {
+                state.consecutive_no_fix = 0;
+                state.warned_no_fix = false;
+            } else {
+                state.consecutive_no_fix += 1;
+                if state.consecutive_no_fix > NO_FIX_WARNING_THRESHOLD && !state.warned_no_fix {
+                    error!(
+                        "Aircraft {:06X}: {} consecutive messages without fix (has_position={}, has_velocity={}, has_callsign={}, on_ground={:?})",
+                        icao_address,
+                        state.consecutive_no_fix,
+                        state.position.is_some(),
+                        state.velocity.is_some(),
+                        state.callsign.is_some(),
+                        state.on_ground,
+                    );
+                    state.warned_no_fix = true;
+                }
+            }
+        }
     }
 
     /// Clean up expired state entries
@@ -847,7 +904,7 @@ mod tests {
         let acc = AdsbAccumulator::new();
         let now = Utc::now();
 
-        // First, add a position via MSG,3
+        // First, add a position via MSG,3 with on_ground status
         let pos_msg = SbsMessage {
             message_type: SbsMessageType::EsAirbornePosition,
             transmission_type: None,
@@ -865,7 +922,7 @@ mod tests {
             alert: None,
             emergency: None,
             spi: None,
-            on_ground: None,
+            on_ground: Some(false),
         };
 
         let result = acc.process_sbs_message(&pos_msg, now).unwrap();
@@ -947,7 +1004,7 @@ mod tests {
         let old_time = Utc::now() - chrono::Duration::seconds(15);
         let now = Utc::now();
 
-        // Add position at old time
+        // Add position at old time with on_ground status
         let pos_msg = SbsMessage {
             message_type: SbsMessageType::EsAirbornePosition,
             transmission_type: None,
@@ -965,7 +1022,7 @@ mod tests {
             alert: None,
             emergency: None,
             spi: None,
-            on_ground: None,
+            on_ground: Some(false),
         };
 
         let _ = acc.process_sbs_message(&pos_msg, old_time).unwrap();
@@ -1029,5 +1086,105 @@ mod tests {
             result.is_none(),
             "Should not emit fix with (0, 0) coordinates"
         );
+    }
+
+    #[test]
+    fn test_position_without_on_ground_no_fix() {
+        let acc = AdsbAccumulator::new();
+        let now = Utc::now();
+
+        // Valid position but no on_ground status
+        let pos_msg = SbsMessage {
+            message_type: SbsMessageType::EsAirbornePosition,
+            transmission_type: None,
+            session_id: None,
+            aircraft_id: "AB1234".to_string(),
+            is_military: None,
+            callsign: None,
+            altitude: Some(35000),
+            ground_speed: None,
+            track: None,
+            latitude: Some(37.7749),
+            longitude: Some(-122.4194),
+            vertical_rate: None,
+            squawk: None,
+            alert: None,
+            emergency: None,
+            spi: None,
+            on_ground: None,
+        };
+
+        let result = acc.process_sbs_message(&pos_msg, now).unwrap();
+        assert!(
+            result.is_none(),
+            "Should not emit fix without on_ground status"
+        );
+    }
+
+    #[test]
+    fn test_position_with_on_ground_emits_fix() {
+        let acc = AdsbAccumulator::new();
+        let now = Utc::now();
+
+        // Valid position with on_ground status
+        let pos_msg = SbsMessage {
+            message_type: SbsMessageType::EsAirbornePosition,
+            transmission_type: None,
+            session_id: None,
+            aircraft_id: "AB1234".to_string(),
+            is_military: None,
+            callsign: None,
+            altitude: Some(35000),
+            ground_speed: None,
+            track: None,
+            latitude: Some(37.7749),
+            longitude: Some(-122.4194),
+            vertical_rate: None,
+            squawk: None,
+            alert: None,
+            emergency: None,
+            spi: None,
+            on_ground: Some(false),
+        };
+
+        let result = acc.process_sbs_message(&pos_msg, now).unwrap();
+        assert!(result.is_some(), "Should emit fix with on_ground status");
+        let (fix, _) = result.unwrap();
+        assert_eq!(fix.on_ground, Some(false));
+    }
+
+    #[test]
+    fn test_on_ground_true_emits_fix() {
+        let acc = AdsbAccumulator::new();
+        let now = Utc::now();
+
+        // Surface position (on ground)
+        let pos_msg = SbsMessage {
+            message_type: SbsMessageType::EsSurfacePosition,
+            transmission_type: None,
+            session_id: None,
+            aircraft_id: "AB1234".to_string(),
+            is_military: None,
+            callsign: None,
+            altitude: None,
+            ground_speed: Some(5.0),
+            track: Some(180.0),
+            latitude: Some(37.7749),
+            longitude: Some(-122.4194),
+            vertical_rate: None,
+            squawk: None,
+            alert: None,
+            emergency: None,
+            spi: None,
+            on_ground: None, // MSG,2 sets on_ground=true automatically
+        };
+
+        let result = acc.process_sbs_message(&pos_msg, now).unwrap();
+        assert!(
+            result.is_some(),
+            "Should emit fix for surface position (on_ground=true)"
+        );
+        let (fix, _) = result.unwrap();
+        assert_eq!(fix.on_ground, Some(true));
     }
 }

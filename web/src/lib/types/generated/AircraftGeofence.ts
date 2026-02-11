@@ -4,7 +4,7 @@
  * Aircraft-geofence link
  */
 export type AircraftGeofence = {
-	aircraftId: string;
-	geofenceId: string;
-	createdAt: string;
+  aircraftId: string;
+  geofenceId: string;
+  createdAt: string;
 };
