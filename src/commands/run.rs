@@ -218,10 +218,19 @@ async fn process_beast_message(
     // If we got a partial fix, complete it and process through FixProcessor
     if let Some((partial_fix, trigger)) = fix_result {
         // Determine if aircraft is active (in flight vs on ground)
-        // The accumulator guarantees on_ground is set before emitting a fix
-        let is_active = !partial_fix
-            .on_ground
-            .expect("accumulator guarantees on_ground is set");
+        // The accumulator guarantees on_ground is set before emitting a fix,
+        // but handle missing values defensively to avoid panics.
+        let is_active = match partial_fix.on_ground {
+            Some(on_ground) => !on_ground,
+            None => {
+                warn!(
+                    "Accumulator emitted ADS-B fix without on_ground; dropping fix for icao_hex={}",
+                    partial_fix.icao_hex
+                );
+                metrics::counter!("beast.run.fix_missing_on_ground_total").increment(1);
+                return;
+            }
+        };
 
         // Build source metadata with ADS-B-specific fields and trigger
         let mut metadata = serde_json::Map::new();
@@ -420,10 +429,19 @@ async fn process_sbs_message(
         };
 
         // Determine if aircraft is active (in flight vs on ground)
-        // The accumulator guarantees on_ground is set before emitting a fix
-        let is_active = !partial_fix
-            .on_ground
-            .expect("accumulator guarantees on_ground is set");
+        // The accumulator guarantees on_ground is set before emitting a fix,
+        // but handle missing values defensively to avoid panics.
+        let is_active = match partial_fix.on_ground {
+            Some(on_ground) => !on_ground,
+            None => {
+                warn!(
+                    "Accumulator emitted SBS fix without on_ground; dropping fix for icao_hex={}",
+                    partial_fix.icao_hex
+                );
+                metrics::counter!("sbs.run.fix_missing_on_ground_total").increment(1);
+                return;
+            }
+        };
 
         // Build source metadata for SBS-specific fields with trigger
         let mut metadata = serde_json::Map::new();

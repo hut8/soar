@@ -113,8 +113,10 @@ impl std::ops::DerefMut for FixWithAircraftInfo {
 }
 
 impl Fix {
-    /// Check if this fix originates from ADS-B (Beast binary or SBS text protocol)
-    pub fn is_adsb(&self) -> bool {
+    /// Check if this fix has authoritative transponder-derived air/ground status.
+    /// Returns true for both ADS-B (Beast binary) and SBS (BaseStation text) protocols,
+    /// which originate from the same Mode S transponder.
+    pub fn has_transponder_data(&self) -> bool {
         self.source_metadata
             .as_ref()
             .and_then(|m| m.as_object())

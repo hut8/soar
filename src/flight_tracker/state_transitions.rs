@@ -71,7 +71,7 @@ pub(crate) async fn process_state_transition(
 ) -> Result<StateTransitionResult> {
     // ADS-B: trust transponder's on_ground field (already set as is_active = !on_ground)
     // APRS: use speed/AGL heuristic
-    let is_active = if fix.is_adsb() {
+    let is_active = if fix.has_transponder_data() {
         fix.is_active
     } else {
         should_be_active(&fix)
@@ -467,7 +467,7 @@ pub(crate) async fn process_state_transition(
             }
 
             // Create new flight - check if takeoff or mid-flight
-            let is_takeoff = if fix.is_adsb() {
+            let is_takeoff = if fix.has_transponder_data() {
                 // ADS-B: any prior inactive fix means on_ground→airborne transition = takeoff
                 if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
                     state.last_n_inactive(1)
@@ -535,7 +535,7 @@ pub(crate) async fn process_state_transition(
 
         // Case 3: Has active flight BUT fix is inactive -> Check if landing
         (Some(flight_id), false) => {
-            if fix.is_adsb() {
+            if fix.has_transponder_data() {
                 // ADS-B: transponder on_ground is authoritative — land immediately
                 fix.flight_id = Some(flight_id);
                 pending_work = PendingBackgroundWork::CompleteFlight {

@@ -194,6 +194,11 @@ pub struct PartialFix {
 /// How often to run cleanup (every N messages)
 const CLEANUP_INTERVAL: u64 = 1000;
 
+/// Number of consecutive messages without a fix before logging a warning.
+/// This helps detect situations where an aircraft is sending messages but
+/// we can never emit a fix (e.g., missing on_ground status, CPR decoding issues).
+const NO_FIX_WARNING_THRESHOLD: u32 = 10;
+
 /// Thread-safe accumulator for combining ADS-B/SBS message data
 pub struct AdsbAccumulator {
     /// Per-aircraft state map (ICAO address -> state)
@@ -682,7 +687,7 @@ impl AdsbAccumulator {
                 state.warned_no_fix = false;
             } else {
                 state.consecutive_no_fix += 1;
-                if state.consecutive_no_fix > 10 && !state.warned_no_fix {
+                if state.consecutive_no_fix > NO_FIX_WARNING_THRESHOLD && !state.warned_no_fix {
                     error!(
                         "Aircraft {:06X}: {} consecutive messages without fix (has_position={}, has_velocity={}, has_callsign={}, on_ground={:?})",
                         icao_address,
