@@ -21,6 +21,7 @@
 		showReceiverMarkers?: boolean;
 		showAirspaceMarkers?: boolean;
 		showRunwayOverlays?: boolean;
+		disableClustering?: boolean;
 	}
 
 	// Settings state
@@ -29,6 +30,7 @@
 	let showReceiverMarkers = $state(true);
 	let showAirspaceMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
+	let disableClustering = $state(false);
 
 	// Settings persistence functions
 	async function loadSettings() {
@@ -50,6 +52,7 @@
 					showReceiverMarkers = backendSettings.showReceiverMarkers ?? true;
 					showAirspaceMarkers = backendSettings.showAirspaceMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
+					disableClustering = backendSettings.disableClustering ?? false;
 					return;
 				}
 			} catch (e) {
@@ -69,6 +72,7 @@
 				showReceiverMarkers = settings.showReceiverMarkers ?? true;
 				showAirspaceMarkers = settings.showAirspaceMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
+				disableClustering = settings.disableClustering ?? false;
 			} catch (e) {
 				logger.warn('Failed to load settings from localStorage: {error}', { error: e });
 			}
@@ -83,7 +87,8 @@
 			showAirportMarkers,
 			showReceiverMarkers,
 			showAirspaceMarkers,
-			showRunwayOverlays
+			showRunwayOverlays,
+			disableClustering
 		};
 
 		// Always save to localStorage for offline support
@@ -114,7 +119,8 @@
 				showAirportMarkers,
 				showReceiverMarkers,
 				showAirspaceMarkers,
-				showRunwayOverlays
+				showRunwayOverlays,
+				disableClustering
 			});
 		}
 	}
@@ -254,6 +260,20 @@
 								<Switch.Thumb />
 							</Switch.Control>
 							<Switch.HiddenInput name="runways-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={disableClustering}
+							onCheckedChange={(details) => {
+								disableClustering = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Disable Clustering</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="clustering-toggle" />
 						</Switch>
 					</div>
 				</section>

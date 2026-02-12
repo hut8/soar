@@ -84,7 +84,8 @@
 		showAirportMarkers: true,
 		showReceiverMarkers: true,
 		showAirspaceMarkers: true,
-		showRunwayOverlays: false
+		showRunwayOverlays: false,
+		disableClustering: false
 	});
 
 	// Loading states
@@ -555,13 +556,17 @@
 
 		try {
 			const bounds = map.getBounds();
-			const params = new URLSearchParams({
+			const paramEntries: Record<string, string> = {
 				north: bounds.getNorth().toFixed(6),
 				south: bounds.getSouth().toFixed(6),
 				east: bounds.getEast().toFixed(6),
 				west: bounds.getWest().toFixed(6),
 				limit: MAX_AIRCRAFT_DISPLAY.toString()
-			});
+			};
+			if (currentSettings.disableClustering) {
+				paramEntries.cluster = 'false';
+			}
+			const params = new URLSearchParams(paramEntries);
 
 			const response = await serverCall<AircraftSearchResponse>(`/aircraft?${params.toString()}`);
 
@@ -801,6 +806,7 @@
 
 	// Handle settings changes from SettingsModal
 	function handleSettingsChange(newSettings: typeof currentSettings) {
+		const clusteringChanged = currentSettings.disableClustering !== newSettings.disableClustering;
 		currentSettings = { ...newSettings };
 
 		// Update layer managers with new settings
@@ -810,6 +816,10 @@
 			airportLayerManager.checkAndUpdate(viewportArea, newSettings.showAirportMarkers);
 			receiverLayerManager.checkAndUpdate(viewportArea, newSettings.showReceiverMarkers);
 			runwayLayerManager.checkAndUpdate(viewportArea, newSettings.showRunwayOverlays);
+
+			if (clusteringChanged) {
+				fetchAircraftInViewport();
+			}
 		}
 	}
 
