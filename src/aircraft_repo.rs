@@ -876,46 +876,50 @@ impl AircraftRepository {
                         //    violate the unique index.
                         // Deleting the dup removes it from unique indexes, and cascade handles
                         // geofences, watchlist, etc.
-                        diesel::delete(
+                        let deleted = diesel::delete(
                             aircraft::table.filter(aircraft::id.eq(dup.id)),
                         )
                         .execute(conn)
                         .context("deleting duplicate aircraft")?;
+                        anyhow::ensure!(
+                            deleted == 1,
+                            "expected to delete 1 duplicate aircraft row, but deleted {}",
+                            deleted
+                        );
 
-                        // Copy addresses from the duplicate to the target (only if target
-                        // lacks them). Safe now that the duplicate row is gone.
-                        if dup.icao_address.is_some() && target.icao_address.is_none() {
-                            diesel::update(
-                                aircraft::table.filter(aircraft::id.eq(target.id)),
-                            )
-                            .set(aircraft::icao_address.eq(dup.icao_address))
-                            .execute(conn)
-                            .context("setting icao_address on target")?;
-                        }
-                        if dup.flarm_address.is_some() && target.flarm_address.is_none() {
-                            diesel::update(
-                                aircraft::table.filter(aircraft::id.eq(target.id)),
-                            )
-                            .set(aircraft::flarm_address.eq(dup.flarm_address))
-                            .execute(conn)
-                            .context("setting flarm_address on target")?;
-                        }
-                        if dup.ogn_address.is_some() && target.ogn_address.is_none() {
-                            diesel::update(
-                                aircraft::table.filter(aircraft::id.eq(target.id)),
-                            )
-                            .set(aircraft::ogn_address.eq(dup.ogn_address))
-                            .execute(conn)
-                            .context("setting ogn_address on target")?;
-                        }
-                        if dup.other_address.is_some() && target.other_address.is_none() {
-                            diesel::update(
-                                aircraft::table.filter(aircraft::id.eq(target.id)),
-                            )
-                            .set(aircraft::other_address.eq(dup.other_address))
-                            .execute(conn)
-                            .context("setting other_address on target")?;
-                        }
+                        // Copy addresses from the duplicate to the target in a single
+                        // UPDATE. Safe now that the duplicate row is gone.
+                        let new_icao = if dup.icao_address.is_some() && target.icao_address.is_none() {
+                            dup.icao_address
+                        } else {
+                            target.icao_address
+                        };
+                        let new_flarm = if dup.flarm_address.is_some() && target.flarm_address.is_none() {
+                            dup.flarm_address
+                        } else {
+                            target.flarm_address
+                        };
+                        let new_ogn = if dup.ogn_address.is_some() && target.ogn_address.is_none() {
+                            dup.ogn_address
+                        } else {
+                            target.ogn_address
+                        };
+                        let new_other = if dup.other_address.is_some() && target.other_address.is_none() {
+                            dup.other_address
+                        } else {
+                            target.other_address
+                        };
+                        diesel::update(
+                            aircraft::table.filter(aircraft::id.eq(target.id)),
+                        )
+                        .set((
+                            aircraft::icao_address.eq(new_icao),
+                            aircraft::flarm_address.eq(new_flarm),
+                            aircraft::ogn_address.eq(new_ogn),
+                            aircraft::other_address.eq(new_other),
+                        ))
+                        .execute(conn)
+                        .context("transferring addresses to target")?;
 
                         info!(
                             "Merged aircraft {} into {} (registration={}): \
