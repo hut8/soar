@@ -143,7 +143,7 @@
 	let isLoadingNearbyFlights = $state(false);
 	let showNearbyFlightsSection = $state(false);
 	// Counter for unique nearby flight layer IDs
-	let nearbyFlightLayerIds = $state<string[]>([]);
+	let nearbyFlightLayerIds = $state<{ layerId: string; sourceId: string }[]>([]);
 
 	// Receiver data
 	let receivers = $state<Receiver[]>([]);
@@ -425,6 +425,11 @@
 					'icon-rotate': ['get', 'bearing'],
 					'icon-allow-overlap': true,
 					'icon-rotation-alignment': 'map'
+				},
+				paint: {
+					'icon-color': ['get', 'color'],
+					'icon-halo-color': 'rgba(0, 0, 0, 0.6)',
+					'icon-halo-width': 1
 				}
 			});
 		}
@@ -540,9 +545,9 @@
 	// Clear nearby flight layers from map
 	function clearNearbyFlightLayers() {
 		if (!map) return;
-		for (const layerId of nearbyFlightLayerIds) {
+		for (const { layerId, sourceId } of nearbyFlightLayerIds) {
 			if (map.getLayer(layerId)) map.removeLayer(layerId);
-			if (map.getSource(layerId)) map.removeSource(layerId);
+			if (map.getSource(sourceId)) map.removeSource(sourceId);
 		}
 		nearbyFlightLayerIds = [];
 	}
@@ -620,7 +625,7 @@
 				}
 			});
 
-			nearbyFlightLayerIds.push(sourceId);
+			nearbyFlightLayerIds.push({ layerId, sourceId });
 			colorIdx++;
 		}
 	}

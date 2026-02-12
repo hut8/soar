@@ -256,6 +256,11 @@
 					'icon-rotate': ['get', 'bearing'],
 					'icon-allow-overlap': true,
 					'icon-rotation-alignment': 'map'
+				},
+				paint: {
+					'icon-color': ['get', 'color'],
+					'icon-halo-color': 'rgba(0, 0, 0, 0.6)',
+					'icon-halo-width': 1
 				}
 			});
 		}
@@ -344,7 +349,7 @@
 
 	// Update map with new data
 	function updateMap() {
-		if (data.path.length === 0 || !map) return;
+		if (data.path.length === 0 || !map || !map.isStyleLoaded()) return;
 
 		// Update track and arrow layers with new data
 		addFlightLayers();
