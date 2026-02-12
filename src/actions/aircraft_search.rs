@@ -65,6 +65,8 @@ pub struct AircraftSearchQuery {
     pub aircraft_types: Option<String>,
     /// Optional limit for number of aircraft returned (for bounding box searches)
     pub limit: Option<i64>,
+    /// Whether to enable clustering when many aircraft are in viewport (default: true)
+    pub cluster: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -231,6 +233,7 @@ async fn search_aircraft_by_bbox(
     west: f64,
     after: Option<DateTime<Utc>>,
     limit: Option<i64>,
+    cluster: Option<bool>,
     pool: crate::web::PgPool,
     lookup: &AircraftTypesLookup,
 ) -> impl IntoResponse {
@@ -296,9 +299,9 @@ async fn search_aircraft_by_bbox(
 
     info!("Total aircraft in bounding box: {}", total_count);
 
-    // Use clustering if total count exceeds 250 aircraft
-    if total_count > 250 {
-        info!("Total count exceeds 250, using clustering");
+    // Use clustering if total count exceeds 2000 aircraft (unless clustering is disabled)
+    if cluster.unwrap_or(true) && total_count > 2000 {
+        info!("Total count exceeds 2000, using clustering");
 
         let grid_size = 5.0; // 5.0 degrees (~555km)
 
@@ -521,7 +524,7 @@ pub async fn search_aircraft(
             query.west,
         ) {
             (Some(north), Some(south), Some(east), Some(west)) => {
-                search_aircraft_by_bbox(north, south, east, west, query.after, query.limit, state.pool.clone(), &state.aircraft_types_lookup).await.into_response()
+                search_aircraft_by_bbox(north, south, east, west, query.after, query.limit, query.cluster, state.pool.clone(), &state.aircraft_types_lookup).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
