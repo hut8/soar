@@ -22,7 +22,20 @@ const DEBOUNCE_MS = 100;
 /** Source and layer IDs */
 const SOURCE_ID = 'receivers-source';
 const SYMBOL_LAYER_ID = 'receivers-symbols';
-const CIRCLE_LAYER_ID = 'receivers-circles';
+const ICON_LAYER_ID = 'receivers-icons';
+const ICON_IMAGE_ID = 'receiver-icon';
+
+/** Icon size in pixels for the receiver icon image */
+const ICON_SIZE = 32;
+
+/**
+ * Create a data URL for the receiver radio/antenna SVG icon.
+ * Uses the same radio wave pattern as the Google Maps ReceiverMarkerManager.
+ */
+function createReceiverIconDataUrl(size: number): string {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>`;
+	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
 
 export interface ReceiverLayerManagerOptions {
 	/** Callback when a receiver marker is clicked */
@@ -36,6 +49,7 @@ export class ReceiverLayerManager {
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private options: ReceiverLayerManagerOptions;
 	private layersAdded: boolean = false;
+	private iconLoaded: boolean = false;
 
 	constructor(options: ReceiverLayerManagerOptions = {}) {
 		this.options = options;
@@ -46,6 +60,9 @@ export class ReceiverLayerManager {
 	 */
 	setMap(map: maplibregl.Map): void {
 		this.map = map;
+
+		// Load the receiver icon image
+		this.loadIcon();
 
 		// Set up click handler if callback provided
 		if (this.options.onReceiverClick) {
@@ -112,6 +129,26 @@ export class ReceiverLayerManager {
 		this.removeLayers();
 		this.receivers = [];
 		this.map = null;
+	}
+
+	/**
+	 * Load the receiver icon image into MapLibre
+	 */
+	private loadIcon(): void {
+		if (!this.map || this.iconLoaded) return;
+
+		const iconUrl = createReceiverIconDataUrl(ICON_SIZE);
+		const img = new Image();
+		img.onload = () => {
+			if (this.map && !this.map.hasImage(ICON_IMAGE_ID)) {
+				this.map.addImage(ICON_IMAGE_ID, img, { sdf: true });
+			}
+			this.iconLoaded = true;
+		};
+		img.onerror = () => {
+			logger.warn('Failed to load receiver icon');
+		};
+		img.src = iconUrl;
 	}
 
 	/**
@@ -223,16 +260,20 @@ export class ReceiverLayerManager {
 			data: geojson
 		});
 
-		// Add circle layer for receiver markers
+		// Add icon layer for receiver markers (replaces old circle layer)
 		this.map.addLayer({
-			id: CIRCLE_LAYER_ID,
-			type: 'circle',
+			id: ICON_LAYER_ID,
+			type: 'symbol',
 			source: SOURCE_ID,
+			layout: {
+				'icon-image': ICON_IMAGE_ID,
+				'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 0.7, 14, 0.9],
+				'icon-allow-overlap': true
+			},
 			paint: {
-				'circle-radius': 6,
-				'circle-color': '#6b7280', // Gray color for receivers
-				'circle-stroke-width': 2,
-				'circle-stroke-color': '#ffffff'
+				'icon-color': '#6b7280',
+				'icon-halo-color': 'rgba(255, 255, 255, 0.9)',
+				'icon-halo-width': 1
 			}
 		});
 
@@ -246,7 +287,7 @@ export class ReceiverLayerManager {
 				'text-field': ['get', 'callsign'],
 				'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
 				'text-size': 10,
-				'text-offset': [0, 1.2],
+				'text-offset': [0, 1.5],
 				'text-anchor': 'top',
 				'text-allow-overlap': false
 			},
@@ -270,8 +311,8 @@ export class ReceiverLayerManager {
 		if (this.map.getLayer(SYMBOL_LAYER_ID)) {
 			this.map.removeLayer(SYMBOL_LAYER_ID);
 		}
-		if (this.map.getLayer(CIRCLE_LAYER_ID)) {
-			this.map.removeLayer(CIRCLE_LAYER_ID);
+		if (this.map.getLayer(ICON_LAYER_ID)) {
+			this.map.removeLayer(ICON_LAYER_ID);
 		}
 
 		// Then remove source
@@ -293,6 +334,14 @@ export class ReceiverLayerManager {
 		const handleClick = (e: maplibregl.MapLayerMouseEvent) => {
 			if (!e.features || e.features.length === 0) return;
 
+			// Check if an aircraft was clicked at the same point - aircraft have priority
+			const aircraftFeatures = this.map!.queryRenderedFeatures(e.point, {
+				layers: ['aircraft-markers']
+			});
+			if (aircraftFeatures.length > 0) {
+				return; // Aircraft clicked, let aircraft handler deal with it
+			}
+
 			const feature = e.features[0];
 			const receiverId = feature.properties?.id;
 
@@ -304,14 +353,25 @@ export class ReceiverLayerManager {
 			}
 		};
 
-		this.map.on('click', CIRCLE_LAYER_ID, handleClick);
+		// Register click handler on both the icon layer and symbol (label) layer
+		this.map.on('click', ICON_LAYER_ID, handleClick);
+		this.map.on('click', SYMBOL_LAYER_ID, handleClick);
 
-		// Change cursor on hover
-		this.map.on('mouseenter', CIRCLE_LAYER_ID, () => {
+		// Change cursor on hover for icon layer
+		this.map.on('mouseenter', ICON_LAYER_ID, () => {
 			if (this.map) this.map.getCanvas().style.cursor = 'pointer';
 		});
 
-		this.map.on('mouseleave', CIRCLE_LAYER_ID, () => {
+		this.map.on('mouseleave', ICON_LAYER_ID, () => {
+			if (this.map) this.map.getCanvas().style.cursor = '';
+		});
+
+		// Change cursor on hover for symbol (label) layer
+		this.map.on('mouseenter', SYMBOL_LAYER_ID, () => {
+			if (this.map) this.map.getCanvas().style.cursor = 'pointer';
+		});
+
+		this.map.on('mouseleave', SYMBOL_LAYER_ID, () => {
 			if (this.map) this.map.getCanvas().style.cursor = '';
 		});
 	}
