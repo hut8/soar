@@ -150,6 +150,16 @@
 		goto(loginPath);
 	}
 
+	function formatDelay(ms: number): string {
+		return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+	}
+
+	function delayColorClass(ms: number): string {
+		if (ms < 2000) return 'text-success-700 dark:text-success-400';
+		if (ms <= 10000) return 'text-warning-700 dark:text-warning-400';
+		return 'text-error-700 dark:text-error-400';
+	}
+
 	// Close menus when clicking outside
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as HTMLElement;
@@ -217,14 +227,21 @@
 										: sources.ogn
 											? 'Live - OGN'
 											: 'Live'}
+							{@const delay = $websocketStatus.delayMs}
 							<div
 								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-								title="{label} - WebSocket connected{$debugStatus.operationsPageActive
-									? ', Operations page active'
-									: ''}"
+								title="{label} - WebSocket connected{delay !== null
+									? `, feed delay: ${formatDelay(delay)}`
+									: ''}{$debugStatus.operationsPageActive ? ', Operations page active' : ''}"
 							>
 								<Wifi size={16} />
 								<span class="text-xs font-medium">{label}</span>
+								{#if delay !== null}
+									<span class="text-xs opacity-60">·</span>
+									<span class="text-xs font-medium {delayColorClass(delay)}"
+										>{formatDelay(delay)}</span
+									>
+								{/if}
 								<RadarLoader />
 							</div>
 						{:else if $websocketStatus.reconnecting}

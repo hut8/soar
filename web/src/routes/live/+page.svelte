@@ -10,12 +10,14 @@
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import AirportModal from '$lib/components/AirportModal.svelte';
 	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
+	import ReceiverModal from '$lib/components/ReceiverModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import type {
 		Aircraft,
 		Airport,
 		Airspace,
+		Receiver,
 		Fix,
 		AircraftSearchResponse,
 		AircraftCluster
@@ -77,6 +79,8 @@
 	let selectedAirport: Airport | null = $state(null);
 	let showAirspaceModal = $state(false);
 	let selectedAirspace: Airspace | null = $state(null);
+	let showReceiverModal = $state(false);
+	let selectedReceiver: Receiver | null = $state(null);
 
 	// Settings state (received from SettingsModal via callback)
 	let currentSettings = $state({
@@ -129,7 +133,12 @@
 		}
 	});
 
-	const receiverLayerManager = new ReceiverLayerManager();
+	const receiverLayerManager = new ReceiverLayerManager({
+		onReceiverClick: (receiver) => {
+			selectedReceiver = receiver;
+			showReceiverModal = true;
+		}
+	});
 
 	// Runway layer manager (uses airport manager for runway data)
 	const runwayLayerManager = new RunwayLayerManager({
@@ -1108,6 +1117,10 @@
 
 {#if selectedAirspace}
 	<AirspaceModal bind:showModal={showAirspaceModal} bind:selectedAirspace />
+{/if}
+
+{#if selectedReceiver}
+	<ReceiverModal bind:showModal={showReceiverModal} bind:selectedReceiver />
 {/if}
 
 <style>

@@ -12,6 +12,7 @@ interface WebSocketStatus {
 	reconnecting: boolean;
 	error: string | null;
 	connectionSources: ConnectionSources;
+	delayMs: number | null;
 }
 
 interface DebugStatus {
@@ -28,7 +29,8 @@ const initialWebSocketStatus: WebSocketStatus = {
 	connectionSources: {
 		ogn: false,
 		adsb: false
-	}
+	},
+	delayMs: null
 };
 
 const initialDebugStatus: DebugStatus = {
@@ -40,6 +42,10 @@ const initialDebugStatus: DebugStatus = {
 
 export const websocketStatus = writable<WebSocketStatus>(initialWebSocketStatus);
 export const debugStatus = writable<DebugStatus>(initialDebugStatus);
+
+// EMA smoothing factor (~13 samples to converge)
+const EMA_ALPHA = 0.15;
+let emaDelayMs: number | null = null;
 
 // Initialize WebSocket status tracking
 if (browser) {
@@ -59,13 +65,29 @@ if (browser) {
 				break;
 
 			case 'connection_closed':
+				emaDelayMs = null;
 				websocketStatus.set({
 					connected: false,
 					reconnecting: false,
 					error: null,
-					connectionSources: { ogn: false, adsb: false }
+					connectionSources: { ogn: false, adsb: false },
+					delayMs: null
 				});
 				break;
+
+			case 'fix_received': {
+				const delay = Math.max(0, Date.now() - new Date(event.fix.receivedAt).getTime());
+				if (emaDelayMs === null) {
+					emaDelayMs = delay;
+				} else {
+					emaDelayMs = EMA_ALPHA * delay + (1 - EMA_ALPHA) * emaDelayMs;
+				}
+				websocketStatus.update((status) => ({
+					...status,
+					delayMs: Math.round(emaDelayMs!)
+				}));
+				break;
+			}
 
 			case 'connection_status':
 				websocketStatus.update((status) => ({
