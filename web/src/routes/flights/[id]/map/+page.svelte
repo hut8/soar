@@ -1,8 +1,7 @@
 <script lang="ts">
-	/// <reference types="@types/google.maps" />
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
-	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+	import maplibregl from 'maplibre-gl';
+	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
@@ -15,7 +14,6 @@
 		Fix
 	} from '$lib/types';
 	import dayjs from 'dayjs';
-	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
 	import { getLogger } from '$lib/logging';
@@ -25,12 +23,10 @@
 	let { data }: { data: PageData } = $props();
 
 	let mapContainer = $state<HTMLElement>();
-	let map = $state<google.maps.Map>();
-	let flightPathSegments = $state<google.maps.Polyline[]>([]);
-	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
-	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+	let map = $state<maplibregl.Map>();
+	let altitudePopup = $state<maplibregl.Popup | null>(null);
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
-	let hoverMarker = $state<google.maps.marker.AdvancedMarkerElement | null>(null);
+	let hoverMarker = $state<maplibregl.Marker | null>(null);
 
 	// Display options
 	let isPanelCollapsed = $state(false);
@@ -44,7 +40,7 @@
 	// Receiver data
 	let showReceivers = $state(false);
 	let receivers = $state<Receiver[]>([]);
-	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
+	let receiverMarkers = $state<maplibregl.Marker[]>([]);
 	let isLoadingReceivers = $state(false);
 
 	// Check if fixes have AGL data
@@ -80,42 +76,6 @@
 		return bearing;
 	}
 
-	// Helper function to determine which fixes should display arrow markers
-	// Returns a Set of indices for fixes that should show arrows
-	function getArrowFixIndices(fixesInOrder: typeof data.fixes): SvelteSet<number> {
-		const indices = new SvelteSet<number>();
-
-		if (fixesInOrder.length === 0) return indices;
-
-		// Always include the first fix
-		indices.add(0);
-
-		if (fixesInOrder.length === 1) return indices;
-
-		// Calculate 10% intervals
-		const totalFixes = fixesInOrder.length;
-		const interval = Math.floor(totalFixes / 10); // 10% of total fixes
-
-		if (interval === 0) return indices; // Too few fixes for intervals
-
-		let lastArrowTimestamp = new Date(fixesInOrder[0].receivedAt).getTime();
-		const oneMinuteMs = 60 * 1000; // 1 minute in milliseconds
-
-		// Check each 10% marker
-		for (let i = 1; i <= 10; i++) {
-			const candidateIndex = Math.min(i * interval, totalFixes - 1);
-			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].receivedAt).getTime();
-
-			// Only add if at least 1 minute has passed since last arrow
-			if (candidateTimestamp - lastArrowTimestamp >= oneMinuteMs) {
-				indices.add(candidateIndex);
-				lastArrowTimestamp = candidateTimestamp;
-			}
-		}
-
-		return indices;
-	}
-
 	// Helper function to map altitude to color (red→blue gradient)
 	function altitudeToColor(altitude: number | null | undefined, min: number, max: number): string {
 		if (altitude === null || altitude === undefined || max === min) {
@@ -144,8 +104,6 @@
 		const normalized = fixIndex / (totalFixes - 1);
 
 		// Interpolate from purple (early) to orange (late)
-		// Purple: rgb(147, 51, 234) - #9333ea
-		// Orange: rgb(251, 146, 60) - #fb923c
 		const r = Math.round(147 + normalized * (251 - 147));
 		const g = Math.round(51 + normalized * (146 - 51));
 		const b = Math.round(234 - normalized * (234 - 60));
@@ -168,123 +126,164 @@
 		}
 	}
 
-	// Calculate arrow scale based on zoom level (inversely proportional to zoom)
-	// Zoom 8 (far out) -> scale 1, Zoom 16 (close in) -> scale 4
-	function getArrowScale(zoom: number): number {
-		// Scale increases linearly with zoom: at zoom 8 = 1, at zoom 16 = 4
-		return Math.max(1, Math.min(5, (zoom - 8) * 0.5 + 1));
-	}
-
-	// Update arrow icons on all polyline segments based on current zoom
-	function updateArrowScales() {
-		if (!map) return;
-		const zoom = map.getZoom() ?? 12;
-		const scale = getArrowScale(zoom);
+	// Build GeoJSON for flight track segments (each segment is a 2-point LineString with a color)
+	function buildTrackGeoJSON(pathPoints: PathPoint[]): GeoJSON.FeatureCollection {
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
-
-		// Path is already in chronological order (oldest first)
-		const pathPoints = data.path;
 		const totalPoints = pathPoints.length;
-
-		// Show arrow every ~10% of points
-		const arrowInterval = Math.max(1, Math.floor(totalPoints / 10));
-
-		flightPathSegments.forEach((segment, index) => {
-			const path = segment.getPath();
-			if (path.getLength() < 2) return;
-
-			// Get color based on segment index
-			if (index >= pathPoints.length) return;
-			const point = pathPoints[index];
-			const color = getFixColor(index, point.altitudeFeet, minAlt, maxAlt, totalPoints);
-
-			// Show arrow at regular intervals
-			const shouldShowArrow = index % arrowInterval === 0;
-
-			// Only add arrow icon if this segment should have one
-			const icons = [];
-			if (shouldShowArrow) {
-				const arrowSymbol = {
-					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-					fillColor: color,
-					fillOpacity: 1,
-					strokeColor: color,
-					strokeOpacity: 0.8,
-					strokeWeight: 1,
-					scale: scale
-				};
-				icons.push({
-					icon: arrowSymbol,
-					offset: '50%'
-				});
-			}
-
-			segment.setOptions({
-				icons: icons
-			});
-		});
-	}
-
-	// Helper function to create gradient polyline segments from compressed path data
-	function createGradientPolylines(
-		pathPoints: PathPoint[],
-		targetMap: google.maps.Map
-	): google.maps.Polyline[] {
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
-		const segments: google.maps.Polyline[] = [];
-		const zoom = targetMap.getZoom() ?? 12;
-		const scale = getArrowScale(zoom);
-		const totalPoints = pathPoints.length;
-
-		// Show arrow every ~10% of points (since we don't have timestamps in path data)
-		const arrowInterval = Math.max(1, Math.floor(totalPoints / 10));
+		const features: GeoJSON.Feature[] = [];
 
 		for (let i = 0; i < pathPoints.length - 1; i++) {
-			const point1 = pathPoints[i];
-			const point2 = pathPoints[i + 1];
+			const p1 = pathPoints[i];
+			const p2 = pathPoints[i + 1];
+			const color = getFixColor(i, p1.altitudeFeet, minAlt, maxAlt, totalPoints);
 
-			const color = getFixColor(i, point1.altitudeFeet, minAlt, maxAlt, totalPoints);
-
-			// Show arrow at regular intervals
-			const shouldShowArrow = i % arrowInterval === 0;
-
-			// Define arrow symbol for this segment if needed
-			const icons = [];
-			if (shouldShowArrow) {
-				const arrowSymbol = {
-					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-					fillColor: color,
-					fillOpacity: 1,
-					strokeColor: color,
-					strokeOpacity: 0.8,
-					strokeWeight: 1,
-					scale: scale
-				};
-				icons.push({
-					icon: arrowSymbol,
-					offset: '50%'
-				});
-			}
-
-			const segment = new google.maps.Polyline({
-				path: [
-					{ lat: point1.latitude, lng: point1.longitude },
-					{ lat: point2.latitude, lng: point2.longitude }
-				],
-				geodesic: true,
-				strokeColor: color,
-				strokeOpacity: 1.0,
-				strokeWeight: 3,
-				icons: icons
+			features.push({
+				type: 'Feature',
+				properties: { color },
+				geometry: {
+					type: 'LineString',
+					coordinates: [
+						[p1.longitude, p1.latitude],
+						[p2.longitude, p2.latitude]
+					]
+				}
 			});
-
-			segment.setMap(targetMap);
-			segments.push(segment);
 		}
 
-		return segments;
+		return { type: 'FeatureCollection', features };
+	}
+
+	// Build GeoJSON for clickable arrow markers from fixes (for info popups)
+	function buildFixArrowGeoJSON(fixesInOrder: Fix[]): GeoJSON.FeatureCollection {
+		const minAlt = minAltitude() ?? 0;
+		const maxAlt = maxAltitude() ?? 1000;
+		const totalFixes = fixesInOrder.length;
+		const features: GeoJSON.Feature[] = [];
+
+		if (totalFixes === 0) return { type: 'FeatureCollection', features };
+
+		// Place arrows at ~10% intervals
+		const arrowInterval = Math.max(1, Math.floor(totalFixes / 10));
+
+		for (let i = 0; i < totalFixes; i++) {
+			if (i % arrowInterval !== 0 && i !== 0) continue;
+
+			const fix = fixesInOrder[i];
+			let bearing = 0;
+
+			if (i < totalFixes - 1) {
+				const nextFix = fixesInOrder[i + 1];
+				bearing = calculateBearing(
+					fix.latitude,
+					fix.longitude,
+					nextFix.latitude,
+					nextFix.longitude
+				);
+			} else if (i > 0) {
+				const prevFix = fixesInOrder[i - 1];
+				bearing = calculateBearing(
+					prevFix.latitude,
+					prevFix.longitude,
+					fix.latitude,
+					fix.longitude
+				);
+			}
+
+			const color = getFixColor(i, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
+
+			features.push({
+				type: 'Feature',
+				properties: {
+					bearing,
+					color,
+					fixIndex: i,
+					altitudeMsl: fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : null,
+					altitudeAgl: fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : null,
+					heading: fix.trackDegrees !== null ? Math.round(fix.trackDegrees) + '°' : null,
+					turnRate: fix.turnRateRot !== null ? fix.turnRateRot.toFixed(2) + ' rot/min' : null,
+					climbRate: fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : null,
+					groundSpeed:
+						fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : null,
+					timestamp: dayjs(fix.receivedAt).format('h:mm:ss A')
+				},
+				geometry: {
+					type: 'Point',
+					coordinates: [fix.longitude, fix.latitude]
+				}
+			});
+		}
+
+		return { type: 'FeatureCollection', features };
+	}
+
+	// Add flight track layers to the map
+	function addFlightLayers() {
+		if (!map) return;
+
+		const trackGeoJSON = buildTrackGeoJSON(data.path);
+		const fixesInOrder = [...data.fixes].reverse();
+		const arrowGeoJSON = buildFixArrowGeoJSON(fixesInOrder);
+
+		// Add track source and layer
+		if (map.getSource('flight-track')) {
+			(map.getSource('flight-track') as maplibregl.GeoJSONSource).setData(trackGeoJSON);
+		} else {
+			map.addSource('flight-track', { type: 'geojson', data: trackGeoJSON });
+			map.addLayer({
+				id: 'flight-track-line',
+				type: 'line',
+				source: 'flight-track',
+				paint: {
+					'line-color': ['get', 'color'],
+					'line-width': 3
+				}
+			});
+		}
+
+		// Add arrow source and layer
+		if (map.getSource('flight-arrows')) {
+			(map.getSource('flight-arrows') as maplibregl.GeoJSONSource).setData(arrowGeoJSON);
+		} else {
+			map.addSource('flight-arrows', { type: 'geojson', data: arrowGeoJSON });
+			map.addLayer({
+				id: 'flight-arrows-layer',
+				type: 'symbol',
+				source: 'flight-arrows',
+				layout: {
+					'icon-image': 'arrow-icon',
+					'icon-size': 0.7,
+					'icon-rotate': ['get', 'bearing'],
+					'icon-allow-overlap': true,
+					'icon-rotation-alignment': 'map'
+				}
+			});
+		}
+	}
+
+	// Create arrow icon for the map
+	function createArrowIcon(mapInstance: maplibregl.Map) {
+		const size = 32;
+		const canvas = document.createElement('canvas');
+		canvas.width = size;
+		canvas.height = size;
+		const ctx = canvas.getContext('2d')!;
+
+		// Draw arrow pointing up (rotation handled by MapLibre)
+		ctx.fillStyle = '#ffffff';
+		ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.moveTo(size / 2, 2); // top
+		ctx.lineTo(size - 4, size - 4); // bottom right
+		ctx.lineTo(size / 2, size - 8); // notch
+		ctx.lineTo(4, size - 4); // bottom left
+		ctx.closePath();
+		ctx.fill();
+		ctx.stroke();
+
+		const imageData = ctx.getImageData(0, 0, size, size);
+		mapInstance.addImage('arrow-icon', imageData, { sdf: true });
 	}
 
 	function isFlightInProgress(): boolean {
@@ -308,7 +307,6 @@
 			]);
 
 			data.flight = flightResponse.data;
-			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
 			if (fixesResponse.data.length > 0) {
@@ -346,142 +344,46 @@
 
 	// Update map with new data
 	function updateMap() {
-		if (data.path.length === 0 || !map || flightPathSegments.length === 0) return;
+		if (data.path.length === 0 || !map) return;
 
-		// Clear existing flight path segments
-		flightPathSegments.forEach((segment) => {
-			segment.setMap(null);
-		});
-		flightPathSegments = [];
+		// Update track and arrow layers with new data
+		addFlightLayers();
 
-		// Create new gradient polyline segments from compressed path
-		flightPathSegments = createGradientPolylines(data.path, map);
-
-		// Clear existing fix markers
-		fixMarkers.forEach((marker) => {
-			marker.map = null;
-		});
-		fixMarkers = [];
-
-		// Wait for map to be ready before adding markers (still uses fixes for detail)
-		const fixesInOrder = [...data.fixes].reverse();
-		google.maps.event.addListenerOnce(map, 'idle', () => {
-			addFixMarkers(fixesInOrder);
-		});
+		// Update takeoff/landing markers
+		updateEndpointMarkers();
 	}
 
-	function addFixMarkers(fixesInOrder: typeof data.fixes) {
-		if (!map) return;
+	// Track takeoff/landing markers for cleanup
+	let takeoffMarker: maplibregl.Marker | null = null;
+	let landingMarker: maplibregl.Marker | null = null;
 
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
-		const arrowIndices = getArrowFixIndices(fixesInOrder);
-		const totalFixes = fixesInOrder.length;
+	function updateEndpointMarkers() {
+		// Remove existing markers
+		takeoffMarker?.remove();
+		landingMarker?.remove();
+		takeoffMarker = null;
+		landingMarker = null;
 
-		fixesInOrder.forEach((fix, index) => {
-			// Only create arrow markers for selected indices
-			if (!arrowIndices.has(index)) return;
+		if (!map || data.path.length === 0) return;
 
-			// Calculate bearing to next fix
-			let bearing = 0;
-			if (index < fixesInOrder.length - 1) {
-				const nextFix = fixesInOrder[index + 1];
-				bearing = calculateBearing(
-					fix.latitude,
-					fix.longitude,
-					nextFix.latitude,
-					nextFix.longitude
-				);
-			} else if (index > 0) {
-				const prevFix = fixesInOrder[index - 1];
-				bearing = calculateBearing(
-					prevFix.latitude,
-					prevFix.longitude,
-					fix.latitude,
-					fix.longitude
-				);
-			}
+		// Add takeoff marker (green)
+		const first = data.path[0];
+		const takeoffEl = document.createElement('div');
+		takeoffEl.style.cssText =
+			'background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;';
+		takeoffMarker = new maplibregl.Marker({ element: takeoffEl })
+			.setLngLat([first.longitude, first.latitude])
+			.addTo(map);
 
-			const color = getFixColor(index, fix.altitudeMslFeet, minAlt, maxAlt, totalFixes);
-
-			// Create SVG arrow element (12x12 pixels, twice the original size)
-			const arrowSvg = document.createElement('div');
-			arrowSvg.innerHTML = `
-				<svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
-					<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
-				</svg>
-			`;
-
-			const marker = new google.maps.marker.AdvancedMarkerElement({
-				map,
-				position: { lat: fix.latitude, lng: fix.longitude },
-				content: arrowSvg
-			});
-
-			marker.addListener('click', () => {
-				const mslAlt = fix.altitudeMslFeet ? Math.round(fix.altitudeMslFeet) : 'N/A';
-				const aglAlt = fix.altitudeAglFeet ? Math.round(fix.altitudeAglFeet) : 'N/A';
-				const heading = fix.trackDegrees !== null ? Math.round(fix.trackDegrees) + '°' : 'N/A';
-				const turnRate = fix.turnRateRot !== null ? fix.turnRateRot.toFixed(2) + ' rot/min' : 'N/A';
-				const climbRate = fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : 'N/A';
-				const groundSpeed =
-					fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : 'N/A';
-				const timestamp = dayjs(fix.receivedAt).format('h:mm:ss A');
-
-				const content = `
-					<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
-						<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">${timestamp}</div>
-						<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">MSL:</span>
-								<span style="font-weight: 600; color: #3b82f6;">${mslAlt} ft</span>
-							</div>
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">AGL:</span>
-								<span style="font-weight: 600; color: #10b981;">${aglAlt} ft</span>
-							</div>
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">Heading:</span>
-								<span style="font-weight: 500; color: #111827;">${heading}</span>
-							</div>
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">Turn Rate:</span>
-								<span style="font-weight: 500; color: #111827;">${turnRate}</span>
-							</div>
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">Climb:</span>
-								<span style="font-weight: 500; color: #111827;">${climbRate}</span>
-							</div>
-							<div style="display: flex; justify-content: space-between;">
-								<span style="color: #6b7280;">Speed:</span>
-								<span style="font-weight: 500; color: #111827;">${groundSpeed}</span>
-							</div>
-						</div>
-					</div>
-				`;
-
-				altitudeInfoWindow?.setContent(content);
-				altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-				altitudeInfoWindow?.open(map);
-			});
-
-			fixMarkers.push(marker);
-		});
-
-		// Add landing marker if flight is complete
-		if (data.flight.landingTime && fixesInOrder.length > 0) {
-			const last = fixesInOrder[fixesInOrder.length - 1];
-			const landingPin = document.createElement('div');
-			landingPin.innerHTML = `
-				<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
-			`;
-
-			new google.maps.marker.AdvancedMarkerElement({
-				map,
-				position: { lat: last.latitude, lng: last.longitude },
-				content: landingPin,
-				title: 'Landing'
-			});
+		// Add landing marker (red) if flight is complete
+		if (data.flight.landingTime && data.path.length > 0) {
+			const last = data.path[data.path.length - 1];
+			const landingEl = document.createElement('div');
+			landingEl.style.cssText =
+				'background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;';
+			landingMarker = new maplibregl.Marker({ element: landingEl })
+				.setLngLat([last.longitude, last.latitude])
+				.addTo(map);
 		}
 	}
 
@@ -490,94 +392,119 @@
 		if (data.path.length === 0 || !mapContainer) return;
 
 		try {
-			setOptions({
-				key: GOOGLE_MAPS_API_KEY,
-				v: 'weekly'
-			});
-
-			await importLibrary('maps');
-			await importLibrary('marker');
-
-			// Use path data for bounds calculation (compressed but covers full flight)
-			const bounds = new google.maps.LatLngBounds();
+			// Calculate bounds from path data
+			const bounds = new maplibregl.LngLatBounds();
 			data.path.forEach((point) => {
-				bounds.extend({ lat: point.latitude, lng: point.longitude });
+				bounds.extend([point.longitude, point.latitude]);
 			});
 
-			const center = bounds.getCenter();
-
-			// Create map with satellite view
-			map = new google.maps.Map(mapContainer, {
-				center: { lat: center.lat(), lng: center.lng() },
-				zoom: 12,
-				mapId: 'FLIGHT_MAP',
-				mapTypeId: google.maps.MapTypeId.SATELLITE,
-				mapTypeControl: true,
-				mapTypeControlOptions: {
-					position: google.maps.ControlPosition.RIGHT_TOP,
-					style: google.maps.MapTypeControlStyle.DEFAULT
+			// Create map with satellite view (ESRI)
+			map = new maplibregl.Map({
+				container: mapContainer,
+				style: {
+					version: 8,
+					sources: {
+						esri: {
+							type: 'raster',
+							tiles: [
+								'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+							],
+							tileSize: 256,
+							attribution:
+								'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+							maxzoom: 19
+						}
+					},
+					layers: [
+						{
+							id: 'esri-satellite',
+							type: 'raster',
+							source: 'esri',
+							minzoom: 0,
+							maxzoom: 19
+						}
+					]
 				},
-				streetViewControl: false,
-				fullscreenControl: false,
-				zoomControl: false
+				bounds: bounds,
+				fitBoundsOptions: { padding: 50 }
 			});
 
-			// Fit bounds
-			map.fitBounds(bounds);
+			map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-			// Create gradient polyline segments from compressed path
-			flightPathSegments = createGradientPolylines(data.path, map);
+			// Wait for map to load before adding layers
+			map.on('load', () => {
+				if (!map) return;
 
-			// Add zoom listener to update arrow scales
-			map.addListener('zoom_changed', () => {
-				updateArrowScales();
-			});
+				// Create arrow icon
+				createArrowIcon(map);
 
-			// Create info window
-			altitudeInfoWindow = new google.maps.InfoWindow();
+				// Add flight track and arrow layers
+				addFlightLayers();
 
-			// Wait for map to be ready before adding markers
-			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Use fixes for detailed markers (takeoff, landing, directional arrows)
-				const fixesInOrder = [...data.fixes].reverse();
+				// Add takeoff/landing markers
+				updateEndpointMarkers();
 
-				// Add takeoff marker (green) - use path for position
-				if (data.path.length > 0) {
-					const first = data.path[0];
-					const takeoffPin = document.createElement('div');
-					takeoffPin.innerHTML = `
-						<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
+				// Setup click handler for arrow markers
+				map.on('click', 'flight-arrows-layer', (e) => {
+					if (!map || !e.features || e.features.length === 0) return;
+
+					const feature = e.features[0];
+					const props = feature.properties;
+					const coordinates = (feature.geometry as GeoJSON.Point).coordinates.slice() as [
+						number,
+						number
+					];
+
+					const content = `
+						<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
+							<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">${props.timestamp}</div>
+							<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">MSL:</span>
+									<span style="font-weight: 600; color: #3b82f6;">${props.altitudeMsl ?? 'N/A'} ft</span>
+								</div>
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">AGL:</span>
+									<span style="font-weight: 600; color: #10b981;">${props.altitudeAgl ?? 'N/A'} ft</span>
+								</div>
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">Heading:</span>
+									<span style="font-weight: 500; color: #111827;">${props.heading ?? 'N/A'}</span>
+								</div>
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">Turn Rate:</span>
+									<span style="font-weight: 500; color: #111827;">${props.turnRate ?? 'N/A'}</span>
+								</div>
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">Climb:</span>
+									<span style="font-weight: 500; color: #111827;">${props.climbRate ?? 'N/A'}</span>
+								</div>
+								<div style="display: flex; justify-content: space-between;">
+									<span style="color: #6b7280;">Speed:</span>
+									<span style="font-weight: 500; color: #111827;">${props.groundSpeed ?? 'N/A'}</span>
+								</div>
+							</div>
+						</div>
 					`;
 
-					new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: first.latitude, lng: first.longitude },
-						content: takeoffPin,
-						title: 'Takeoff'
-					});
-				}
+					// Close existing popup
+					altitudePopup?.remove();
+					altitudePopup = new maplibregl.Popup({ closeOnClick: true, maxWidth: '300px' })
+						.setLngLat(coordinates)
+						.setHTML(content)
+						.addTo(map!);
+				});
 
-				// Add landing marker if flight is complete - use path for position
-				if (data.flight.landingTime && data.path.length > 0) {
-					const last = data.path[data.path.length - 1];
-					const landingPin = document.createElement('div');
-					landingPin.innerHTML = `
-						<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
-					`;
-
-					new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: last.latitude, lng: last.longitude },
-						content: landingPin,
-						title: 'Landing'
-					});
-				}
-
-				// Add directional arrow markers at selected intervals (uses full fixes for detail)
-				addFixMarkers(fixesInOrder);
+				// Change cursor on hover over arrows
+				map.on('mouseenter', 'flight-arrows-layer', () => {
+					if (map) map.getCanvas().style.cursor = 'pointer';
+				});
+				map.on('mouseleave', 'flight-arrows-layer', () => {
+					if (map) map.getCanvas().style.cursor = '';
+				});
 			});
 		} catch (error) {
-			logger.error('Failed to load Google Maps: {error}', { error });
+			logger.error('Failed to initialize map: {error}', { error });
 		}
 
 		// Start polling if flight is in progress
@@ -591,7 +518,7 @@
 
 		// Untrack the rest to avoid infinite loop when updateMap modifies state
 		untrack(() => {
-			if (map && flightPathSegments.length > 0) {
+			if (map && map.isStyleLoaded()) {
 				updateMap();
 			}
 		});
@@ -612,59 +539,41 @@
 	function handleChartHover(fix: (typeof data.fixes)[0]) {
 		if (!map) return;
 
-		// Create or update hover marker
 		if (!hoverMarker) {
-			const markerContent = document.createElement('div');
-			markerContent.innerHTML = `
-				<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
-			`;
-
-			hoverMarker = new google.maps.marker.AdvancedMarkerElement({
-				map,
-				position: { lat: fix.latitude, lng: fix.longitude },
-				content: markerContent,
-				zIndex: 1000
-			});
+			const el = document.createElement('div');
+			el.style.cssText =
+				'background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);';
+			hoverMarker = new maplibregl.Marker({ element: el })
+				.setLngLat([fix.longitude, fix.latitude])
+				.addTo(map);
 		} else {
-			// Update position of existing marker
-			hoverMarker.position = { lat: fix.latitude, lng: fix.longitude };
-			hoverMarker.map = map;
+			hoverMarker.setLngLat([fix.longitude, fix.latitude]).addTo(map);
 		}
 	}
 
 	function handleChartUnhover() {
-		// Hide hover marker
-		if (hoverMarker) {
-			hoverMarker.map = null;
-		}
+		hoverMarker?.remove();
 	}
 
 	function handleChartClick(fix: (typeof data.fixes)[0]) {
 		if (!map) return;
 
-		// Create or update hover marker (reuse the same marker for clicks)
 		if (!hoverMarker) {
-			const markerContent = document.createElement('div');
-			markerContent.innerHTML = `
-				<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
-			`;
-
-			hoverMarker = new google.maps.marker.AdvancedMarkerElement({
-				map,
-				position: { lat: fix.latitude, lng: fix.longitude },
-				content: markerContent,
-				zIndex: 1000
-			});
+			const el = document.createElement('div');
+			el.style.cssText =
+				'background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);';
+			hoverMarker = new maplibregl.Marker({ element: el })
+				.setLngLat([fix.longitude, fix.latitude])
+				.addTo(map);
 		} else {
-			// Update position of existing marker
-			hoverMarker.position = { lat: fix.latitude, lng: fix.longitude };
-			hoverMarker.map = map;
+			hoverMarker.setLngLat([fix.longitude, fix.latitude]).addTo(map);
 		}
 	}
 
 	// Cleanup
 	onDestroy(() => {
 		stopPolling();
+		map?.remove();
 	});
 
 	function goBack() {
@@ -681,9 +590,7 @@
 			fetchReceivers();
 		} else {
 			// Clear receivers from map
-			receiverMarkers.forEach((marker) => {
-				marker.map = null;
-			});
+			receiverMarkers.forEach((marker) => marker.remove());
 			receiverMarkers = [];
 			receivers = [];
 		}
@@ -696,43 +603,28 @@
 		isLoadingReceivers = true;
 		try {
 			const bounds = map.getBounds();
-			if (!bounds) return;
-
 			const ne = bounds.getNorthEast();
 			const sw = bounds.getSouthWest();
 
 			const params = new URLSearchParams({
-				north: ne.lat().toString(),
-				south: sw.lat().toString(),
-				east: ne.lng().toString(),
-				west: sw.lng().toString()
+				north: ne.lat.toString(),
+				south: sw.lat.toString(),
+				east: ne.lng.toString(),
+				west: sw.lng.toString()
 			});
 
 			const response = await serverCall<DataListResponse<Receiver>>(`/receivers?${params}`);
 			receivers = response.data.filter((receiver: Receiver) => {
-				// Basic validation
-				if (!receiver) {
-					logger.error('Invalid receiver: null or undefined: {receiver}', { receiver });
+				if (!receiver) return false;
+				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number')
 					return false;
-				}
-
-				// Validate latitude and longitude are numbers
-				if (typeof receiver.latitude !== 'number' || typeof receiver.longitude !== 'number') {
-					logger.error('Invalid receiver: latitude or longitude is not a number: {receiver}', {
-						receiver
-					});
-					return false;
-				}
-
 				return true;
 			});
 
 			// Display receivers on map
 			if (map) {
 				// Clear existing receiver markers
-				receiverMarkers.forEach((marker) => {
-					marker.map = null;
-				});
+				receiverMarkers.forEach((marker) => marker.remove());
 				receiverMarkers = [];
 
 				receivers.forEach((receiver) => {
@@ -764,13 +656,9 @@
 					markerLink.appendChild(iconDiv);
 					markerLink.appendChild(labelDiv);
 
-					const marker = new google.maps.marker.AdvancedMarkerElement({
-						position: { lat: receiver.latitude, lng: receiver.longitude },
-						map: map,
-						title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
-						content: markerLink,
-						zIndex: 150
-					});
+					const marker = new maplibregl.Marker({ element: markerLink })
+						.setLngLat([receiver.longitude, receiver.latitude])
+						.addTo(map!);
 
 					receiverMarkers.push(marker);
 				});
