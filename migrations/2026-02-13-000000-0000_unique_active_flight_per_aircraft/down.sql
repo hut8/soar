@@ -1,1 +1,2 @@
-DROP INDEX IF EXISTS idx_flights_one_active_per_aircraft;
+-- Data cleanup is not reversible; the unique index is dropped in the next migration's down.sql.
+SELECT 1;
