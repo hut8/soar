@@ -915,6 +915,161 @@ async fn complete_flight_in_background(
     Ok(true) // Return true to indicate flight was completed normally
 }
 
+/// Enrich a flight that was completed during startup orphan cleanup.
+///
+/// This fetches the flight from DB, calculates distance/displacement from fixes,
+/// finds the arrival airport, calculates altitude offset, updates the flight record,
+/// and spawns geocoding/runway enrichment in background.
+///
+/// Skips email notifications and spurious detection (these are old/recovered flights).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn enrich_flight_on_startup(
+    flight_id: Uuid,
+    fixes_repo: &FixesRepository,
+    flights_repo: &FlightsRepository,
+    aircraft_repo: &AircraftRepository,
+    airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
+    runways_repo: &RunwaysRepository,
+    elevation_db: &ElevationDB,
+    magnetic_service: &crate::magnetic::MagneticService,
+) {
+    let start = std::time::Instant::now();
+
+    // 1. Fetch the flight (already has landing_time = last_fix_at from startup cleanup)
+    let flight = match flights_repo.get_flight_by_id(flight_id).await {
+        Ok(Some(f)) => f,
+        Ok(None) => {
+            warn!(
+                "Flight {} not found during startup enrichment (may have been deleted)",
+                flight_id
+            );
+            return;
+        }
+        Err(e) => {
+            error!(
+                "Failed to fetch flight {} for startup enrichment: {}",
+                flight_id, e
+            );
+            return;
+        }
+    };
+
+    // 2. Fetch all fixes using partition pruning
+    let fixes_start_time = flight
+        .takeoff_time
+        .map(|t| t - chrono::Duration::minutes(FIXES_TIME_RANGE_START_BUFFER_MINUTES))
+        .unwrap_or_else(|| flight.created_at - chrono::Duration::hours(1));
+
+    let flight_fixes = match fixes_repo
+        .get_fixes_for_flight(flight_id, None, fixes_start_time, None)
+        .await
+    {
+        Ok(fixes) => fixes,
+        Err(e) => {
+            error!(
+                "Failed to fetch fixes for startup enrichment of flight {}: {}",
+                flight_id, e
+            );
+            return;
+        }
+    };
+
+    // 3. Calculate total distance and maximum displacement
+    let total_distance_meters = flight
+        .total_distance(fixes_repo, Some(&flight_fixes))
+        .await
+        .ok()
+        .flatten();
+
+    let maximum_displacement_meters = flight
+        .maximum_displacement(fixes_repo, airports_repo, Some(&flight_fixes))
+        .await
+        .ok()
+        .flatten();
+
+    // 4. Find arrival airport from last fix coordinates
+    let (arrival_airport_id, landing_altitude_offset_ft, last_fix_time) =
+        if let Some(last_fix) = flight_fixes.last() {
+            let airport_id =
+                find_nearby_airport(airports_repo, last_fix.latitude, last_fix.longitude).await;
+            let alt_offset = calculate_altitude_offset_ft(elevation_db, last_fix).await;
+            (airport_id, alt_offset, Some(last_fix.received_at))
+        } else {
+            (None, None, None)
+        };
+
+    // 5. Update the flight record (landing_time already set, add enrichment data)
+    let landing_time_val = flight.landing_time.unwrap_or(flight.last_fix_at);
+    if let Err(e) = flights_repo
+        .update_flight_landing(
+            flight_id,
+            landing_time_val,
+            arrival_airport_id,
+            None, // landing_location_id - will be enriched in background
+            None, // end_location_id - will be enriched in background
+            landing_altitude_offset_ft,
+            None, // landing_runway_ident - will be enriched in background
+            total_distance_meters,
+            maximum_displacement_meters,
+            None,          // runways_inferred
+            last_fix_time, // last_fix_at
+        )
+        .await
+    {
+        error!(
+            "Failed to update flight {} during startup enrichment: {}",
+            flight_id, e
+        );
+        return;
+    }
+
+    // 6. Calculate and update bounding box
+    if let Err(e) = flights_repo
+        .calculate_and_update_bounding_box(flight_id)
+        .await
+    {
+        error!(
+            "Failed to calculate bounding box for flight {} during startup enrichment: {}",
+            flight_id, e
+        );
+    }
+
+    // 7. Spawn geocoding/runway enrichment in background (if we have a last fix)
+    if !flight_fixes.is_empty() {
+        let last_fix = flight_fixes.last().unwrap();
+
+        // Fetch aircraft for runway detection
+        let aircraft = match aircraft_repo.get_aircraft_by_id(last_fix.aircraft_id).await {
+            Ok(Some(a)) => Some(a),
+            _ => None,
+        };
+
+        if let Some(aircraft) = aircraft {
+            spawn_flight_enrichment_on_completion_direct(
+                fixes_repo,
+                flights_repo,
+                airports_repo,
+                locations_repo,
+                runways_repo,
+                magnetic_service,
+                last_fix.clone(),
+                aircraft,
+                flight_id,
+            );
+        }
+    }
+
+    metrics::histogram!("flight_tracker.enrich_flight_on_startup.latency_ms")
+        .record(start.elapsed().as_micros() as f64 / 1000.0);
+
+    debug!(
+        "Startup enrichment completed for flight {} in {:.2}s",
+        flight_id,
+        start.elapsed().as_secs_f64()
+    );
+}
+
 /// Spawn background task to enrich flight with runway and location data on completion
 /// This runs AFTER the flight is completed and fix is processed, so it doesn't block the pipeline
 /// Direct version of spawn_flight_enrichment_on_completion that takes individual repos

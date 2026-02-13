@@ -13,7 +13,7 @@ pub(crate) mod utils;
 
 // Re-export should_be_active for use in fix_processor
 pub use aircraft_state::{AircraftState, CompactFix};
-use flight_lifecycle::spawn_complete_flight;
+use flight_lifecycle::{enrich_flight_on_startup, spawn_complete_flight};
 use state_transitions::PendingBackgroundWork;
 pub use state_transitions::should_be_active;
 
@@ -191,8 +191,9 @@ impl FlightTracker {
     }
 
     /// Initialize the flight tracker on startup:
-    /// 1. Timeout old incomplete flights (where last_fix_at is older than timeout_duration)
+    /// 1. Complete orphaned flights (old orphans + per-aircraft duplicates)
     /// 2. Restore aircraft states from database for all active flights
+    /// 3. Spawn background enrichment for flights completed in step 1
     ///
     /// This restores the in-memory state by loading recent fixes for each active flight,
     /// which is critical for:
@@ -201,27 +202,28 @@ impl FlightTracker {
     /// - Flight coalescing (needs flight phase from recent fixes)
     /// - Tow release detection (needs recent fixes for climb rate)
     ///
-    /// Returns (timed_out_count, restored_states_count)
+    /// Returns (completed_orphan_count, restored_states_count)
     pub async fn initialize_from_database(
         &self,
         timeout_duration: chrono::Duration,
     ) -> Result<(usize, usize)> {
         info!(
-            "Timing out incomplete flights older than {} hours...",
+            "Completing orphaned flights (older than {} hours or duplicate active flights)...",
             timeout_duration.num_hours()
         );
-        let timed_out_count = self
+        let completed_flights = self
             .flights_repo
-            .timeout_old_incomplete_flights(timeout_duration)
+            .complete_orphaned_startup_flights(timeout_duration)
             .await?;
 
-        if timed_out_count > 0 {
+        let completed_count = completed_flights.len();
+        if completed_count > 0 {
             info!(
-                "Timed out {} old incomplete flights on startup",
-                timed_out_count
+                "Completed {} orphaned flights on startup (set landing_time = last_fix_at)",
+                completed_count
             );
         } else {
-            info!("No old incomplete flights to timeout");
+            info!("No orphaned flights to complete");
         }
 
         // Restore aircraft states from active and timed-out flights
@@ -300,9 +302,72 @@ impl FlightTracker {
         // Update metrics
         metrics::counter!("flight_tracker.startup.aircraft_states_restored_total")
             .increment(restored_count as u64);
+        metrics::counter!("flight_tracker.startup.orphaned_flights_completed_total")
+            .increment(completed_count as u64);
         utils::update_flight_tracker_metrics(&self.aircraft_states);
 
-        Ok((timed_out_count, restored_count))
+        // Spawn background enrichment for completed orphaned flights (non-blocking)
+        if !completed_flights.is_empty() {
+            let fixes_repo = self.fixes_repo.clone();
+            let flights_repo = self.flights_repo.clone();
+            let aircraft_repo = self.device_repo.clone();
+            let airports_repo = self.airports_repo.clone();
+            let locations_repo = self.locations_repo.clone();
+            let runways_repo = self.runways_repo.clone();
+            let elevation_db = self.elevation_db.clone();
+            let magnetic_service = self.magnetic_service.clone();
+
+            tokio::spawn(async move {
+                let semaphore = Arc::new(tokio::sync::Semaphore::new(10));
+                let mut handles = Vec::new();
+
+                for (flight_id, _aircraft_id) in completed_flights {
+                    let permit = semaphore.clone().acquire_owned().await;
+                    if permit.is_err() {
+                        break;
+                    }
+                    let permit = permit.unwrap();
+                    let fixes_repo = fixes_repo.clone();
+                    let flights_repo = flights_repo.clone();
+                    let aircraft_repo = aircraft_repo.clone();
+                    let airports_repo = airports_repo.clone();
+                    let locations_repo = locations_repo.clone();
+                    let runways_repo = runways_repo.clone();
+                    let elevation_db = elevation_db.clone();
+                    let magnetic_service = magnetic_service.clone();
+
+                    handles.push(tokio::spawn(async move {
+                        enrich_flight_on_startup(
+                            flight_id,
+                            &fixes_repo,
+                            &flights_repo,
+                            &aircraft_repo,
+                            &airports_repo,
+                            &locations_repo,
+                            &runways_repo,
+                            &elevation_db,
+                            &magnetic_service,
+                        )
+                        .await;
+                        drop(permit);
+                    }));
+                }
+
+                let total = handles.len();
+                let mut succeeded = 0;
+                for handle in handles {
+                    if handle.await.is_ok() {
+                        succeeded += 1;
+                    }
+                }
+                info!(
+                    "Startup enrichment complete: {}/{} flights enriched",
+                    succeeded, total
+                );
+            });
+        }
+
+        Ok((completed_count, restored_count))
     }
 
     /// Get a reference to the elevation database
