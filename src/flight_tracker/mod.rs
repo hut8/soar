@@ -322,11 +322,17 @@ impl FlightTracker {
                 let mut handles = Vec::new();
 
                 for (flight_id, _aircraft_id) in completed_flights {
-                    let permit = semaphore.clone().acquire_owned().await;
-                    if permit.is_err() {
-                        break;
-                    }
-                    let permit = permit.unwrap();
+                    let permit = match semaphore.clone().acquire_owned().await {
+                        Ok(permit) => permit,
+                        Err(err) => {
+                            error!(
+                                "Failed to acquire semaphore for startup flight enrichment: {}; \
+                                 skipping remaining flights",
+                                err
+                            );
+                            break;
+                        }
+                    };
                     let fixes_repo = fixes_repo.clone();
                     let flights_repo = flights_repo.clone();
                     let aircraft_repo = aircraft_repo.clone();
