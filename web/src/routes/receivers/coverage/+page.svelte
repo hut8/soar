@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
+	import { MapboxOverlay } from '@deck.gl/mapbox';
+	import { H3HexagonLayer } from '@deck.gl/geo-layers';
 	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
 
@@ -18,6 +20,7 @@
 
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = null;
+	let deckOverlay: MapboxOverlay | null = null;
 	let loading = false;
 	let error = '';
 	let resolution = 7;
@@ -178,6 +181,13 @@
 
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+		// Create deck.gl overlay for H3 hexagon visualization
+		deckOverlay = new MapboxOverlay({
+			interleaved: false,
+			layers: []
+		});
+		map.addControl(deckOverlay as unknown as maplibregl.IControl);
+
 		// Load coverage data and receivers when map is ready
 		map.on('load', async () => {
 			loadCoverage();
@@ -203,12 +213,45 @@
 
 		return () => {
 			document.removeEventListener('click', handleClickOutside);
+			deckOverlay?.finalize();
 			map?.remove();
 		};
 	});
 
+	/** Interpolate color based on normalized value (0-1) */
+	function getHexColor(normalized: number): [number, number, number, number] {
+		// Gradient: light blue → light green → light yellow → light orange
+		const stops: [number, [number, number, number]][] = [
+			[0, [147, 197, 253]], // #93c5fd
+			[0.33, [134, 239, 172]], // #86efac
+			[0.66, [253, 224, 71]], // #fde047
+			[1.0, [253, 186, 116]] // #fdba74
+		];
+
+		// Find the two stops to interpolate between
+		let lower = stops[0];
+		let upper = stops[stops.length - 1];
+		for (let i = 0; i < stops.length - 1; i++) {
+			if (normalized >= stops[i][0] && normalized <= stops[i + 1][0]) {
+				lower = stops[i];
+				upper = stops[i + 1];
+				break;
+			}
+		}
+
+		const range = upper[0] - lower[0];
+		const t = range === 0 ? 0 : (normalized - lower[0]) / range;
+
+		return [
+			Math.round(lower[1][0] + (upper[1][0] - lower[1][0]) * t),
+			Math.round(lower[1][1] + (upper[1][1] - lower[1][1]) * t),
+			Math.round(lower[1][2] + (upper[1][2] - lower[1][2]) * t),
+			180 // alpha
+		];
+	}
+
 	async function loadCoverage() {
-		if (!map) return;
+		if (!map || !deckOverlay) return;
 
 		loading = true;
 		error = '';
@@ -295,114 +338,86 @@
 				resolution
 			});
 
-			// Remove existing coverage layer if it exists
-			if (map.getLayer('coverage-hexes')) {
-				map.removeLayer('coverage-hexes');
-			}
-			if (map.getSource('coverage')) {
-				map.removeSource('coverage');
-			}
-
-			// Only add layer if we have features
+			// Clear deck.gl layers if no data
 			if (hexCount === 0) {
-				return; // No data to display
+				deckOverlay.setProps({ layers: [] });
+				return;
 			}
 
-			// Add coverage source and layer
-			map.addSource('coverage', {
-				type: 'geojson',
-				data: response
-			});
+			// Extract hex data from GeoJSON features for deck.gl
+			const hexData = response.features.map((f) => f.properties);
 
-			// Calculate max fix count for color scaling
-			const maxFixCount = Math.max(...response.features.map((f) => f.properties.fixCount), 1);
+			// Calculate max fix count for color/elevation scaling
+			const maxFixCount = Math.max(...hexData.map((d) => d.fixCount), 1);
 
-			map.addLayer({
+			// Create deck.gl H3HexagonLayer
+			const hexLayer = new H3HexagonLayer<CoverageHexProperties>({
 				id: 'coverage-hexes',
-				type: 'fill',
-				source: 'coverage',
-				paint: {
-					'fill-color': [
-						'interpolate',
-						['linear'],
-						['get', 'fixCount'],
-						0,
-						'#93c5fd', // Light blue (low coverage)
-						maxFixCount * 0.33,
-						'#86efac', // Light green
-						maxFixCount * 0.66,
-						'#fde047', // Light yellow
-						maxFixCount,
-						'#fdba74' // Light orange (high coverage)
-					],
-					'fill-opacity': 0.25,
-					'fill-outline-color': 'rgba(0, 0, 0, 0.2)'
+				data: hexData,
+				pickable: true,
+				extruded: true,
+				filled: true,
+				getHexagon: (d: CoverageHexProperties) => d.h3Index,
+				getFillColor: (d: CoverageHexProperties) => getHexColor(d.fixCount / maxFixCount),
+				getElevation: (d: CoverageHexProperties) => (d.fixCount / maxFixCount) * 5000,
+				elevationScale: 1,
+				opacity: 0.8,
+				// Hover: show popup
+				onHover: (info: { object?: CoverageHexProperties; coordinate?: number[] }) => {
+					if (!map) return;
+					if (info.object && info.coordinate) {
+						map.getCanvas().style.cursor = 'pointer';
+						const props = info.object;
+
+						// Remove previous popup
+						if (currentPopup) {
+							currentPopup.remove();
+						}
+
+						currentPopup = new maplibregl.Popup({
+							closeButton: false,
+							closeOnClick: false
+						})
+							.setLngLat([info.coordinate[0], info.coordinate[1]])
+							.setHTML(
+								`
+								<div class="bg-surface-800 text-surface-50 p-2 rounded">
+									<p class="font-semibold mb-1">Coverage Hex</p>
+									<p class="text-sm mb-0.5">Fixes: ${props.fixCount.toLocaleString()}</p>
+									<p class="text-sm mb-0.5">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
+									${props.avgAltitudeMslFeet ? `<p class="text-sm mb-0.5">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+									${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p class="text-sm mb-0.5">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
+									<p class="text-sm text-surface-400">Resolution: ${props.resolution}</p>
+								</div>
+							`
+							)
+							.addTo(map);
+					} else {
+						// Mouse left - remove popup
+						if (currentPopup) {
+							currentPopup.remove();
+							currentPopup = null;
+						}
+						if (map) {
+							map.getCanvas().style.cursor = '';
+						}
+					}
+				},
+				// Click: open modal
+				onClick: (info: { object?: CoverageHexProperties }) => {
+					if (info.object) {
+						// Close hover popup
+						if (currentPopup) {
+							currentPopup.remove();
+							currentPopup = null;
+						}
+						selectedHexProperties = info.object;
+						showHexModal = true;
+					}
 				}
 			});
 
-			// Add popup on hover
-			map.on('mousemove', 'coverage-hexes', (e: maplibregl.MapLayerMouseEvent) => {
-				if (!e.features || !e.features[0]) return;
-
-				map!.getCanvas().style.cursor = 'pointer';
-
-				const feature = e.features[0] as maplibregl.MapGeoJSONFeature & {
-					properties: CoverageHexProperties;
-				};
-				const props = feature.properties;
-
-				// Remove previous popup if it exists
-				if (currentPopup) {
-					currentPopup.remove();
-				}
-
-				currentPopup = new maplibregl.Popup({
-					closeButton: false,
-					closeOnClick: false
-				})
-					.setLngLat(e.lngLat)
-					.setHTML(
-						`
-						<div class="bg-surface-800 text-surface-50 p-2 rounded">
-							<p class="font-semibold mb-1">Coverage Hex</p>
-							<p class="text-sm mb-0.5">Fixes: ${props.fixCount.toLocaleString()}</p>
-							<p class="text-sm mb-0.5">Coverage: ${props.coverageHours.toFixed(1)} hours</p>
-							${props.avgAltitudeMslFeet ? `<p class="text-sm mb-0.5">Avg Altitude: ${props.avgAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							${props.minAltitudeMslFeet !== null && props.maxAltitudeMslFeet !== null ? `<p class="text-sm mb-0.5">Altitude Range: ${props.minAltitudeMslFeet.toLocaleString()}-${props.maxAltitudeMslFeet.toLocaleString()} ft</p>` : ''}
-							<p class="text-sm text-surface-400">Resolution: ${props.resolution}</p>
-						</div>
-					`
-					)
-					.addTo(map!);
-			});
-
-			// Remove popup when mouse leaves the hexagon layer
-			map.on('mouseleave', 'coverage-hexes', () => {
-				if (currentPopup) {
-					currentPopup.remove();
-					currentPopup = null;
-				}
-				map!.getCanvas().style.cursor = '';
-			});
-
-			// Add click handler for hexagons to show detailed modal
-			map.on('click', 'coverage-hexes', (e: maplibregl.MapLayerMouseEvent) => {
-				if (!e.features || !e.features[0]) return;
-
-				const feature = e.features[0] as maplibregl.MapGeoJSONFeature & {
-					properties: CoverageHexProperties;
-				};
-
-				// Close hover popup when clicking
-				if (currentPopup) {
-					currentPopup.remove();
-					currentPopup = null;
-				}
-
-				// Open modal with hex properties
-				selectedHexProperties = feature.properties;
-				showHexModal = true;
-			});
+			deckOverlay.setProps({ layers: [hexLayer] });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load coverage: ${errorMessage}`;

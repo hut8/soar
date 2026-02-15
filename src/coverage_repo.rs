@@ -6,20 +6,16 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::actions::views::receiver::ReceiverView;
-use crate::coverage::{CoverageHexFeature, NewReceiverCoverageH3, ReceiverCoverageH3};
+use crate::coverage::{AggregatedCoverageH3, CoverageHexFeature, NewReceiverCoverageH3};
 use crate::web::PgPool;
 
-/// Queryable result for raw SQL coverage queries
+/// Queryable result for aggregated coverage SQL queries (grouped by h3_index)
 #[derive(QueryableByName, Debug)]
-struct CoverageQueryResult {
+struct AggregatedCoverageQueryResult {
     #[diesel(sql_type = sql_types::BigInt)]
     h3_index: i64,
     #[diesel(sql_type = sql_types::SmallInt)]
     resolution: i16,
-    #[diesel(sql_type = sql_types::Uuid)]
-    receiver_id: Uuid,
-    #[diesel(sql_type = sql_types::Date)]
-    date: NaiveDate,
     #[diesel(sql_type = sql_types::BigInt)]
     fix_count: i64,
     #[diesel(sql_type = sql_types::Timestamptz)]
@@ -36,13 +32,11 @@ struct CoverageQueryResult {
     updated_at: DateTime<Utc>,
 }
 
-impl From<CoverageQueryResult> for ReceiverCoverageH3 {
-    fn from(result: CoverageQueryResult) -> Self {
+impl From<AggregatedCoverageQueryResult> for AggregatedCoverageH3 {
+    fn from(result: AggregatedCoverageQueryResult) -> Self {
         Self {
             h3_index: result.h3_index,
             resolution: result.resolution,
-            receiver_id: result.receiver_id,
-            date: result.date,
             fix_count: result.fix_count,
             first_seen_at: result.first_seen_at,
             last_seen_at: result.last_seen_at,
@@ -64,9 +58,10 @@ impl CoverageRepository {
         Self { pool }
     }
 
-    /// Get coverage hexes within bounding box for a given resolution and time range
-    /// Filters by date range, optional receiver, and optional altitude range
-    /// Uses h3_postgis extension for efficient spatial filtering
+    /// Get coverage hexes within bounding box for a given resolution and time range,
+    /// aggregated by h3_index (across all receivers and dates).
+    /// Filters by date range, optional receiver, and optional altitude range.
+    /// Uses h3_postgis extension for efficient spatial filtering.
     #[allow(clippy::too_many_arguments)]
     pub async fn get_coverage_in_bbox(
         &self,
@@ -81,7 +76,7 @@ impl CoverageRepository {
         min_altitude: Option<i32>,
         max_altitude: Option<i32>,
         limit: i64,
-    ) -> Result<Vec<ReceiverCoverageH3>> {
+    ) -> Result<Vec<AggregatedCoverageH3>> {
         let pool = self.pool.clone();
         let limit = limit.min(10000); // Cap at 10k hexes
 
@@ -92,6 +87,7 @@ impl CoverageRepository {
             // 1. Create bounding box as PostGIS geography
             // 2. Use h3_polygon_to_cells to get all H3 cells within the bbox
             // 3. Join with receiver_coverage_h3 to get coverage data for those cells
+            // 4. GROUP BY h3_index, resolution to aggregate across receivers and dates
             //
             // Note: west can be > east when crossing the International Date Line.
             // In that case, we split into two bounding boxes: [west, 180] and [-180, east]
@@ -117,10 +113,14 @@ impl CoverageRepository {
                     SELECT DISTINCT h3_polygon_to_cells(bbox.geog, {}) AS h3_idx
                     FROM bbox
                 )
-                SELECT rch.h3_index, rch.resolution, rch.receiver_id, rch.date,
-                       rch.fix_count, rch.first_seen_at, rch.last_seen_at,
-                       rch.min_altitude_msl_feet, rch.max_altitude_msl_feet,
-                       rch.avg_altitude_msl_feet, rch.updated_at
+                SELECT rch.h3_index, rch.resolution,
+                       SUM(rch.fix_count) AS fix_count,
+                       MIN(rch.first_seen_at) AS first_seen_at,
+                       MAX(rch.last_seen_at) AS last_seen_at,
+                       MIN(rch.min_altitude_msl_feet) AS min_altitude_msl_feet,
+                       MAX(rch.max_altitude_msl_feet) AS max_altitude_msl_feet,
+                       AVG(rch.avg_altitude_msl_feet)::integer AS avg_altitude_msl_feet,
+                       MAX(rch.updated_at) AS updated_at
                 FROM receiver_coverage_h3 rch
                 INNER JOIN cells c ON rch.h3_index = c.h3_idx::bigint
                 WHERE rch.resolution = {}
@@ -165,12 +165,14 @@ impl CoverageRepository {
                 sql.push_str(&conditions.join(" AND "));
             }
 
-            sql.push_str(&format!(" ORDER BY rch.fix_count DESC LIMIT {}", limit));
+            sql.push_str(" GROUP BY rch.h3_index, rch.resolution");
+            sql.push_str(&format!(" ORDER BY fix_count DESC LIMIT {}", limit));
 
             // Execute raw SQL query
-            let query_results: Vec<CoverageQueryResult> = diesel::sql_query(sql).load(&mut conn)?;
+            let query_results: Vec<AggregatedCoverageQueryResult> =
+                diesel::sql_query(sql).load(&mut conn)?;
 
-            let results: Vec<ReceiverCoverageH3> =
+            let results: Vec<AggregatedCoverageH3> =
                 query_results.into_iter().map(|r| r.into()).collect();
 
             info!(
@@ -223,7 +225,7 @@ impl CoverageRepository {
         // Convert to GeoJSON features
         let features: Result<Vec<CoverageHexFeature>> = coverages
             .into_iter()
-            .map(CoverageHexFeature::from_coverage)
+            .map(CoverageHexFeature::from_aggregated_coverage)
             .collect();
 
         features
