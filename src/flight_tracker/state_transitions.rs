@@ -127,6 +127,13 @@ pub(crate) async fn process_state_transition(
             };
 
             if should_end_flight {
+                // Set preliminary landing_time before creating new flight to prevent
+                // two active flights for the same aircraft (unique index violation)
+                let _ = ctx
+                    .flights_repo
+                    .set_preliminary_landing_time(flight_id, fix.received_at)
+                    .await;
+
                 // End current flight - defer background work until after fix insertion
                 pending_work = PendingBackgroundWork::CompleteFlight {
                     flight_id,
@@ -210,6 +217,13 @@ pub(crate) async fn process_state_transition(
                 };
 
                 if should_end_due_to_gap {
+                    // Set preliminary landing_time before creating new flight to prevent
+                    // two active flights for the same aircraft (unique index violation)
+                    let _ = ctx
+                        .flights_repo
+                        .set_preliminary_landing_time(flight_id, fix.received_at)
+                        .await;
+
                     // End current flight - defer background work until after fix insertion
                     pending_work = PendingBackgroundWork::CompleteFlight {
                         flight_id,
@@ -537,6 +551,13 @@ pub(crate) async fn process_state_transition(
         (Some(flight_id), false) => {
             if fix.has_transponder_data() {
                 // ADS-B: transponder on_ground is authoritative — land immediately
+                // Set preliminary landing_time to prevent race where a new fix triggers
+                // flight creation before CompleteFlight background task runs
+                let _ = ctx
+                    .flights_repo
+                    .set_preliminary_landing_time(flight_id, fix.received_at)
+                    .await;
+
                 fix.flight_id = Some(flight_id);
                 pending_work = PendingBackgroundWork::CompleteFlight {
                     flight_id,
@@ -573,6 +594,13 @@ pub(crate) async fn process_state_transition(
                             };
 
                         if should_land {
+                            // Set preliminary landing_time to prevent race where a new fix
+                            // triggers flight creation before CompleteFlight background task runs
+                            let _ = ctx
+                                .flights_repo
+                                .set_preliminary_landing_time(flight_id, fix.received_at)
+                                .await;
+
                             // Landing confirmed - defer background work until after fix insertion
                             fix.flight_id = Some(flight_id);
 

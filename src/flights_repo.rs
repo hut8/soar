@@ -1363,6 +1363,97 @@ impl FlightsRepository {
         Ok(rows_affected)
     }
 
+    /// Complete orphaned flights at startup.
+    ///
+    /// Uses a window function to identify all flights needing resolution and sets
+    /// `landing_time = last_fix_at` on them. This handles two cases:
+    /// - **Old orphans**: any active flight with `last_fix_at` older than the timeout threshold
+    /// - **Duplicates**: for aircraft with multiple active flights, all but the most recent
+    ///
+    /// Returns Vec<(flight_id, aircraft_id)> pairs for background enrichment.
+    pub async fn complete_orphaned_startup_flights(
+        &self,
+        timeout_duration: chrono::Duration,
+    ) -> Result<Vec<(Uuid, Option<Uuid>)>> {
+        use diesel::sql_types::{Nullable, Timestamptz, Uuid as UuidType};
+
+        let pool = self.pool.clone();
+        let cutoff_time = Utc::now() - timeout_duration;
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            #[derive(QueryableByName)]
+            struct CompletedFlight {
+                #[diesel(sql_type = UuidType)]
+                id: Uuid,
+                #[diesel(sql_type = Nullable<UuidType>)]
+                aircraft_id: Option<Uuid>,
+            }
+
+            let completed = diesel::sql_query(
+                "WITH ranked AS ( \
+                     SELECT id, aircraft_id, last_fix_at, \
+                            ROW_NUMBER() OVER (PARTITION BY aircraft_id ORDER BY last_fix_at DESC) AS rn \
+                     FROM flights \
+                     WHERE landing_time IS NULL \
+                       AND timed_out_at IS NULL \
+                       AND aircraft_id IS NOT NULL \
+                 ) \
+                 UPDATE flights f \
+                 SET landing_time = f.last_fix_at, \
+                     updated_at = NOW() \
+                 FROM ranked r \
+                 WHERE f.id = r.id \
+                   AND (r.last_fix_at < $1 OR r.rn > 1) \
+                 RETURNING f.id, f.aircraft_id",
+            )
+            .bind::<Timestamptz, _>(cutoff_time)
+            .load::<CompletedFlight>(&mut conn)?;
+
+            let pairs: Vec<(Uuid, Option<Uuid>)> =
+                completed.into_iter().map(|r| (r.id, r.aircraft_id)).collect();
+
+            Ok::<Vec<(Uuid, Option<Uuid>)>, anyhow::Error>(pairs)
+        })
+        .await??;
+
+        Ok(results)
+    }
+
+    /// Set a preliminary landing_time on a flight before creating a new flight.
+    ///
+    /// This prevents a window where two active flights exist for the same aircraft,
+    /// which would violate the unique partial index. Only updates if landing_time is
+    /// still NULL (idempotent — later enrichment overwrites with the same or better value).
+    ///
+    /// Returns whether a row was updated.
+    pub async fn set_preliminary_landing_time(
+        &self,
+        flight_id: Uuid,
+        landing_time_param: DateTime<Utc>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id).and(landing_time.is_null())))
+                .set((
+                    landing_time.eq(Some(landing_time_param)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Get all flights for tracker initialization
     /// Returns:
     /// - Active flights (timed_out_at IS NULL) from last `timeout_duration` (e.g., 1 hour)
