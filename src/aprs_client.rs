@@ -29,8 +29,6 @@ pub struct AprsClientConfig {
     pub server: String,
     /// APRS server port
     pub port: u16,
-    /// Maximum number of connection retry attempts
-    pub max_retries: u32,
     /// Callsign for authentication
     pub callsign: String,
     /// Password for authentication (optional)
@@ -50,7 +48,6 @@ impl Default for AprsClientConfig {
         Self {
             server: "aprs.glidernet.org".to_string(),
             port: 14580,
-            max_retries: 5,
             callsign: "N0CALL".to_string(),
             password: None,
             filter: None,
@@ -614,11 +611,6 @@ impl AprsClientConfigBuilder {
         self
     }
 
-    pub fn max_retries(mut self, max_retries: u32) -> Self {
-        self.config.max_retries = max_retries;
-        self
-    }
-
     pub fn callsign<S: Into<String>>(mut self, callsign: S) -> Self {
         self.config.callsign = callsign.into();
         self
@@ -673,7 +665,6 @@ mod tests {
             .callsign("TEST123")
             .password(Some("12345"))
             .filter(Some("r/47.0/-122.0/100"))
-            .max_retries(3)
             .retry_delay_seconds(10)
             .build();
 
@@ -682,7 +673,6 @@ mod tests {
         assert_eq!(config.callsign, "TEST123");
         assert_eq!(config.password, Some("12345".to_string()));
         assert_eq!(config.filter, Some("r/47.0/-122.0/100".to_string()));
-        assert_eq!(config.max_retries, 3);
         assert_eq!(config.retry_delay_seconds, 10);
     }
 
@@ -727,7 +717,6 @@ mod tests {
             callsign: "TEST123".to_string(),
             password: Some("12345".to_string()),
             filter: Some("r/47.0/-122.0/100".to_string()),
-            max_retries: 3,
             retry_delay_seconds: 5,
             max_retry_delay_seconds: 60,
             archive_base_dir: None,
@@ -748,7 +737,6 @@ mod tests {
             callsign: "TEST123".to_string(),
             password: None,
             filter: None,
-            max_retries: 3,
             retry_delay_seconds: 5,
             max_retry_delay_seconds: 60,
             archive_base_dir: None,

@@ -31,8 +31,6 @@ pub struct BeastClientConfig {
     pub server: String,
     /// Beast server port (typically 30005)
     pub port: u16,
-    /// Maximum number of connection retry attempts
-    pub max_retries: u32,
     /// Initial delay between reconnection attempts in seconds (will use exponential backoff)
     pub retry_delay_seconds: u64,
     /// Maximum delay between reconnection attempts in seconds (cap for exponential backoff)
@@ -44,7 +42,6 @@ impl Default for BeastClientConfig {
         Self {
             server: "localhost".to_string(),
             port: 30005,
-            max_retries: 5,
             retry_delay_seconds: 0, // Reconnect immediately on first failure
             max_retry_delay_seconds: 60, // Cap at 60 seconds
         }
@@ -228,8 +225,7 @@ impl BeastClient {
             );
         });
 
-        // Main connection loop
-        let mut retry_count = 0;
+        // Main connection loop - retries indefinitely with exponential backoff
         let mut retry_delay = config.retry_delay_seconds;
 
         loop {
@@ -246,7 +242,6 @@ impl BeastClient {
                     match result {
                         ConnectionResult::Success => {
                             info!("Beast connection completed successfully");
-                            retry_count = 0; // Reset retry count on successful connection
                             retry_delay = config.retry_delay_seconds; // Reset delay
                         }
                         ConnectionResult::ConnectionFailed(e) => {
@@ -260,18 +255,6 @@ impl BeastClient {
                                 health.last_error = Some(e.to_string());
                             }
 
-                            retry_count += 1;
-                            if retry_count >= config.max_retries {
-                                error!(
-                                    "Max retries ({}) reached, giving up",
-                                    config.max_retries
-                                );
-                                return Err(anyhow::anyhow!(
-                                    "Failed to connect to Beast server after {} retries",
-                                    config.max_retries
-                                ));
-                            }
-
                             // Exponential backoff: double the delay each time, up to max
                             retry_delay = std::cmp::min(
                                 if retry_delay == 0 {
@@ -283,8 +266,8 @@ impl BeastClient {
                             );
 
                             info!(
-                                "Retrying in {} seconds (attempt {}/{})",
-                                retry_delay, retry_count, config.max_retries
+                                "Retrying in {} seconds",
+                                retry_delay
                             );
                             sleep(Duration::from_secs(retry_delay)).await;
                         }
@@ -299,24 +282,12 @@ impl BeastClient {
                                 health.last_error = Some(e.to_string());
                             }
 
-                            retry_count += 1;
-                            if retry_count >= config.max_retries {
-                                error!(
-                                    "Max retries ({}) reached, giving up",
-                                    config.max_retries
-                                );
-                                return Err(anyhow::anyhow!(
-                                    "Beast operation failed after {} retries",
-                                    config.max_retries
-                                ));
-                            }
-
                             // Use shorter delay for operation failures (connection was successful)
                             let operation_retry_delay = std::cmp::min(retry_delay, 5);
 
                             info!(
-                                "Retrying in {} seconds (attempt {}/{})",
-                                operation_retry_delay, retry_count, config.max_retries
+                                "Retrying in {} seconds",
+                                operation_retry_delay
                             );
                             sleep(Duration::from_secs(operation_retry_delay)).await;
                         }
@@ -351,7 +322,7 @@ impl BeastClient {
         // Spawn queue feeding task - reads from channel, sends to persistent queue
         let queue_clone = queue.clone();
         let stats_counter_clone = stats_counter.clone();
-        let queue_handle = tokio::spawn(async move {
+        let _queue_handle = tokio::spawn(async move {
             let mut at_capacity_logged = false;
             let mut last_metrics_update = std::time::Instant::now();
 
@@ -414,8 +385,7 @@ impl BeastClient {
             }
         });
 
-        // Connection retry loop
-        let mut retry_count = 0;
+        // Connection retry loop - retries indefinitely with exponential backoff
         let mut retry_delay = config.retry_delay_seconds;
 
         loop {
@@ -447,34 +417,22 @@ impl BeastClient {
             match result {
                 ConnectionResult::Success => {
                     info!("Beast connection completed normally");
-                    retry_count = 0;
                     retry_delay = config.retry_delay_seconds;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
                     error!("Beast connection failed: {}", e);
-                    retry_count += 1;
-                    if retry_count >= config.max_retries {
-                        break;
-                    }
                     retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
+                    info!("Retrying in {} seconds", retry_delay);
                     sleep(Duration::from_secs(retry_delay)).await;
                 }
                 ConnectionResult::OperationFailed(e) => {
                     error!("Beast operation failed: {}", e);
-                    retry_count += 1;
-                    if retry_count >= config.max_retries {
-                        break;
-                    }
-                    sleep(Duration::from_secs(std::cmp::min(retry_delay, 5))).await;
+                    let operation_retry_delay = std::cmp::min(retry_delay, 5);
+                    info!("Retrying in {} seconds", operation_retry_delay);
+                    sleep(Duration::from_secs(operation_retry_delay)).await;
                 }
             }
         }
-
-        // Shutdown
-        drop(raw_message_tx);
-        let _ = queue_handle.await;
-
-        Ok(())
     }
 
     /// Start the Beast client with envelope queue (NEW: unified queue with protobuf envelopes)
@@ -495,7 +453,7 @@ impl BeastClient {
         // Spawn queue feeding task - reads from channel, sends to persistent queue
         let queue_clone = queue.clone();
         let stats_counter_clone = stats_counter.clone();
-        let queue_handle = tokio::spawn(async move {
+        let _queue_handle = tokio::spawn(async move {
             let mut at_capacity_logged = false;
             let mut last_metrics_update = std::time::Instant::now();
 
@@ -548,8 +506,7 @@ impl BeastClient {
             }
         });
 
-        // Connection retry loop
-        let mut retry_count = 0;
+        // Connection retry loop - retries indefinitely with exponential backoff
         let mut retry_delay = config.retry_delay_seconds;
 
         loop {
@@ -580,34 +537,22 @@ impl BeastClient {
             match result {
                 ConnectionResult::Success => {
                     info!("Beast connection completed normally");
-                    retry_count = 0;
                     retry_delay = config.retry_delay_seconds;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
                     error!("Beast connection failed: {}", e);
-                    retry_count += 1;
-                    if retry_count >= config.max_retries {
-                        break;
-                    }
                     retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
+                    info!("Retrying in {} seconds", retry_delay);
                     sleep(Duration::from_secs(retry_delay)).await;
                 }
                 ConnectionResult::OperationFailed(e) => {
                     error!("Beast operation failed: {}", e);
-                    retry_count += 1;
-                    if retry_count >= config.max_retries {
-                        break;
-                    }
-                    sleep(Duration::from_secs(std::cmp::min(retry_delay, 5))).await;
+                    let operation_retry_delay = std::cmp::min(retry_delay, 5);
+                    info!("Retrying in {} seconds", operation_retry_delay);
+                    sleep(Duration::from_secs(operation_retry_delay)).await;
                 }
             }
         }
-
-        // Shutdown
-        drop(envelope_tx);
-        let _ = queue_handle.await;
-
-        Ok(())
     }
 
     /// Connect to the Beast server and run the message processing loop (envelope version)
