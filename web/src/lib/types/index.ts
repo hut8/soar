@@ -302,7 +302,6 @@ export interface AirspaceFeatureCollection {
 export interface CoverageHexProperties {
 	h3Index: string;
 	resolution: number;
-	receiverId: string;
 	fixCount: number;
 	firstSeenAt: string;
 	lastSeenAt: string;

@@ -53,6 +53,9 @@
 		"vite-plugin-static-copy": "^3.2.0"
 	},
 	"dependencies": {
+		"@deck.gl/core": "^9.2.7",
+		"@deck.gl/geo-layers": "^9.2.7",
+		"@deck.gl/mapbox": "^9.2.7",
 		"@googlemaps/js-api-loader": "^2.0.2",
 		"@logtape/logtape": "^2.0.2",
 		"@lucide/svelte": "^0.563.1",

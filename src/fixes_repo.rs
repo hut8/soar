@@ -1224,7 +1224,7 @@ impl FixesRepository {
             // Only include OGN/APRS fixes (those with receiver_id) - exclude ADS-B/Beast/SBS
             let mut select_sql = format!(
                 r#"
-                SELECT id, source, timestamp, latitude, longitude,
+                SELECT id, source, received_at, latitude, longitude,
                        altitude_msl_feet, altitude_agl_feet, flight_number, squawk,
                        ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                        source_metadata, flight_id, aircraft_id, received_at, is_active,
@@ -1269,7 +1269,7 @@ impl FixesRepository {
 
             // Add ordering and pagination to select query
             select_sql.push_str(&format!(
-                " ORDER BY timestamp DESC LIMIT {} OFFSET {}",
+                " ORDER BY received_at DESC LIMIT {} OFFSET {}",
                 limit, offset
             ));
 
