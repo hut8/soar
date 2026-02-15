@@ -54,7 +54,6 @@ pub struct IngestConfig {
     pub beast_servers: Vec<String>,
     pub sbs_servers: Vec<String>,
     // Common parameters
-    pub max_retries: u32,
     pub retry_delay: u64,
 }
 
@@ -66,7 +65,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         ogn_filter,
         beast_servers,
         sbs_servers,
-        max_retries,
         retry_delay,
     } = config;
     // Validate that at least one source is specified
@@ -628,7 +626,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             .port(ogn_port_final)
             .callsign(ogn_callsign)
             .filter(ogn_filter)
-            .max_retries(max_retries)
             .retry_delay_seconds(retry_delay)
             .build();
 
@@ -669,7 +666,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         let config = BeastClientConfig {
             server: server.clone(),
             port,
-            max_retries,
             retry_delay_seconds: retry_delay,
             max_retry_delay_seconds: 60,
         };
@@ -703,7 +699,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         let config = SbsClientConfig {
             server: server.clone(),
             port,
-            max_retries,
             retry_delay_seconds: retry_delay,
             max_retry_delay_seconds: 60,
         };

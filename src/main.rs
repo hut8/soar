@@ -150,10 +150,6 @@ enum Commands {
         #[arg(long)]
         sbs: Vec<String>,
 
-        /// Maximum number of connection retry attempts
-        #[arg(long, default_value = "5")]
-        max_retries: u32,
-
         /// Delay between reconnection attempts in seconds
         #[arg(long, default_value = "5")]
         retry_delay: u64,
@@ -1105,7 +1101,6 @@ async fn main() -> Result<()> {
             ogn_filter,
             beast,
             sbs,
-            max_retries,
             retry_delay,
         } => {
             // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
@@ -1116,7 +1111,6 @@ async fn main() -> Result<()> {
                 ogn_filter: ogn_filter.clone(),
                 beast_servers: beast.clone(),
                 sbs_servers: sbs.clone(),
-                max_retries: *max_retries,
                 retry_delay: *retry_delay,
             })
             .await;
