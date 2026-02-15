@@ -875,6 +875,15 @@ impl AircraftRepository {
                         .execute(conn)
                         .context("reassigning flights")?;
 
+                        // Reassign tow-plane references from the duplicate to the target
+                        diesel::update(
+                            flights::table
+                                .filter(flights::towed_by_aircraft_id.eq(dup.id)),
+                        )
+                        .set(flights::towed_by_aircraft_id.eq(target.id))
+                        .execute(conn)
+                        .context("reassigning towed-by flights")?;
+
                         // Reassign spurious flights from the duplicate to the target
                         diesel::update(
                             spurious_flights::table
@@ -883,6 +892,15 @@ impl AircraftRepository {
                         .set(spurious_flights::aircraft_id.eq(target.id))
                         .execute(conn)
                         .context("reassigning spurious flights")?;
+
+                        // Reassign tow-plane references in spurious flights
+                        diesel::update(
+                            spurious_flights::table
+                                .filter(spurious_flights::towed_by_aircraft_id.eq(dup.id)),
+                        )
+                        .set(spurious_flights::towed_by_aircraft_id.eq(target.id))
+                        .execute(conn)
+                        .context("reassigning spurious towed-by flights")?;
 
                         // Delete the duplicate first, then copy its addresses to the target.
                         // This avoids two problems:
