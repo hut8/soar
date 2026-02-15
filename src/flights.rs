@@ -133,7 +133,6 @@ pub struct Flight {
     pub total_distance_meters: Option<f64>,
 
     /// Maximum displacement from departure airport in meters
-    /// Only computed for local flights where departure == arrival
     pub maximum_displacement_meters: Option<f64>,
 
     /// Whether runways were inferred from heading (true) or looked up in database (false)
@@ -500,10 +499,9 @@ impl Flight {
         }
     }
 
-    /// Calculate the maximum displacement from the departure airport
-    /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
+    /// Calculate the maximum displacement from the departure airport.
     /// Uses spline interpolation to check the entire flight path, not just the GPS fix points.
-    /// Returns the maximum distance in meters from the departure airport, or None if not applicable
+    /// Returns the maximum distance in meters from the departure airport, or None if no departure airport is set.
     ///
     /// # Arguments
     /// * `fixes_repo` - Repository for fetching fixes (only used if `cached_fixes` is None)
@@ -515,16 +513,11 @@ impl Flight {
         airports_repo: &crate::airports_repo::AirportsRepository,
         cached_fixes: Option<&[crate::Fix]>,
     ) -> Result<Option<f64>> {
-        // Only applicable for flights where departure == arrival
-        if self.departure_airport_id.is_none()
-            || self.arrival_airport_id.is_none()
-            || self.departure_airport_id != self.arrival_airport_id
-        {
-            return Ok(None);
-        }
-
-        // Get the departure airport coordinates
-        let airport_id = self.departure_airport_id.unwrap();
+        // Requires a departure airport to measure displacement from
+        let airport_id = match self.departure_airport_id {
+            Some(id) => id,
+            None => return Ok(None),
+        };
         let airport = match airports_repo.get_airport_by_id(airport_id).await? {
             Some(a) => a,
             None => return Ok(None),
