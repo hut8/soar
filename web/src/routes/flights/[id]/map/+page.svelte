@@ -677,23 +677,18 @@
 </script>
 
 <!-- Container that fills viewport - using fixed positioning to break out of main container -->
-<div class="fixed inset-x-0 top-[42px] bottom-0 w-full overflow-hidden">
+<div class="fixed inset-x-0 top-[42px] bottom-0 flex w-full flex-col overflow-hidden">
 	<!-- Map container -->
-	<div
-		bind:this={mapContainer}
-		class="absolute top-0 right-0 left-0"
-		class:bottom-[48px]={isPanelCollapsed}
-		class:bottom-[300px]={!isPanelCollapsed}
-	></div>
+	<div bind:this={mapContainer} class="relative flex-1"></div>
 
-	<!-- Back button (top-left) -->
+	<!-- Back button (top-left, overlays map) -->
 	<button onclick={goBack} class="location-btn absolute top-4 left-4 z-[80]" title="Back to Flight">
 		<ArrowLeft size={20} />
 	</button>
 
 	<!-- Bottom panel with altitude chart -->
 	<div
-		class="bg-surface-50-900-token absolute right-0 bottom-0 left-0 z-[80] shadow-lg transition-all duration-300"
+		class="bg-surface-50-900-token z-[80] flex-shrink-0 shadow-lg transition-all duration-300"
 		style={isPanelCollapsed ? 'height: 48px;' : 'height: 300px;'}
 	>
 		<!-- Panel header -->
