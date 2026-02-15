@@ -10,7 +10,8 @@ use crate::aircraft_registrations::{
 use crate::aircraft_types::AircraftCategory;
 use crate::fixes::Fix;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftRegistrationView {
     pub registration_number: String,
@@ -39,10 +40,13 @@ pub struct AircraftRegistrationView {
     pub light_sport_type: Option<LightSportType>,
     pub aircraft_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub model: Option<AircraftModelView>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub aircraft_category: Option<AircraftCategory>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<String>>", optional)]
     pub approved_operations: Vec<String>,
 }
 

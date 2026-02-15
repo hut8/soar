@@ -8,6 +8,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::str::FromStr;
 use tracing::warn;
+use ts_rs::TS;
 use uuid::Uuid;
 
 // Import Point from clubs module
@@ -28,7 +29,8 @@ fn validate_registration(registration: &str) -> Option<String> {
         .map(|r| r.canonical_callsign().to_string())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirworthinessClass")]
 pub enum AirworthinessClass {
     Standard,
@@ -104,7 +106,8 @@ impl std::fmt::Display for AirworthinessClass {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::LightSportType")]
 pub enum LightSportType {
     Airplane,
@@ -117,7 +120,8 @@ pub enum LightSportType {
     WeightShiftControl,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::RegistrantType")]
 pub enum RegistrantType {
     Individual,
