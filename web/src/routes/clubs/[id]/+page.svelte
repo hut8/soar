@@ -416,10 +416,10 @@
 											target="_blank"
 											rel="noopener noreferrer"
 											class="preset-tonal-primary-500 btn btn-sm"
-											title="View device details"
+											title="View aircraft details"
 										>
 											<Plane class="h-4 w-4" />
-											Device
+											Details
 										</a>
 									{/if}
 									<a
