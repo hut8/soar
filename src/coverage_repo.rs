@@ -114,7 +114,7 @@ impl CoverageRepository {
                     FROM bbox
                 )
                 SELECT rch.h3_index, rch.resolution,
-                       SUM(rch.fix_count) AS fix_count,
+                       SUM(rch.fix_count)::bigint AS fix_count,
                        MIN(rch.first_seen_at) AS first_seen_at,
                        MAX(rch.last_seen_at) AS last_seen_at,
                        MIN(rch.min_altitude_msl_feet) AS min_altitude_msl_feet,
