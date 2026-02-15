@@ -178,9 +178,12 @@
 				}
 
 				// Reverse geocode to get a place name (fire-and-forget, don't block search)
-				serverCall<DataResponse<ReverseGeocodeResponse>>(
-					`/geocode/reverse?lat=${position.coords.latitude}&lon=${position.coords.longitude}`
-				)
+				serverCall<DataResponse<ReverseGeocodeResponse>>('/geocode/reverse', {
+					params: {
+						lat: position.coords.latitude,
+						lon: position.coords.longitude
+					}
+				})
 					.then((response) => {
 						if (response.data.displayName && autocompleteElement) {
 							(autocompleteElement as unknown as { value: string }).value =

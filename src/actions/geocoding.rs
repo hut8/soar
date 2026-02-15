@@ -1,9 +1,9 @@
-use axum::{Json, extract::Query, http::StatusCode, response::IntoResponse};
+use axum::{extract::Query, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use ts_rs::TS;
 
-use super::DataResponse;
+use super::{DataResponse, json_error};
 use crate::geocoding::Geocoder;
 
 #[derive(Debug, Deserialize)]
@@ -28,22 +28,22 @@ pub struct ReverseGeocodeResponse {
 pub async fn reverse_geocode(Query(params): Query<ReverseGeocodeParams>) -> impl IntoResponse {
     // Validate coordinate ranges
     if !(-90.0..=90.0).contains(&params.lat) || !(-180.0..=180.0).contains(&params.lon) {
-        return (
+        return json_error(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "errors": "Invalid coordinates: lat must be -90..90, lon must be -180..180" })),
+            "Invalid coordinates: lat must be -90..90, lon must be -180..180",
         )
-            .into_response();
+        .into_response();
     }
 
     let geocoder = match Geocoder::new_realtime_flight_tracking() {
         Ok(g) => g,
         Err(e) => {
             warn!("Pelias not configured for reverse geocoding: {}", e);
-            return (
+            return json_error(
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({ "errors": "Geocoding service unavailable" })),
+                "Geocoding service unavailable",
             )
-                .into_response();
+            .into_response();
         }
     };
 
@@ -55,20 +55,18 @@ pub async fn reverse_geocode(Query(params): Query<ReverseGeocodeParams>) -> impl
                 country: result.country,
                 display_name: result.display_name,
             };
-            (StatusCode::OK, Json(DataResponse { data: response })).into_response()
+            (StatusCode::OK, axum::Json(DataResponse { data: response })).into_response()
         }
         Err(e) => {
             warn!(
                 "Reverse geocoding failed for ({}, {}): {}",
                 params.lat, params.lon, e
             );
-            (
+            json_error(
                 StatusCode::NOT_FOUND,
-                Json(
-                    serde_json::json!({ "errors": "No location found for the given coordinates" }),
-                ),
+                "No location found for the given coordinates",
             )
-                .into_response()
+            .into_response()
         }
     }
 }
