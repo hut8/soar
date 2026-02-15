@@ -259,14 +259,22 @@ impl AircraftRepository {
                 .get()
                 .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-            // Extract country code from ICAO address if applicable
-            let country_code =
-                Aircraft::extract_country_code_from_icao(address as u32, address_type);
-
             // Extract tail number from ICAO address if it's a US aircraft
             let registration =
                 Aircraft::extract_tail_number_from_icao(address as u32, address_type)
                     .unwrap_or_default();
+
+            // Extract country code: try ICAO address first, then fall back to registration
+            let country_code =
+                Aircraft::extract_country_code_from_icao(address as u32, address_type).or_else(
+                    || {
+                        if !registration.is_empty() {
+                            Aircraft::extract_country_code_from_registration(&registration)
+                        } else {
+                            None
+                        }
+                    },
+                );
 
             // Route address to the correct typed column
             let (icao_address, flarm_address, ogn_address, other_address) = match address_type {
@@ -429,10 +437,6 @@ impl AircraftRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Extract country code from ICAO address if applicable
-            let country_code =
-                Aircraft::extract_country_code_from_icao(address as u32, address_type);
-
             // Extract tail number from ICAO address if it's a US aircraft
             // Use packet registration if available and non-empty, otherwise try to extract from ICAO
             let registration = packet_fields
@@ -442,6 +446,18 @@ impl AircraftRepository {
                 .cloned()
                 .or_else(|| Aircraft::extract_tail_number_from_icao(address as u32, address_type))
                 .unwrap_or_default();
+
+            // Extract country code: try ICAO address first, then fall back to registration.
+            // FLARM/OGN addresses don't encode country, so registration is the only source
+            // for those aircraft (e.g. "D-KETB" → "DE").
+            let country_code = Aircraft::extract_country_code_from_icao(address as u32, address_type)
+                .or_else(|| {
+                    if !registration.is_empty() {
+                        Aircraft::extract_country_code_from_registration(&registration)
+                    } else {
+                        None
+                    }
+                });
 
             // Route address to the correct typed column
             let (icao_address, flarm_address, ogn_address, other_address) = match address_type {
@@ -544,7 +560,7 @@ impl AircraftRepository {
                          ELSE aircraft.aircraft_model END"
                     )),
                     aircraft::registration.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>(&registration_sql)),
-                    aircraft::country_code.eq(&country_code),
+                    aircraft::country_code.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>("COALESCE(EXCLUDED.country_code, aircraft.country_code)")),
                 )}
             }
 
