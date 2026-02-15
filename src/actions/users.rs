@@ -16,6 +16,7 @@ use crate::web::AppState;
 use super::{DataListResponse, json_error, views::UserView};
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetClubRequest {
     pub club_id: Uuid,
 }
