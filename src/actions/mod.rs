@@ -10,6 +10,7 @@ pub mod clubs;
 pub mod coverage;
 pub mod fixes;
 pub mod flights;
+pub mod geocoding;
 pub mod geofences;
 pub mod pilots;
 pub mod raw_messages;
