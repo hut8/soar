@@ -829,6 +829,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/flights/{id}/geofence-events",
             get(actions::geofences::get_flight_geofence_events),
         )
+        // Geocoding
+        .route("/geocode/reverse", get(actions::geocoding::reverse_geocode))
         // User location tracking
         .route("/user-fix", post(actions::create_user_fix))
         // Analytics routes

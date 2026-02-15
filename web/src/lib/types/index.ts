@@ -23,6 +23,9 @@ import type { ModelDataView } from './generated/ModelDataView';
 import type { AircraftRegistrationView } from './generated/AircraftRegistrationView';
 import type { AircraftModelView } from './generated/AircraftModelView';
 
+// Import auto-generated geocoding types from Rust
+import type { ReverseGeocodeResponse } from './generated/ReverseGeocodeResponse';
+
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
 import type { GeofenceLayer } from './generated/GeofenceLayer';
@@ -67,7 +70,9 @@ export type {
 	AircraftGeofence,
 	GeofenceExitEvent,
 	GeofenceExitEventsResponse,
-	ModelDataView
+	ModelDataView,
+	// Geocoding types
+	ReverseGeocodeResponse
 };
 
 // Type aliases for backward compatibility

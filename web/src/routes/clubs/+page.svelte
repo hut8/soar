@@ -8,7 +8,12 @@
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { getLogger } from '$lib/logging';
-	import type { ClubWithSoaring, DataListResponse } from '$lib/types';
+	import type {
+		ClubWithSoaring,
+		DataListResponse,
+		DataResponse,
+		ReverseGeocodeResponse
+	} from '$lib/types';
 
 	const logger = getLogger(['soar', 'ClubsPage']);
 
@@ -165,12 +170,28 @@
 				selectedLongitude = position.coords.longitude;
 				geolocating = false;
 
-				// Display coordinates in the autocomplete input
+				// Show coordinates immediately, then try to resolve to a place name
+				const lat = position.coords.latitude.toFixed(4);
+				const lng = position.coords.longitude.toFixed(4);
 				if (autocompleteElement) {
-					const lat = position.coords.latitude.toFixed(4);
-					const lng = position.coords.longitude.toFixed(4);
 					(autocompleteElement as unknown as { value: string }).value = `${lat}, ${lng}`;
 				}
+
+				// Reverse geocode to get a place name (fire-and-forget, don't block search)
+				serverCall<DataResponse<ReverseGeocodeResponse>>(
+					`/geocode/reverse?lat=${position.coords.latitude}&lon=${position.coords.longitude}`
+				)
+					.then((response) => {
+						if (response.data.displayName && autocompleteElement) {
+							(autocompleteElement as unknown as { value: string }).value =
+								response.data.displayName;
+						}
+					})
+					.catch((err) => {
+						logger.debug('Reverse geocoding failed, keeping coordinates: {error}', {
+							error: err
+						});
+					});
 
 				// Automatically trigger search after getting location
 				searchClubs();
