@@ -6,10 +6,11 @@ mod tests {
 
     use crate::actions::club_tow_fees::TowFeeView;
     use crate::actions::views::{
-        Aircraft, AircraftView, AirportView, ClubView, FlightView, ModelDataView, ReceiverView,
-        RunwayEnd, RunwayView, UserView,
+        Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView, ClubView,
+        FlightView, ModelDataView, ReceiverView, RunwayEnd, RunwayView, UserView,
     };
     use crate::aircraft::AddressType;
+    use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};
     use crate::aircraft_types::AircraftCategory;
     use crate::fixes::Fix;
     use crate::flights::FlightState;
@@ -29,6 +30,12 @@ mod tests {
         ModelDataView::export(&cfg).expect("Failed to export ModelDataView type");
         Aircraft::export(&cfg).expect("Failed to export Aircraft type");
         AircraftCategory::export(&cfg).expect("Failed to export AircraftCategory type");
+        AircraftRegistrationView::export(&cfg)
+            .expect("Failed to export AircraftRegistrationView type");
+        AircraftModelView::export(&cfg).expect("Failed to export AircraftModelView type");
+        AirworthinessClass::export(&cfg).expect("Failed to export AirworthinessClass type");
+        LightSportType::export(&cfg).expect("Failed to export LightSportType type");
+        RegistrantType::export(&cfg).expect("Failed to export RegistrantType type");
         ClubView::export(&cfg).expect("Failed to export ClubView type");
         TowFeeView::export(&cfg).expect("Failed to export TowFeeView type");
         FlightView::export(&cfg).expect("Failed to export FlightView type");

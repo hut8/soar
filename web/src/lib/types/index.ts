@@ -20,6 +20,8 @@ import type { AirportView } from './generated/AirportView';
 import type { RunwayView } from './generated/RunwayView';
 import type { RunwayEnd as RunwayEndGenerated } from './generated/RunwayEnd';
 import type { ModelDataView } from './generated/ModelDataView';
+import type { AircraftRegistrationView } from './generated/AircraftRegistrationView';
+import type { AircraftModelView } from './generated/AircraftModelView';
 
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
@@ -150,55 +152,9 @@ export interface ComboboxData {
 	club: ClubWithSoaring;
 }
 
-// Aircraft registration information (from FAA database)
-export interface AircraftRegistration {
-	registrationNumber: string;
-	serialNumber: string;
-	manufacturerCode?: string;
-	modelCode?: string;
-	seriesCode?: string;
-	engineManufacturerCode?: string;
-	engineModelCode?: string;
-	yearManufactured?: number;
-	registrantType?: string;
-	registrantName?: string;
-	aircraftType?: string;
-	engineType?: number;
-	statusCode?: string;
-	transponderCode?: number;
-	airworthinessClass?: string;
-	airworthinessDate?: string;
-	certificateIssueDate?: string;
-	expirationDate?: string;
-	clubId?: string;
-	homeBaseAirportId?: string;
-	kitManufacturerName?: string;
-	kitModelName?: string;
-	otherNames?: string[];
-	lightSportType?: string;
-	aircraftId?: string;
-	model?: AircraftModel; // Embedded model data if available
-	aircraftCategory?: string; // Aircraft category if available
-}
-
-// Aircraft model information
-export interface AircraftModel {
-	manufacturerCode: string;
-	modelCode: string;
-	seriesCode: string;
-	manufacturerName: string;
-	modelName: string;
-	aircraftType: string | null;
-	engineType: string | null;
-	aircraftCategory: string | null;
-	builderCertification: string | null;
-	numberOfEngines: number | null;
-	numberOfSeats: number | null;
-	weightClass: string | null;
-	cruisingSpeed: number | null;
-	typeCertificateDataSheet: string | null;
-	typeCertificateDataHolder: string | null;
-}
+// Aircraft registration and model types (auto-generated from Rust via ts-rs)
+export type AircraftRegistration = AircraftRegistrationView;
+export type AircraftModel = AircraftModelView;
 
 // Type guards for AircraftOrCluster (not auto-generated)
 export function isAircraftItem(

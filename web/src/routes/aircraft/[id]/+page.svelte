@@ -984,6 +984,20 @@
 									<dd>{aircraftRegistration.otherNames.join(', ')}</dd>
 								</div>
 							{/if}
+
+							<!-- Approved Operations -->
+							{#if aircraftRegistration.approvedOperations && aircraftRegistration.approvedOperations.length > 0}
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Approved Operations</dt>
+									<dd>
+										<ul class="list-inside list-disc">
+											{#each aircraftRegistration.approvedOperations as operation (operation)}
+												<li>{operation}</li>
+											{/each}
+										</ul>
+									</dd>
+								</div>
+							{/if}
 						</dl>
 					{:else}
 						<div class="text-surface-600-300-token py-4 text-center text-xs">
