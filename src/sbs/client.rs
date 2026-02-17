@@ -27,8 +27,6 @@ pub struct SbsClientConfig {
     pub server: String,
     /// SBS server port (typically 30003)
     pub port: u16,
-    /// Maximum number of connection retry attempts
-    pub max_retries: u32,
     /// Initial delay between reconnection attempts in seconds (will use exponential backoff)
     pub retry_delay_seconds: u64,
     /// Maximum delay between reconnection attempts in seconds (cap for exponential backoff)
@@ -40,7 +38,6 @@ impl Default for SbsClientConfig {
         Self {
             server: "localhost".to_string(),
             port: 30003,
-            max_retries: 5,
             retry_delay_seconds: 0, // Reconnect immediately on first failure
             max_retry_delay_seconds: 60, // Cap at 60 seconds
         }
@@ -111,8 +108,7 @@ impl SbsClient {
             }
         });
 
-        // Connection loop with exponential backoff
-        let mut retry_count = 0;
+        // Connection loop with exponential backoff - retries indefinitely
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
@@ -136,19 +132,10 @@ impl SbsClient {
                             break;
                         }
                         ConnectionResult::ConnectionFailed(e) => {
-                            retry_count += 1;
-                            if retry_count > config.max_retries {
-                                error!(
-                                    "Max retries ({}) exceeded for SBS connection to {}:{}, giving up: {}",
-                                    config.max_retries, config.server, config.port, e
-                                );
-                                break;
-                            }
-
                             metrics::counter!("sbs.connection.failed_total").increment(1);
                             warn!(
-                                "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
-                                config.server, config.port, retry_count, config.max_retries, e, current_delay
+                                "Failed to connect to SBS server {}:{}: {} - retrying in {}s",
+                                config.server, config.port, e, current_delay
                             );
 
                             sleep(Duration::from_secs(current_delay)).await;
@@ -164,8 +151,7 @@ impl SbsClient {
                             warn!("SBS connection to {}:{} failed during operation: {} - reconnecting in 1s", config.server, config.port, e);
                             sleep(Duration::from_secs(1)).await;
 
-                            // Reset retry count on operation failures (connection was successful)
-                            retry_count = 0;
+                            // Reset delay on operation failures (connection was successful)
                             current_delay = config.retry_delay_seconds;
                         }
                     }
@@ -246,8 +232,7 @@ impl SbsClient {
             }
         });
 
-        // Connection loop with exponential backoff
-        let mut retry_count = 0;
+        // Connection loop with exponential backoff - retries indefinitely
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
@@ -282,24 +267,10 @@ impl SbsClient {
                     break;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
-                    retry_count += 1;
-                    if retry_count > config.max_retries {
-                        error!(
-                            "Max retries ({}) exceeded for SBS connection to {}:{}, giving up: {}",
-                            config.max_retries, config.server, config.port, e
-                        );
-                        break;
-                    }
-
                     metrics::counter!("sbs.connection.failed_total").increment(1);
                     warn!(
-                        "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
-                        config.server,
-                        config.port,
-                        retry_count,
-                        config.max_retries,
-                        e,
-                        current_delay
+                        "Failed to connect to SBS server {}:{}: {} - retrying in {}s",
+                        config.server, config.port, e, current_delay
                     );
 
                     sleep(Duration::from_secs(current_delay)).await;
@@ -316,8 +287,7 @@ impl SbsClient {
                     );
                     sleep(Duration::from_secs(1)).await;
 
-                    // Reset retry count on operation failures (connection was successful)
-                    retry_count = 0;
+                    // Reset delay on operation failures (connection was successful)
                     current_delay = config.retry_delay_seconds;
                 }
             }
@@ -402,8 +372,7 @@ impl SbsClient {
             }
         });
 
-        // Connection loop with exponential backoff
-        let mut retry_count = 0;
+        // Connection loop with exponential backoff - retries indefinitely
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
@@ -437,24 +406,10 @@ impl SbsClient {
                     break;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
-                    retry_count += 1;
-                    if retry_count > config.max_retries {
-                        error!(
-                            "Max retries ({}) exceeded for SBS connection, giving up: {}",
-                            config.max_retries, e
-                        );
-                        break;
-                    }
-
                     metrics::counter!("sbs.connection.failed_total").increment(1);
                     warn!(
-                        "Failed to connect to SBS server {}:{} (attempt {}/{}): {} - retrying in {}s",
-                        config.server,
-                        config.port,
-                        retry_count,
-                        config.max_retries,
-                        e,
-                        current_delay
+                        "Failed to connect to SBS server {}:{}: {} - retrying in {}s",
+                        config.server, config.port, e, current_delay
                     );
 
                     sleep(Duration::from_secs(current_delay)).await;
@@ -468,7 +423,6 @@ impl SbsClient {
                         config.server, config.port, e
                     );
                     sleep(Duration::from_secs(1)).await;
-                    retry_count = 0;
                     current_delay = config.retry_delay_seconds;
                 }
             }
@@ -856,7 +810,6 @@ mod tests {
         let config = SbsClientConfig::default();
         assert_eq!(config.server, "localhost");
         assert_eq!(config.port, 30003);
-        assert_eq!(config.max_retries, 5);
         assert_eq!(config.retry_delay_seconds, 0);
         assert_eq!(config.max_retry_delay_seconds, 60);
     }
@@ -866,13 +819,11 @@ mod tests {
         let config = SbsClientConfig {
             server: "data.adsbhub.org".to_string(),
             port: 5002,
-            max_retries: 10,
             retry_delay_seconds: 5,
             max_retry_delay_seconds: 120,
         };
         assert_eq!(config.server, "data.adsbhub.org");
         assert_eq!(config.port, 5002);
-        assert_eq!(config.max_retries, 10);
         assert_eq!(config.retry_delay_seconds, 5);
         assert_eq!(config.max_retry_delay_seconds, 120);
     }

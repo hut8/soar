@@ -5,6 +5,7 @@ mod tests {
     use ts_rs::{Config, TS};
 
     use crate::actions::club_tow_fees::TowFeeView;
+    use crate::actions::geocoding::ReverseGeocodeResponse;
     use crate::actions::views::{
         Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView, ClubView,
         FlightView, ModelDataView, ReceiverView, RunwayEnd, RunwayView, UserView,
@@ -46,6 +47,9 @@ mod tests {
         AirportView::export(&cfg).expect("Failed to export AirportView type");
         RunwayView::export(&cfg).expect("Failed to export RunwayView type");
         RunwayEnd::export(&cfg).expect("Failed to export RunwayEnd type");
+
+        // Geocoding types
+        ReverseGeocodeResponse::export(&cfg).expect("Failed to export ReverseGeocodeResponse type");
 
         // Geofence types
         GeofenceLayer::export(&cfg).expect("Failed to export GeofenceLayer type");

@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::actions::views::{AircraftInfo, AirportInfo, FlightView, LocationInfo};
+use crate::actions::views::{AircraftInfo, AircraftView, AirportInfo, FlightView, LocationInfo};
 use crate::actions::{
     DataListResponse, DataResponse, PaginatedDataResponse, PaginationMetadata, json_error,
 };
@@ -225,7 +225,14 @@ pub async fn get_flight_device(
             if let Some(aircraft_id) = flight.aircraft_id {
                 // Look up aircraft information
                 match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
-                    Ok(Some(aircraft)) => Json(DataResponse { data: aircraft }).into_response(),
+                    Ok(Some(aircraft)) => {
+                        let mut aircraft_view: AircraftView = aircraft.into();
+                        aircraft_view.enrich_model_data(&state.aircraft_types_lookup);
+                        Json(DataResponse {
+                            data: aircraft_view,
+                        })
+                        .into_response()
+                    }
                     Ok(None) => {
                         json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
