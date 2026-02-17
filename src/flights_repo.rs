@@ -55,6 +55,38 @@ impl FlightsRepository {
         Ok(())
     }
 
+    /// Look up an existing active flight for the given aircraft.
+    /// An "active" flight has no landing_time and no timed_out_at.
+    /// Uses the partial unique index idx_flights_one_active_per_aircraft for fast lookup.
+    pub async fn get_active_flight_id_for_aircraft(
+        &self,
+        aircraft_id_param: Uuid,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let flight_id_result = flights
+                .filter(
+                    aircraft_id
+                        .eq(aircraft_id_param)
+                        .and(landing_time.is_null())
+                        .and(timed_out_at.is_null()),
+                )
+                .select(id)
+                .first::<Uuid>(&mut conn)
+                .optional()?;
+
+            Ok::<Option<Uuid>, anyhow::Error>(flight_id_result)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Update flight with takeoff enrichment data (runway, locations)
     /// Used by background enrichment task after flight is created
     pub async fn update_flight_takeoff_enrichment(
