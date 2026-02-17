@@ -525,6 +525,7 @@ pub(crate) async fn process_state_transition(
                     fix.flight_id = Some(existing_flight_id);
                     if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
                         state.current_flight_id = Some(existing_flight_id);
+                        state.current_callsign = fix.flight_number.clone();
                     }
                     metrics::counter!("flight_tracker.orphaned_flight_adopted_total").increment(1);
                     return Ok(StateTransitionResult { fix, pending_work });
