@@ -28,13 +28,20 @@ impl ReceiverStatusRepository {
 
     /// Insert a new receiver status
     pub async fn insert(&self, new_status: &NewReceiverStatus) -> Result<ReceiverStatus> {
-        let mut conn = self.get_connection()?;
-        let status = diesel::insert_into(receiver_statuses::table)
-            .values(new_status)
-            .returning(ReceiverStatus::as_returning())
-            .get_result::<ReceiverStatus>(&mut conn)?;
+        let pool = self.pool.clone();
+        let new_status = new_status.clone();
 
-        Ok(status)
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let status = diesel::insert_into(receiver_statuses::table)
+                .values(&new_status)
+                .returning(ReceiverStatus::as_returning())
+                .get_result::<ReceiverStatus>(&mut conn)?;
+            Ok(status)
+        })
+        .await?
     }
 
     /// Get statuses for a receiver with pagination
