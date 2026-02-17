@@ -3,7 +3,7 @@ use crate::aircraft::Aircraft;
 use crate::aircraft_types::AircraftCategory;
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
@@ -129,30 +129,44 @@ pub(crate) async fn process_state_transition(
             if should_end_flight {
                 // Set preliminary landing_time before creating new flight to prevent
                 // two active flights for the same aircraft (unique index violation)
-                let _ = ctx
+                match ctx
                     .flights_repo
                     .set_preliminary_landing_time(flight_id, fix.received_at)
-                    .await;
+                    .await
+                {
+                    Ok(_) => {
+                        // Old flight is now inactive - safe to create new one
+                        pending_work = PendingBackgroundWork::CompleteFlight {
+                            flight_id,
+                            aircraft: Box::new(aircraft.clone()),
+                            fix: Box::new(fix.clone()),
+                        };
 
-                // End current flight - defer background work until after fix insertion
-                pending_work = PendingBackgroundWork::CompleteFlight {
-                    flight_id,
-                    aircraft: Box::new(aircraft.clone()),
-                    fix: Box::new(fix.clone()),
-                };
-
-                let new_flight_id = Uuid::now_v7();
-                match create_flight_fast(ctx, &fix, new_flight_id, false).await {
-                    Ok(flight_id) => {
-                        fix.flight_id = Some(flight_id);
-                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                            state.current_flight_id = Some(flight_id);
-                            state.current_callsign = fix.flight_number.clone();
+                        let new_flight_id = Uuid::now_v7();
+                        match create_flight_fast(ctx, &fix, new_flight_id, false).await {
+                            Ok(flight_id) => {
+                                fix.flight_id = Some(flight_id);
+                                if let Some(mut state) =
+                                    ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                {
+                                    state.current_flight_id = Some(flight_id);
+                                    state.current_callsign = fix.flight_number.clone();
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to create new flight after callsign change: {}", e);
+                                fix.flight_id = None;
+                            }
                         }
                     }
                     Err(e) => {
-                        error!("Failed to create new flight after callsign change: {}", e);
-                        fix.flight_id = None;
+                        // DB error - keep old flight active in memory to maintain sync
+                        // Next fix will re-evaluate the callsign change
+                        warn!(
+                            "Could not set landing time for flight {} before callsign change, will retry: {}",
+                            flight_id, e
+                        );
+                        fix.flight_id = Some(flight_id);
                     }
                 }
             } else {
@@ -219,30 +233,44 @@ pub(crate) async fn process_state_transition(
                 if should_end_due_to_gap {
                     // Set preliminary landing_time before creating new flight to prevent
                     // two active flights for the same aircraft (unique index violation)
-                    let _ = ctx
+                    match ctx
                         .flights_repo
                         .set_preliminary_landing_time(flight_id, fix.received_at)
-                        .await;
+                        .await
+                    {
+                        Ok(_) => {
+                            // Old flight is now inactive - safe to create new one
+                            pending_work = PendingBackgroundWork::CompleteFlight {
+                                flight_id,
+                                aircraft: Box::new(aircraft.clone()),
+                                fix: Box::new(fix.clone()),
+                            };
 
-                    // End current flight - defer background work until after fix insertion
-                    pending_work = PendingBackgroundWork::CompleteFlight {
-                        flight_id,
-                        aircraft: Box::new(aircraft.clone()),
-                        fix: Box::new(fix.clone()),
-                    };
-
-                    let new_flight_id = Uuid::now_v7();
-                    match create_flight_fast(ctx, &fix, new_flight_id, false).await {
-                        Ok(flight_id) => {
-                            fix.flight_id = Some(flight_id);
-                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                                state.current_flight_id = Some(flight_id);
-                                state.current_callsign = fix.flight_number.clone();
+                            let new_flight_id = Uuid::now_v7();
+                            match create_flight_fast(ctx, &fix, new_flight_id, false).await {
+                                Ok(flight_id) => {
+                                    fix.flight_id = Some(flight_id);
+                                    if let Some(mut state) =
+                                        ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                    {
+                                        state.current_flight_id = Some(flight_id);
+                                        state.current_callsign = fix.flight_number.clone();
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to create new flight after gap: {}", e);
+                                    fix.flight_id = None;
+                                }
                             }
                         }
                         Err(e) => {
-                            error!("Failed to create new flight after gap: {}", e);
-                            fix.flight_id = None;
+                            // DB error - keep old flight active in memory to maintain sync
+                            // Next fix will re-evaluate the gap
+                            warn!(
+                                "Could not set landing time for flight {} before gap-based split, will retry: {}",
+                                flight_id, e
+                            );
+                            fix.flight_id = Some(flight_id);
                         }
                     }
                 } else {
@@ -480,6 +508,37 @@ pub(crate) async fn process_state_transition(
                 metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
             }
 
+            // Before creating a new flight, check if there's an orphaned active flight in DB.
+            // This handles cases where in-memory state got out of sync with the database
+            // (e.g., set_preliminary_landing_time failed but current_flight_id was cleared,
+            // or state was lost after a restart).
+            match ctx
+                .flights_repo
+                .get_active_flight_id_for_aircraft(fix.aircraft_id)
+                .await
+            {
+                Ok(Some(existing_flight_id)) => {
+                    info!(
+                        "Found orphaned active flight {} for aircraft {}, adopting it",
+                        existing_flight_id, fix.aircraft_id
+                    );
+                    fix.flight_id = Some(existing_flight_id);
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.current_flight_id = Some(existing_flight_id);
+                        state.current_callsign = fix.flight_number.clone();
+                    }
+                    metrics::counter!("flight_tracker.orphaned_flight_adopted_total").increment(1);
+                    return Ok(StateTransitionResult { fix, pending_work });
+                }
+                Ok(None) => {
+                    // No existing active flight - proceed to create a new one
+                }
+                Err(e) => {
+                    // DB query failed - proceed to create and let it fail naturally if needed
+                    warn!("Failed to check for existing active flight: {}", e);
+                }
+            }
+
             // Create new flight - check if takeoff or mid-flight
             let is_takeoff = if fix.has_transponder_data() {
                 // ADS-B: any prior inactive fix means on_ground→airborne transition = takeoff
@@ -553,21 +612,34 @@ pub(crate) async fn process_state_transition(
                 // ADS-B: transponder on_ground is authoritative — land immediately
                 // Set preliminary landing_time to prevent race where a new fix triggers
                 // flight creation before CompleteFlight background task runs
-                let _ = ctx
+                match ctx
                     .flights_repo
                     .set_preliminary_landing_time(flight_id, fix.received_at)
-                    .await;
-
-                fix.flight_id = Some(flight_id);
-                pending_work = PendingBackgroundWork::CompleteFlight {
-                    flight_id,
-                    aircraft: Box::new(aircraft.clone()),
-                    fix: Box::new(fix.clone()),
-                };
-                if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                    state.current_flight_id = None;
+                    .await
+                {
+                    Ok(_) => {
+                        // Landing time set (or already set) - safe to clear state
+                        fix.flight_id = Some(flight_id);
+                        pending_work = PendingBackgroundWork::CompleteFlight {
+                            flight_id,
+                            aircraft: Box::new(aircraft.clone()),
+                            fix: Box::new(fix.clone()),
+                        };
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = None;
+                        }
+                        metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
+                    }
+                    Err(e) => {
+                        // DB error - keep flight active in memory to maintain sync
+                        // Next inactive fix will retry the landing
+                        warn!(
+                            "Failed to set landing time for flight {} (will retry): {}",
+                            flight_id, e
+                        );
+                        fix.flight_id = Some(flight_id);
+                    }
                 }
-                metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
             } else {
                 // APRS: use AGL check + 5-fix debounce (heuristic-based is_active can flicker)
                 let agl = calculate_altitude_agl(ctx.elevation_db, &fix).await;
@@ -596,27 +668,37 @@ pub(crate) async fn process_state_transition(
                         if should_land {
                             // Set preliminary landing_time to prevent race where a new fix
                             // triggers flight creation before CompleteFlight background task runs
-                            let _ = ctx
+                            match ctx
                                 .flights_repo
                                 .set_preliminary_landing_time(flight_id, fix.received_at)
-                                .await;
-
-                            // Landing confirmed - defer background work until after fix insertion
-                            fix.flight_id = Some(flight_id);
-
-                            pending_work = PendingBackgroundWork::CompleteFlight {
-                                flight_id,
-                                aircraft: Box::new(aircraft.clone()),
-                                fix: Box::new(fix.clone()),
-                            };
-
-                            // Clear current_flight_id
-                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                                state.current_flight_id = None;
+                                .await
+                            {
+                                Ok(_) => {
+                                    // Landing confirmed
+                                    fix.flight_id = Some(flight_id);
+                                    pending_work = PendingBackgroundWork::CompleteFlight {
+                                        flight_id,
+                                        aircraft: Box::new(aircraft.clone()),
+                                        fix: Box::new(fix.clone()),
+                                    };
+                                    if let Some(mut state) =
+                                        ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                    {
+                                        state.current_flight_id = None;
+                                    }
+                                    metrics::counter!("flight_tracker.flight_ended.landed_total")
+                                        .increment(1);
+                                }
+                                Err(e) => {
+                                    // DB error - keep flight active in memory to maintain sync
+                                    // Next inactive fix will retry the landing
+                                    warn!(
+                                        "Failed to set landing time for flight {} (will retry): {}",
+                                        flight_id, e
+                                    );
+                                    fix.flight_id = Some(flight_id);
+                                }
                             }
-
-                            metrics::counter!("flight_tracker.flight_ended.landed_total")
-                                .increment(1);
                         } else {
                             // Not yet 5 inactive - keep flight active
                             fix.flight_id = Some(flight_id);
