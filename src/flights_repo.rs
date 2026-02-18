@@ -1433,7 +1433,7 @@ impl FlightsRepository {
                        AND aircraft_id IS NOT NULL \
                  ) \
                  UPDATE flights f \
-                 SET landing_time = f.last_fix_at, \
+                 SET landing_time = GREATEST(f.last_fix_at, f.takeoff_time + interval '1 second'), \
                      updated_at = NOW() \
                  FROM ranked r \
                  WHERE f.id = r.id \

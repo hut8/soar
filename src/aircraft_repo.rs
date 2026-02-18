@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use dashmap::DashMap;
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use diesel::upsert::excluded;
 use std::sync::Arc;
@@ -15,7 +15,6 @@ use crate::schema::aircraft;
 use chrono::{DateTime, Utc};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
-pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// Statistics from merging duplicate aircraft by pending_registration.
 #[derive(Debug, Clone, Default)]
@@ -50,12 +49,6 @@ impl AircraftRepository {
         Self { pool }
     }
 
-    fn get_connection(&self) -> Result<PgPooledConnection> {
-        self.pool
-            .get()
-            .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
-    }
-
     /// Upsert aircraft into the database
     /// This will insert new aircraft or update existing ones based on typed address columns.
     /// Each DDB record has a single address type, so we branch on which typed address column
@@ -64,113 +57,130 @@ impl AircraftRepository {
     where
         I: IntoIterator<Item = Aircraft>,
     {
-        let mut conn = self.get_connection()?;
-        let mut upserted_count = 0;
+        let pool = self.pool.clone();
+        // Collect into Vec before moving into spawn_blocking (iterators aren't Send)
+        let aircraft_vec: Vec<Aircraft> = aircraft_iter.into_iter().collect();
 
-        // Convert aircraft to NewAircraft structs for insertion
-        let new_aircraft: Vec<NewAircraft> = aircraft_iter.into_iter().map(|d| d.into()).collect();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let mut upserted_count = 0;
 
-        // Common DO UPDATE set fields used by all address type branches
-        macro_rules! ddb_upsert_set {
-            () => {(
-                // Update fields from DDB, but preserve existing values if DDB value is empty
-                // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
-                aircraft::aircraft_model.eq(diesel::dsl::sql(
-                    "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), aircraft.aircraft_model)"
-                )),
-                aircraft::registration.eq(diesel::dsl::sql(
-                    "COALESCE(NULLIF(EXCLUDED.registration, ''), aircraft.registration)"
-                )),
-                aircraft::competition_number.eq(diesel::dsl::sql(
-                    "COALESCE(NULLIF(EXCLUDED.competition_number, ''), aircraft.competition_number)"
-                )),
-                aircraft::tracked.eq(excluded(aircraft::tracked)),
-                aircraft::identified.eq(excluded(aircraft::identified)),
-                aircraft::from_ogn_ddb.eq(excluded(aircraft::from_ogn_ddb)),
-                // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
-                aircraft::frequency_mhz.eq(diesel::dsl::sql(
-                    "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
-                )),
-                aircraft::pilot_name.eq(diesel::dsl::sql(
-                    "COALESCE(EXCLUDED.pilot_name, aircraft.pilot_name)"
-                )),
-                aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
-                    "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
-                )),
-                aircraft::country_code.eq(diesel::dsl::sql(
-                    "COALESCE(EXCLUDED.country_code, aircraft.country_code)"
-                )),
-                aircraft::updated_at.eq(diesel::dsl::now),
-                // NOTE: We do NOT update the following fields because they come from real-time packets:
-                // - aircraft_category (from OGN packets)
-                // - icao_model_code (from ADSB packets)
-                // - adsb_emitter_category (from ADSB packets)
-                // - tracker_device_type (from tracker packets)
-                // - last_fix_at (managed by fix processing)
-                // - club_id (managed by club assignment logic)
-            )}
-        }
+            // Convert aircraft to NewAircraft structs for insertion
+            let new_aircraft: Vec<NewAircraft> =
+                aircraft_vec.into_iter().map(|d| d.into()).collect();
 
-        for new_aircraft_entry in new_aircraft {
-            // Branch on which typed address column is populated to determine ON CONFLICT target.
-            // Diesel requires the conflict column to be known at compile time.
-            let result = if new_aircraft_entry.icao_address.is_some() {
-                diesel::insert_into(aircraft::table)
-                    .values(&new_aircraft_entry)
-                    .on_conflict(aircraft::icao_address)
-                    .do_update()
-                    .set(ddb_upsert_set!())
-                    .execute(&mut conn)
-            } else if new_aircraft_entry.flarm_address.is_some() {
-                diesel::insert_into(aircraft::table)
-                    .values(&new_aircraft_entry)
-                    .on_conflict(aircraft::flarm_address)
-                    .do_update()
-                    .set(ddb_upsert_set!())
-                    .execute(&mut conn)
-            } else if new_aircraft_entry.ogn_address.is_some() {
-                diesel::insert_into(aircraft::table)
-                    .values(&new_aircraft_entry)
-                    .on_conflict(aircraft::ogn_address)
-                    .do_update()
-                    .set(ddb_upsert_set!())
-                    .execute(&mut conn)
-            } else if new_aircraft_entry.other_address.is_some() {
-                diesel::insert_into(aircraft::table)
-                    .values(&new_aircraft_entry)
-                    .on_conflict(aircraft::other_address)
-                    .do_update()
-                    .set(ddb_upsert_set!())
-                    .execute(&mut conn)
-            } else {
-                warn!("Skipping aircraft with no address columns set");
-                continue;
-            };
+            // Common DO UPDATE set fields used by all address type branches
+            macro_rules! ddb_upsert_set {
+                () => {(
+                    // Update fields from DDB, but preserve existing values if DDB value is empty
+                    // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
+                    aircraft::aircraft_model.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), aircraft.aircraft_model)"
+                    )),
+                    aircraft::registration.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.registration, ''), aircraft.registration)"
+                    )),
+                    aircraft::competition_number.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.competition_number, ''), aircraft.competition_number)"
+                    )),
+                    aircraft::tracked.eq(excluded(aircraft::tracked)),
+                    aircraft::identified.eq(excluded(aircraft::identified)),
+                    aircraft::from_ogn_ddb.eq(excluded(aircraft::from_ogn_ddb)),
+                    // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
+                    aircraft::frequency_mhz.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
+                    )),
+                    aircraft::pilot_name.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.pilot_name, aircraft.pilot_name)"
+                    )),
+                    aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
+                    )),
+                    aircraft::country_code.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.country_code, aircraft.country_code)"
+                    )),
+                    aircraft::updated_at.eq(diesel::dsl::now),
+                    // NOTE: We do NOT update the following fields because they come from real-time packets:
+                    // - aircraft_category (from OGN packets)
+                    // - icao_model_code (from ADSB packets)
+                    // - adsb_emitter_category (from ADSB packets)
+                    // - tracker_device_type (from tracker packets)
+                    // - last_fix_at (managed by fix processing)
+                    // - club_id (managed by club assignment logic)
+                )}
+            }
 
-            match result {
-                Ok(_) => {
-                    upserted_count += 1;
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to upsert aircraft {}: {}",
-                        new_aircraft_entry.address_hex(),
-                        e
-                    );
-                    // Continue with other aircraft rather than failing the entire batch
+            for new_aircraft_entry in new_aircraft {
+                // Branch on which typed address column is populated to determine ON CONFLICT target.
+                // Diesel requires the conflict column to be known at compile time.
+                let result = if new_aircraft_entry.icao_address.is_some() {
+                    diesel::insert_into(aircraft::table)
+                        .values(&new_aircraft_entry)
+                        .on_conflict(aircraft::icao_address)
+                        .do_update()
+                        .set(ddb_upsert_set!())
+                        .execute(&mut conn)
+                } else if new_aircraft_entry.flarm_address.is_some() {
+                    diesel::insert_into(aircraft::table)
+                        .values(&new_aircraft_entry)
+                        .on_conflict(aircraft::flarm_address)
+                        .do_update()
+                        .set(ddb_upsert_set!())
+                        .execute(&mut conn)
+                } else if new_aircraft_entry.ogn_address.is_some() {
+                    diesel::insert_into(aircraft::table)
+                        .values(&new_aircraft_entry)
+                        .on_conflict(aircraft::ogn_address)
+                        .do_update()
+                        .set(ddb_upsert_set!())
+                        .execute(&mut conn)
+                } else if new_aircraft_entry.other_address.is_some() {
+                    diesel::insert_into(aircraft::table)
+                        .values(&new_aircraft_entry)
+                        .on_conflict(aircraft::other_address)
+                        .do_update()
+                        .set(ddb_upsert_set!())
+                        .execute(&mut conn)
+                } else {
+                    warn!("Skipping aircraft with no address columns set");
+                    continue;
+                };
+
+                match result {
+                    Ok(_) => {
+                        upserted_count += 1;
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to upsert aircraft {}: {}",
+                            new_aircraft_entry.address_hex(),
+                            e
+                        );
+                        // Continue with other aircraft rather than failing the entire batch
+                    }
                 }
             }
-        }
 
-        info!("Successfully upserted {} aircraft", upserted_count);
-        Ok(upserted_count)
+            info!("Successfully upserted {} aircraft", upserted_count);
+            Ok(upserted_count)
+        })
+        .await?
     }
 
     /// Get the total count of aircraft in the database
     pub async fn get_aircraft_count(&self) -> Result<i64> {
-        let mut conn = self.get_connection()?;
-        let count = aircraft::table.count().get_result::<i64>(&mut conn)?;
-        Ok(count)
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let count = aircraft::table.count().get_result::<i64>(&mut conn)?;
+            Ok(count)
+        })
+        .await?
     }
 
     /// Get an aircraft by its address and type.
@@ -180,32 +190,39 @@ impl AircraftRepository {
         address: u32,
         address_type: AddressType,
     ) -> Result<Option<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let addr = address as i32;
-        let model = match address_type {
-            AddressType::Icao => aircraft::table
-                .filter(aircraft::icao_address.eq(addr))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Flarm => aircraft::table
-                .filter(aircraft::flarm_address.eq(addr))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Ogn => aircraft::table
-                .filter(aircraft::ogn_address.eq(addr))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Unknown => aircraft::table
-                .filter(aircraft::other_address.eq(addr))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-        };
+        let pool = self.pool.clone();
 
-        Ok(model.map(|model| model.into()))
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let addr = address as i32;
+            let model = match address_type {
+                AddressType::Icao => aircraft::table
+                    .filter(aircraft::icao_address.eq(addr))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Flarm => aircraft::table
+                    .filter(aircraft::flarm_address.eq(addr))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Ogn => aircraft::table
+                    .filter(aircraft::ogn_address.eq(addr))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Unknown => aircraft::table
+                    .filter(aircraft::other_address.eq(addr))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+            };
+
+            Ok(model.map(|model| model.into()))
+        })
+        .await?
     }
 
     /// Get an aircraft model (with UUID) by address and type.
@@ -215,30 +232,37 @@ impl AircraftRepository {
         address: i32,
         address_type: AddressType,
     ) -> Result<Option<AircraftModel>> {
-        let mut conn = self.get_connection()?;
-        let model = match address_type {
-            AddressType::Icao => aircraft::table
-                .filter(aircraft::icao_address.eq(address))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Flarm => aircraft::table
-                .filter(aircraft::flarm_address.eq(address))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Ogn => aircraft::table
-                .filter(aircraft::ogn_address.eq(address))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-            AddressType::Unknown => aircraft::table
-                .filter(aircraft::other_address.eq(address))
-                .select(AircraftModel::as_select())
-                .first(&mut conn)
-                .optional()?,
-        };
-        Ok(model)
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let model = match address_type {
+                AddressType::Icao => aircraft::table
+                    .filter(aircraft::icao_address.eq(address))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Flarm => aircraft::table
+                    .filter(aircraft::flarm_address.eq(address))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Ogn => aircraft::table
+                    .filter(aircraft::ogn_address.eq(address))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+                AddressType::Unknown => aircraft::table
+                    .filter(aircraft::other_address.eq(address))
+                    .select(AircraftModel::as_select())
+                    .first(&mut conn)
+                    .optional()?,
+            };
+            Ok(model)
+        })
+        .await?
     }
 
     /// Get or insert an aircraft by address
@@ -1005,59 +1029,88 @@ impl AircraftRepository {
 
     /// Get an aircraft by its ID
     pub async fn get_aircraft_by_id(&self, aircraft_id: Uuid) -> Result<Option<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let model = aircraft::table
-            .filter(aircraft::id.eq(aircraft_id))
-            .select(AircraftModel::as_select())
-            .first(&mut conn)
-            .optional()?;
+        let pool = self.pool.clone();
 
-        Ok(model.map(|model| model.into()))
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let model = aircraft::table
+                .filter(aircraft::id.eq(aircraft_id))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok(model.map(|model| model.into()))
+        })
+        .await?
     }
 
     /// Search for all aircraft assigned to a specific club
     pub async fn search_by_club_id(&self, club_id: Uuid) -> Result<Vec<Aircraft>> {
-        let mut conn = self.get_connection()?;
+        let pool = self.pool.clone();
 
-        let models = aircraft::table
-            .filter(aircraft::club_id.eq(club_id))
-            .order_by(aircraft::registration)
-            .select(AircraftModel::as_select())
-            .load(&mut conn)?;
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        Ok(models.into_iter().map(|model| model.into()).collect())
+            let models = aircraft::table
+                .filter(aircraft::club_id.eq(club_id))
+                .order_by(aircraft::registration)
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
+
+            Ok(models.into_iter().map(|model| model.into()).collect())
+        })
+        .await?
     }
 
     /// Search aircraft by address across all typed address columns.
     /// Returns the first match (an address value should only exist in one column).
     pub async fn search_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let addr = address as i32;
-        let model = aircraft::table
-            .filter(
-                aircraft::icao_address
-                    .eq(addr)
-                    .or(aircraft::flarm_address.eq(addr))
-                    .or(aircraft::ogn_address.eq(addr))
-                    .or(aircraft::other_address.eq(addr)),
-            )
-            .select(AircraftModel::as_select())
-            .first(&mut conn)
-            .optional()?;
+        let pool = self.pool.clone();
 
-        Ok(model.map(|model| model.into()))
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let addr = address as i32;
+            let model = aircraft::table
+                .filter(
+                    aircraft::icao_address
+                        .eq(addr)
+                        .or(aircraft::flarm_address.eq(addr))
+                        .or(aircraft::ogn_address.eq(addr))
+                        .or(aircraft::other_address.eq(addr)),
+                )
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok(model.map(|model| model.into()))
+        })
+        .await?
     }
 
     /// Search aircraft by registration
     pub async fn search_by_registration(&self, registration: &str) -> Result<Vec<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let search_pattern = format!("%{}%", registration);
-        let models = aircraft::table
-            .filter(aircraft::registration.ilike(&search_pattern))
-            .select(AircraftModel::as_select())
-            .load(&mut conn)?;
+        let pool = self.pool.clone();
+        let registration = registration.to_string();
 
-        Ok(models.into_iter().map(|model| model.into()).collect())
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let search_pattern = format!("%{}%", registration);
+            let models = aircraft::table
+                .filter(aircraft::registration.ilike(&search_pattern))
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
+
+            Ok(models.into_iter().map(|model| model.into()).collect())
+        })
+        .await?
     }
 
     /// Get recent aircraft with a limit, ordered by last_fix_at (most recently heard from)
@@ -1067,58 +1120,66 @@ impl AircraftRepository {
         limit: i64,
         aircraft_types: Option<Vec<String>>,
     ) -> Result<Vec<Aircraft>> {
-        use diesel::ExpressionMethods;
+        let pool = self.pool.clone();
 
-        let mut conn = self.get_connection()?;
+        tokio::task::spawn_blocking(move || {
+            use diesel::ExpressionMethods;
 
-        let mut query = aircraft::table
-            .filter(aircraft::last_fix_at.is_not_null())
-            .into_boxed();
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        // Apply aircraft category filter if provided
-        if let Some(types) = aircraft_types
-            && !types.is_empty()
-        {
-            // Convert string aircraft types to AircraftCategory enum values
-            let aircraft_category_enums: Vec<AircraftCategory> = types
-                .iter()
-                .filter_map(|t| match t.as_str() {
-                    "glider" => Some(AircraftCategory::Glider),
-                    "tow_tug" => Some(AircraftCategory::TowTug),
-                    "gyroplane" => Some(AircraftCategory::Gyroplane),
-                    "skydiver_parachute" => Some(AircraftCategory::SkydiverParachute),
-                    "hang_glider" => Some(AircraftCategory::HangGlider),
-                    "paraglider" => Some(AircraftCategory::Paraglider),
-                    "landplane" => Some(AircraftCategory::Landplane),
-                    "unknown" => Some(AircraftCategory::Unknown),
-                    "balloon" => Some(AircraftCategory::Balloon),
-                    "airship" => Some(AircraftCategory::Airship),
-                    "drone" => Some(AircraftCategory::Drone),
-                    "static_obstacle" => Some(AircraftCategory::StaticObstacle),
-                    "helicopter" => Some(AircraftCategory::Helicopter),
-                    "amphibian" => Some(AircraftCategory::Amphibian),
-                    "powered_parachute" => Some(AircraftCategory::PoweredParachute),
-                    "rotorcraft" => Some(AircraftCategory::Rotorcraft),
-                    "seaplane" => Some(AircraftCategory::Seaplane),
-                    "tiltrotor" => Some(AircraftCategory::Tiltrotor),
-                    "vtol" => Some(AircraftCategory::Vtol),
-                    "electric" => Some(AircraftCategory::Electric),
-                    _ => None,
-                })
-                .collect();
+            let mut query = aircraft::table
+                .filter(aircraft::last_fix_at.is_not_null())
+                .into_boxed();
 
-            if !aircraft_category_enums.is_empty() {
-                query = query.filter(aircraft::aircraft_category.eq_any(aircraft_category_enums));
+            // Apply aircraft category filter if provided
+            if let Some(types) = aircraft_types
+                && !types.is_empty()
+            {
+                // Convert string aircraft types to AircraftCategory enum values
+                let aircraft_category_enums: Vec<AircraftCategory> = types
+                    .iter()
+                    .filter_map(|t| match t.as_str() {
+                        "glider" => Some(AircraftCategory::Glider),
+                        "tow_tug" => Some(AircraftCategory::TowTug),
+                        "gyroplane" => Some(AircraftCategory::Gyroplane),
+                        "skydiver_parachute" => Some(AircraftCategory::SkydiverParachute),
+                        "hang_glider" => Some(AircraftCategory::HangGlider),
+                        "paraglider" => Some(AircraftCategory::Paraglider),
+                        "landplane" => Some(AircraftCategory::Landplane),
+                        "unknown" => Some(AircraftCategory::Unknown),
+                        "balloon" => Some(AircraftCategory::Balloon),
+                        "airship" => Some(AircraftCategory::Airship),
+                        "drone" => Some(AircraftCategory::Drone),
+                        "static_obstacle" => Some(AircraftCategory::StaticObstacle),
+                        "helicopter" => Some(AircraftCategory::Helicopter),
+                        "amphibian" => Some(AircraftCategory::Amphibian),
+                        "powered_parachute" => Some(AircraftCategory::PoweredParachute),
+                        "rotorcraft" => Some(AircraftCategory::Rotorcraft),
+                        "seaplane" => Some(AircraftCategory::Seaplane),
+                        "tiltrotor" => Some(AircraftCategory::Tiltrotor),
+                        "vtol" => Some(AircraftCategory::Vtol),
+                        "electric" => Some(AircraftCategory::Electric),
+                        _ => None,
+                    })
+                    .collect();
+
+                if !aircraft_category_enums.is_empty() {
+                    query =
+                        query.filter(aircraft::aircraft_category.eq_any(aircraft_category_enums));
+                }
             }
-        }
 
-        let models = query
-            .order(aircraft::last_fix_at.desc())
-            .limit(limit)
-            .select(AircraftModel::as_select())
-            .load(&mut conn)?;
+            let models = query
+                .order(aircraft::last_fix_at.desc())
+                .limit(limit)
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
 
-        Ok(models.into_iter().map(|model| model.into()).collect())
+            Ok(models.into_iter().map(|model| model.into()).collect())
+        })
+        .await?
     }
 
     /// Find all aircraft within a bounding box that have recent fixes
@@ -1132,88 +1193,102 @@ impl AircraftRepository {
         cutoff_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<AircraftModel>> {
-        use diesel::sql_types::{BigInt, Double, Timestamptz};
+        let pool = self.pool.clone();
 
-        let mut conn = self.get_connection()?;
+        tokio::task::spawn_blocking(move || {
+            use diesel::sql_types::{BigInt, Double, Timestamptz};
 
-        // Build the SQL query with optional LIMIT clause
-        let limit_clause = if limit.is_some() { "LIMIT $6" } else { "" };
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        let aircraft_sql = format!(
-            r#"
-            WITH params AS (
-                SELECT
-                    $1::double precision AS left_lng,
-                    $2::double precision AS bottom_lat,
-                    $3::double precision AS right_lng,
-                    $4::double precision AS top_lat,
-                    $5::timestamptz AS cutoff_time
-            ),
-            parts AS (
-                SELECT
-                    CASE WHEN left_lng <= right_lng THEN
-                        ARRAY[
-                            ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
-                        ]
-                    ELSE
-                        ARRAY[
-                            ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
-                            ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
-                        ]
-                    END AS boxes,
-                    cutoff_time
-                FROM params
-            )
-            SELECT d.*
-            FROM aircraft d, parts
-            WHERE d.last_fix_at >= parts.cutoff_time
-              AND d.location_geom IS NOT NULL
-              AND (
-                  d.location_geom && parts.boxes[1]
-                  OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
-              )
-            {}
-        "#,
-            limit_clause
-        );
+            // Build the SQL query with optional LIMIT clause
+            let limit_clause = if limit.is_some() { "LIMIT $6" } else { "" };
 
-        let query = diesel::sql_query(aircraft_sql)
-            .bind::<Double, _>(west)
-            .bind::<Double, _>(south)
-            .bind::<Double, _>(east)
-            .bind::<Double, _>(north)
-            .bind::<Timestamptz, _>(cutoff_time);
+            let aircraft_sql = format!(
+                r#"
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS cutoff_time
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes,
+                        cutoff_time
+                    FROM params
+                )
+                SELECT d.*
+                FROM aircraft d, parts
+                WHERE d.last_fix_at >= parts.cutoff_time
+                  AND d.location_geom IS NOT NULL
+                  AND (
+                      d.location_geom && parts.boxes[1]
+                      OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                  )
+                {}
+            "#,
+                limit_clause
+            );
 
-        // Bind limit if provided
-        let aircraft_models = if let Some(lim) = limit {
-            query
-                .bind::<BigInt, _>(lim)
-                .load::<AircraftModel>(&mut conn)?
-        } else {
-            query.load::<AircraftModel>(&mut conn)?
-        };
+            let query = diesel::sql_query(aircraft_sql)
+                .bind::<Double, _>(west)
+                .bind::<Double, _>(south)
+                .bind::<Double, _>(east)
+                .bind::<Double, _>(north)
+                .bind::<Timestamptz, _>(cutoff_time);
 
-        Ok(aircraft_models)
+            // Bind limit if provided
+            let aircraft_models = if let Some(lim) = limit {
+                query
+                    .bind::<BigInt, _>(lim)
+                    .load::<AircraftModel>(&mut conn)?
+            } else {
+                query.load::<AircraftModel>(&mut conn)?
+            };
+
+            Ok(aircraft_models)
+        })
+        .await?
     }
 
     /// Update the club assignment for an aircraft
     pub async fn update_club_id(&self, aircraft_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
-        let mut conn = self.get_connection()?;
+        let pool = self.pool.clone();
 
-        let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
-            .set(aircraft::club_id.eq(club_id))
-            .execute(&mut conn)?;
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        if rows_updated > 0 {
-            info!(
-                "Updated aircraft {} club assignment to {:?}",
-                aircraft_id, club_id
-            );
-            Ok(true)
-        } else {
-            warn!("No aircraft found with ID {}", aircraft_id);
-            Ok(false)
-        }
+            let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
+                .set(aircraft::club_id.eq(club_id))
+                .execute(&mut conn)?;
+
+            if rows_updated > 0 {
+                info!(
+                    "Updated aircraft {} club assignment to {:?}",
+                    aircraft_id, club_id
+                );
+                Ok(true)
+            } else {
+                warn!("No aircraft found with ID {}", aircraft_id);
+                Ok(false)
+            }
+        })
+        .await?
     }
 
     /// Get aircraft by ID (returns AircraftModel with all fields including images)
@@ -1221,15 +1296,22 @@ impl AircraftRepository {
         &self,
         aircraft_id: Uuid,
     ) -> Result<Option<AircraftModel>> {
-        let mut conn = self.get_connection()?;
+        let pool = self.pool.clone();
 
-        let model = aircraft::table
-            .filter(aircraft::id.eq(aircraft_id))
-            .select(AircraftModel::as_select())
-            .first(&mut conn)
-            .optional()?;
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        Ok(model)
+            let model = aircraft::table
+                .filter(aircraft::id.eq(aircraft_id))
+                .select(AircraftModel::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok(model)
+        })
+        .await?
     }
 
     /// Update the images cache for an aircraft
@@ -1238,19 +1320,26 @@ impl AircraftRepository {
         aircraft_id: Uuid,
         images_json: serde_json::Value,
     ) -> Result<bool> {
-        let mut conn = self.get_connection()?;
+        let pool = self.pool.clone();
 
-        let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
-            .set(aircraft::images.eq(images_json))
-            .execute(&mut conn)?;
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-        if rows_updated > 0 {
-            info!("Updated aircraft {} images cache", aircraft_id);
-            Ok(true)
-        } else {
-            warn!("No aircraft found with ID {}", aircraft_id);
-            Ok(false)
-        }
+            let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
+                .set(aircraft::images.eq(images_json))
+                .execute(&mut conn)?;
+
+            if rows_updated > 0 {
+                info!("Updated aircraft {} images cache", aircraft_id);
+                Ok(true)
+            } else {
+                warn!("No aircraft found with ID {}", aircraft_id);
+                Ok(false)
+            }
+        })
+        .await?
     }
 }
 

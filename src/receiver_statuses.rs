@@ -70,7 +70,7 @@ pub struct ReceiverStatus {
 }
 
 /// For inserting new receiver statuses (without auto-generated fields)
-#[derive(Debug, Insertable, AsChangeset)]
+#[derive(Debug, Clone, Insertable, AsChangeset)]
 #[diesel(table_name = crate::schema::receiver_statuses)]
 pub struct NewReceiverStatus {
     pub receiver_id: Uuid,

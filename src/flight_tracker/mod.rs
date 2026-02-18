@@ -211,10 +211,21 @@ impl FlightTracker {
             "Completing orphaned flights (older than {} hours or duplicate active flights)...",
             timeout_duration.num_hours()
         );
-        let completed_flights = self
+        let completed_flights = match self
             .flights_repo
             .complete_orphaned_startup_flights(timeout_duration)
-            .await?;
+            .await
+        {
+            Ok(flights) => flights,
+            Err(e) => {
+                // Don't abort initialization if orphan cleanup fails — still restore states
+                error!(
+                    "Failed to complete orphaned flights on startup: {}. Continuing with state restoration.",
+                    e
+                );
+                Vec::new()
+            }
+        };
 
         let completed_count = completed_flights.len();
         if completed_count > 0 {
