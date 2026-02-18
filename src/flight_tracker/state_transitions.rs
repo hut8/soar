@@ -481,6 +481,8 @@ pub(crate) async fn process_state_transition(
             }
 
             // Create new flight - check if takeoff or mid-flight
+            // IMPORTANT: Extract data and release DashMap lock BEFORE any async operations
+            // to avoid holding synchronous locks across await points (causes deadlocks)
             let is_takeoff = if fix.has_transponder_data() {
                 // ADS-B: any prior inactive fix means on_ground→airborne transition = takeoff
                 if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
@@ -488,25 +490,30 @@ pub(crate) async fn process_state_transition(
                 } else {
                     false // No prior state — mid-flight appearance
                 }
-            } else if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
-                // APRS: Need 4+ fixes to use history-based detection (3 to check + 1 current to skip)
-                if state.recent_fixes.len() >= 4 {
-                    // Enough history - check if last 3 fixes before current were inactive
-                    state.last_n_inactive(3)
-                } else {
-                    // Not enough history - fall back to AGL check
-                    // If AGL < 100 ft, aircraft is on/near ground = takeoff
-                    calculate_altitude_agl(ctx.elevation_db, &fix)
-                        .await
-                        .map(|agl| agl < 100)
-                        .unwrap_or(false)
-                }
             } else {
-                // No recent fixes - check AGL
-                calculate_altitude_agl(ctx.elevation_db, &fix)
-                    .await
-                    .map(|agl| agl < 100)
-                    .unwrap_or(false)
+                // APRS: check in-memory state first, release DashMap ref, then do async work
+                let history_result = ctx.aircraft_states.get(&fix.aircraft_id).map(|state| {
+                    if state.recent_fixes.len() >= 4 {
+                        // Enough history - check if last 3 fixes before current were inactive
+                        Some(state.last_n_inactive(3))
+                    } else {
+                        // Not enough history - need AGL check (async)
+                        None
+                    }
+                });
+                // DashMap ref is now dropped - safe to do async work
+
+                match history_result {
+                    Some(Some(is_inactive)) => is_inactive,
+                    Some(None) | None => {
+                        // Not enough history or no state - fall back to AGL check
+                        // If AGL < 100 ft, aircraft is on/near ground = takeoff
+                        calculate_altitude_agl(ctx.elevation_db, &fix)
+                            .await
+                            .map(|agl| agl < 100)
+                            .unwrap_or(false)
+                    }
+                }
             };
 
             let flight_id = Uuid::now_v7();
