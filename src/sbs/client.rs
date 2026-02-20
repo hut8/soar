@@ -45,267 +45,22 @@ impl Default for SbsClientConfig {
 }
 
 /// SBS client that connects to an SBS-1 BaseStation server via TCP
-/// Publishes raw SBS CSV messages to NATS for processing
+/// Sends SBS CSV messages to a persistent queue as protobuf envelopes
 pub struct SbsClient {
     config: SbsClientConfig,
-    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl SbsClient {
     /// Create a new SBS client
     pub fn new(config: SbsClientConfig) -> Self {
-        Self {
-            config,
-            shutdown_tx: None,
-        }
+        Self { config }
     }
 
-    /// Start the SBS client with a publisher
-    /// This connects to the SBS server and publishes all messages to NATS
-    #[tracing::instrument(skip(self, publisher))]
-    pub async fn start<P: crate::sbs::SbsPublisher>(&mut self, publisher: P) -> Result<()> {
-        let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-        let health_state = crate::metrics::init_beast_health(); // Reuse Beast health for now
-        self.start_with_shutdown(publisher, shutdown_rx, health_state)
-            .await
-    }
-
-    /// Start the SBS client with a publisher and external shutdown signal
-    /// This connects to the SBS server and publishes all messages to NATS
-    /// Supports graceful shutdown when shutdown_rx receives a signal
-    /// Updates health_state with connection status for health checks
-    #[tracing::instrument(skip(self, publisher, shutdown_rx, health_state))]
-    pub async fn start_with_shutdown<P: crate::sbs::SbsPublisher>(
-        &mut self,
-        publisher: P,
-        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
-        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
-    ) -> Result<()> {
-        let (internal_shutdown_tx, mut internal_shutdown_rx) =
-            tokio::sync::oneshot::channel::<()>();
-        self.shutdown_tx = Some(internal_shutdown_tx);
-
-        let config = self.config.clone();
-
-        // Use a broadcast channel to share shutdown signal with both publisher and connection loop
-        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
-
-        // Create bounded channel for raw SBS messages from TCP socket
-        let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
-
-        // Spawn publisher task that consumes from the raw_message_rx channel and publishes to NATS
-        let publisher_clone = publisher.clone();
-        let publisher_handle = tokio::spawn(async move {
-            Self::publisher_loop(publisher_clone, raw_message_rx).await;
-        });
-
-        // Monitor shutdown signal
-        tokio::spawn(async move {
-            if shutdown_rx.await.is_ok() {
-                info!("Received shutdown signal, broadcasting to tasks...");
-                let _ = shutdown_broadcast_tx.send(());
-            }
-        });
-
-        // Connection loop with exponential backoff - retries indefinitely
-        let mut current_delay = config.retry_delay_seconds;
-
-        loop {
-            tokio::select! {
-                _ = &mut internal_shutdown_rx => {
-                    info!("Shutdown signal received, stopping SBS client");
-                    break;
-                }
-                _ = shutdown_rx_for_loop.recv() => {
-                    info!("Shutdown broadcast received, stopping SBS client");
-                    break;
-                }
-                result = Self::connect_and_process(
-                    &config,
-                    &raw_message_tx,
-                    health_state.clone(),
-                ) => {
-                    match result {
-                        ConnectionResult::Success => {
-                            info!("SBS connection completed successfully");
-                            break;
-                        }
-                        ConnectionResult::ConnectionFailed(e) => {
-                            metrics::counter!("sbs.connection.failed_total").increment(1);
-                            warn!(
-                                "Failed to connect to SBS server {}:{}: {} - retrying in {}s",
-                                config.server, config.port, e, current_delay
-                            );
-
-                            sleep(Duration::from_secs(current_delay)).await;
-
-                            // Exponential backoff with cap
-                            current_delay = std::cmp::min(
-                                current_delay * 2,
-                                config.max_retry_delay_seconds,
-                            );
-                        }
-                        ConnectionResult::OperationFailed(e) => {
-                            metrics::counter!("sbs.connection.operation_failed_total").increment(1);
-                            warn!("SBS connection to {}:{} failed during operation: {} - reconnecting in 1s", config.server, config.port, e);
-                            sleep(Duration::from_secs(1)).await;
-
-                            // Reset delay on operation failures (connection was successful)
-                            current_delay = config.retry_delay_seconds;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Wait for publisher task to complete
-        info!("Waiting for SBS publisher task to complete...");
-        let _ = publisher_handle.await;
-        info!("SBS client stopped");
-
-        Ok(())
-    }
-
-    /// Start the SBS client with a persistent queue (NEW: NATS replacement)
-    /// This connects to the SBS server and feeds all messages to a persistent queue
-    /// The queue handles buffering when soar-run is disconnected
-    #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
-    pub async fn start_with_queue(
-        &mut self,
-        queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
-        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
-        stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
-    ) -> Result<()> {
-        let config = self.config.clone();
-
-        // Create bounded channel for raw SBS messages from TCP socket
-        let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
-
-        // Spawn queue feeding task that consumes from the raw_message_rx channel and sends to persistent queue
-        let queue_clone = queue.clone();
-        let stats_counter_clone = stats_counter.clone();
-        let queue_feeder_handle = tokio::spawn(async move {
-            info!("Starting SBS queue feeding task");
-            let mut at_capacity_logged = false;
-            loop {
-                // Check if disk queue is at capacity before consuming from channel
-                // This provides backpressure - channel will fill up, causing TCP reader to block
-                while queue_clone.is_at_capacity() {
-                    if !at_capacity_logged {
-                        warn!(
-                            "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
-                            queue_clone.name()
-                        );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "SBS")
-                            .increment(1);
-                        at_capacity_logged = true;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-                if at_capacity_logged {
-                    info!(
-                        "Queue '{}' has space, resuming consumption",
-                        queue_clone.name()
-                    );
-                    at_capacity_logged = false;
-                }
-
-                match raw_message_rx.recv_async().await {
-                    Ok(message) => {
-                        if let Err(e) = queue_clone.send(message).await {
-                            // This can still happen in a race condition, but should be rare
-                            warn!(
-                                "Failed to send SBS message to persistent queue (will retry): {}",
-                                e
-                            );
-                            metrics::counter!("sbs.queue.send_error_total").increment(1);
-                        } else if let Some(ref counter) = stats_counter_clone {
-                            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        }
-                    }
-                    Err(_) => {
-                        info!("SBS queue feeding task ended");
-                        break;
-                    }
-                }
-            }
-        });
-
-        // Connection loop with exponential backoff - retries indefinitely
-        let mut current_delay = config.retry_delay_seconds;
-
-        loop {
-            // Before connecting/reconnecting, wait for queue to be ready
-            // This prevents reconnecting when the queue is still full
-            if !queue.is_ready_for_connection() {
-                let capacity = queue.capacity_percent();
-                info!(
-                    "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
-                    capacity
-                );
-                metrics::counter!("sbs.connection_deferred_total").increment(1);
-
-                // Wait for queue to drain
-                while !queue.is_ready_for_connection() {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
-
-                let new_capacity = queue.capacity_percent();
-                info!(
-                    "Queue drained to {}% capacity, proceeding with reconnection",
-                    new_capacity
-                );
-            }
-
-            let result =
-                Self::connect_and_process(&config, &raw_message_tx, health_state.clone()).await;
-
-            match result {
-                ConnectionResult::Success => {
-                    info!("SBS connection completed successfully");
-                    break;
-                }
-                ConnectionResult::ConnectionFailed(e) => {
-                    metrics::counter!("sbs.connection.failed_total").increment(1);
-                    warn!(
-                        "Failed to connect to SBS server {}:{}: {} - retrying in {}s",
-                        config.server, config.port, e, current_delay
-                    );
-
-                    sleep(Duration::from_secs(current_delay)).await;
-
-                    // Exponential backoff with cap
-                    current_delay =
-                        std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
-                }
-                ConnectionResult::OperationFailed(e) => {
-                    metrics::counter!("sbs.connection.operation_failed_total").increment(1);
-                    warn!(
-                        "SBS connection to {}:{} failed during operation: {} - reconnecting in 1s",
-                        config.server, config.port, e
-                    );
-                    sleep(Duration::from_secs(1)).await;
-
-                    // Reset delay on operation failures (connection was successful)
-                    current_delay = config.retry_delay_seconds;
-                }
-            }
-        }
-
-        // Wait for queue feeder task to complete
-        info!("Waiting for SBS queue feeder task to complete...");
-        let _ = queue_feeder_handle.await;
-        info!("SBS client stopped");
-
-        Ok(())
-    }
-
-    /// Start the SBS client with envelope queue (NEW: unified queue with protobuf envelopes)
+    /// Start the SBS client with persistent queue
     /// This connects to the SBS server and sends all messages to the queue as serialized protobuf Envelopes
     /// Each envelope contains: source type (SBS), timestamp (captured at receive time), and raw payload
     #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
-    pub async fn start_with_envelope_queue(
+    pub async fn start(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
@@ -320,40 +75,35 @@ impl SbsClient {
         let queue_clone = queue.clone();
         let stats_counter_clone = stats_counter.clone();
         let queue_feeder_handle = tokio::spawn(async move {
-            info!("Starting SBS envelope queue feeding task");
-            let mut at_capacity_logged = false;
+            info!("Starting SBS queue feeding task");
             let mut last_metrics_update = std::time::Instant::now();
 
             loop {
-                while queue_clone.is_at_capacity() {
-                    if !at_capacity_logged {
-                        warn!(
-                            "Queue '{}' disk at capacity, pausing consumption",
-                            queue_clone.name()
-                        );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "ingest")
-                            .increment(1);
-                        at_capacity_logged = true;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-                if at_capacity_logged {
-                    info!(
-                        "Queue '{}' has space, resuming consumption",
-                        queue_clone.name()
-                    );
-                    at_capacity_logged = false;
-                }
-
                 match envelope_rx.recv_async().await {
                     Ok(envelope_bytes) => {
-                        if let Err(e) = queue_clone.send(envelope_bytes).await {
+                        if let Err(e) = queue_clone.send(envelope_bytes.clone()).await {
                             warn!(
-                                "Failed to send SBS envelope to persistent queue (will retry): {}",
+                                "Failed to send SBS envelope to persistent queue, retrying: {}",
                                 e
                             );
                             metrics::counter!("sbs.queue.send_error_total").increment(1);
-                        } else if let Some(ref counter) = stats_counter_clone {
+                            // Retry with backoff until it succeeds
+                            let mut retry_delay = Duration::from_millis(100);
+                            loop {
+                                sleep(retry_delay).await;
+                                match queue_clone.send(envelope_bytes.clone()).await {
+                                    Ok(()) => break,
+                                    Err(e) => {
+                                        warn!("SBS persistent queue send retry failed: {}", e);
+                                        metrics::counter!("sbs.queue.send_error_total")
+                                            .increment(1);
+                                        retry_delay =
+                                            std::cmp::min(retry_delay * 2, Duration::from_secs(5));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(ref counter) = stats_counter_clone {
                             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
 
@@ -365,7 +115,7 @@ impl SbsClient {
                         }
                     }
                     Err(_) => {
-                        info!("SBS envelope channel closed, queue feeder exiting");
+                        info!("SBS channel closed, queue feeder exiting");
                         break;
                     }
                 }
@@ -376,29 +126,8 @@ impl SbsClient {
         let mut current_delay = config.retry_delay_seconds;
 
         loop {
-            // Wait for queue to be ready before connecting
-            if !queue.is_ready_for_connection() {
-                let capacity = queue.capacity_percent();
-                info!(
-                    "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
-                    capacity
-                );
-                metrics::counter!("sbs.connection_deferred_total").increment(1);
-
-                while !queue.is_ready_for_connection() {
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                }
-
-                let new_capacity = queue.capacity_percent();
-                info!(
-                    "Queue drained to {}% capacity, proceeding with reconnection",
-                    new_capacity
-                );
-            }
-
             let result =
-                Self::connect_and_process_envelope(&config, &envelope_tx, health_state.clone())
-                    .await;
+                Self::connect_and_process(&config, &envelope_tx, health_state.clone()).await;
 
             match result {
                 ConnectionResult::Success => {
@@ -428,22 +157,25 @@ impl SbsClient {
             }
         }
 
+        // Drop envelope_tx so the queue feeder task sees channel closed and exits
+        drop(envelope_tx);
+
         // Wait for queue feeder task to complete
-        info!("Waiting for SBS envelope queue feeder task to complete...");
+        info!("Waiting for SBS queue feeder task to complete...");
         let _ = queue_feeder_handle.await;
-        info!("SBS client (envelope mode) stopped");
+        info!("SBS client stopped");
 
         Ok(())
     }
 
-    /// Connect to SBS server and process messages with envelope creation
-    async fn connect_and_process_envelope(
+    /// Connect to SBS server and process messages
+    async fn connect_and_process(
         config: &SbsClientConfig,
         envelope_tx: &flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
     ) -> ConnectionResult {
         let address = format!("{}:{}", config.server, config.port);
-        info!("Connecting to SBS server at {} (envelope mode)", address);
+        info!("Connecting to SBS server at {}", address);
 
         let stream = match TcpStream::connect(&address).await {
             Ok(stream) => {
@@ -468,11 +200,11 @@ impl SbsClient {
         };
 
         // Process the connection
-        Self::process_stream_envelope(stream, envelope_tx, health_state).await
+        Self::process_stream(stream, envelope_tx, health_state).await
     }
 
-    /// Process SBS stream and create protobuf envelopes with timestamps captured at receive time
-    async fn process_stream_envelope(
+    /// Process SBS stream, creating protobuf envelopes with timestamps captured at receive time
+    async fn process_stream(
         stream: TcpStream,
         envelope_tx: &flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
@@ -498,6 +230,12 @@ impl SbsClient {
                     info!("SBS connection closed by server");
                     metrics::counter!("sbs.connection.server_closed_total").increment(1);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::Success;
                 }
                 Ok(Ok(_)) => {
@@ -578,12 +316,24 @@ impl SbsClient {
                 Ok(Err(e)) => {
                     error!("Error reading from SBS stream: {}", e);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!("Read error: {}", e));
                 }
                 Err(_) => {
                     warn!("No data received from SBS server for 5 minutes");
                     metrics::counter!("sbs.timeout_total").increment(1);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
                         "Message timeout - no data received for 5 minutes"
                     ));
@@ -592,174 +342,8 @@ impl SbsClient {
         }
     }
 
-    /// Connect to SBS server and process messages
-    async fn connect_and_process(
-        config: &SbsClientConfig,
-        raw_message_tx: &flume::Sender<Vec<u8>>,
-        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
-    ) -> ConnectionResult {
-        let address = format!("{}:{}", config.server, config.port);
-        info!("Connecting to SBS server at {}", address);
-
-        // Attempt to establish connection
-        let stream = match TcpStream::connect(&address).await {
-            Ok(stream) => {
-                info!("Connected to SBS server at {}", address);
-                metrics::gauge!("sbs.connection.connected").set(1.0);
-
-                // Mark as connected in health state
-                {
-                    let mut health = health_state.write().await;
-                    health.beast_connected = true; // Reuse Beast health field for now
-                }
-
-                stream
-            }
-            Err(e) => {
-                error!("Failed to connect to SBS server at {}: {}", address, e);
-                metrics::gauge!("sbs.connection.connected").set(0.0);
-                return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
-                    "Failed to connect: {}",
-                    e
-                ));
-            }
-        };
-
-        let peer_addr_str = stream
-            .peer_addr()
-            .map(|a| a.to_string())
-            .unwrap_or_else(|_| "unknown".to_string());
-
-        Self::process_connection(stream, peer_addr_str, raw_message_tx, health_state).await
-    }
-
-    /// Process an active SBS connection
-    async fn process_connection(
-        stream: TcpStream,
-        peer_addr_str: String,
-        raw_message_tx: &flume::Sender<Vec<u8>>,
-        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
-    ) -> ConnectionResult {
-        info!("Processing connection to SBS server at {}", peer_addr_str);
-
-        let message_timeout = Duration::from_secs(300); // 5 minute timeout
-        let reader = BufReader::new(stream);
-        let mut lines = reader.lines();
-        let mut last_stats_log = std::time::Instant::now();
-        let connection_start = std::time::Instant::now();
-
-        // Initialize interval tracking in health state
-        {
-            let mut health = health_state.write().await;
-            if health.interval_start.is_none() {
-                health.interval_start = Some(std::time::Instant::now());
-            }
-        }
-
-        loop {
-            let result = tokio::time::timeout(message_timeout, lines.next_line()).await;
-            match result {
-                Err(_) => {
-                    // Timeout
-                    let duration = connection_start.elapsed();
-                    warn!(
-                        "SBS connection to {} timed out after {:.1}s (no data for {}s)",
-                        peer_addr_str,
-                        duration.as_secs_f64(),
-                        message_timeout.as_secs()
-                    );
-                    metrics::gauge!("sbs.connection.connected").set(0.0);
-
-                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "Connection timed out"
-                    ));
-                }
-                Ok(Ok(None)) => {
-                    // Connection closed
-                    let duration = connection_start.elapsed();
-                    let total_messages = {
-                        let health = health_state.read().await;
-                        health.total_messages
-                    };
-                    info!(
-                        "SBS connection closed by server (IP: {}) after {:.1}s, received {} messages",
-                        peer_addr_str,
-                        duration.as_secs_f64(),
-                        total_messages
-                    );
-                    metrics::gauge!("sbs.connection.connected").set(0.0);
-
-                    // Mark as disconnected in health state
-                    {
-                        let mut health = health_state.write().await;
-                        health.beast_connected = false;
-                    }
-
-                    return ConnectionResult::Success;
-                }
-                Ok(Ok(Some(line))) => {
-                    // Data received
-                    trace!("Received SBS line: {}", line);
-                    metrics::counter!("sbs.bytes.received_total").increment(line.len() as u64);
-
-                    // Skip empty lines
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-
-                    // Publish line with timestamp
-                    Self::publish_line(raw_message_tx, line).await;
-
-                    // Update stats in health state
-                    {
-                        let mut health = health_state.write().await;
-                        health.total_messages += 1;
-                        health.interval_messages += 1;
-                        health.last_message_time = Some(std::time::Instant::now());
-                    }
-
-                    // Update metrics gauge periodically (every 10 seconds)
-                    if last_stats_log.elapsed().as_secs() >= 10 {
-                        let health = health_state.read().await;
-                        if let Some(interval_start) = health.interval_start {
-                            let elapsed = interval_start.elapsed().as_secs_f64();
-                            if elapsed > 0.0 {
-                                let rate = health.interval_messages as f64 / elapsed;
-                                metrics::gauge!("sbs.message_rate").set(rate);
-                            }
-                        }
-                        drop(health);
-
-                        // Reset interval counters
-                        {
-                            let mut health = health_state.write().await;
-                            health.interval_messages = 0;
-                            health.interval_start = Some(std::time::Instant::now());
-                        }
-                        last_stats_log = std::time::Instant::now();
-                    }
-                }
-                Ok(Err(e)) => {
-                    // Read error
-                    let duration = connection_start.elapsed();
-                    error!(
-                        "SBS read error from {} after {:.1}s: {}",
-                        peer_addr_str,
-                        duration.as_secs_f64(),
-                        e
-                    );
-                    metrics::gauge!("sbs.connection.connected").set(0.0);
-
-                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "SBS read error: {}",
-                        e
-                    ));
-                }
-            }
-        }
-    }
-
-    /// Publish an SBS CSV line to the queue
+    /// Publish an SBS CSV line to the queue (used by tests)
+    #[cfg(test)]
     async fn publish_line(raw_message_tx: &flume::Sender<Vec<u8>>, line: String) {
         if line.is_empty() {
             return;
@@ -783,21 +367,6 @@ impl SbsClient {
                 metrics::counter!("sbs.lines.dropped_total").increment(1);
             }
         }
-    }
-
-    /// Publisher loop that consumes from the queue and publishes to NATS
-    async fn publisher_loop<P: crate::sbs::SbsPublisher>(
-        publisher: P,
-        raw_message_rx: flume::Receiver<Vec<u8>>,
-    ) {
-        info!("Starting SBS publisher loop");
-
-        while let Ok(message) = raw_message_rx.recv_async().await {
-            // Publish to NATS with fire-and-forget
-            publisher.publish_fire_and_forget(&message).await;
-        }
-
-        info!("SBS publisher loop ended");
     }
 }
 

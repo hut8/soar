@@ -165,8 +165,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
             "ingest".to_string(),
             queue_path,
-            Some(10 * 1024 * 1024 * 1024), // 10 GB max
-            3000,                          // Memory capacity (combined for all sources)
+            3000, // Memory capacity (combined for all sources)
         )
         .expect("Failed to create unified ingest queue"),
     );
@@ -637,11 +636,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         tokio::spawn(async move {
             let mut client = AprsClient::new(config);
 
-            // The AprsClient's start_with_envelope_queue method creates protobuf envelopes
-            // with timestamps captured at receive time
+            // The AprsClient creates protobuf envelopes with timestamps captured at receive time
             loop {
                 match client
-                    .start_with_envelope_queue(
+                    .start(
                         queue_for_ogn.clone(),
                         aprs_health.clone(),
                         Some(stats_rx.clone()),
@@ -680,10 +678,9 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         tokio::spawn(async move {
             let mut client = BeastClient::new(config);
 
-            // The Beast client's start_with_envelope_queue creates protobuf envelopes
-            // with timestamps captured at receive time
+            // The Beast client creates protobuf envelopes with timestamps captured at receive time
             match client
-                .start_with_envelope_queue(queue_for_beast, beast_health, Some(stats_rx))
+                .start(queue_for_beast, beast_health, Some(stats_rx))
                 .await
             {
                 Ok(_) => {
@@ -713,10 +710,9 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         tokio::spawn(async move {
             let mut client = SbsClient::new(config);
 
-            // The SBS client's start_with_envelope_queue creates protobuf envelopes
-            // with timestamps captured at receive time
+            // The SBS client creates protobuf envelopes with timestamps captured at receive time
             match client
-                .start_with_envelope_queue(queue_for_sbs, sbs_health, Some(stats_rx))
+                .start(queue_for_sbs, sbs_health, Some(stats_rx))
                 .await
             {
                 Ok(_) => {
@@ -772,7 +768,4 @@ fn initialize_ingest_metrics() {
     metrics::gauge!("ingest.health.beast_connected").set(0.0);
     metrics::gauge!("ingest.health.sbs_connected").set(0.0);
     metrics::gauge!("ingest.health.socket_connected").set(0.0);
-
-    // Queue capacity pause metrics (backpressure events)
-    metrics::counter!("queue.capacity_pause_total", "queue" => "ingest").absolute(0);
 }
