@@ -107,7 +107,7 @@ otelcol.exporter.otlphttp "tempo" {
 
 // Discover SOAR processes and scrape pprof endpoints
 // The SOAR Rust application exposes pprof endpoints at:
-// - /debug/pprof/profile?seconds=5 (CPU profiling - 5 seconds)
+// - /debug/pprof/profile (CPU profiling - server caps duration at 5 seconds)
 // - /debug/pprof/heap (Heap profiling)
 //
 // Service metrics ports (from src/commands/*.rs):
@@ -115,6 +115,7 @@ otelcol.exporter.otlphttp "tempo" {
 // - ingest:      production=9095, staging=9197
 // - soar-web:    No pprof endpoints (metrics only at /data/metrics on main port)
 
+// BEGIN:production
 // Scrape production soar-run service (port 9091)
 // Note: service_name is required for Pyroscope to identify the service
 // service_repository and service_git_ref enable source code linking in Grafana Profiles
@@ -148,7 +149,9 @@ discovery.relabel "soar_ingest" {
     replacement  = "soar-ingest"
   }
 }
+// END:production
 
+// BEGIN:staging
 // Scrape staging soar-run service (port 9192)
 discovery.relabel "soar_run_staging" {
   targets = [{
@@ -180,10 +183,12 @@ discovery.relabel "soar_ingest_staging" {
     replacement  = "soar-ingest-staging"
   }
 }
+// END:staging
 
-// CPU profiling scraper - scrapes /debug/pprof/profile
+// BEGIN:production
+// CPU profiling scraper (production) - scrapes /debug/pprof/profile
 // SOAR services return pprof protobuf format with configurable duration via ?seconds=N
-// Default: 10 seconds profiling, so we need scrape timeout > 10s
+// The Rust handler caps duration at 5 seconds regardless of what Alloy passes.
 //
 // Note: SOAR is a Rust application using the `pprof` crate, which only supports
 // CPU profiling. Go-specific profile types (memory, goroutine, mutex, block)
@@ -192,23 +197,21 @@ pyroscope.scrape "soar_cpu" {
   targets = concat(
     discovery.relabel.soar_run.output,
     discovery.relabel.soar_ingest.output,
-    discovery.relabel.soar_run_staging.output,
-    discovery.relabel.soar_ingest_staging.output,
   )
 
   forward_to = [pyroscope.write.endpoint.receiver]
 
-  // Scrape every 60 seconds with a 20s timeout (profile takes 5s + serialization overhead)
+  // Scrape every 60 seconds with a 20s timeout (profile takes <=5s + serialization overhead)
   scrape_interval = "60s"
   scrape_timeout  = "20s"
 
   profiling_config {
     // CPU profiling - the only profile type supported by Rust pprof crate
-    // Explicitly set ?seconds=5 to override Alloy's default of passing scrape_timeout as the
-    // profiling duration, which left no time for report serialization and caused timeouts.
+    // Do NOT put query params in path - Alloy URL-encodes ? to %3F causing 404s.
+    // The Rust handler caps profiling duration at 5 seconds server-side.
     profile.process_cpu {
       enabled = true
-      path    = "/debug/pprof/profile?seconds=5"
+      path    = "/debug/pprof/profile"
       delta   = false
     }
 
@@ -227,6 +230,48 @@ pyroscope.scrape "soar_cpu" {
     }
   }
 }
+// END:production
+
+// BEGIN:staging
+// CPU profiling scraper (staging) - scrapes /debug/pprof/profile
+pyroscope.scrape "soar_cpu_staging" {
+  targets = concat(
+    discovery.relabel.soar_run_staging.output,
+    discovery.relabel.soar_ingest_staging.output,
+  )
+
+  forward_to = [pyroscope.write.endpoint.receiver]
+
+  // Scrape every 60 seconds with a 20s timeout (profile takes <=5s + serialization overhead)
+  scrape_interval = "60s"
+  scrape_timeout  = "20s"
+
+  profiling_config {
+    // CPU profiling - the only profile type supported by Rust pprof crate
+    // Do NOT put query params in path - Alloy URL-encodes ? to %3F causing 404s.
+    // The Rust handler caps profiling duration at 5 seconds server-side.
+    profile.process_cpu {
+      enabled = true
+      path    = "/debug/pprof/profile"
+      delta   = false
+    }
+
+    // Disable Go-specific profile types that SOAR doesn't support
+    profile.memory {
+      enabled = false
+    }
+    profile.block {
+      enabled = false
+    }
+    profile.goroutine {
+      enabled = false
+    }
+    profile.mutex {
+      enabled = false
+    }
+  }
+}
+// END:staging
 
 // Write profiles to Pyroscope
 pyroscope.write "endpoint" {

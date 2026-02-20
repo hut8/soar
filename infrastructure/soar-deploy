@@ -1085,10 +1085,22 @@ if [ -f "$DEPLOY_DIR/alloy-config.alloy.template" ]; then
         log_warn "VERSION file not found, profiling source links will not work"
     fi
 
-    # Process template and install
+    # Determine the opposite environment to strip its blocks
+    if [ "$ENVIRONMENT" = "staging" ]; then
+        STRIP_ENV="production"
+    else
+        STRIP_ENV="staging"
+    fi
+
+    # Process template: replace placeholders and strip blocks for the other environment.
+    # Lines between "// BEGIN:<other-env>" and "// END:<other-env>" (inclusive) are removed.
     sed -e "s|{{GIT_COMMIT}}|$GIT_COMMIT|g" \
+        -e "/^\/\/ BEGIN:${STRIP_ENV}$/,/^\/\/ END:${STRIP_ENV}$/d" \
+        -e "/^\/\/ BEGIN:${ENVIRONMENT}$/d" \
+        -e "/^\/\/ END:${ENVIRONMENT}$/d" \
         "$DEPLOY_DIR/alloy-config.alloy.template" \
         > /etc/alloy/config.alloy
+    log_info "Stripped $STRIP_ENV-only blocks, kept $ENVIRONMENT blocks"
     sudo chown alloy:alloy /etc/alloy/config.alloy
     sudo chmod 644 /etc/alloy/config.alloy
     log_info "Alloy configuration installed with git commit: $GIT_COMMIT"
