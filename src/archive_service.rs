@@ -2,7 +2,7 @@ use anyhow::Result;
 use tracing::{error, info, warn};
 
 // Queue size for archive messages
-const ARCHIVE_QUEUE_SIZE: usize = 10000;
+const ARCHIVE_QUEUE_SIZE: usize = 1000;
 
 /// Archive service for managing daily log files and compression
 #[derive(Clone)]
@@ -48,11 +48,10 @@ impl ArchiveService {
         }
 
         // Use bounded channel to prevent unbounded memory growth
-        // Should handle bursts while limiting memory to ~1.5MB (assuming ~150 bytes per APRS message)
         let (sender, receiver) = flume::bounded::<String>(ARCHIVE_QUEUE_SIZE);
 
         info!(
-            "Archive service initialized with bounded channel (capacity: {} messages, ~1.5MB buffer)",
+            "Archive service initialized with bounded channel (capacity: {} messages)",
             ARCHIVE_QUEUE_SIZE
         );
 
@@ -136,7 +135,7 @@ impl ArchiveService {
                         "Archive stats: {} messages written in last 5min, {} messages queued",
                         messages_written, queue_len
                     );
-                    if queue_len > 5000 {
+                    if queue_len > 500 {
                         warn!(
                             "Archive queue is building up ({} messages) - disk writes may be too slow",
                             queue_len

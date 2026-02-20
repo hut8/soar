@@ -7,7 +7,7 @@ use tracing::{error, info, warn};
 use crate::fixes::Fix;
 
 // Queue size for NATS publish queue
-const NATS_PUBLISH_QUEUE_SIZE: usize = 1000;
+const NATS_PUBLISH_QUEUE_SIZE: usize = 200;
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
@@ -101,11 +101,11 @@ impl NatsFixPublisher {
 
         let nats_client = Arc::new(nats_client);
 
-        // Create bounded channel for fixes (~2MB buffer)
+        // Create bounded channel for fixes
         let (fix_sender, fix_receiver) = flume::bounded::<Fix>(NATS_PUBLISH_QUEUE_SIZE);
 
         info!(
-            "NATS publisher initialized with bounded channel (capacity: {} fixes, ~2MB buffer)",
+            "NATS publisher initialized with bounded channel (capacity: {} fixes)",
             NATS_PUBLISH_QUEUE_SIZE
         );
 

@@ -53,7 +53,34 @@
       },
       "unit": "short"
     },
-    "overrides": []
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Total (msg/s)"
+        },
+        "properties": [
+          {
+            "id": "custom.lineStyle",
+            "value": {
+              "dash": [10, 10],
+              "fill": "dash"
+            }
+          },
+          {
+            "id": "custom.fillOpacity",
+            "value": 0
+          },
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "white",
+              "mode": "fixed"
+            }
+          }
+        ]
+      }
+    ]
   },
   "options": {
     "legend": {
@@ -106,6 +133,17 @@
       "legendFormat": "SBS (msg/s)",
       "range": true,
       "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(socket_router_aprs_routed_total{component=\"run\",environment=\"$environment\"}[5m]) + rate(socket_router_beast_routed_total{component=\"run\",environment=\"$environment\"}[5m]) + rate(socket_router_sbs_routed_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Total (msg/s)",
+      "range": true,
+      "refId": "D"
     }
   ],
   "title": "Message Routing Rates",

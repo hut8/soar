@@ -8,7 +8,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::protocol::{IngestSource, create_serialized_envelope};
 
 // Queue size for raw APRS messages
-const RAW_MESSAGE_QUEUE_SIZE: usize = 1000;
+const RAW_MESSAGE_QUEUE_SIZE: usize = 200;
 
 // AprsClient only publishes raw messages to queue - all parsing happens in the consumer
 

@@ -8,7 +8,7 @@ use tracing::{error, info, trace, warn};
 use crate::protocol::{IngestSource, create_serialized_envelope};
 
 // Queue size for raw SBS messages from TCP socket
-const RAW_MESSAGE_QUEUE_SIZE: usize = 10000;
+const RAW_MESSAGE_QUEUE_SIZE: usize = 200;
 
 /// Result type for connection attempts
 enum ConnectionResult {
