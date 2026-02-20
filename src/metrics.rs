@@ -48,7 +48,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
@@ -268,78 +268,58 @@ struct ProfileParams {
 /// CPU profiling handler compatible with Pyroscope scraping
 /// Returns profiling data in pprof protobuf format
 /// Accepts `seconds` query parameter to control duration (default: 10s, max: 60s)
+///
+/// Profiling runs on the blocking thread pool via `spawn_blocking` so that
+/// the sleep duration is not affected by async runtime saturation.
 async fn profile_handler(
     axum::extract::Query(params): axum::extract::Query<ProfileParams>,
 ) -> impl IntoResponse {
-    // Parse duration from query param, default to 10 seconds, max 60 seconds
     let duration_secs = params.seconds.unwrap_or(10).min(60);
     trace!("Starting CPU profiling for {} seconds", duration_secs);
 
-    // Create a profiler guard
-    let guard = match pprof::ProfilerGuardBuilder::default()
-        .frequency(99)
-        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-    {
-        Ok(g) => g,
-        Err(e) => {
-            warn!("Failed to create profiler: {}", e);
-            return (
+    // Run profiling on blocking thread pool — immune to async runtime overload
+    let result = tokio::task::spawn_blocking(move || {
+        let guard = pprof::ProfilerGuardBuilder::default()
+            .frequency(99)
+            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .build()?;
+
+        // Sleep the OS thread directly, not dependent on the tokio timer wheel
+        std::thread::sleep(std::time::Duration::from_secs(duration_secs));
+
+        let report = guard.report().build()?;
+        let profile = report.pprof()?;
+        let mut body = Vec::new();
+        profile.write_to_vec(&mut body)?;
+        Ok::<_, anyhow::Error>(body)
+    })
+    .await;
+
+    match result {
+        Ok(Ok(body)) => {
+            trace!(
+                "CPU profiling completed, generated pprof ({} bytes)",
+                body.len()
+            );
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+                body,
+            )
+        }
+        Ok(Err(e)) => {
+            warn!("CPU profiling failed: {}", e);
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 [(
                     axum::http::header::CONTENT_TYPE,
                     "text/plain; charset=utf-8",
                 )],
                 Vec::new(),
-            );
-        }
-    };
-
-    // Profile for specified duration
-    tokio::time::sleep(tokio::time::Duration::from_secs(duration_secs)).await;
-
-    // Generate pprof report (protobuf format for Pyroscope compatibility)
-    match guard.report().build() {
-        Ok(report) => {
-            let mut body = Vec::new();
-            match report.pprof() {
-                Ok(profile) => {
-                    if let Err(e) = profile.write_to_vec(&mut body) {
-                        warn!("Failed to serialize pprof: {}", e);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            [(
-                                axum::http::header::CONTENT_TYPE,
-                                "text/plain; charset=utf-8",
-                            )],
-                            Vec::new(),
-                        );
-                    }
-                    trace!(
-                        "CPU profiling completed, generated pprof ({} bytes)",
-                        body.len()
-                    );
-                    (
-                        StatusCode::OK,
-                        [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
-                        body,
-                    )
-                }
-                Err(e) => {
-                    warn!("Failed to generate pprof: {}", e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        [(
-                            axum::http::header::CONTENT_TYPE,
-                            "text/plain; charset=utf-8",
-                        )],
-                        Vec::new(),
-                    )
-                }
-            }
+            )
         }
         Err(e) => {
-            warn!("Failed to build profiling report: {}", e);
+            warn!("CPU profiling task panicked: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 [(
@@ -355,75 +335,55 @@ async fn profile_handler(
 /// Heap profiling handler compatible with Pyroscope scraping
 /// Returns profiling data in pprof protobuf format
 /// Accepts `seconds` query parameter to control duration (default: 10s, max: 60s)
+///
+/// Profiling runs on the blocking thread pool via `spawn_blocking` so that
+/// the sleep duration is not affected by async runtime saturation.
 async fn heap_profile_handler(
     axum::extract::Query(params): axum::extract::Query<ProfileParams>,
 ) -> impl IntoResponse {
-    // Parse duration from query param, default to 10 seconds, max 60 seconds
     let duration_secs = params.seconds.unwrap_or(10).min(60);
     info!("Generating heap profile ({} seconds)", duration_secs);
 
-    // Create a profiler guard
-    let guard = match pprof::ProfilerGuardBuilder::default()
-        .frequency(99)
-        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-    {
-        Ok(g) => g,
-        Err(e) => {
-            warn!("Failed to create profiler: {}", e);
-            return (
+    // Run profiling on blocking thread pool — immune to async runtime overload
+    let result = tokio::task::spawn_blocking(move || {
+        let guard = pprof::ProfilerGuardBuilder::default()
+            .frequency(99)
+            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .build()?;
+
+        // Sleep the OS thread directly, not dependent on the tokio timer wheel
+        std::thread::sleep(std::time::Duration::from_secs(duration_secs));
+
+        let report = guard.report().build()?;
+        let profile = report.pprof()?;
+        let mut body = Vec::new();
+        profile.write_to_vec(&mut body)?;
+        Ok::<_, anyhow::Error>(body)
+    })
+    .await;
+
+    match result {
+        Ok(Ok(body)) => {
+            info!("Heap profile generated ({} bytes)", body.len());
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
+                body,
+            )
+        }
+        Ok(Err(e)) => {
+            warn!("Heap profiling failed: {}", e);
+            (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 [(
                     axum::http::header::CONTENT_TYPE,
                     "text/plain; charset=utf-8",
                 )],
                 Vec::new(),
-            );
-        }
-    };
-
-    // Profile for specified duration
-    tokio::time::sleep(tokio::time::Duration::from_secs(duration_secs)).await;
-
-    // Generate pprof report
-    match guard.report().build() {
-        Ok(report) => {
-            let mut body = Vec::new();
-            match report.pprof() {
-                Ok(profile) => {
-                    if let Err(e) = profile.write_to_vec(&mut body) {
-                        warn!("Failed to serialize pprof: {}", e);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            [(
-                                axum::http::header::CONTENT_TYPE,
-                                "text/plain; charset=utf-8",
-                            )],
-                            Vec::new(),
-                        );
-                    }
-                    info!("Heap profile generated ({} bytes)", body.len());
-                    (
-                        StatusCode::OK,
-                        [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
-                        body,
-                    )
-                }
-                Err(e) => {
-                    warn!("Failed to generate pprof: {}", e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        [(
-                            axum::http::header::CONTENT_TYPE,
-                            "text/plain; charset=utf-8",
-                        )],
-                        Vec::new(),
-                    )
-                }
-            }
+            )
         }
         Err(e) => {
-            warn!("Failed to build profiling report: {}", e);
+            warn!("Heap profiling task panicked: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 [(
@@ -1096,11 +1056,15 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
         addr
     );
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("Failed to bind metrics server");
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            error!("Failed to bind metrics server on {}: {}", addr, e);
+            return;
+        }
+    };
 
-    axum::serve(listener, app)
-        .await
-        .expect("Metrics server failed");
+    if let Err(e) = axum::serve(listener, app).await {
+        error!("Metrics server failed: {}", e);
+    }
 }

@@ -107,7 +107,7 @@ otelcol.exporter.otlphttp "tempo" {
 
 // Discover SOAR processes and scrape pprof endpoints
 // The SOAR Rust application exposes pprof endpoints at:
-// - /debug/pprof/profile (CPU profiling - 30 seconds)
+// - /debug/pprof/profile?seconds=5 (CPU profiling - 5 seconds)
 // - /debug/pprof/heap (Heap profiling)
 //
 // Service metrics ports (from src/commands/*.rs):
@@ -198,15 +198,17 @@ pyroscope.scrape "soar_cpu" {
 
   forward_to = [pyroscope.write.endpoint.receiver]
 
-  // Scrape every 60 seconds with a 15s timeout (profile takes 10s by default)
+  // Scrape every 60 seconds with a 20s timeout (profile takes 5s + serialization overhead)
   scrape_interval = "60s"
-  scrape_timeout  = "15s"
+  scrape_timeout  = "20s"
 
   profiling_config {
     // CPU profiling - the only profile type supported by Rust pprof crate
+    // Explicitly set ?seconds=5 to override Alloy's default of passing scrape_timeout as the
+    // profiling duration, which left no time for report serialization and caused timeouts.
     profile.process_cpu {
       enabled = true
-      path    = "/debug/pprof/profile"
+      path    = "/debug/pprof/profile?seconds=5"
       delta   = false
     }
 

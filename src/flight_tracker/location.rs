@@ -2,8 +2,14 @@ use crate::airports_repo::AirportsRepository;
 use crate::geocoding::Geocoder;
 use crate::locations::Location;
 use crate::locations_repo::LocationsRepository;
+use std::sync::OnceLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Cached geocoder for real-time flight tracking.
+/// Created once on first use to reuse the underlying HTTP connection pool,
+/// avoiding per-request TCP+TLS handshake overhead.
+static REALTIME_GEOCODER: OnceLock<Geocoder> = OnceLock::new();
 
 /// DEPRECATED: Reverse geocoding for takeoff_location_id/landing_location_id fields (no longer used)
 /// These fields have been replaced by start_location_id/end_location_id
@@ -187,15 +193,24 @@ pub(crate) async fn create_start_end_location(
         context, latitude, longitude
     );
 
-    // Use Pelias-only geocoder for real-time flight tracking
-    let geocoder = match Geocoder::new_realtime_flight_tracking() {
-        Ok(g) => g,
-        Err(e) => {
-            warn!(
-                "Pelias not configured for real-time flight tracking: {}. Skipping location creation for {} at ({}, {})",
-                e, context, latitude, longitude
-            );
-            return None;
+    // Use cached Pelias-only geocoder — reuses HTTP connection pool across calls
+    let geocoder = if let Some(g) = REALTIME_GEOCODER.get() {
+        g
+    } else {
+        match Geocoder::new_realtime_flight_tracking() {
+            Ok(g) => {
+                // Race is fine — if two threads init simultaneously, one wins and the other
+                // value is dropped, but the winner's value is used from here on.
+                let _ = REALTIME_GEOCODER.set(g);
+                REALTIME_GEOCODER.get().unwrap()
+            }
+            Err(e) => {
+                warn!(
+                    "Pelias not configured for real-time flight tracking: {}. Skipping location creation for {} at ({}, {})",
+                    e, context, latitude, longitude
+                );
+                return None;
+            }
         }
     };
 

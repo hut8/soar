@@ -84,7 +84,7 @@ Alloy provides unified observability collection for:
 
 **1. Profiling (Pyroscope)**
 - Scrapes pprof endpoints from SOAR services
-- CPU profiling via `/debug/pprof/profile` (30-second samples)
+- CPU profiling via `/debug/pprof/profile?seconds=5` (5-second samples)
 - Forwards to Pyroscope at `http://localhost:4040`
 
 **2. Logs (Loki)**
