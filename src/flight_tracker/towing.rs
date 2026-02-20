@@ -117,6 +117,7 @@ async fn find_towed_glider(
                         towplane_fix
                             .flight_id
                             .expect("Towplane must have flight_id"),
+                        towplane_fix.received_at,
                     )
                     .await
                 {

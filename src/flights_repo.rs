@@ -95,6 +95,7 @@ impl FlightsRepository {
         takeoff_runway_ident_param: Option<String>,
         start_location_id_param: Option<Uuid>,
         takeoff_location_id_param: Option<Uuid>,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -108,7 +109,7 @@ impl FlightsRepository {
                     takeoff_runway_ident.eq(&takeoff_runway_ident_param),
                     start_location_id.eq(&start_location_id_param),
                     takeoff_location_id.eq(&takeoff_location_id_param),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -128,6 +129,7 @@ impl FlightsRepository {
         runways_inferred_param: Option<bool>,
         end_location_id_param: Option<Uuid>,
         landing_location_id_param: Option<Uuid>,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -142,7 +144,7 @@ impl FlightsRepository {
                     runways_inferred.eq(&runways_inferred_param),
                     end_location_id.eq(&end_location_id_param),
                     landing_location_id.eq(&landing_location_id_param),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -159,6 +161,7 @@ impl FlightsRepository {
         &self,
         flight_id: Uuid,
         start_location_id_param: Option<Uuid>,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -170,7 +173,7 @@ impl FlightsRepository {
             diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     start_location_id.eq(&start_location_id_param),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -220,7 +223,7 @@ impl FlightsRepository {
                     maximum_displacement_meters.eq(&maximum_displacement_meters_param),
                     runways_inferred.eq(&runways_inferred_param),
                     last_fix_at.eq(last_fix_time),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(last_fix_time),
                 ))
                 .execute(&mut conn)?;
 
@@ -595,6 +598,7 @@ impl FlightsRepository {
         glider_flight_id: Uuid,
         towplane_device_id: Uuid,
         towplane_flight_id: Uuid,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
 
@@ -607,7 +611,7 @@ impl FlightsRepository {
                 .set((
                     towed_by_aircraft_id.eq(Some(towplane_device_id)),
                     towed_by_flight_id.eq(Some(towplane_flight_id)),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -682,7 +686,7 @@ impl FlightsRepository {
                     tow_release_altitude_msl_ft.eq(Some(release_altitude_ft)),
                     tow_release_time.eq(Some(release_time)),
                     tow_release_height_delta_ft.eq(height_delta),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(release_time),
                 ))
                 .execute(&mut conn)?;
 
@@ -853,7 +857,7 @@ impl FlightsRepository {
             // Use raw SQL to set timed_out_at = last_fix_at atomically
             // This prevents race conditions where last_fix_at changes between read and update
             let rows = diesel::sql_query(
-                "UPDATE flights SET timed_out_at = last_fix_at, updated_at = NOW() WHERE id = $1",
+                "UPDATE flights SET timed_out_at = last_fix_at, updated_at = last_fix_at WHERE id = $1",
             )
             .bind::<diesel::sql_types::Uuid, _>(flight_id)
             .execute(&mut conn)?;
@@ -888,7 +892,7 @@ impl FlightsRepository {
                  SET timed_out_at = last_fix_at, \
                      timeout_phase = $2, \
                      end_location_id = $3, \
-                     updated_at = NOW() \
+                     updated_at = last_fix_at \
                  WHERE id = $1 AND landing_time IS NULL",
             )
             .bind::<diesel::sql_types::Uuid, _>(flight_id)
@@ -907,7 +911,11 @@ impl FlightsRepository {
 
     /// Clear the timed_out_at field for a flight (set it to NULL).
     /// This is used for flight coalescing when resuming tracking of a timed-out flight.
-    pub async fn clear_timeout(&self, flight_id: Uuid) -> Result<bool> {
+    pub async fn clear_timeout(
+        &self,
+        flight_id: Uuid,
+        event_timestamp: DateTime<Utc>,
+    ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
@@ -918,7 +926,7 @@ impl FlightsRepository {
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     timed_out_at.eq(None::<DateTime<Utc>>),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -956,7 +964,7 @@ impl FlightsRepository {
                 "UPDATE flights
                  SET created_at = LEAST(created_at, $1),
                      last_fix_at = GREATEST(last_fix_at, $1),
-                     updated_at = NOW()
+                     updated_at = GREATEST(updated_at, $1)
                  WHERE id = $2",
             )
             .bind::<diesel::sql_types::Timestamptz, _>(fix_timestamp)
@@ -991,7 +999,7 @@ impl FlightsRepository {
                 .set((
                     timed_out_at.eq(None::<DateTime<Utc>>),
                     last_fix_at.eq(fix_timestamp),
-                    updated_at.eq(Utc::now()),
+                    updated_at.eq(fix_timestamp),
                 ))
                 .execute(&mut conn)?;
 
@@ -1008,6 +1016,7 @@ impl FlightsRepository {
         &self,
         flight_id: Uuid,
         new_callsign: Option<String>,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
 
@@ -1017,7 +1026,7 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((callsign.eq(new_callsign), updated_at.eq(Utc::now())))
+                .set((callsign.eq(new_callsign), updated_at.eq(event_timestamp)))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
@@ -1046,14 +1055,14 @@ impl FlightsRepository {
                 .first::<(chrono::DateTime<Utc>, chrono::DateTime<Utc>)>(&mut conn)
                 .optional()?;
 
-            let bbox_result = if let Some((start_time, end_time)) = flight_times {
+            if let Some((start_time, end_time)) = flight_times {
                 // Add 1 hour buffer to handle clock skew and ensure we get all fixes
                 let start_with_buffer = start_time - chrono::Duration::hours(1);
                 let end_with_buffer = end_time + chrono::Duration::hours(1);
 
                 // Calculate bounding box from all fixes for this flight
                 // Filter by received_at for partition pruning (flights are always < 24h)
-                fixes_dsl::fixes
+                let bbox_result = fixes_dsl::fixes
                     .filter(fixes_dsl::flight_id.eq(flight_id))
                     .filter(fixes_dsl::received_at.between(start_with_buffer, end_with_buffer))
                     .select((
@@ -1071,27 +1080,28 @@ impl FlightsRepository {
                         ),
                     ))
                     .first::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(&mut conn)
-                    .optional()?
-            } else {
-                // Flight not found, return None
-                None
-            };
+                    .optional()?;
 
-            // If we got bounding box values, update the flight
-            if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
-                let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                    .set((
-                        min_latitude.eq(min_lat),
-                        max_latitude.eq(max_lat),
-                        min_longitude.eq(min_lon),
-                        max_longitude.eq(max_lon),
-                        updated_at.eq(Utc::now()),
-                    ))
-                    .execute(&mut conn)?;
+                // If we got bounding box values, update the flight
+                // Use last_fix_at (end_time) from the flight as the event timestamp
+                if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
+                    let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                        .set((
+                            min_latitude.eq(min_lat),
+                            max_latitude.eq(max_lat),
+                            min_longitude.eq(min_lon),
+                            max_longitude.eq(max_lon),
+                            updated_at.eq(end_time),
+                        ))
+                        .execute(&mut conn)?;
 
-                Ok::<usize, anyhow::Error>(rows)
+                    Ok::<usize, anyhow::Error>(rows)
+                } else {
+                    // No fixes found for this flight, don't update
+                    Ok(0)
+                }
             } else {
-                // No fixes found for this flight, don't update
+                // Flight not found, don't update
                 Ok(0)
             }
         })
@@ -1377,7 +1387,7 @@ impl FlightsRepository {
             let query = format!(
                 "UPDATE flights \
                  SET timed_out_at = last_fix_at + INTERVAL '{}', \
-                     updated_at = NOW() \
+                     updated_at = last_fix_at \
                  WHERE timed_out_at IS NULL \
                    AND landing_time IS NULL \
                    AND last_fix_at < $1",
@@ -1434,7 +1444,7 @@ impl FlightsRepository {
                  ) \
                  UPDATE flights f \
                  SET landing_time = GREATEST(f.last_fix_at, f.takeoff_time + interval '1 second'), \
-                     updated_at = NOW() \
+                     updated_at = f.last_fix_at \
                  FROM ranked r \
                  WHERE f.id = r.id \
                    AND (r.last_fix_at < $1 OR r.rn > 1) \
@@ -1459,25 +1469,31 @@ impl FlightsRepository {
     /// which would violate the unique partial index. Only updates if landing_time is
     /// still NULL (idempotent — later enrichment overwrites with the same or better value).
     ///
+    /// Also updates last_fix_at to at least the landing time, ensuring the
+    /// check_landing_near_last_fix constraint is satisfied. Uses GREATEST to avoid
+    /// regressing last_fix_at if it's already ahead.
+    ///
     /// Returns whether a row was updated.
     pub async fn set_preliminary_landing_time(
         &self,
         flight_id: Uuid,
         landing_time_param: DateTime<Utc>,
     ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
         let pool = self.pool.clone();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(flights.filter(id.eq(flight_id).and(landing_time.is_null())))
-                .set((
-                    landing_time.eq(Some(landing_time_param)),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
+            let rows = diesel::sql_query(
+                "UPDATE flights \
+                 SET landing_time = $1, \
+                     last_fix_at = GREATEST(last_fix_at, $1), \
+                     updated_at = $1 \
+                 WHERE id = $2 AND landing_time IS NULL",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(landing_time_param)
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })

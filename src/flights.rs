@@ -242,7 +242,7 @@ impl Flight {
     }
 
     pub fn new_from_fix(fix: &Fix, device: &Aircraft, takeoff_time: Option<DateTime<Utc>>) -> Self {
-        let now = Utc::now();
+        let now = fix.received_at;
         info!(
             "Creating flight for {} from fix {} with climb: {:?} alt: {:?} speed: {:?}",
             device.aircraft_address_hex().unwrap_or_default(),
@@ -293,7 +293,7 @@ impl Flight {
     /// Create a new flight for device already airborne with a pre-generated UUID
     /// This is used to prevent race conditions when creating flights asynchronously
     pub fn new_airborne_from_fix_with_id(fix: &Fix, device: &Aircraft, flight_id: Uuid) -> Self {
-        let now = Utc::now();
+        let now = fix.received_at;
         debug!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
         Self {
             id: flight_id,
@@ -347,7 +347,7 @@ impl Flight {
         flight_id: Uuid,
         takeoff_time: DateTime<Utc>,
     ) -> Self {
-        let now = Utc::now();
+        let now = fix.received_at;
         debug!(
             "Creating flight {} with takeoff from fix: {:?}",
             flight_id, fix
