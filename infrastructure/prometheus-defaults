@@ -3,4 +3,4 @@
 # Install to: /etc/default/prometheus
 
 # Enable remote-write-receiver to allow Tempo to push span metrics
-ARGS="--web.enable-remote-write-receiver"
+ARGS="--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus/metrics2/ --web.enable-remote-write-receiver"

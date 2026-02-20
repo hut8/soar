@@ -666,8 +666,44 @@ else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
 fi
 
+# Install Prometheus defaults file (enables remote-write-receiver for Tempo)
+PROMETHEUS_DEFAULTS_CHANGED=false
+if [ -f "$DEPLOY_DIR/prometheus-defaults" ]; then
+    log_info "Installing Prometheus defaults file..."
+
+    # Check if config differs from current
+    if [ -f "/etc/default/prometheus" ]; then
+        if ! diff -q "$DEPLOY_DIR/prometheus-defaults" "/etc/default/prometheus" > /dev/null 2>&1; then
+            log_info "Prometheus defaults have changed, updating..."
+            cp "$DEPLOY_DIR/prometheus-defaults" /etc/default/prometheus
+            chmod 644 /etc/default/prometheus
+            PROMETHEUS_DEFAULTS_CHANGED=true
+            log_info "Prometheus defaults file updated"
+        else
+            log_info "Prometheus defaults unchanged, skipping"
+        fi
+    else
+        log_info "No existing Prometheus defaults, installing..."
+        cp "$DEPLOY_DIR/prometheus-defaults" /etc/default/prometheus
+        chmod 644 /etc/default/prometheus
+        PROMETHEUS_DEFAULTS_CHANGED=true
+        log_info "Prometheus defaults file installed"
+    fi
+else
+    log_warn "prometheus-defaults not found in deployment, skipping"
+fi
+
 # Reload Prometheus if job configurations were updated
-if [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
+# Restart Prometheus if defaults changed (requires restart for command-line args)
+if [ "$PROMETHEUS_DEFAULTS_CHANGED" = true ]; then
+    if systemctl is-active --quiet prometheus; then
+        log_info "Prometheus defaults changed - restarting Prometheus to apply new arguments..."
+        systemctl restart prometheus || log_warn "Failed to restart Prometheus"
+        log_info "Prometheus restarted successfully"
+    else
+        log_warn "Prometheus is not running, skipping restart"
+    fi
+elif [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
     if systemctl is-active --quiet prometheus; then
         log_info "Reloading Prometheus to load new scrape configurations..."
         systemctl reload prometheus || log_warn "Failed to reload Prometheus"
