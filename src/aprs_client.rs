@@ -102,10 +102,26 @@ impl AprsClient {
             loop {
                 match envelope_rx.recv_async().await {
                     Ok(envelope_bytes) => {
-                        if let Err(e) = queue_clone.send(envelope_bytes).await {
-                            warn!("Failed to send to persistent queue (will retry): {}", e);
+                        if let Err(e) = queue_clone.send(envelope_bytes.clone()).await {
+                            warn!("Failed to send to persistent queue, retrying: {}", e);
                             metrics::counter!("aprs.queue.send_error_total").increment(1);
-                        } else if let Some(ref counter) = stats_counter_clone {
+                            // Retry with backoff until it succeeds
+                            let mut retry_delay = Duration::from_millis(100);
+                            loop {
+                                tokio::time::sleep(retry_delay).await;
+                                match queue_clone.send(envelope_bytes.clone()).await {
+                                    Ok(()) => break,
+                                    Err(e) => {
+                                        warn!("Persistent queue send retry failed: {}", e);
+                                        metrics::counter!("aprs.queue.send_error_total")
+                                            .increment(1);
+                                        retry_delay =
+                                            std::cmp::min(retry_delay * 2, Duration::from_secs(5));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(ref counter) = stats_counter_clone {
                             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
 
@@ -378,6 +394,13 @@ impl AprsClient {
                                 duration.as_secs_f64()
                             );
                             metrics::counter!("aprs.connection.server_closed_total").increment(1);
+                            metrics::gauge!("aprs.connection.connected").set(0.0);
+
+                            {
+                                let mut health = health_state.write().await;
+                                health.aprs_connected = false;
+                            }
+
                             break;
                         }
                         Ok(_) => {
@@ -482,6 +505,13 @@ impl AprsClient {
                             }
                         }
                         Err(e) => {
+                            metrics::gauge!("aprs.connection.connected").set(0.0);
+
+                            {
+                                let mut health = health_state.write().await;
+                                health.aprs_connected = false;
+                            }
+
                             return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                 "Connection error: {}",
                                 e
@@ -491,6 +521,13 @@ impl AprsClient {
                 }
                 Err(_) => {
                     error!("No message received for 5 minutes, disconnecting");
+                    metrics::gauge!("aprs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.aprs_connected = false;
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
                         "Message timeout - no data received for 5 minutes"
                     ));

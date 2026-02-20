@@ -80,10 +80,26 @@ impl BeastClient {
             loop {
                 match envelope_rx.recv_async().await {
                     Ok(envelope_bytes) => {
-                        if let Err(e) = queue_clone.send(envelope_bytes).await {
-                            warn!("Failed to send to persistent queue (will retry): {}", e);
+                        if let Err(e) = queue_clone.send(envelope_bytes.clone()).await {
+                            warn!("Failed to send to persistent queue, retrying: {}", e);
                             metrics::counter!("beast.queue.send_error_total").increment(1);
-                        } else if let Some(ref counter) = stats_counter_clone {
+                            // Retry with backoff until it succeeds
+                            let mut retry_delay = Duration::from_millis(100);
+                            loop {
+                                sleep(retry_delay).await;
+                                match queue_clone.send(envelope_bytes.clone()).await {
+                                    Ok(()) => break,
+                                    Err(e) => {
+                                        warn!("Persistent queue send retry failed: {}", e);
+                                        metrics::counter!("beast.queue.send_error_total")
+                                            .increment(1);
+                                        retry_delay =
+                                            std::cmp::min(retry_delay * 2, Duration::from_secs(5));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(ref counter) = stats_counter_clone {
                             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
 
@@ -382,6 +398,12 @@ impl BeastClient {
                     );
                     metrics::gauge!("beast.connection.connected").set(0.0);
 
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                        health.last_error = Some(format!("Read error: {}", e));
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
                         "Beast read error: {}",
                         e
@@ -397,6 +419,15 @@ impl BeastClient {
                     );
                     metrics::counter!("beast.timeout_total").increment(1);
                     metrics::gauge!("beast.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                        health.last_error = Some(format!(
+                            "Timeout: no data for {}s",
+                            message_timeout.as_secs()
+                        ));
+                    }
 
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
                         "No data received for {} seconds",

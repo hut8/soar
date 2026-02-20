@@ -81,13 +81,29 @@ impl SbsClient {
             loop {
                 match envelope_rx.recv_async().await {
                     Ok(envelope_bytes) => {
-                        if let Err(e) = queue_clone.send(envelope_bytes).await {
+                        if let Err(e) = queue_clone.send(envelope_bytes.clone()).await {
                             warn!(
-                                "Failed to send SBS envelope to persistent queue (will retry): {}",
+                                "Failed to send SBS envelope to persistent queue, retrying: {}",
                                 e
                             );
                             metrics::counter!("sbs.queue.send_error_total").increment(1);
-                        } else if let Some(ref counter) = stats_counter_clone {
+                            // Retry with backoff until it succeeds
+                            let mut retry_delay = Duration::from_millis(100);
+                            loop {
+                                sleep(retry_delay).await;
+                                match queue_clone.send(envelope_bytes.clone()).await {
+                                    Ok(()) => break,
+                                    Err(e) => {
+                                        warn!("SBS persistent queue send retry failed: {}", e);
+                                        metrics::counter!("sbs.queue.send_error_total")
+                                            .increment(1);
+                                        retry_delay =
+                                            std::cmp::min(retry_delay * 2, Duration::from_secs(5));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some(ref counter) = stats_counter_clone {
                             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
 
@@ -140,6 +156,9 @@ impl SbsClient {
                 }
             }
         }
+
+        // Drop envelope_tx so the queue feeder task sees channel closed and exits
+        drop(envelope_tx);
 
         // Wait for queue feeder task to complete
         info!("Waiting for SBS queue feeder task to complete...");
@@ -211,6 +230,12 @@ impl SbsClient {
                     info!("SBS connection closed by server");
                     metrics::counter!("sbs.connection.server_closed_total").increment(1);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::Success;
                 }
                 Ok(Ok(_)) => {
@@ -291,12 +316,24 @@ impl SbsClient {
                 Ok(Err(e)) => {
                     error!("Error reading from SBS stream: {}", e);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!("Read error: {}", e));
                 }
                 Err(_) => {
                     warn!("No data received from SBS server for 5 minutes");
                     metrics::counter!("sbs.timeout_total").increment(1);
                     metrics::gauge!("sbs.connection.connected").set(0.0);
+
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
                         "Message timeout - no data received for 5 minutes"
                     ));
