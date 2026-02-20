@@ -85,8 +85,15 @@ pub async fn handle_run(
         // Auto-assign port based on environment: production=9091, staging=9192
         let metrics_port = if is_staging { 9192 } else { 9091 };
         info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(async move {
+        let metrics_handle = tokio::spawn(async move {
             soar::metrics::start_metrics_server(metrics_port, Some("run")).await;
+        });
+        // Monitor the metrics server so we know if it dies
+        tokio::spawn(async move {
+            match metrics_handle.await {
+                Ok(()) => error!("Metrics server exited unexpectedly"),
+                Err(e) => error!("Metrics server task panicked: {}", e),
+            }
         });
     }
 
