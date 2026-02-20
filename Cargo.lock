@@ -4320,8 +4320,8 @@ dependencies = [
 
 [[package]]
 name = "ogn-parser"
-version = "0.3.15"
-source = "git+https://github.com/hut8/ogn-parser-rs?branch=master#332bf4d3dc41a186dd6e8c69db599881e2b3daf2"
+version = "0.3.17"
+source = "git+https://github.com/hut8/ogn-parser-rs?tag=v0.3.17#c5d6e701de28569432643262643b59d9bf4d7304"
 dependencies = [
  "chrono",
  "flat_projection",
