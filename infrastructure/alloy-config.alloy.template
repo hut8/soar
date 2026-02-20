@@ -107,7 +107,7 @@ otelcol.exporter.otlphttp "tempo" {
 
 // Discover SOAR processes and scrape pprof endpoints
 // The SOAR Rust application exposes pprof endpoints at:
-// - /debug/pprof/profile (CPU profiling - 30 seconds)
+// - /debug/pprof/profile?seconds=5 (CPU profiling - 5 seconds)
 // - /debug/pprof/heap (Heap profiling)
 //
 // Service metrics ports (from src/commands/*.rs):
