@@ -74,11 +74,11 @@ impl AprsClient {
         }
     }
 
-    /// Start the APRS client with envelope queue
+    /// Start the APRS client with persistent queue
     /// This connects to APRS-IS and sends all messages to the queue as serialized protobuf Envelopes
     /// Each envelope contains: source type (OGN), timestamp (captured at receive time), and raw payload
     #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
-    pub async fn start_with_envelope_queue(
+    pub async fn start(
         &mut self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
@@ -97,31 +97,9 @@ impl AprsClient {
         let queue_clone = queue.clone();
         let stats_counter_clone = stats_counter.clone();
         let queue_handle = tokio::spawn(async move {
-            let mut at_capacity_logged = false;
             let mut last_metrics_update = std::time::Instant::now();
 
             loop {
-                // Check if disk queue is at capacity before consuming from channel
-                while queue_clone.is_at_capacity() {
-                    if !at_capacity_logged {
-                        warn!(
-                            "Queue '{}' disk at capacity, pausing consumption (source will disconnect)",
-                            queue_clone.name()
-                        );
-                        metrics::counter!("queue.capacity_pause_total", "queue" => "ingest")
-                            .increment(1);
-                        at_capacity_logged = true;
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                }
-                if at_capacity_logged {
-                    info!(
-                        "Queue '{}' has space, resuming consumption",
-                        queue_clone.name()
-                    );
-                    at_capacity_logged = false;
-                }
-
                 match envelope_rx.recv_async().await {
                     Ok(envelope_bytes) => {
                         if let Err(e) = queue_clone.send(envelope_bytes).await {
@@ -149,32 +127,11 @@ impl AprsClient {
 
         // Spawn connection management task
         let health_for_connection = health_state.clone();
-        let queue_for_connection = queue.clone();
         let connection_handle = tokio::spawn(async move {
             let mut retry_count = 0;
             let mut current_delay = config.retry_delay_seconds;
 
             loop {
-                // Before connecting/reconnecting, wait for queue to be ready
-                if !queue_for_connection.is_ready_for_connection() {
-                    let capacity = queue_for_connection.capacity_percent();
-                    info!(
-                        "Queue at {}% capacity, waiting for it to drain to 75% before reconnecting",
-                        capacity
-                    );
-                    metrics::counter!("aprs.connection_deferred_total").increment(1);
-
-                    while !queue_for_connection.is_ready_for_connection() {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                    }
-
-                    let new_capacity = queue_for_connection.capacity_percent();
-                    info!(
-                        "Queue drained to {}% capacity, proceeding with reconnection",
-                        new_capacity
-                    );
-                }
-
                 if retry_count == 0 {
                     info!(
                         "Connecting to APRS server at {}:{}",
@@ -187,7 +144,7 @@ impl AprsClient {
                     );
                 }
 
-                let connect_result = Self::connect_and_run_envelope(
+                let connect_result = Self::connect_and_run(
                     &config,
                     envelope_tx.clone(),
                     health_for_connection.clone(),
@@ -238,16 +195,16 @@ impl AprsClient {
         }
     }
 
-    /// Connect to the APRS server and run the message processing loop (envelope version)
+    /// Connect to the APRS server and run the message processing loop
     /// Creates protobuf envelopes with timestamps captured at receive time
     #[tracing::instrument(skip(config, envelope_tx, health_state), fields(server = %config.server, port = %config.port))]
-    async fn connect_and_run_envelope(
+    async fn connect_and_run(
         config: &AprsClientConfig,
         envelope_tx: flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> ConnectionResult {
         info!(
-            "Connecting to APRS server {}:{} (envelope mode)",
+            "Connecting to APRS server {}:{}",
             config.server, config.port
         );
 
@@ -316,7 +273,7 @@ impl AprsClient {
                         health.aprs_connected = true;
                     }
 
-                    return Self::process_connection_envelope(
+                    return Self::process_connection(
                         stream,
                         config,
                         envelope_tx,
@@ -341,10 +298,10 @@ impl AprsClient {
         ))
     }
 
-    /// Process an established APRS connection (envelope version)
+    /// Process an established APRS connection
     /// Creates protobuf envelopes with timestamps at the moment messages are received
     #[tracing::instrument(skip(stream, config, envelope_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
-    async fn process_connection_envelope(
+    async fn process_connection(
         stream: TcpStream,
         config: &AprsClientConfig,
         envelope_tx: flume::Sender<Vec<u8>>,
@@ -352,10 +309,7 @@ impl AprsClient {
         connection_start: std::time::Instant,
         peer_addr_str: String,
     ) -> ConnectionResult {
-        info!(
-            "Processing connection to APRS server at {} (envelope mode)",
-            peer_addr_str
-        );
+        info!("Processing connection to APRS server at {}", peer_addr_str);
 
         let (reader, mut writer) = stream.into_split();
         let mut buf_reader = BufReader::new(reader);
@@ -418,8 +372,9 @@ impl AprsClient {
                     match inner_result {
                         Ok(0) => {
                             let duration = connection_start.elapsed();
-                            warn!(
-                                "Connection closed by server after {:.1}s",
+                            // Use error! so sentry_tracing forwards this as a Sentry event
+                            error!(
+                                "APRS connection closed by server after {:.1}s",
                                 duration.as_secs_f64()
                             );
                             metrics::counter!("aprs.connection.server_closed_total").increment(1);

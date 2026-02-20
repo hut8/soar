@@ -101,7 +101,6 @@ where
 {
     name: String,
     dir_path: PathBuf,
-    max_total_size_bytes: Option<u64>,
     max_segment_size_bytes: u64,
     state: Arc<RwLock<QueueState>>,
     memory_tx: flume::Sender<T>,
@@ -112,13 +111,6 @@ where
     /// Track whether we've logged the spillover warning (to avoid spamming logs)
     /// Set to true on first spillover to disk, reset to false after drain completes
     overflow_warned: Arc<AtomicBool>,
-    /// Cached data size for is_at_capacity() - avoids expensive recalculation on every call
-    /// Value is the data size in bytes
-    cached_data_size: Arc<AtomicU64>,
-    /// Timestamp (millis since queue creation) when cached_data_size was last updated
-    cached_data_size_time_ms: Arc<AtomicU64>,
-    /// Instant when the queue was created (for calculating cache age)
-    created_at: Instant,
     /// Mutex to serialize all file operations (append/read)
     /// Prevents data corruption from concurrent writes to the same segment file
     file_lock: Arc<Mutex<()>>,
@@ -145,21 +137,9 @@ where
     /// # Arguments
     /// * `name` - Queue name (for metrics)
     /// * `dir_path` - Path to persistent queue directory
-    /// * `max_total_size_bytes` - Optional maximum total size across all segments (disconnect on overflow)
     /// * `memory_capacity` - Bounded channel capacity for fast path
-    pub fn new(
-        name: String,
-        dir_path: PathBuf,
-        max_total_size_bytes: Option<u64>,
-        memory_capacity: usize,
-    ) -> Result<Self> {
-        Self::with_segment_size(
-            name,
-            dir_path,
-            max_total_size_bytes,
-            memory_capacity,
-            DEFAULT_MAX_SEGMENT_SIZE,
-        )
+    pub fn new(name: String, dir_path: PathBuf, memory_capacity: usize) -> Result<Self> {
+        Self::with_segment_size(name, dir_path, memory_capacity, DEFAULT_MAX_SEGMENT_SIZE)
     }
 
     /// Create a new persistent queue with custom segment size
@@ -167,13 +147,11 @@ where
     /// # Arguments
     /// * `name` - Queue name (for metrics)
     /// * `dir_path` - Path to persistent queue directory
-    /// * `max_total_size_bytes` - Optional maximum total size across all segments
     /// * `memory_capacity` - Bounded channel capacity for fast path
     /// * `max_segment_size_bytes` - Maximum size of each segment file before rotation
     pub fn with_segment_size(
         name: String,
         dir_path: PathBuf,
-        max_total_size_bytes: Option<u64>,
         memory_capacity: usize,
         max_segment_size_bytes: u64,
     ) -> Result<Self> {
@@ -185,11 +163,9 @@ where
         // Calculate initial total file size from existing segments
         let initial_total_size = Self::calculate_total_file_size(&dir_path);
 
-        let created_at = Instant::now();
         let queue = Self {
             name: name.clone(),
             dir_path,
-            max_total_size_bytes,
             max_segment_size_bytes,
             state: Arc::new(RwLock::new(QueueState::Disconnected {
                 disconnected_at: Instant::now(),
@@ -200,9 +176,6 @@ where
             memory_rx,
             pending_commit: Arc::new(RwLock::new(None)),
             overflow_warned: Arc::new(AtomicBool::new(false)),
-            cached_data_size: Arc::new(AtomicU64::new(0)),
-            cached_data_size_time_ms: Arc::new(AtomicU64::new(0)),
-            created_at,
             file_lock: Arc::new(Mutex::new(())),
             write_segment: Arc::new(std::sync::Mutex::new(None)),
             read_segment: Arc::new(std::sync::Mutex::new(None)),
@@ -821,72 +794,6 @@ where
         total
     }
 
-    /// Get data size with caching to avoid expensive filesystem operations
-    /// Cache is refreshed at most every 250ms
-    fn cached_data_size_bytes(&self) -> u64 {
-        const CACHE_TTL_MS: u64 = 250; // Refresh at most every 250ms
-
-        let now_ms = self.created_at.elapsed().as_millis() as u64;
-        let cached_time = self.cached_data_size_time_ms.load(Ordering::Relaxed);
-
-        // Check if cache is still valid
-        if now_ms.saturating_sub(cached_time) < CACHE_TTL_MS {
-            return self.cached_data_size.load(Ordering::Relaxed);
-        }
-
-        // Cache expired, recalculate
-        let data_size = self.data_size_bytes();
-
-        // Update cache (relaxed ordering is fine - we don't need strict consistency)
-        self.cached_data_size.store(data_size, Ordering::Relaxed);
-        self.cached_data_size_time_ms
-            .store(now_ms, Ordering::Relaxed);
-
-        data_size
-    }
-
-    /// Check if the disk queue is at or near capacity
-    /// Returns true if sending would likely fail due to size limit
-    /// Uses 95% threshold on actual data size to trigger backpressure
-    /// Uses cached data size to avoid expensive filesystem operations on every call
-    pub fn is_at_capacity(&self) -> bool {
-        if let Some(max_size) = self.max_total_size_bytes {
-            let data_size = self.cached_data_size_bytes();
-            // Backpressure when actual data is >= 95% of max
-            if data_size >= (max_size * 95 / 100) {
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Check if the queue is ready to accept new connections
-    /// Returns true if below 75% capacity (allows reconnection after backpressure)
-    /// Uses cached data size to avoid expensive filesystem operations
-    pub fn is_ready_for_connection(&self) -> bool {
-        if let Some(max_size) = self.max_total_size_bytes {
-            let data_size = self.cached_data_size_bytes();
-
-            // Allow reconnection when actual data is below 75% of max
-            if data_size < (max_size * 75 / 100) {
-                return true;
-            }
-            return false;
-        }
-        // If no max size or no segments, always ready
-        true
-    }
-
-    /// Get current capacity usage as a percentage (0-100)
-    /// Based on actual data size, not file size
-    pub fn capacity_percent(&self) -> u8 {
-        if let Some(max_size) = self.max_total_size_bytes {
-            let data_size = self.data_size_bytes();
-            return ((data_size * 100) / max_size) as u8;
-        }
-        0
-    }
-
     /// Get the queue name (for logging)
     pub fn name(&self) -> &str {
         &self.name
@@ -1030,17 +937,6 @@ where
 
         // Message size on disk: 4 bytes length + data + 4 bytes checksum
         let message_disk_size = 4 + data.len() as u64 + 4;
-
-        // Check total size limit using cached value (no directory scan!)
-        if let Some(max_size) = self.max_total_size_bytes {
-            let current_size = self.total_file_size_cached.load(Ordering::Acquire);
-            if current_size >= max_size {
-                anyhow::bail!(
-                    "Queue total size limit exceeded: {}",
-                    self.dir_path.display()
-                );
-            }
-        }
 
         // Acquire write segment lock (std::sync::Mutex since no await points inside)
         let mut write_segment_guard = self
@@ -1516,8 +1412,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap();
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
         // Connect consumer
         queue
@@ -1544,8 +1439,7 @@ mod tests {
         // Create queue, send messages while disconnected
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
             queue.send("message1".to_string()).await.unwrap();
             queue.send("message2".to_string()).await.unwrap();
@@ -1555,8 +1449,7 @@ mod tests {
         // Create new queue instance (simulates restart)
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
             // Connect and drain
             queue
@@ -1583,8 +1476,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 100)
-                .unwrap(),
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 100).unwrap(),
         );
 
         // Buffer messages to disk
@@ -1625,41 +1517,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_overflow_protection() {
-        let temp_dir = TempDir::new().unwrap();
-        let queue_path = temp_dir.path().join("test_queue");
-
-        let queue = PersistentQueue::<String>::new(
-            "test".to_string(),
-            queue_path.clone(),
-            Some(1024), // 1 KB limit
-            10,
-        )
-        .unwrap();
-
-        // Try to send messages until we hit the limit
-        let mut sent = 0;
-        loop {
-            let large_message = "x".repeat(100);
-            match queue.send(large_message).await {
-                Ok(_) => sent += 1,
-                Err(e) => {
-                    assert!(e.to_string().contains("size limit exceeded"));
-                    break;
-                }
-            }
-        }
-
-        assert!(sent > 0, "Should have sent at least some messages");
-    }
-
-    #[tokio::test]
     async fn test_binary_messages() {
         let temp_dir = TempDir::new().unwrap();
         let queue_path = temp_dir.path().join("test_queue");
 
-        let queue =
-            PersistentQueue::<Vec<u8>>::new("test".to_string(), queue_path, None, 10).unwrap();
+        let queue = PersistentQueue::<Vec<u8>>::new("test".to_string(), queue_path, 10).unwrap();
 
         // Send binary data
         queue.send(vec![0x00, 0xFF, 0xAA, 0x55]).await.unwrap();
@@ -1684,9 +1546,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let queue_path = temp_dir.path().join("test_queue");
 
-        let queue = Arc::new(
-            PersistentQueue::<usize>::new("test".to_string(), queue_path, None, 1000).unwrap(),
-        );
+        let queue =
+            Arc::new(PersistentQueue::<usize>::new("test".to_string(), queue_path, 1000).unwrap());
 
         queue
             .connect_consumer("test-consumer".to_string())
@@ -1727,8 +1588,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap();
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
         // Initial state: Disconnected
         let state = queue.state.read().await.clone();
@@ -1769,8 +1629,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let queue_path = temp_dir.path().join("test_queue");
 
-        let queue =
-            PersistentQueue::<String>::new("test".to_string(), queue_path, None, 10).unwrap();
+        let queue = PersistentQueue::<String>::new("test".to_string(), queue_path, 10).unwrap();
 
         queue
             .connect_consumer("test-consumer".to_string())
@@ -1802,7 +1661,6 @@ mod tests {
         let queue = PersistentQueue::<String>::with_segment_size(
             "test".to_string(),
             queue_path.clone(),
-            None,
             10,
             500, // 500 bytes per segment
         )
@@ -1852,7 +1710,6 @@ mod tests {
         let queue = PersistentQueue::<String>::with_segment_size(
             "test".to_string(),
             queue_path.clone(),
-            None,
             10,
             200, // Very small segments
         )
@@ -1909,8 +1766,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap(),
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap(),
         );
 
         // Buffer a single message to disk (creates one segment)
@@ -1954,8 +1810,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap();
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
         // Send and drain a single message
         queue.send("message1".to_string()).await.unwrap();
@@ -1995,8 +1850,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue =
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap();
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
         // Initial state: Disconnected
         let state = queue.state.read().await.clone();
@@ -2041,8 +1895,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                .unwrap(),
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap(),
         );
 
         // Initial state: Disconnected
@@ -2083,8 +1936,7 @@ mod tests {
         // First "process" - sends messages but never calls recv()
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
             // Send messages while disconnected - they go to disk
             queue.send("persistent1".to_string()).await.unwrap();
@@ -2100,8 +1952,7 @@ mod tests {
         // Second "process" - should recover messages
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 10)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 10).unwrap();
 
             // Verify still disconnected initially
             let state = queue.state.read().await.clone();
@@ -2135,8 +1986,8 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         // Small memory channel capacity (3) so we can easily fill it
-        let queue = PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
-            .unwrap();
+        let queue =
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 3).unwrap();
 
         // Connect consumer first (enters Connected state, fast path)
         queue
@@ -2183,8 +2034,7 @@ mod tests {
         let queue_path = temp_dir.path().join("test_queue");
 
         let queue = Arc::new(
-            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
-                .unwrap(),
+            PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 3).unwrap(),
         );
 
         // Connect and fill memory
@@ -2245,8 +2095,7 @@ mod tests {
         // the flush, then "crash" (drop the queue).
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 3).unwrap();
 
             queue
                 .connect_consumer("test-consumer".to_string())
@@ -2275,8 +2124,7 @@ mod tests {
         // Second "process": recover and verify all messages are present in order.
         {
             let queue =
-                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), None, 3)
-                    .unwrap();
+                PersistentQueue::<String>::new("test".to_string(), queue_path.clone(), 3).unwrap();
 
             let mut received = Vec::new();
             for _ in 0..4 {
