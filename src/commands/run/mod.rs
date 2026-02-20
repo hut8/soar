@@ -279,21 +279,21 @@ pub async fn handle_run(
     );
 
     // Create bounded channels for per-processor queues
-    // Aircraft positions: highest capacity due to high volume and heavy processing
+    // Aircraft positions: highest volume processing path
     let (aircraft_tx, aircraft_rx) = flume::bounded(AIRCRAFT_QUEUE_SIZE);
     info!(
         "Created aircraft position queue with capacity {}",
         AIRCRAFT_QUEUE_SIZE
     );
 
-    // Receiver status: high capacity
+    // Receiver status: low volume
     let (receiver_status_tx, receiver_status_rx) = flume::bounded(RECEIVER_STATUS_QUEUE_SIZE);
     info!(
         "Created receiver status queue with capacity {}",
         RECEIVER_STATUS_QUEUE_SIZE
     );
 
-    // Receiver position: medium capacity
+    // Receiver position: low volume
     let (receiver_position_tx, receiver_position_rx) = flume::bounded(RECEIVER_POSITION_QUEUE_SIZE);
     info!(
         "Created receiver position queue with capacity {}",
@@ -380,12 +380,22 @@ pub async fn handle_run(
     let beast_intake_tx_for_router = beast_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let sbs_intake_tx_for_router = sbs_intake_opt.as_ref().map(|(tx, _)| tx.clone());
     let metrics_envelope_rx = envelope_rx.clone(); // Clone for metrics before moving
+    let router_packets_total = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let router_lag_ms = Arc::new(std::sync::atomic::AtomicI64::new(0));
+    let router_packets_for_task = router_packets_total.clone();
+    let router_lag_for_task = router_lag_ms.clone();
     tokio::spawn(async move {
         info!("Envelope router task started");
         while let Ok(envelope) = envelope_rx.recv_async().await {
             // Convert envelope timestamp to DateTime<Utc>
             let received_at = DateTime::from_timestamp_micros(envelope.timestamp_micros)
                 .unwrap_or_else(chrono::Utc::now);
+
+            let lag_millis = (chrono::Utc::now() - received_at).num_milliseconds();
+            let lag_seconds = lag_millis as f64 / 1000.0;
+            metrics::gauge!("socket.router.lag_seconds").set(lag_seconds);
+            router_lag_for_task.store(lag_millis, std::sync::atomic::Ordering::Relaxed);
+            router_packets_for_task.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
             match envelope.source() {
                 soar::protocol::IngestSource::Ogn => {
@@ -508,6 +518,8 @@ pub async fn handle_run(
         receiver_position_rx.clone(),
         server_status_rx.clone(),
         diesel_pool.clone(),
+        router_packets_total,
+        router_lag_ms,
     );
     info!("Spawned queue depth metrics reporter (reports every 10 seconds to Prometheus)");
 

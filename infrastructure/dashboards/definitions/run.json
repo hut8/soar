@@ -26,6 +26,7 @@
     "version",
     "build-details",
     "message-routing-rates",
+    "processing-lag",
     "process-uptime",
     "process-status",
     "process-memory-usage",

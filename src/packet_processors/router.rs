@@ -23,7 +23,7 @@ enum MessageTask {
 pub struct PacketRouter {
     /// Generic processor for archiving, receiver identification, and APRS message insertion
     generic_processor: GenericProcessor,
-    /// Internal queue for message tasks (5000 capacity)
+    /// Internal queue for message tasks
     internal_queue_tx: flume::Sender<MessageTask>,
     /// Internal queue receiver (used once during start())
     #[allow(clippy::type_complexity)]
@@ -39,12 +39,12 @@ pub struct PacketRouter {
 }
 
 /// Internal queue capacity for the PacketRouter worker pool
-pub const INTERNAL_QUEUE_CAPACITY: usize = 10_000;
+pub const INTERNAL_QUEUE_CAPACITY: usize = 1_000;
 
 impl PacketRouter {
     /// Create a new PacketRouter with a generic processor
     ///
-    /// Creates an internal queue of 5000 message tasks.
+    /// Creates an internal bounded queue for message tasks.
     /// Workers are spawned when start() is called after configuration.
     pub fn new(generic_processor: GenericProcessor) -> Self {
         let (internal_queue_tx, internal_queue_rx) =
