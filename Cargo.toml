@@ -45,7 +45,7 @@ lettre = { version = "0.11", features = [
 ], default-features = false }
 libc = "0.2"
 mime_guess = "2.0"
-rand = "0.9.2"
+rand = "0.10"
 rayon = "1.10"
 num-traits = "0.2"
 ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", tag = "v0.3.17" }
@@ -96,7 +96,7 @@ opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
 postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
 rust_decimal = { version = "1.40", default-features = false, features = ["std", "serde", "borsh"] }
-zip = "7"
+zip = "8.0"
 flydent = "0.6.0"
 flume = { version = "0.12", features = ["async"] }
 sitemap-rs = "0.4.0"

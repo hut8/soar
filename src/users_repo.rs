@@ -6,7 +6,7 @@ use argon2::{
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
-use rand::Rng;
+use rand::{RngExt, distr::Alphanumeric};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
@@ -385,11 +385,11 @@ impl UsersRepository {
 
     /// Generate a random password reset token
     fn generate_reset_token(&self) -> String {
-        let mut rng = rand::rng();
-        let token: String = (0..32)
-            .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
-            .collect();
-        token
+        rand::rng()
+            .sample_iter(Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect()
     }
 
     /// Set email verification token
@@ -450,11 +450,11 @@ impl UsersRepository {
 
     /// Generate a random email verification token
     fn generate_verification_token(&self) -> String {
-        let mut rng = rand::rng();
-        let token: String = (0..32)
-            .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
-            .collect();
-        token
+        rand::rng()
+            .sample_iter(Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect()
     }
 
     /// Update user settings

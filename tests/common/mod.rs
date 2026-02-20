@@ -143,9 +143,8 @@ impl TestDatabase {
     /// Returns (admin_url, db_name) tuple.
     fn generate_database_info(base_url: &str) -> Result<(String, String)> {
         // Generate a random 16-character hex suffix using hex (simple and portable)
-        use rand::RngCore;
-        let mut rng = rand::rng();
-        let random_bytes: u64 = rng.next_u64();
+        use rand::Rng;
+        let random_bytes: u64 = rand::rng().next_u64();
         let suffix = format!("{:016x}", random_bytes);
 
         let db_name = format!("soar_test_{}", suffix);
