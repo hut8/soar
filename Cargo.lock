@@ -4321,7 +4321,7 @@ dependencies = [
 [[package]]
 name = "ogn-parser"
 version = "0.3.15"
-source = "git+https://github.com/hut8/ogn-parser-rs?branch=master#423b7212d22d539f4e6da53a4e974dbfe07fd2ea"
+source = "git+https://github.com/hut8/ogn-parser-rs?branch=master#332bf4d3dc41a186dd6e8c69db599881e2b3daf2"
 dependencies = [
  "chrono",
  "flat_projection",
@@ -4940,7 +4940,7 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools",
  "log",
  "multimap",

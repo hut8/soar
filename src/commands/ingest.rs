@@ -524,7 +524,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             // so no per-message size estimate is needed.
             let bytes_sent_per_sec = ewma_bytes_sent.value();
             let drain_time_estimate = if queue_depth.disk_data_bytes > 0 {
-                if bytes_sent_per_sec > 0.0 {
+                if bytes_sent_per_sec < 1.0 {
+                    // Rate is effectively zero (EWMA decayed to near-nothing) — show infinity
+                    "∞".to_string()
+                } else {
                     let est_seconds = queue_depth.disk_data_bytes as f64 / bytes_sent_per_sec;
                     if est_seconds > 3600.0 {
                         format!("{:.1}h", est_seconds / 3600.0)
@@ -533,8 +536,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                     } else {
                         format!("{:.0}s", est_seconds)
                     }
-                } else {
-                    "stalled".to_string()
                 }
             } else {
                 "done".to_string()
