@@ -1089,7 +1089,9 @@ impl FlightsRepository {
             // If we got bounding box values, update the flight
             // Use last_fix_at from the flight as the event timestamp
             if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
-                let event_ts = flight_times.map(|(_, end)| end).unwrap_or_else(Utc::now);
+                let event_ts = flight_times
+                    .map(|(_, end)| end)
+                    .expect("flight_times must be Some when bbox_result is Some");
                 let rows = diesel::update(flights.filter(id.eq(flight_id)))
                     .set((
                         min_latitude.eq(min_lat),
