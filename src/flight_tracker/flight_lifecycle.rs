@@ -213,6 +213,7 @@ fn spawn_flight_enrichment_on_creation(
                     takeoff_runway,
                     start_location_id,
                     takeoff_location_id,
+                    fix.received_at,
                 )
                 .await
             {
@@ -259,7 +260,7 @@ fn spawn_flight_enrichment_airborne(ctx: &FlightProcessorContext<'_>, fix: Fix, 
 
             // Update flight with start location
             if let Err(e) = flights_repo
-                .update_flight_start_location(flight_id, start_location_id)
+                .update_flight_start_location(flight_id, start_location_id, fix.received_at)
                 .await
             {
                 error!(
@@ -1172,6 +1173,7 @@ fn spawn_flight_enrichment_on_completion_direct(
                     landing_runway_inferred,
                     end_location_id,
                     None, // landing_location_id - not set during enrichment
+                    fix.received_at,
                 )
                 .await
             {

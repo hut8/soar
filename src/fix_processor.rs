@@ -442,6 +442,7 @@ impl FixProcessor {
                                     flight_id,
                                     updated_fix.aircraft_id,
                                     Some(flight_number.clone()),
+                                    updated_fix.received_at,
                                 )
                                 .await
                             {

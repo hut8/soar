@@ -681,6 +681,26 @@ impl FlightTracker {
             // This ensures timeout checks use packet time, not wall clock time
             self.update_latest_fix_timestamp(fix.received_at);
 
+            // Update flight's last_fix_at asynchronously to keep it current
+            // This ensures check_landing_near_last_fix constraint is satisfied
+            // when set_preliminary_landing_time is called later
+            if let Some(flight_id) = fix.flight_id {
+                let flights_repo = self.flights_repo.clone();
+                let fix_timestamp = fix.received_at;
+                tokio::spawn(async move {
+                    if let Err(e) = flights_repo
+                        .update_last_fix_at(flight_id, fix_timestamp)
+                        .await
+                    {
+                        tracing::warn!(
+                            "Failed to update last_fix_at for flight {}: {}",
+                            flight_id,
+                            e
+                        );
+                    }
+                });
+            }
+
             // Check geofences for this aircraft (only if fix has a flight_id)
             if fix.flight_id.is_some() {
                 self.check_geofences_for_fix(fix).await;
@@ -765,11 +785,12 @@ impl FlightTracker {
         flight_id: Uuid,
         aircraft_id: Uuid,
         callsign: Option<String>,
+        event_timestamp: DateTime<Utc>,
     ) -> Result<bool> {
         // Update database
         let result = self
             .flights_repo
-            .update_callsign(flight_id, callsign.clone())
+            .update_callsign(flight_id, callsign.clone(), event_timestamp)
             .await;
 
         // Update in-memory state to keep it in sync with database
