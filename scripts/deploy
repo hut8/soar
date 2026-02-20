@@ -171,6 +171,12 @@ for config_file in tempo-config.yml loki-config.yml pyroscope-config.yml alloy-c
     fi
 done
 
+# Copy Prometheus defaults (for enabling remote-write-receiver)
+if [ -f "infrastructure/prometheus-defaults" ]; then
+    cp infrastructure/prometheus-defaults "$DEPLOY_PKG/"
+    log_info "Prometheus defaults included"
+fi
+
 # Copy backup scripts directory
 if [ -d "scripts/backup" ]; then
     mkdir -p "$DEPLOY_PKG/scripts"
