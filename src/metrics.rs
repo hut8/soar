@@ -258,10 +258,16 @@ pub fn init_metrics(component: Option<&str>) -> PrometheusHandle {
         .expect("failed to install Prometheus recorder")
 }
 
+/// Maximum CPU profiling duration in seconds.
+/// Alloy's pyroscope scraper passes `?seconds=<scrape_timeout>` (e.g. 20s) by default.
+/// We cap at 5 seconds (495 samples at 99 Hz) to leave generous margin within the
+/// scrape timeout for report serialization and HTTP transfer.
+const MAX_PROFILE_SECONDS: u64 = 5;
+
 /// Query parameters for CPU profiling endpoint
 #[derive(Debug, serde::Deserialize)]
 struct ProfileParams {
-    /// Duration in seconds (default: 10, max: 60)
+    /// Duration in seconds (default: 5, capped at MAX_PROFILE_SECONDS)
     seconds: Option<u64>,
 }
 
@@ -274,7 +280,10 @@ struct ProfileParams {
 async fn profile_handler(
     axum::extract::Query(params): axum::extract::Query<ProfileParams>,
 ) -> impl IntoResponse {
-    let duration_secs = params.seconds.unwrap_or(10).min(60);
+    let duration_secs = params
+        .seconds
+        .unwrap_or(MAX_PROFILE_SECONDS)
+        .min(MAX_PROFILE_SECONDS);
     trace!("Starting CPU profiling for {} seconds", duration_secs);
 
     // Run profiling on blocking thread pool — immune to async runtime overload
@@ -341,7 +350,10 @@ async fn profile_handler(
 async fn heap_profile_handler(
     axum::extract::Query(params): axum::extract::Query<ProfileParams>,
 ) -> impl IntoResponse {
-    let duration_secs = params.seconds.unwrap_or(10).min(60);
+    let duration_secs = params
+        .seconds
+        .unwrap_or(MAX_PROFILE_SECONDS)
+        .min(MAX_PROFILE_SECONDS);
     info!("Generating heap profile ({} seconds)", duration_secs);
 
     // Run profiling on blocking thread pool — immune to async runtime overload
