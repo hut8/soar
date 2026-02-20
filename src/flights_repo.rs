@@ -1055,14 +1055,14 @@ impl FlightsRepository {
                 .first::<(chrono::DateTime<Utc>, chrono::DateTime<Utc>)>(&mut conn)
                 .optional()?;
 
-            let bbox_result = if let Some((start_time, end_time)) = flight_times {
+            if let Some((start_time, end_time)) = flight_times {
                 // Add 1 hour buffer to handle clock skew and ensure we get all fixes
                 let start_with_buffer = start_time - chrono::Duration::hours(1);
                 let end_with_buffer = end_time + chrono::Duration::hours(1);
 
                 // Calculate bounding box from all fixes for this flight
                 // Filter by received_at for partition pruning (flights are always < 24h)
-                fixes_dsl::fixes
+                let bbox_result = fixes_dsl::fixes
                     .filter(fixes_dsl::flight_id.eq(flight_id))
                     .filter(fixes_dsl::received_at.between(start_with_buffer, end_with_buffer))
                     .select((
@@ -1080,31 +1080,28 @@ impl FlightsRepository {
                         ),
                     ))
                     .first::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(&mut conn)
-                    .optional()?
-            } else {
-                // Flight not found, return None
-                None
-            };
+                    .optional()?;
 
-            // If we got bounding box values, update the flight
-            // Use last_fix_at from the flight as the event timestamp
-            if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
-                let event_ts = flight_times
-                    .map(|(_, end)| end)
-                    .expect("flight_times must be Some when bbox_result is Some");
-                let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                    .set((
-                        min_latitude.eq(min_lat),
-                        max_latitude.eq(max_lat),
-                        min_longitude.eq(min_lon),
-                        max_longitude.eq(max_lon),
-                        updated_at.eq(event_ts),
-                    ))
-                    .execute(&mut conn)?;
+                // If we got bounding box values, update the flight
+                // Use last_fix_at (end_time) from the flight as the event timestamp
+                if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
+                    let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                        .set((
+                            min_latitude.eq(min_lat),
+                            max_latitude.eq(max_lat),
+                            min_longitude.eq(min_lon),
+                            max_longitude.eq(max_lon),
+                            updated_at.eq(end_time),
+                        ))
+                        .execute(&mut conn)?;
 
-                Ok::<usize, anyhow::Error>(rows)
+                    Ok::<usize, anyhow::Error>(rows)
+                } else {
+                    // No fixes found for this flight, don't update
+                    Ok(0)
+                }
             } else {
-                // No fixes found for this flight, don't update
+                // Flight not found, don't update
                 Ok(0)
             }
         })
