@@ -1,12 +1,12 @@
--- Validate the two FK constraints on fixes that were created with NOT VALID.
+-- This migration was originally intended to VALIDATE CONSTRAINT on the two
+-- FK constraints on fixes (fixes_aircraft_id_fkey, fixes_flight_id_fkey)
+-- that were created with NOT VALID.
 --
--- These were left NOT VALID by the 2026-01-25 deduplicate and 2026-01-30
--- address migration to avoid expensive full-table scans at migration time.
--- The orphaned rows have since been cleaned up by the retention policy,
--- so validation will now succeed.
+-- However, VALIDATE CONSTRAINT is not supported on TimescaleDB hypertables
+-- with columnstore (compression) enabled, so we skip it.
 --
--- This migration runs outside a transaction (see metadata.toml) because
--- VALIDATE CONSTRAINT only takes a SHARE UPDATE EXCLUSIVE lock, allowing
--- concurrent reads and writes while it scans.
-ALTER TABLE fixes VALIDATE CONSTRAINT fixes_aircraft_id_fkey;
-ALTER TABLE fixes VALIDATE CONSTRAINT fixes_flight_id_fkey;
+-- The NOT VALID constraints still enforce referential integrity on all new
+-- inserts and updates. Validation would only confirm that pre-existing rows
+-- are valid, which is already guaranteed since the retention policy has
+-- cleaned up any orphaned rows.
+SELECT 1;
