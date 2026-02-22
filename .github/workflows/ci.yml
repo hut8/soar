@@ -178,6 +178,8 @@ jobs:
           # Point Playwright at the Rust backend which serves both
           # embedded static files (from web/build/) and the API (/data/*)
           PLAYWRIGHT_BASE_URL: http://localhost:61225
+          # Mailpit is a service container, accessible by hostname not localhost
+          MAILPIT_URL: http://mailpit:8025
         run: npm test
 
       - name: Stop backend server

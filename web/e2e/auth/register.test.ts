@@ -23,8 +23,8 @@ interface MailpitMessagesResponse {
  * @returns The most recent email message or null if not found
  */
 async function getLatestEmailFromMailpit(email: string): Promise<MailpitMessage | null> {
-	// Always use localhost - Mailpit container exposes port 8025
-	const mailpitUrl = 'http://localhost:8025';
+	// Use MAILPIT_URL env var for CI containers, fall back to localhost for local dev
+	const mailpitUrl = process.env.MAILPIT_URL || 'http://localhost:8025';
 	const response = await fetch(`${mailpitUrl}/api/v1/messages?limit=50`);
 
 	if (!response.ok) {
