@@ -3,7 +3,7 @@
     "type": "prometheus",
     "uid": "prometheus"
   },
-  "description": "now() - time of latest packet received over the socket",
+  "description": "Ratio of data-time processed per wall-clock second. >1 means catching up, <1 means falling behind, =1 means keeping pace.",
   "fieldConfig": {
     "defaults": {
       "color": {
@@ -13,7 +13,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "seconds",
+        "axisLabel": "ratio",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -39,24 +39,25 @@
           "mode": "none"
         },
         "thresholdsStyle": {
-          "mode": "line+area"
+          "mode": "line"
         }
       },
+      "decimals": 2,
       "mappings": [],
       "thresholds": {
         "mode": "absolute",
         "steps": [
           {
-            "color": "transparent",
+            "color": "red",
             "value": null
           },
           {
-            "color": "red",
-            "value": 15
+            "color": "green",
+            "value": 1
           }
         ]
       },
-      "unit": "s"
+      "unit": "none"
     },
     "overrides": []
   },
@@ -64,8 +65,7 @@
     "legend": {
       "calcs": [
         "lastNotNull",
-        "mean",
-        "max"
+        "mean"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -73,8 +73,8 @@
     },
     "tooltip": {
       "hideZeros": false,
-      "mode": "multi",
-      "sort": "desc"
+      "mode": "single",
+      "sort": "none"
     }
   },
   "pluginVersion": "12.2.1",
@@ -85,12 +85,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "socket_router_lag_seconds{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Processing Lag",
+      "expr": "socket_router_processing_rate_ratio{component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "Processing Rate Ratio",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Processing Lag",
+  "title": "Processing Rate Ratio",
   "type": "timeseries"
 }

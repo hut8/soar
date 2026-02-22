@@ -3,7 +3,7 @@
     "type": "prometheus",
     "uid": "prometheus"
   },
-  "description": "now() - time of latest packet received over the socket",
+  "description": "Estimated time until processing catches up to real-time, based on EWMA-smoothed processing rate. Formula: ETA = lag / (rate_ratio - 1). Shows -1 when falling behind (will never catch up). Shows 0 when already caught up.",
   "fieldConfig": {
     "defaults": {
       "color": {
@@ -13,7 +13,7 @@
         "axisBorderShow": false,
         "axisCenteredZero": false,
         "axisColorMode": "text",
-        "axisLabel": "seconds",
+        "axisLabel": "",
         "axisPlacement": "auto",
         "barAlignment": 0,
         "barWidthFactor": 0.6,
@@ -39,20 +39,28 @@
           "mode": "none"
         },
         "thresholdsStyle": {
-          "mode": "line+area"
+          "mode": "off"
         }
       },
-      "mappings": [],
+      "mappings": [
+        {
+          "options": {
+            "from": -1,
+            "result": {
+              "color": "red",
+              "text": "Never"
+            },
+            "to": -0.5
+          },
+          "type": "range"
+        }
+      ],
       "thresholds": {
         "mode": "absolute",
         "steps": [
           {
-            "color": "transparent",
+            "color": "green",
             "value": null
-          },
-          {
-            "color": "red",
-            "value": 15
           }
         ]
       },
@@ -63,9 +71,7 @@
   "options": {
     "legend": {
       "calcs": [
-        "lastNotNull",
-        "mean",
-        "max"
+        "lastNotNull"
       ],
       "displayMode": "table",
       "placement": "bottom",
@@ -73,8 +79,8 @@
     },
     "tooltip": {
       "hideZeros": false,
-      "mode": "multi",
-      "sort": "desc"
+      "mode": "single",
+      "sort": "none"
     }
   },
   "pluginVersion": "12.2.1",
@@ -85,12 +91,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "socket_router_lag_seconds{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Processing Lag",
+      "expr": "socket_router_catchup_eta_seconds{component=\"run\",environment=\"$environment\"} >= 0",
+      "legendFormat": "Catchup ETA",
       "range": true,
       "refId": "A"
     }
   ],
-  "title": "Processing Lag",
+  "title": "Catchup ETA",
   "type": "timeseries"
 }
