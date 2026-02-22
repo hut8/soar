@@ -690,7 +690,6 @@ pub type BeastMessagesRepository = RawMessagesRepository;
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use diesel::connection::SimpleConnection;
     use diesel::r2d2::{ConnectionManager, Pool};
     use serial_test::serial;
 
@@ -708,34 +707,10 @@ mod tests {
             .expect("Failed to create test pool")
     }
 
-    /// Helper to clean up test data between tests
-    ///
-    /// NOTE: Assumes migrations have already been run (as in CI).
-    /// To run tests locally, first run migrations on your test database:
-    ///   diesel migration run --database-url postgresql://localhost/soar_test
-    fn cleanup_test_data(pool: &PgPool) {
-        let mut conn = pool.get().expect("Failed to get connection");
-
-        // CRITICAL: TRUNCATE in dependency order (children first) to avoid deadlocks
-        // NEVER use CASCADE - it creates complex lock hierarchies on TimescaleDB hypertables
-        // that deadlock with concurrent INSERT operations
-        //
-        // Dependency order:
-        // 1. fixes (references raw_messages)
-        // 2. receiver_statuses (references raw_messages)
-        // 3. raw_messages (hypertable, references receivers)
-        // 4. receivers (parent table)
-        let _ = conn.batch_execute("TRUNCATE TABLE fixes");
-        let _ = conn.batch_execute("TRUNCATE TABLE receiver_statuses");
-        let _ = conn.batch_execute("TRUNCATE TABLE raw_messages");
-        let _ = conn.batch_execute("TRUNCATE TABLE receivers");
-    }
-
     #[tokio::test]
     #[serial]
     async fn test_insert_and_get_by_id() {
         let pool = create_test_pool();
-        cleanup_test_data(&pool);
 
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
@@ -789,7 +764,6 @@ mod tests {
     #[serial]
     async fn test_get_by_id_not_found() {
         let pool = create_test_pool();
-        cleanup_test_data(&pool);
 
         let repo = AprsMessagesRepository::new(pool);
 
@@ -806,7 +780,6 @@ mod tests {
     #[serial]
     async fn test_get_by_ids_multiple() {
         let pool = create_test_pool();
-        cleanup_test_data(&pool);
 
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
@@ -872,7 +845,6 @@ mod tests {
     #[serial]
     async fn test_get_by_ids_partial_match() {
         let pool = create_test_pool();
-        cleanup_test_data(&pool);
 
         let receiver_id = Uuid::new_v4();
         let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
@@ -929,7 +901,6 @@ mod tests {
     #[serial]
     async fn test_get_by_ids_empty_list() {
         let pool = create_test_pool();
-        cleanup_test_data(&pool);
 
         let repo = AprsMessagesRepository::new(pool);
 
