@@ -203,8 +203,8 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
 
     // Extract ACFTREF.txt and MASTER.txt from the zip file
     info!("Extracting aircraft files from zip...");
-    let zip_file = fs::File::open(&zip_path)?;
-    let mut archive = zip::ZipArchive::new(zip_file)?;
+    let mut zip_file = fs::File::open(&zip_path)?;
+    let mut archive = zip::ZipArchive::new(&mut zip_file)?;
 
     // Extract ACFTREF.txt (aircraft models)
     let acftref_path = format!("{}/ACFTREF.txt", temp_dir);

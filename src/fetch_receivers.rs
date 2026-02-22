@@ -1,7 +1,7 @@
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 use once_cell::sync::Lazy;
-use rand::{Rng, distr::Alphanumeric};
+use rand::RngExt;
 use regex::{Captures, Regex};
 use reqwest::header::{CONTENT_TYPE, COOKIE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -119,11 +119,10 @@ struct Args {
 }
 
 fn gen_token() -> String {
-    rand::rng()
-        .sample_iter(&Alphanumeric)
-        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-        .map(char::from)
-        .take(8)
+    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::rng();
+    (0..8)
+        .map(|_| CHARSET[rng.random_range(0..CHARSET.len())] as char)
         .collect()
 }
 
