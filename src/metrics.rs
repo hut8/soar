@@ -702,6 +702,8 @@ pub fn initialize_run_metrics() {
 
     // Socket router metrics
     metrics::gauge!("socket.router.lag_seconds").set(0.0);
+    metrics::gauge!("socket.router.processing_rate_ratio").set(0.0);
+    metrics::gauge!("socket.router.catchup_eta_seconds").set(0.0);
     metrics::counter!("socket.router.aprs_routed_total").absolute(0);
     metrics::counter!("socket.router.aprs_send_error_total").absolute(0);
     metrics::counter!("socket.router.beast_routed_total").absolute(0);

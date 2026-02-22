@@ -35,11 +35,18 @@ pub(crate) fn spawn_metrics_reporter(
         const STATS_INTERVAL_SECS: f64 = 30.0;
         const HALF_LIFE_SECS: f64 = 15.0 * 60.0; // 15-minute half-life
 
+        // Half-life for the lag derivative EWMA (5 minutes) — shorter than the
+        // incoming-rate EWMA so the catchup ETA responds to changes reasonably
+        // quickly while still being smooth enough to be useful.
+        const LAG_DERIVATIVE_HALF_LIFE_SECS: f64 = 5.0 * 60.0;
+
         let mut interval =
             tokio::time::interval(std::time::Duration::from_secs(METRICS_INTERVAL_SECS));
         interval.tick().await; // First tick completes immediately
 
         let mut ewma_incoming = soar::metrics::Ewma::new(HALF_LIFE_SECS);
+        let mut ewma_lag_derivative = soar::metrics::Ewma::new(LAG_DERIVATIVE_HALF_LIFE_SECS);
+        let mut prev_lag_secs: Option<f64> = None;
         let mut ticks_since_stats: u64 = 0;
 
         loop {
@@ -72,6 +79,43 @@ pub(crate) fn spawn_metrics_reporter(
             metrics::gauge!("aprs.db_pool.active_connections").set(active_connections as f64);
             metrics::gauge!("aprs.db_pool.idle_connections")
                 .set(pool_state.idle_connections as f64);
+
+            // Compute processing rate ratio and catchup ETA from lag derivative.
+            //
+            // The processing rate ratio R measures how many seconds of data we
+            // process per wall-clock second:
+            //   R = 1 - dL/dt   (where L = lag, dL/dt = rate of change of lag)
+            //
+            // When R > 1 we're catching up; the net gain is (R - 1) seconds of
+            // backlog reduced per wall-clock second.  The ETA to be fully caught
+            // up, accounting for new data arriving during the catchup period:
+            //   ETA = L / (R - 1)
+            //
+            // When R <= 1 we're falling behind or treading water: ETA = -1
+            // (sentinel for "never").
+            let lag_secs = router_lag_ms.load(Ordering::Relaxed) as f64 / 1000.0;
+            if let Some(prev) = prev_lag_secs {
+                let dt = METRICS_INTERVAL_SECS as f64;
+                let dl_dt = (lag_secs - prev) / dt; // negative when catching up
+                ewma_lag_derivative.update(dl_dt, dt);
+
+                let smoothed_dl_dt = ewma_lag_derivative.value();
+                // R = 1 - dL/dt: if lag decreases by 1s per second, R = 2
+                let rate_ratio = 1.0 - smoothed_dl_dt;
+                metrics::gauge!("socket.router.processing_rate_ratio").set(rate_ratio);
+
+                if rate_ratio > 1.0 && lag_secs > 1.0 {
+                    let eta_secs = lag_secs / (rate_ratio - 1.0);
+                    metrics::gauge!("socket.router.catchup_eta_seconds").set(eta_secs);
+                } else if lag_secs <= 1.0 {
+                    // Already caught up (within 1 second)
+                    metrics::gauge!("socket.router.catchup_eta_seconds").set(0.0);
+                } else {
+                    // Falling behind or treading water
+                    metrics::gauge!("socket.router.catchup_eta_seconds").set(-1.0);
+                }
+            }
+            prev_lag_secs = Some(lag_secs);
 
             // Log periodic stats every 30 seconds (every 3rd tick at 10s interval)
             let stats_ticks = (STATS_INTERVAL_SECS / METRICS_INTERVAL_SECS as f64) as u64;

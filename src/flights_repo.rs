@@ -200,8 +200,6 @@ impl FlightsRepository {
         runways_inferred_param: Option<bool>,
         last_fix_at_param: Option<DateTime<Utc>>,
     ) -> Result<()> {
-        use crate::schema::flights::dsl::*;
-
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
@@ -210,22 +208,48 @@ impl FlightsRepository {
             // If last_fix_at not provided, use landing_time (by definition a flight has at least one fix)
             let last_fix_time = last_fix_at_param.unwrap_or(landing_time_param);
 
-            // Single UPDATE query with all fields including last_fix_at and end_location_id
-            let rows_affected = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    landing_time.eq(&Some(landing_time_param)),
-                    arrival_airport_id.eq(&arrival_airport_id_param),
-                    landing_location_id.eq(&landing_location_id_param),
-                    end_location_id.eq(&end_location_id_param),
-                    landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
-                    landing_runway_ident.eq(&landing_runway_ident_param),
-                    total_distance_meters.eq(&total_distance_meters_param),
-                    maximum_displacement_meters.eq(&maximum_displacement_meters_param),
-                    runways_inferred.eq(&runways_inferred_param),
-                    last_fix_at.eq(last_fix_time),
-                    updated_at.eq(last_fix_time),
-                ))
-                .execute(&mut conn)?;
+            // Use raw SQL with GREATEST for last_fix_at to ensure we never set it to a value
+            // earlier than the existing value, which would violate the check_landing_near_last_fix
+            // constraint. This matches the pattern used in set_preliminary_landing_time.
+            let rows_affected = diesel::sql_query(
+                "UPDATE flights \
+                 SET landing_time = $1, \
+                     arrival_airport_id = $2, \
+                     landing_location_id = $3, \
+                     end_location_id = $4, \
+                     landing_altitude_offset_ft = $5, \
+                     landing_runway_ident = $6, \
+                     total_distance_meters = $7, \
+                     maximum_displacement_meters = $8, \
+                     runways_inferred = $9, \
+                     last_fix_at = GREATEST(last_fix_at, $10), \
+                     updated_at = $10 \
+                 WHERE id = $11",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(landing_time_param)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Integer>, _>(
+                arrival_airport_id_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(
+                landing_location_id_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(end_location_id_param)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Integer>, _>(
+                landing_altitude_offset_ft_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(
+                landing_runway_ident_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Double>, _>(
+                total_distance_meters_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Double>, _>(
+                maximum_displacement_meters_param,
+            )
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Bool>, _>(runways_inferred_param)
+            .bind::<diesel::sql_types::Timestamptz, _>(last_fix_time)
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .execute(&mut conn)?;
 
             if rows_affected == 0 {
                 return Err(anyhow::anyhow!(
