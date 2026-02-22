@@ -62,7 +62,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "sum(increase(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(beast_nats_publish_error_total{component=\"ingest-adsb\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(nats_fix_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1h]) or vector(0))",
+      "expr": "sum(increase(aprs_nats_publish_error_total{component=\"ingest-ogn\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(beast_nats_publish_error_total{component=\"ingest-adsb\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(nats_fix_publisher_errors_total{component=\"run\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(nats_fix_publisher_timeout_total{component=\"run\",environment=\"$environment\"}[1h]) or vector(0)) + sum(increase(nats_fix_publisher_queue_full_drops_total{component=\"run\",environment=\"$environment\"}[1h]) or vector(0))",
       "legendFormat": "Total Errors (All Components)",
       "range": true,
       "refId": "A"

@@ -90,51 +90,7 @@
       },
       "expr": "socket_envelope_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
       "legendFormat": "Envelope Intake Queue",
-      "refId": "G"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "aprs_aircraft_queue_depth{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Aircraft Queue",
-      "range": true,
-      "refId": "B"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "aprs_receiver_status_queue_depth{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Receiver Status Queue",
-      "range": true,
-      "refId": "C"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "aprs_receiver_position_queue_depth{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Receiver Position Queue",
-      "range": true,
-      "refId": "D"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "aprs_server_status_queue_depth{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Server Status Queue",
-      "range": true,
-      "refId": "E"
+      "refId": "A"
     },
     {
       "datasource": {
@@ -145,18 +101,7 @@
       "expr": "aprs_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
       "legendFormat": "APRS Intake Queue",
       "range": true,
-      "refId": "H"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "aprs_router_queue_depth{component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "Router Queue",
-      "range": true,
-      "refId": "I"
+      "refId": "B"
     },
     {
       "datasource": {
@@ -167,7 +112,7 @@
       "expr": "nats_fix_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
       "legendFormat": "NATS Fix Publisher Queue",
       "range": true,
-      "refId": "J"
+      "refId": "C"
     },
     {
       "datasource": {
@@ -178,7 +123,18 @@
       "expr": "beast_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
       "legendFormat": "Beast Intake Queue",
       "range": true,
-      "refId": "K"
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "sbs_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
+      "legendFormat": "SBS Intake Queue",
+      "range": true,
+      "refId": "E"
     }
   ],
   "title": "Queue Depths",

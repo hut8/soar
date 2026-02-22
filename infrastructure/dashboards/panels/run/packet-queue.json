@@ -52,44 +52,21 @@
           }
         ]
       },
-      "unit": "short"
+      "unit": "ops"
     },
     "overrides": [
       {
         "matcher": {
           "id": "byRegexp",
-          "options": ".*Dropped.*"
+          "options": ".*Failed.*"
         },
         "properties": [
-          {
-            "id": "custom.axisPlacement",
-            "value": "right"
-          },
-          {
-            "id": "custom.axisLabel",
-            "value": "Dropped/sec"
-          },
           {
             "id": "color",
             "value": {
-              "mode": "palette-classic"
+              "fixedColor": "red",
+              "mode": "fixed"
             }
-          }
-        ]
-      },
-      {
-        "matcher": {
-          "id": "byRegexp",
-          "options": ".*Enqueued.*"
-        },
-        "properties": [
-          {
-            "id": "custom.axisPlacement",
-            "value": "left"
-          },
-          {
-            "id": "custom.axisLabel",
-            "value": "Enqueued/sec"
           }
         ]
       }
@@ -120,8 +97,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_aircraft_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Aircraft Enqueued",
+      "expr": "rate(aprs_intake_processed_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "OGN Messages Processed/sec",
       "range": true,
       "refId": "A"
     },
@@ -131,8 +108,8 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_receiver_status_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Receiver Status Enqueued",
+      "expr": "rate(aprs_process_aprs_message_called_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "APRS Processor Calls/sec",
       "range": true,
       "refId": "B"
     },
@@ -142,100 +119,12 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_receiver_position_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Receiver Position Enqueued",
+      "expr": "rate(aprs_parse_failed_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Parse Failed/sec",
       "range": true,
       "refId": "C"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_server_status_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Server Status Enqueued",
-      "range": true,
-      "refId": "D"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_router_processed_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Router Processed",
-      "range": true,
-      "refId": "K"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_raw_message_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_aircraft_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_position_queue_full_total{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_server_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Total Dropped",
-      "range": true,
-      "refId": "E"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_aircraft_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Aircraft Dropped",
-      "range": true,
-      "refId": "F"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_receiver_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Receiver Status Dropped",
-      "range": true,
-      "refId": "G"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_receiver_position_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Receiver Position Dropped",
-      "range": true,
-      "refId": "H"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_server_status_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Server Status Dropped",
-      "range": true,
-      "refId": "I"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "rate(aprs_raw_message_queue_full_total{component=\"run\",environment=\"$environment\"}[1m])",
-      "legendFormat": "Raw Message Queue Dropped",
-      "range": true,
-      "refId": "J"
     }
   ],
-  "title": "Packet Queue",
+  "title": "APRS Packet Queue",
   "type": "timeseries"
 }
