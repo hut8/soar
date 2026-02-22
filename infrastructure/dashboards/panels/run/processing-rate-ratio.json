@@ -85,7 +85,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "socket_router_processing_rate_ratio{component=\"run\",environment=\"$environment\"}",
+      "expr": "clamp(avg_over_time(socket_router_processing_rate_ratio{component=\"run\",environment=\"$environment\"}[5m]), 0, 10)",
       "legendFormat": "Processing Rate Ratio",
       "range": true,
       "refId": "A"

@@ -16,7 +16,7 @@
         "axisPlacement": "auto",
         "barAlignment": 0,
         "drawStyle": "line",
-        "fillOpacity": 30,
+        "fillOpacity": 0,
         "gradientMode": "none",
         "hideFrom": {
           "tooltip": false,
@@ -34,7 +34,7 @@
         "spanNulls": false,
         "stacking": {
           "group": "A",
-          "mode": "normal"
+          "mode": "none"
         },
         "thresholdsStyle": {
           "mode": "off"
@@ -63,7 +63,7 @@
     },
     "tooltip": {
       "mode": "multi",
-      "sort": "none"
+      "sort": "desc"
     }
   },
   "targets": [
