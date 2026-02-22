@@ -1,4 +1,4 @@
-use crate::packet_processors::generic::PacketContext;
+use crate::ogn::packet_context::PacketContext;
 use crate::receiver_repo::ReceiverRepository;
 use num_traits::AsPrimitive;
 use ogn_parser::{AprsData, AprsPacket};
@@ -18,7 +18,7 @@ impl ReceiverPositionProcessor {
     }
 
     /// Process a receiver position packet and update its location
-    /// Note: Receiver is guaranteed to exist in database (created by GenericProcessor)
+    /// Note: Receiver is guaranteed to exist in database (created by OgnGenericProcessor)
     #[tracing::instrument(skip(self, packet, _context), fields(callsign = %packet.from))]
     pub async fn process_receiver_position(&self, packet: &AprsPacket, _context: PacketContext) {
         // Extract position data from packet
@@ -40,7 +40,7 @@ impl ReceiverPositionProcessor {
                             callsign, latitude, longitude
                         );
                     } else {
-                        // This shouldn't happen since GenericProcessor ensures receiver exists
+                        // This shouldn't happen since OgnGenericProcessor ensures receiver exists
                         warn!(
                             "Receiver {} not found when updating position - this indicates a race condition or database issue",
                             callsign

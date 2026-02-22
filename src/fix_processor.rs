@@ -9,7 +9,7 @@ use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
-use crate::packet_processors::generic::PacketContext;
+use crate::ogn::PacketContext;
 use crate::receiver_repo::ReceiverRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -155,7 +155,7 @@ impl FixProcessor {
 impl FixProcessor {
     /// Process an APRS packet by looking up device and creating a Fix
     /// This is the main entry point that orchestrates the entire pipeline
-    /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
+    /// Note: Receiver is guaranteed to exist and APRS message already inserted by OgnGenericProcessor
     #[tracing::instrument(skip(self, packet, raw_message, context))]
     pub async fn process_aprs_packet(
         &self,

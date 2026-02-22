@@ -7,23 +7,12 @@ use std::sync::Arc;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
-/// Context containing IDs from generic packet processing
-/// This is passed to specific packet processors so they don't need to duplicate receiver/message logic
-#[derive(Debug, Clone)]
-pub struct PacketContext {
-    /// ID of the APRS message record created for this packet
-    pub raw_message_id: Uuid,
-    /// ID of the receiver that sent/relayed this packet
-    pub receiver_id: Uuid,
-    /// Timestamp when the message was received from APRS-IS
-    /// This is captured at ingestion time to prevent clock skew from queue processing delays
-    pub received_at: chrono::DateTime<chrono::Utc>,
-}
+use super::packet_context::PacketContext;
 
 /// Generic processor that handles archiving, receiver identification, and APRS message insertion
 /// This runs before packet-type-specific processing to ensure all packets are properly recorded
 #[derive(Clone)]
-pub struct GenericProcessor {
+pub struct OgnGenericProcessor {
     receiver_repo: ReceiverRepository,
     aprs_messages_repo: RawMessagesRepository,
     archive_service: Option<ArchiveService>,
@@ -32,8 +21,8 @@ pub struct GenericProcessor {
     receiver_cache: Arc<Cache<String, Uuid>>,
 }
 
-impl GenericProcessor {
-    /// Create a new GenericProcessor
+impl OgnGenericProcessor {
+    /// Create a new OgnGenericProcessor
     pub fn new(
         receiver_repo: ReceiverRepository,
         aprs_messages_repo: RawMessagesRepository,
@@ -54,7 +43,7 @@ impl GenericProcessor {
         }
     }
 
-    /// Create a new GenericProcessor with archiving enabled
+    /// Create a new OgnGenericProcessor with archiving enabled
     pub fn with_archive_service(mut self, archive_service: ArchiveService) -> Self {
         self.archive_service = Some(archive_service);
         self
@@ -191,13 +180,10 @@ impl GenericProcessor {
         callsign
     }
 
-    /// Process a server message (lines starting with #) - archives only, no database insertion
-    pub async fn process_server_message(&self, raw_message: &str) {
-        // Archive the server message if archiving is enabled
+    /// Archive a raw message (for server messages that don't go through process_packet)
+    pub async fn archive(&self, raw_message: &str) {
         if let Some(archive) = &self.archive_service {
             archive.archive(raw_message).await;
         }
-        // Server messages are just archived, not processed further in GenericProcessor
-        // They will be routed to ServerStatusProcessor for database insertion
     }
 }

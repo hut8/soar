@@ -1,44 +1,60 @@
 use chrono::DateTime;
-use ogn_parser::AprsPacket;
 use soar::adsb_accumulator::AdsbAccumulator;
 use soar::aircraft_repo::AircraftRepository;
 use soar::fix_processor::FixProcessor;
-use soar::packet_processors::{
-    AircraftPositionProcessor, PacketContext, PacketRouter, ReceiverPositionProcessor,
-    ReceiverStatusProcessor, ServerStatusProcessor,
+use soar::ogn::{
+    OgnGenericProcessor, ReceiverPositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
 };
 use soar::raw_messages_repo::RawMessagesRepository;
 use std::sync::Arc;
 use tracing::info;
 
-/// Spawn intake queue processor for OGN/APRS messages.
-/// This task reads raw OGN/APRS messages from the intake queue and processes them.
-/// Separating socket consumption from processing allows graceful shutdown.
-pub(crate) fn spawn_ogn_intake_worker(
+/// Spawn OGN intake queue workers for parallel processing of OGN/APRS messages.
+/// Each worker parses, archives, and processes messages inline — no intermediate queues.
+/// Modeled after Beast intake workers for consistent architecture.
+pub(crate) fn spawn_ogn_intake_workers(
     ogn_intake_rx: flume::Receiver<(DateTime<chrono::Utc>, String)>,
-    packet_router: PacketRouter,
+    generic_processor: &OgnGenericProcessor,
+    fix_processor: &FixProcessor,
+    receiver_status_processor: &ReceiverStatusProcessor,
+    receiver_position_processor: &ReceiverPositionProcessor,
+    server_status_processor: &ServerStatusProcessor,
+    num_workers: usize,
 ) {
-    tokio::spawn(async move {
-        info!("Intake queue processor started");
-        let mut messages_processed = 0u64;
-        while let Ok((received_at, message)) = ogn_intake_rx.recv_async().await {
-            // Note: No tracing spans here - they cause trace accumulation in Tempo
-            // Use metrics only for observability in the hot path
-            metrics::gauge!("worker.active", "type" => "intake").increment(1.0);
-            super::aprs::process_aprs_message(received_at, &message, &packet_router).await;
-            messages_processed += 1;
-            metrics::counter!("aprs.intake.processed_total").increment(1);
-            metrics::gauge!("worker.active", "type" => "intake").decrement(1.0);
+    info!("Spawning {} OGN intake queue workers", num_workers);
 
-            // Update intake queue depth metric
-            metrics::gauge!("aprs.intake_queue.depth").set(ogn_intake_rx.len() as f64);
-        }
-        info!(
-            "Intake queue processor stopped after processing {} messages",
-            messages_processed
-        );
-    });
-    info!("Spawned intake queue processor");
+    for worker_id in 0..num_workers {
+        let worker_rx = ogn_intake_rx.clone();
+        let worker_generic = generic_processor.clone();
+        let worker_fix = fix_processor.clone();
+        let worker_receiver_status = receiver_status_processor.clone();
+        let worker_receiver_position = receiver_position_processor.clone();
+        let worker_server_status = server_status_processor.clone();
+
+        tokio::spawn(async move {
+            while let Ok((received_at, message)) = worker_rx.recv_async().await {
+                // Note: No tracing spans here - they cause trace accumulation in Tempo
+                metrics::gauge!("worker.active", "type" => "ogn_intake").increment(1.0);
+                super::aprs::process_aprs_message(
+                    received_at,
+                    &message,
+                    &worker_generic,
+                    &worker_fix,
+                    &worker_receiver_status,
+                    &worker_receiver_position,
+                    &worker_server_status,
+                )
+                .await;
+                metrics::counter!("aprs.intake.processed_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "ogn_intake").decrement(1.0);
+
+                // Update intake queue depth metric (sample from each worker)
+                metrics::gauge!("aprs.intake_queue.depth").set(worker_rx.len() as f64);
+            }
+            info!("OGN intake queue worker {} stopped", worker_id);
+        });
+    }
+    info!("Spawned {} OGN intake queue workers", num_workers);
 }
 
 /// Spawn Beast intake queue workers for parallel processing of Beast (binary) messages.
@@ -137,133 +153,4 @@ pub(crate) fn spawn_sbs_intake_workers(
         });
     }
     info!("Spawned {} SBS intake queue workers", num_sbs_workers);
-}
-
-/// Spawn dedicated worker pools for each APRS processor type.
-/// Each pool has a different number of workers based on traffic volume and processing cost.
-pub(crate) fn spawn_aprs_processor_workers(
-    aircraft: (
-        flume::Receiver<(AprsPacket, PacketContext)>,
-        AircraftPositionProcessor,
-    ),
-    receiver_status: (
-        flume::Receiver<(AprsPacket, PacketContext)>,
-        ReceiverStatusProcessor,
-    ),
-    receiver_position: (
-        flume::Receiver<(AprsPacket, PacketContext)>,
-        ReceiverPositionProcessor,
-    ),
-    server_status: (
-        flume::Receiver<(String, chrono::DateTime<chrono::Utc>)>,
-        ServerStatusProcessor,
-    ),
-) {
-    let (aircraft_rx, aircraft_position_processor) = aircraft;
-    let (receiver_status_rx, receiver_status_processor) = receiver_status;
-    let (receiver_position_rx, receiver_position_processor) = receiver_position;
-    let (server_status_rx, server_status_processor) = server_status;
-    // Aircraft position workers (80 workers - heaviest processing due to FixProcessor + flight tracking)
-    // Increased from 20 to 80 because aircraft queue was constantly full at 1,000 capacity
-    // Most APRS messages (~80-90%) are aircraft positions, so this queue needs the most workers
-    let num_aircraft_workers = 80;
-    info!(
-        "Spawning {} aircraft position workers",
-        num_aircraft_workers
-    );
-    for _worker_id in 0..num_aircraft_workers {
-        let worker_rx = aircraft_rx.clone();
-        let processor = aircraft_position_processor.clone();
-        tokio::spawn(async move {
-            while let Ok((packet, context)) = worker_rx.recv_async().await {
-                // Note: No tracing spans here - they cause trace accumulation in Tempo
-                metrics::gauge!("worker.active", "type" => "aircraft").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_aircraft_position(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.aircraft.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.aircraft.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.aircraft_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "aircraft").decrement(1.0);
-            }
-        });
-    }
-
-    // Receiver status workers (6 workers - medium processing)
-    let num_receiver_status_workers = 6;
-    info!(
-        "Spawning {} receiver status workers",
-        num_receiver_status_workers
-    );
-    for _worker_id in 0..num_receiver_status_workers {
-        let worker_rx = receiver_status_rx.clone();
-        let processor = receiver_status_processor.clone();
-        tokio::spawn(async move {
-            while let Ok((packet, context)) = worker_rx.recv_async().await {
-                // Note: No tracing spans here - they cause trace accumulation in Tempo
-                metrics::gauge!("worker.active", "type" => "receiver_status").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_status_packet(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.receiver_status.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.receiver_status.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "receiver_status").decrement(1.0);
-            }
-        });
-    }
-
-    // Receiver position workers (4 workers - light processing)
-    let num_receiver_position_workers = 4;
-    info!(
-        "Spawning {} receiver position workers",
-        num_receiver_position_workers
-    );
-    for _worker_id in 0..num_receiver_position_workers {
-        let worker_rx = receiver_position_rx.clone();
-        let processor = receiver_position_processor.clone();
-        tokio::spawn(async move {
-            while let Ok((packet, context)) = worker_rx.recv_async().await {
-                // Note: No tracing spans here - they cause trace accumulation in Tempo
-                metrics::gauge!("worker.active", "type" => "receiver_position").increment(1.0);
-                let start = std::time::Instant::now();
-                processor.process_receiver_position(&packet, context).await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.receiver_position.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.receiver_position.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.receiver_position_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "receiver_position").decrement(1.0);
-            }
-        });
-    }
-
-    // Server status workers (2 workers - very light processing)
-    info!("Spawning 2 server status workers");
-    for _worker_id in 0..2 {
-        let worker_rx = server_status_rx.clone();
-        let processor = server_status_processor.clone();
-        tokio::spawn(async move {
-            while let Ok((message, received_at)) = worker_rx.recv_async().await {
-                // Note: No tracing spans here - they cause trace accumulation in Tempo
-                metrics::gauge!("worker.active", "type" => "server_status").increment(1.0);
-                let start = std::time::Instant::now();
-                processor
-                    .process_server_message(&message, received_at)
-                    .await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.server_status.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.server_status.processed_total").increment(1);
-                metrics::counter!("aprs.messages.processed.server_total").increment(1);
-                metrics::counter!("aprs.messages.processed.total_total").increment(1);
-                metrics::gauge!("worker.active", "type" => "server_status").decrement(1.0);
-            }
-        });
-    }
 }

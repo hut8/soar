@@ -41,36 +41,31 @@ pub trait RawMessageSource: Send + Sync {
     }
 }
 
-/// Process messages from a source through the packet processing pipeline
+/// Process messages from a source through the OGN processing pipeline
 ///
 /// This function reads messages from a `RawMessageSource` and processes them through
-/// the `PacketRouter`, handling timestamp extraction, parsing, and routing.
+/// the `OgnGenericProcessor`, handling timestamp extraction, parsing, and routing.
 ///
 /// # Arguments
 /// * `source` - The message source (NATS, file, etc.)
-/// * `packet_router` - The packet router that handles message processing
+/// * `generic_processor` - The OGN generic processor for archiving and receiver identification
+/// * `fix_processor` - The fix processor for aircraft positions
+/// * `receiver_status_processor` - The receiver status processor
+/// * `receiver_position_processor` - The receiver position processor
+/// * `server_status_processor` - The server status processor
 ///
 /// # Returns
 /// The number of messages successfully processed
-///
-/// # Example
-/// ```ignore
-/// use soar::message_sources::{TestMessageSource, process_messages_from_source};
-/// use soar::packet_processors::PacketRouter;
-///
-/// # async fn example() -> anyhow::Result<()> {
-/// let mut source = TestMessageSource::from_file("test.txt").await?;
-/// let packet_router = PacketRouter::new(/* ... */);
-///
-/// let count = process_messages_from_source(&mut source, &packet_router).await?;
-/// println!("Processed {} messages", count);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn process_messages_from_source(
     source: &mut dyn RawMessageSource,
-    packet_router: &crate::packet_processors::PacketRouter,
+    generic_processor: &crate::ogn::OgnGenericProcessor,
+    fix_processor: &crate::fix_processor::FixProcessor,
+    receiver_status_processor: &crate::ogn::ReceiverStatusProcessor,
+    receiver_position_processor: &crate::ogn::ReceiverPositionProcessor,
+    server_status_processor: &crate::ogn::ServerStatusProcessor,
 ) -> Result<usize> {
+    use ogn_parser::{AprsData, PositionSourceType};
+
     let mut messages_processed = 0;
 
     while let Some(message) = source.next_message().await? {
@@ -98,7 +93,8 @@ pub async fn process_messages_from_source(
         // Server messages don't create PacketContext
         if actual_message.starts_with('#') {
             debug!("Server message: {}", actual_message);
-            packet_router
+            generic_processor.archive(actual_message).await;
+            server_status_processor
                 .process_server_message(actual_message, received_at)
                 .await;
             messages_processed += 1;
@@ -108,10 +104,53 @@ pub async fn process_messages_from_source(
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(actual_message) {
             Ok(parsed) => {
-                // Call PacketRouter to archive, process, and route to queues
-                packet_router
-                    .process_packet(parsed, actual_message, received_at)
-                    .await;
+                // Generic processing: archive, identify receiver, insert APRS message
+                let context = match generic_processor
+                    .process_packet(&parsed, actual_message, received_at)
+                    .await
+                {
+                    Some(ctx) => ctx,
+                    None => {
+                        debug!("Generic processing failed for packet from {}", parsed.from);
+                        continue;
+                    }
+                };
+
+                // Route to appropriate processor based on packet type
+                let position_source = parsed.position_source_type();
+                match &parsed.data {
+                    AprsData::Position(_) => match position_source {
+                        PositionSourceType::Aircraft => {
+                            let raw_message = parsed.raw.clone().unwrap_or_default();
+                            fix_processor
+                                .process_aprs_packet(parsed, &raw_message, context)
+                                .await;
+                        }
+                        PositionSourceType::Receiver => {
+                            receiver_position_processor
+                                .process_receiver_position(&parsed, context)
+                                .await;
+                        }
+                        _ => {
+                            trace!(
+                                "Position from source type {:?} from {} - archived only",
+                                position_source, parsed.from
+                            );
+                        }
+                    },
+                    AprsData::Status(_) => {
+                        receiver_status_processor
+                            .process_status_packet(&parsed, context)
+                            .await;
+                    }
+                    _ => {
+                        debug!(
+                            "Packet type {:?} from {} - archived only",
+                            std::mem::discriminant(&parsed.data),
+                            parsed.from
+                        );
+                    }
+                }
                 messages_processed += 1;
             }
             Err(e) => {

@@ -1,4 +1,4 @@
-use crate::packet_processors::generic::PacketContext;
+use crate::ogn::packet_context::PacketContext;
 use crate::receiver_repo::ReceiverRepository;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
@@ -25,7 +25,7 @@ impl ReceiverStatusProcessor {
     }
 
     /// Process a status packet from a receiver
-    /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
+    /// Note: Receiver is guaranteed to exist and APRS message already inserted by OgnGenericProcessor
     #[tracing::instrument(skip(self, packet, context), fields(callsign = %packet.from))]
     pub async fn process_status_packet(&self, packet: &AprsPacket, context: PacketContext) {
         let source_type = packet.position_source_type();

@@ -59,7 +59,7 @@ impl Default for AprsClientConfig {
 }
 
 /// APRS client that connects to an APRS-IS server via TCP
-/// Calls PacketRouter directly without a queue
+/// Sends messages to a persistent queue for processing by OGN intake workers
 pub struct AprsClient {
     config: AprsClientConfig,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,

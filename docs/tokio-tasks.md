@@ -23,16 +23,11 @@ The main real-time processing pipeline. Most critical tasks live here.
 | `src/commands/run/mod.rs` | 88 | Metrics server | 1 | Serves Prometheus `/metrics` endpoint |
 | `src/commands/run/mod.rs` | 366 | Socket accept loop | 1 | Accepts ingest connections on Unix socket |
 | `src/commands/run/mod.rs` | 376 | Envelope router | 1 | Routes envelopes from socket to per-source intake queues |
-| `src/commands/run/workers.rs` | 21 | OGN intake worker | 1 | Reads raw OGN/APRS messages from intake queue, routes through PacketRouter |
-| `src/commands/run/workers.rs` | 66 | Beast intake workers | 200 | Process raw Beast binary frames from intake queue |
-| `src/commands/run/workers.rs` | 114 | SBS intake workers | 50 | Process raw SBS CSV messages from intake queue |
-| `src/commands/run/workers.rs` | 177 | Aircraft position workers | 80 | Process aircraft positions (heaviest — FixProcessor + flight tracking) |
-| `src/commands/run/workers.rs` | 203 | Receiver status workers | 6 | Process receiver status packets |
-| `src/commands/run/workers.rs` | 229 | Receiver position workers | 4 | Process receiver position packets |
-| `src/commands/run/workers.rs` | 251 | Server status workers | 2 | Process server status messages |
-| `src/commands/run/monitoring.rs` | 27 | Queue depth reporter | 1 | Reports queue depths + DB pool state every 10s |
-| `src/commands/run/shutdown.rs` | 22 | Shutdown handler | 1 | Listens for Ctrl+C, drains queues before exit |
-| `src/packet_processors/router.rs` | 87 | PacketRouter workers | N (configurable) | Parse APRS packets and route to per-type queues |
+| `src/commands/run/workers.rs` | | OGN intake workers | 200 | Parse + process OGN/APRS messages inline (archive, receiver upsert, fix processing) |
+| `src/commands/run/workers.rs` | | Beast intake workers | 200 | Process raw Beast binary frames from intake queue |
+| `src/commands/run/workers.rs` | | SBS intake workers | 50 | Process raw SBS CSV messages from intake queue |
+| `src/commands/run/monitoring.rs` | | Queue depth reporter | 1 | Reports queue depths + DB pool state every 10s |
+| `src/commands/run/shutdown.rs` | | Shutdown handler | 1 | Listens for Ctrl+C, drains queues before exit |
 | `src/nats_publisher.rs` | 114 | NATS fix publisher | 1 | Publishes fixes to NATS for live WebSocket clients |
 | `src/archive_service.rs` | 63 | Archive file writer | 1 | Writes raw messages to daily log files |
 | `src/flight_tracker/mod.rs` | 398 | Flight timeout checker | 1 | Periodically checks for timed-out flights (every 60s) |

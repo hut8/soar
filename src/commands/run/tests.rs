@@ -5,7 +5,7 @@ fn test_timestamp_parsing_valid() {
     // Test that a valid ISO-8601 timestamp is correctly parsed
     let message = "2025-01-15T12:34:56.789Z FLRDDA5BA>APRS,qAS,LFNX:/160829h4902.45N/00531.30E'342/049/A=001322";
 
-    // We can't directly test process_aprs_message since it's async and requires PacketRouter,
+    // We can't directly test process_aprs_message since it's async and requires processors,
     // but we can test the parsing logic
     let (timestamp_str, rest) = message.split_once(' ').unwrap();
     let parsed = chrono::DateTime::parse_from_rfc3339(timestamp_str);

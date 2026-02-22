@@ -1,13 +1,25 @@
 use chrono::DateTime;
+use ogn_parser::{AprsData, PositionSourceType};
+use soar::fix_processor::FixProcessor;
+use soar::ogn::{
+    OgnGenericProcessor, ReceiverPositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
+};
 use tracing::{debug, trace};
 
-/// Process a received APRS message by parsing and routing through PacketRouter
+/// Process a received APRS message by parsing and processing inline.
+///
+/// This replaces the old PacketRouter approach: instead of routing through multiple
+/// intermediate queues, each worker parses, archives, and processes the message directly.
 // Note: Intentionally NOT using #[tracing::instrument] here - it causes trace accumulation
 // in Tempo because spawned tasks inherit trace context and all messages end up in one huge trace.
 pub(crate) async fn process_aprs_message(
     received_at: DateTime<chrono::Utc>,
     message: &str,
-    packet_router: &soar::packet_processors::PacketRouter,
+    generic_processor: &OgnGenericProcessor,
+    fix_processor: &FixProcessor,
+    receiver_status_processor: &ReceiverStatusProcessor,
+    receiver_position_processor: &ReceiverPositionProcessor,
+    server_status_processor: &ServerStatusProcessor,
 ) {
     let start_time = std::time::Instant::now();
 
@@ -23,7 +35,8 @@ pub(crate) async fn process_aprs_message(
     // Server messages don't create PacketContext
     if message.starts_with('#') {
         debug!("Server message: {}", message);
-        packet_router
+        generic_processor.archive(message).await;
+        server_status_processor
             .process_server_message(message, received_at)
             .await;
         return;
@@ -35,12 +48,75 @@ pub(crate) async fn process_aprs_message(
             // Track successful parse
             metrics::counter!("aprs.parse.success_total").increment(1);
 
-            // Call PacketRouter to archive, process, and route to queues
-            packet_router
-                .process_packet(parsed, message, received_at)
-                .await;
+            // Step 1: Generic processing - archives, identifies receiver, inserts APRS message
+            let context = match generic_processor
+                .process_packet(&parsed, message, received_at)
+                .await
+            {
+                Some(ctx) => ctx,
+                None => {
+                    debug!(
+                        "Generic processing failed for packet from {}, skipping",
+                        parsed.from
+                    );
+                    metrics::counter!("aprs.router.generic_processor.failed_total").increment(1);
+                    return;
+                }
+            };
 
-            metrics::counter!("aprs.router.process_packet.called_total").increment(1);
+            // Step 2: Route to appropriate processor based on packet type
+            let position_source = parsed.position_source_type();
+
+            match &parsed.data {
+                AprsData::Position(_) => {
+                    match position_source {
+                        PositionSourceType::Aircraft => {
+                            // Process aircraft position inline
+                            let raw_message = parsed.raw.clone().unwrap_or_default();
+                            fix_processor
+                                .process_aprs_packet(parsed, &raw_message, context)
+                                .await;
+                            metrics::counter!("aprs.messages.processed.aircraft_total")
+                                .increment(1);
+                        }
+                        PositionSourceType::Receiver => {
+                            // Process receiver position inline
+                            receiver_position_processor
+                                .process_receiver_position(&parsed, context)
+                                .await;
+                            metrics::counter!("aprs.messages.processed.receiver_position_total")
+                                .increment(1);
+                        }
+                        PositionSourceType::WeatherStation => {
+                            trace!(
+                                "Position from weather station {} - archived only",
+                                parsed.from
+                            );
+                        }
+                        source_type => {
+                            trace!(
+                                "Position from unknown source type {:?} from {} - archived only",
+                                source_type, parsed.from
+                            );
+                        }
+                    }
+                }
+                AprsData::Status(_) => {
+                    // Process receiver status inline
+                    receiver_status_processor
+                        .process_status_packet(&parsed, context)
+                        .await;
+                    metrics::counter!("aprs.messages.processed.receiver_status_total").increment(1);
+                }
+                _ => {
+                    debug!(
+                        "Received packet of type {:?}, no specific handler - archived only",
+                        std::mem::discriminant(&parsed.data)
+                    );
+                }
+            }
+
+            metrics::counter!("aprs.messages.processed.total_total").increment(1);
         }
         Err(e) => {
             metrics::counter!("aprs.parse.failed_total").increment(1);

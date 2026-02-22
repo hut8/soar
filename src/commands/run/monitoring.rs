@@ -1,31 +1,15 @@
 use super::constants::*;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use soar::packet_processors::PacketRouter;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use tracing::info;
 
 /// Spawn queue depth and system metrics reporter.
-/// Reports the depth of all processing queues and DB pool state to Prometheus every 10 seconds.
+/// Reports the depth of the envelope queue and DB pool state to Prometheus every 10 seconds.
 /// Logs a periodic stats summary every 30 seconds with incoming packet rate, lag, and queue depth.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_metrics_reporter(
     metrics_envelope_rx: flume::Receiver<soar::protocol::Envelope>,
-    metrics_packet_router: PacketRouter,
-    metrics_aircraft_rx: flume::Receiver<(
-        ogn_parser::AprsPacket,
-        soar::packet_processors::PacketContext,
-    )>,
-    metrics_receiver_status_rx: flume::Receiver<(
-        ogn_parser::AprsPacket,
-        soar::packet_processors::PacketContext,
-    )>,
-    metrics_receiver_position_rx: flume::Receiver<(
-        ogn_parser::AprsPacket,
-        soar::packet_processors::PacketContext,
-    )>,
-    metrics_server_status_rx: flume::Receiver<(String, chrono::DateTime<chrono::Utc>)>,
     metrics_db_pool: Pool<ConnectionManager<PgConnection>>,
     router_packets_total: Arc<AtomicU64>,
     router_lag_ms: Arc<AtomicI64>,
@@ -55,11 +39,6 @@ pub(crate) fn spawn_metrics_reporter(
 
             // Sample queue depths (lock-free with flume!)
             let envelope_intake_depth = metrics_envelope_rx.len();
-            let internal_queue_depth = metrics_packet_router.internal_queue_depth();
-            let aircraft_depth = metrics_aircraft_rx.len();
-            let receiver_status_depth = metrics_receiver_status_rx.len();
-            let receiver_position_depth = metrics_receiver_position_rx.len();
-            let server_status_depth = metrics_server_status_rx.len();
 
             // Get database pool state
             let pool_state = metrics_db_pool.state();
@@ -67,12 +46,6 @@ pub(crate) fn spawn_metrics_reporter(
 
             // Report queue depths to Prometheus
             metrics::gauge!("socket.envelope_intake_queue.depth").set(envelope_intake_depth as f64);
-            metrics::gauge!("aprs.router_queue.depth").set(internal_queue_depth as f64);
-            metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
-            metrics::gauge!("aprs.receiver_status_queue.depth").set(receiver_status_depth as f64);
-            metrics::gauge!("aprs.receiver_position_queue.depth")
-                .set(receiver_position_depth as f64);
-            metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
 
             // Report database pool state to Prometheus
             metrics::gauge!("aprs.db_pool.total_connections").set(pool_state.connections as f64);
