@@ -19,7 +19,7 @@ use futures_util::StreamExt;
 use std::path::Path;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, warn};
 
 /// Trait for sources of raw APRS messages
 ///
@@ -43,16 +43,8 @@ pub trait RawMessageSource: Send + Sync {
 
 /// Process messages from a source through the OGN processing pipeline
 ///
-/// This function reads messages from a `RawMessageSource` and processes them through
-/// the `OgnGenericProcessor`, handling timestamp extraction, parsing, and routing.
-///
-/// # Arguments
-/// * `source` - The message source (NATS, file, etc.)
-/// * `generic_processor` - The OGN generic processor for archiving and receiver identification
-/// * `fix_processor` - The fix processor for aircraft positions
-/// * `receiver_status_processor` - The receiver status processor
-/// * `receiver_position_processor` - The receiver position processor
-/// * `server_status_processor` - The server status processor
+/// This function reads messages from a `RawMessageSource`, extracts timestamps,
+/// and delegates to the shared `process_ogn_message` for parsing and routing.
 ///
 /// # Returns
 /// The number of messages successfully processed
@@ -64,8 +56,6 @@ pub async fn process_messages_from_source(
     receiver_position_processor: &crate::ogn::ReceiverPositionProcessor,
     server_status_processor: &crate::ogn::ServerStatusProcessor,
 ) -> Result<usize> {
-    use ogn_parser::{AprsData, PositionSourceType};
-
     let mut messages_processed = 0;
 
     while let Some(message) = source.next_message().await? {
@@ -89,83 +79,20 @@ pub async fn process_messages_from_source(
             }
         };
 
-        // Route server messages (starting with #) differently
-        // Server messages don't create PacketContext
-        if actual_message.starts_with('#') {
-            debug!("Server message: {}", actual_message);
-            generic_processor.archive(actual_message).await;
-            server_status_processor
-                .process_server_message(actual_message, received_at)
-                .await;
+        // Delegate to the shared OGN processing logic
+        let processed = crate::ogn::process_ogn_message(
+            received_at,
+            actual_message,
+            generic_processor,
+            fix_processor,
+            receiver_status_processor,
+            receiver_position_processor,
+            server_status_processor,
+        )
+        .await;
+
+        if processed {
             messages_processed += 1;
-            continue;
-        }
-
-        // Try to parse the message using ogn-parser
-        match ogn_parser::parse(actual_message) {
-            Ok(parsed) => {
-                // Generic processing: archive, identify receiver, insert APRS message
-                let context = match generic_processor
-                    .process_packet(&parsed, actual_message, received_at)
-                    .await
-                {
-                    Some(ctx) => ctx,
-                    None => {
-                        debug!("Generic processing failed for packet from {}", parsed.from);
-                        continue;
-                    }
-                };
-
-                // Route to appropriate processor based on packet type
-                let position_source = parsed.position_source_type();
-                match &parsed.data {
-                    AprsData::Position(_) => match position_source {
-                        PositionSourceType::Aircraft => {
-                            let raw_message = parsed.raw.clone().unwrap_or_default();
-                            fix_processor
-                                .process_aprs_packet(parsed, &raw_message, context)
-                                .await;
-                        }
-                        PositionSourceType::Receiver => {
-                            receiver_position_processor
-                                .process_receiver_position(&parsed, context)
-                                .await;
-                        }
-                        _ => {
-                            trace!(
-                                "Position from source type {:?} from {} - archived only",
-                                position_source, parsed.from
-                            );
-                        }
-                    },
-                    AprsData::Status(_) => {
-                        receiver_status_processor
-                            .process_status_packet(&parsed, context)
-                            .await;
-                    }
-                    _ => {
-                        debug!(
-                            "Packet type {:?} from {} - archived only",
-                            std::mem::discriminant(&parsed.data),
-                            parsed.from
-                        );
-                    }
-                }
-                messages_processed += 1;
-            }
-            Err(e) => {
-                // For OGNFNT sources with invalid lat/lon, log as trace instead of error
-                // These are common and expected issues with this data source
-                let error_str = e.to_string();
-                if actual_message.contains("OGNFNT")
-                    && (error_str.contains("Invalid Latitude")
-                        || error_str.contains("Invalid Longitude"))
-                {
-                    trace!("Failed to parse APRS message '{actual_message}': {e}");
-                } else {
-                    info!("Failed to parse APRS message '{actual_message}': {e}");
-                }
-            }
         }
     }
 

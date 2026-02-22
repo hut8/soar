@@ -48,8 +48,10 @@ pub(crate) fn spawn_ogn_intake_workers(
                 metrics::counter!("aprs.intake.processed_total").increment(1);
                 metrics::gauge!("worker.active", "type" => "ogn_intake").decrement(1.0);
 
-                // Update intake queue depth metric (sample from each worker)
-                metrics::gauge!("aprs.intake_queue.depth").set(worker_rx.len() as f64);
+                // Update intake queue depth metric (sample from a single worker to reduce contention)
+                if worker_id == 0 {
+                    metrics::gauge!("aprs.intake_queue.depth").set(worker_rx.len() as f64);
+                }
             }
             info!("OGN intake queue worker {} stopped", worker_id);
         });
