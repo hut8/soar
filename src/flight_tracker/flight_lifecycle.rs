@@ -1002,6 +1002,11 @@ pub(crate) async fn enrich_flight_on_startup(
 
     // 5. Update the flight record (landing_time already set, add enrichment data)
     let landing_time_val = flight.landing_time.unwrap_or(flight.last_fix_at);
+    // Clamp last_fix_time to be at least landing_time_val to satisfy check_landing_near_last_fix constraint.
+    // During startup enrichment, landing_time may have been set by complete_orphaned_startup_flights
+    // to a value like takeoff_time + 1s, while the actual last fix record's received_at could be
+    // much earlier (e.g., fix records were pruned or missing).
+    let last_fix_time = last_fix_time.map(|t| t.max(landing_time_val));
     if let Err(e) = flights_repo
         .update_flight_landing(
             flight_id,
