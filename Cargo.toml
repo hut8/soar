@@ -107,7 +107,7 @@ pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec", "frame-p
 lru = "0.16"
 moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
-kml = "0.12"
+kml = "0.13"
 hex = "0.4.3"
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1.124"
