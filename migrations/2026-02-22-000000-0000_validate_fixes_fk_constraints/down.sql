@@ -1,2 +1,0 @@
--- Cannot un-validate a constraint. This is a no-op.
--- The constraints remain valid and functional.
