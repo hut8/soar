@@ -61,7 +61,7 @@ impl FlightsRepository {
     pub async fn get_active_flight_id_for_aircraft(
         &self,
         aircraft_id_param: Uuid,
-    ) -> Result<Option<Uuid>> {
+    ) -> Result<Option<(Uuid, Option<String>)>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
@@ -69,18 +69,18 @@ impl FlightsRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let flight_id_result = flights
+            let flight_result = flights
                 .filter(
                     aircraft_id
                         .eq(aircraft_id_param)
                         .and(landing_time.is_null())
                         .and(timed_out_at.is_null()),
                 )
-                .select(id)
-                .first::<Uuid>(&mut conn)
+                .select((id, callsign.nullable()))
+                .first::<(Uuid, Option<String>)>(&mut conn)
                 .optional()?;
 
-            Ok::<Option<Uuid>, anyhow::Error>(flight_id_result)
+            Ok::<Option<(Uuid, Option<String>)>, anyhow::Error>(flight_result)
         })
         .await??;
 

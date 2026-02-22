@@ -517,18 +517,48 @@ pub(crate) async fn process_state_transition(
                 .get_active_flight_id_for_aircraft(fix.aircraft_id)
                 .await
             {
-                Ok(Some(existing_flight_id)) => {
-                    info!(
-                        "Found orphaned active flight {} for aircraft {}, adopting it",
-                        existing_flight_id, fix.aircraft_id
-                    );
-                    fix.flight_id = Some(existing_flight_id);
-                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                        state.current_flight_id = Some(existing_flight_id);
-                        state.current_callsign = fix.flight_number.clone();
+                Ok(Some((existing_flight_id, existing_callsign))) => {
+                    // Check callsign compatibility before adopting.
+                    // If the orphaned flight has a different callsign than the current fix,
+                    // it's a different operation (e.g., SAS1465 vs SAS1470) and we should
+                    // end the orphaned flight and create a new one instead of adopting it.
+                    let callsign_compatible = match (&existing_callsign, &fix.flight_number) {
+                        (Some(existing), Some(new)) => existing == new,
+                        _ => true, // If either is None, allow adoption
+                    };
+
+                    if callsign_compatible {
+                        info!(
+                            "Found orphaned active flight {} for aircraft {}, adopting it",
+                            existing_flight_id, fix.aircraft_id
+                        );
+                        fix.flight_id = Some(existing_flight_id);
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = Some(existing_flight_id);
+                            state.current_callsign = fix.flight_number.clone();
+                        }
+                        metrics::counter!("flight_tracker.orphaned_flight_adopted_total")
+                            .increment(1);
+                        return Ok(StateTransitionResult { fix, pending_work });
+                    } else {
+                        // Callsign mismatch - end the orphaned flight and create a new one
+                        info!(
+                            "Orphaned active flight {} has callsign '{:?}' but fix has '{:?}', ending it instead of adopting",
+                            existing_flight_id, existing_callsign, fix.flight_number
+                        );
+                        let _ = ctx
+                            .flights_repo
+                            .set_preliminary_landing_time(existing_flight_id, fix.received_at)
+                            .await;
+                        pending_work = PendingBackgroundWork::CompleteFlight {
+                            flight_id: existing_flight_id,
+                            aircraft: Box::new(aircraft.clone()),
+                            fix: Box::new(fix.clone()),
+                        };
+                        metrics::counter!("flight_tracker.orphaned_flight_callsign_mismatch_total")
+                            .increment(1);
+                        // Fall through to create a new flight
                     }
-                    metrics::counter!("flight_tracker.orphaned_flight_adopted_total").increment(1);
-                    return Ok(StateTransitionResult { fix, pending_work });
                 }
                 Ok(None) => {
                     // No existing active flight - proceed to create a new one
@@ -584,6 +614,7 @@ pub(crate) async fn process_state_transition(
                     // Update state
                     if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
                         state.current_flight_id = Some(flight_id);
+                        state.current_callsign = fix.flight_number.clone();
                     }
 
                     if is_takeoff {
