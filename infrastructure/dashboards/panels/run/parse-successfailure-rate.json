@@ -112,7 +112,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aprs_parse_success_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "expr": "rate(aprs_process_aprs_message_called_total{component=\"run\",environment=\"$environment\"}[5m]) - rate(aprs_parse_failed_total{component=\"run\",environment=\"$environment\"}[5m])",
       "legendFormat": "APRS Parse Success/sec",
       "range": true,
       "refId": "A"

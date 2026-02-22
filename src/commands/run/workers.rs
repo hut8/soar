@@ -84,6 +84,7 @@ pub(crate) fn spawn_beast_intake_workers(
         tokio::spawn(async move {
             while let Ok((received_at, raw_frame)) = beast_intake_rx.recv_async().await {
                 // Note: No tracing spans here - they cause trace accumulation in Tempo
+                metrics::gauge!("worker.active", "type" => "beast_intake").increment(1.0);
                 let start_time = std::time::Instant::now();
                 super::beast::process_beast_message(
                     received_at,
@@ -99,6 +100,7 @@ pub(crate) fn spawn_beast_intake_workers(
                 metrics::histogram!("beast.run.process_message_duration_ms")
                     .record(duration.as_millis() as f64);
                 metrics::counter!("beast.run.intake.processed_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "beast_intake").decrement(1.0);
 
                 // Update Beast intake queue depth metric (sample from each worker)
                 metrics::gauge!("beast.intake_queue.depth").set(beast_intake_rx.len() as f64);
@@ -132,6 +134,7 @@ pub(crate) fn spawn_sbs_intake_workers(
         tokio::spawn(async move {
             while let Ok((received_at, csv_bytes)) = sbs_intake_rx.recv_async().await {
                 // Note: No tracing spans here - they cause trace accumulation in Tempo
+                metrics::gauge!("worker.active", "type" => "sbs_intake").increment(1.0);
                 let start_time = std::time::Instant::now();
                 super::sbs::process_sbs_message(
                     received_at,
@@ -147,6 +150,7 @@ pub(crate) fn spawn_sbs_intake_workers(
                 metrics::histogram!("sbs.run.process_message_duration_ms")
                     .record(duration.as_millis() as f64);
                 metrics::counter!("sbs.run.intake.processed_total").increment(1);
+                metrics::gauge!("worker.active", "type" => "sbs_intake").decrement(1.0);
 
                 // Update SBS intake queue depth metric (sample from each worker)
                 metrics::gauge!("sbs.intake_queue.depth").set(sbs_intake_rx.len() as f64);
