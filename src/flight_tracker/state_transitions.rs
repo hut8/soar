@@ -514,7 +514,7 @@ pub(crate) async fn process_state_transition(
             // or state was lost after a restart).
             match ctx
                 .flights_repo
-                .get_active_flight_id_for_aircraft(fix.aircraft_id)
+                .get_active_flight_for_aircraft(fix.aircraft_id)
                 .await
             {
                 Ok(Some((existing_flight_id, existing_callsign))) => {
@@ -535,7 +535,10 @@ pub(crate) async fn process_state_transition(
                         fix.flight_id = Some(existing_flight_id);
                         if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
                             state.current_flight_id = Some(existing_flight_id);
-                            state.current_callsign = fix.flight_number.clone();
+                            // Prefer the DB callsign over the fix's callsign to avoid
+                            // clearing in-memory state when a fix has no callsign
+                            state.current_callsign =
+                                existing_callsign.or(fix.flight_number.clone());
                         }
                         metrics::counter!("flight_tracker.orphaned_flight_adopted_total")
                             .increment(1);
@@ -546,15 +549,36 @@ pub(crate) async fn process_state_transition(
                             "Orphaned active flight {} has callsign '{:?}' but fix has '{:?}', ending it instead of adopting",
                             existing_flight_id, existing_callsign, fix.flight_number
                         );
-                        let _ = ctx
+                        match ctx
                             .flights_repo
                             .set_preliminary_landing_time(existing_flight_id, fix.received_at)
-                            .await;
-                        pending_work = PendingBackgroundWork::CompleteFlight {
-                            flight_id: existing_flight_id,
-                            aircraft: Box::new(aircraft.clone()),
-                            fix: Box::new(fix.clone()),
-                        };
+                            .await
+                        {
+                            Ok(_) => {
+                                pending_work = PendingBackgroundWork::CompleteFlight {
+                                    flight_id: existing_flight_id,
+                                    aircraft: Box::new(aircraft.clone()),
+                                    fix: Box::new(fix.clone()),
+                                };
+                            }
+                            Err(e) => {
+                                // DB error - orphaned flight stays active, so adopt it
+                                // to avoid unique index violation when creating a new flight
+                                warn!(
+                                    "Could not set landing time for orphaned flight {} before callsign-mismatch split, adopting instead: {}",
+                                    existing_flight_id, e
+                                );
+                                fix.flight_id = Some(existing_flight_id);
+                                if let Some(mut state) =
+                                    ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                {
+                                    state.current_flight_id = Some(existing_flight_id);
+                                    state.current_callsign =
+                                        existing_callsign.or(fix.flight_number.clone());
+                                }
+                                return Ok(StateTransitionResult { fix, pending_work });
+                            }
+                        }
                         metrics::counter!("flight_tracker.orphaned_flight_callsign_mismatch_total")
                             .increment(1);
                         // Fall through to create a new flight
