@@ -5,7 +5,10 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sql_types;
+use moka::sync::Cache;
 use serde_json::Value as JsonValue;
+use std::sync::Arc;
+use std::time::Duration;
 use uuid::Uuid;
 
 use crate::geofence::{
@@ -149,11 +152,24 @@ fn row_to_geofence(row: GeofenceRow) -> Result<Geofence> {
 #[derive(Clone)]
 pub struct GeofenceRepository {
     pool: PgPool,
+    /// Cache of geofences per aircraft_id with 60-second TTL.
+    /// Most aircraft have zero geofences, so caching the empty result
+    /// eliminates a DB round-trip per fix for every in-flight aircraft.
+    geofence_cache: Arc<Cache<Uuid, Vec<Geofence>>>,
 }
 
 impl GeofenceRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let geofence_cache = Arc::new(
+            Cache::builder()
+                .max_capacity(10_000)
+                .time_to_live(Duration::from_secs(60))
+                .build(),
+        );
+        Self {
+            pool,
+            geofence_cache,
+        }
     }
 
     /// Create a new geofence
@@ -568,26 +584,40 @@ impl GeofenceRepository {
         .await?
     }
 
-    /// Get all geofences that an aircraft is linked to
+    /// Get all geofences that an aircraft is linked to.
+    /// Results are cached for 60 seconds to avoid a DB round-trip per fix.
     pub async fn get_geofences_for_aircraft(&self, aircraft_id: Uuid) -> Result<Vec<Geofence>> {
+        // Check cache first
+        if let Some(cached) = self.geofence_cache.get(&aircraft_id) {
+            metrics::counter!("geofence_repo.geofences_for_aircraft.cache_hit").increment(1);
+            return Ok(cached);
+        }
+        metrics::counter!("geofence_repo.geofences_for_aircraft.cache_miss").increment(1);
+
         use aircraft_geofences::dsl as ag_dsl;
         use geofences::dsl;
 
         let pool = self.pool.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<Vec<Geofence>> {
-            let mut conn = pool.get()?;
+        let result: Vec<Geofence> =
+            tokio::task::spawn_blocking(move || -> Result<Vec<Geofence>> {
+                let mut conn = pool.get()?;
 
-            let rows: Vec<GeofenceRow> = dsl::geofences
-                .inner_join(ag_dsl::aircraft_geofences.on(ag_dsl::geofence_id.eq(dsl::id)))
-                .filter(ag_dsl::aircraft_id.eq(aircraft_id))
-                .filter(dsl::deleted_at.is_null())
-                .select(geofence_select())
-                .load(&mut conn)?;
+                let rows: Vec<GeofenceRow> = dsl::geofences
+                    .inner_join(ag_dsl::aircraft_geofences.on(ag_dsl::geofence_id.eq(dsl::id)))
+                    .filter(ag_dsl::aircraft_id.eq(aircraft_id))
+                    .filter(dsl::deleted_at.is_null())
+                    .select(geofence_select())
+                    .load(&mut conn)?;
 
-            rows.into_iter().map(row_to_geofence).collect()
-        })
-        .await?
+                rows.into_iter().map(row_to_geofence).collect()
+            })
+            .await??;
+
+        // Cache the result (including empty results — most aircraft have no geofences)
+        self.geofence_cache.insert(aircraft_id, result.clone());
+
+        Ok(result)
     }
 
     // ==================== Subscribers ====================

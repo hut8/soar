@@ -681,25 +681,9 @@ impl FlightTracker {
             // This ensures timeout checks use packet time, not wall clock time
             self.update_latest_fix_timestamp(fix.received_at);
 
-            // Update flight's last_fix_at asynchronously to keep it current
-            // This ensures check_landing_near_last_fix constraint is satisfied
-            // when set_preliminary_landing_time is called later
-            if let Some(flight_id) = fix.flight_id {
-                let flights_repo = self.flights_repo.clone();
-                let fix_timestamp = fix.received_at;
-                tokio::spawn(async move {
-                    if let Err(e) = flights_repo
-                        .update_last_fix_at(flight_id, fix_timestamp)
-                        .await
-                    {
-                        tracing::warn!(
-                            "Failed to update last_fix_at for flight {}: {}",
-                            flight_id,
-                            e
-                        );
-                    }
-                });
-            }
+            // Note: flight timestamp updates (created_at, last_fix_at) are handled
+            // by the trg_update_flight_timestamp trigger on fix INSERT, so no
+            // application-level update_last_fix_at() call is needed here.
 
             // Check geofences for this aircraft (only if fix has a flight_id)
             if fix.flight_id.is_some() {

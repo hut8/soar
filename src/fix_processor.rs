@@ -78,6 +78,16 @@ impl FixProcessor {
         self
     }
 
+    /// Enable batched aircraft position updates for the fixes repository.
+    /// This replaces per-fix position UPDATEs with batched UPDATEs (up to 500 rows every 100ms).
+    pub fn with_position_batcher(
+        mut self,
+        diesel_pool: Pool<ConnectionManager<PgConnection>>,
+    ) -> Self {
+        self.fixes_repo = FixesRepository::with_position_batcher(diesel_pool);
+        self
+    }
+
     /// Create a new FixProcessor with NATS publisher
     pub async fn new_with_nats(
         diesel_pool: Pool<ConnectionManager<PgConnection>>,

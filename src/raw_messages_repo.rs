@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::web::PgPool;
@@ -300,17 +300,42 @@ impl<'de> Deserialize<'de> for AprsMessage {
 #[derive(Clone)]
 pub struct RawMessagesRepository {
     pool: PgPool,
+    /// Optional batcher for high-throughput insert paths.
+    /// When set, insert_aprs/insert_beast/insert_sbs will queue messages
+    /// for batched INSERT instead of individual DB round-trips.
+    batcher: Option<RawMessageBatcher>,
 }
 
 impl RawMessagesRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            batcher: None,
+        }
+    }
+
+    /// Create a repository with a batcher for high-throughput insert paths.
+    /// Messages will be queued and flushed in batches (up to 500 rows or every 100ms).
+    pub fn with_batcher(pool: PgPool) -> Self {
+        let batcher = RawMessageBatcher::new(pool.clone());
+        Self {
+            pool,
+            batcher: Some(batcher),
+        }
     }
 
     /// Insert a new APRS message into the database
     /// Returns the ID of the inserted message
-    /// On duplicate (redelivery after crash), returns the existing message ID
+    /// When a batcher is configured, the message is queued for batch insert and the
+    /// pre-generated UUID is returned immediately. Otherwise, inserts synchronously.
     pub async fn insert_aprs(&self, new_message: NewAprsMessage) -> Result<Uuid> {
+        // Fast path: queue for batch insert
+        if let Some(ref batcher) = self.batcher {
+            metrics::counter!("aprs.messages.inserted_total").increment(1);
+            return Ok(batcher.queue_aprs(new_message));
+        }
+
+        // Slow path: individual insert (used by non-batched code paths like tests/web API)
         use crate::schema::raw_messages::dsl::*;
 
         let message_id = new_message.id;
@@ -358,8 +383,15 @@ impl RawMessagesRepository {
 
     /// Insert a new Beast (ADS-B) message into the database
     /// Returns the ID of the inserted message
-    /// On duplicate (redelivery after crash), returns the existing message ID
+    /// When a batcher is configured, the message is queued for batch insert.
     pub async fn insert_beast(&self, new_message: NewBeastMessage) -> Result<Uuid> {
+        // Fast path: queue for batch insert
+        if let Some(ref batcher) = self.batcher {
+            metrics::counter!("beast.messages.inserted_total").increment(1);
+            return Ok(batcher.queue_beast(new_message));
+        }
+
+        // Slow path: individual insert
         let message_id = new_message.id;
         let pool = self.pool.clone();
         let receiver = new_message.receiver_id;
@@ -472,8 +504,15 @@ impl RawMessagesRepository {
 
     /// Insert a new SBS message into the database
     /// Returns the ID of the inserted message
-    /// On duplicate (redelivery after crash), returns the existing message ID
+    /// When a batcher is configured, the message is queued for batch insert.
     pub async fn insert_sbs(&self, new_message: NewSbsMessage) -> Result<Uuid> {
+        // Fast path: queue for batch insert
+        if let Some(ref batcher) = self.batcher {
+            metrics::counter!("sbs.messages.inserted_total").increment(1);
+            return Ok(batcher.queue_sbs(new_message));
+        }
+
+        // Slow path: individual insert
         let message_id = new_message.id;
         let pool = self.pool.clone();
         let receiver = new_message.receiver_id;
@@ -685,6 +724,223 @@ impl RawMessagesRepository {
 // Type aliases for backward compatibility during migration
 pub type AprsMessagesRepository = RawMessagesRepository;
 pub type BeastMessagesRepository = RawMessagesRepository;
+
+/// A raw message pending batch insert, with its source type encoded.
+enum PendingRawMessage {
+    Aprs(NewAprsMessage),
+    Beast(NewBeastMessage),
+    Sbs(NewSbsMessage),
+}
+
+/// Batches raw_messages INSERTs to reduce per-message DB round-trips.
+///
+/// Callers send messages via `queue_aprs`, `queue_beast`, or `queue_sbs` and
+/// get the pre-generated UUID back immediately. A background task flushes
+/// accumulated messages in batches (up to 500 rows or every 100ms).
+#[derive(Clone)]
+pub struct RawMessageBatcher {
+    tx: tokio::sync::mpsc::Sender<PendingRawMessage>,
+}
+
+impl RawMessageBatcher {
+    /// Maximum number of messages per batch INSERT.
+    const MAX_BATCH_SIZE: usize = 500;
+    /// Maximum time to wait before flushing a partial batch.
+    const FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+    /// Create a new batcher and spawn the background flush task.
+    /// The batcher uses a bounded channel (capacity 10,000) to apply backpressure.
+    pub fn new(pool: PgPool) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel::<PendingRawMessage>(10_000);
+        tokio::spawn(Self::flush_loop(pool, rx));
+        Self { tx }
+    }
+
+    /// Queue an APRS message for batch insert. Returns the pre-generated UUID immediately.
+    pub fn queue_aprs(&self, msg: NewAprsMessage) -> Uuid {
+        let id = msg.id;
+        // If the channel is full, drop the message (backpressure).
+        // The raw_message is only used for debugging, so losing some under extreme load is acceptable.
+        if self.tx.try_send(PendingRawMessage::Aprs(msg)).is_err() {
+            metrics::counter!("raw_messages_batcher.dropped_total", "source" => "aprs")
+                .increment(1);
+        }
+        id
+    }
+
+    /// Queue a Beast message for batch insert. Returns the pre-generated UUID immediately.
+    pub fn queue_beast(&self, msg: NewBeastMessage) -> Uuid {
+        let id = msg.id;
+        if self.tx.try_send(PendingRawMessage::Beast(msg)).is_err() {
+            metrics::counter!("raw_messages_batcher.dropped_total", "source" => "beast")
+                .increment(1);
+        }
+        id
+    }
+
+    /// Queue an SBS message for batch insert. Returns the pre-generated UUID immediately.
+    pub fn queue_sbs(&self, msg: NewSbsMessage) -> Uuid {
+        let id = msg.id;
+        if self.tx.try_send(PendingRawMessage::Sbs(msg)).is_err() {
+            metrics::counter!("raw_messages_batcher.dropped_total", "source" => "sbs").increment(1);
+        }
+        id
+    }
+
+    /// Background loop that collects messages and flushes them in batches.
+    async fn flush_loop(pool: PgPool, mut rx: tokio::sync::mpsc::Receiver<PendingRawMessage>) {
+        let mut batch: Vec<PendingRawMessage> = Vec::with_capacity(Self::MAX_BATCH_SIZE);
+
+        loop {
+            // Wait for the first message (blocks until something arrives or channel closes)
+            match rx.recv().await {
+                Some(msg) => batch.push(msg),
+                None => {
+                    // Channel closed — flush remaining and exit
+                    if !batch.is_empty() {
+                        Self::flush_batch(&pool, &mut batch).await;
+                    }
+                    return;
+                }
+            }
+
+            // Drain as many as available without waiting, up to batch size
+            while batch.len() < Self::MAX_BATCH_SIZE {
+                match rx.try_recv() {
+                    Ok(msg) => batch.push(msg),
+                    Err(_) => break,
+                }
+            }
+
+            // If batch isn't full yet, wait briefly for more messages
+            if batch.len() < Self::MAX_BATCH_SIZE {
+                let deadline = tokio::time::Instant::now() + Self::FLUSH_INTERVAL;
+                loop {
+                    match tokio::time::timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(msg)) => {
+                            batch.push(msg);
+                            if batch.len() >= Self::MAX_BATCH_SIZE {
+                                break;
+                            }
+                        }
+                        Ok(None) => {
+                            // Channel closed
+                            if !batch.is_empty() {
+                                Self::flush_batch(&pool, &mut batch).await;
+                            }
+                            return;
+                        }
+                        Err(_) => break, // Timeout — flush what we have
+                    }
+                }
+            }
+
+            if !batch.is_empty() {
+                Self::flush_batch(&pool, &mut batch).await;
+            }
+        }
+    }
+
+    /// Flush a batch of pending messages as a single multi-row INSERT.
+    async fn flush_batch(pool: &PgPool, batch: &mut Vec<PendingRawMessage>) {
+        let batch_size = batch.len();
+        let start = std::time::Instant::now();
+
+        let messages: Vec<PendingRawMessage> = std::mem::take(batch);
+        let pool = pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build multi-row INSERT using raw SQL with ON CONFLICT DO NOTHING
+            // to handle duplicates gracefully without failing the batch.
+            //
+            // We build the VALUES clause dynamically and bind parameters positionally.
+            let count = messages.len();
+            if count == 0 {
+                return Ok::<usize, anyhow::Error>(0);
+            }
+
+            let mut params_ids: Vec<Uuid> = Vec::with_capacity(count);
+            let mut params_raw: Vec<Vec<u8>> = Vec::with_capacity(count);
+            let mut params_received: Vec<DateTime<Utc>> = Vec::with_capacity(count);
+            let mut params_receiver: Vec<Option<Uuid>> = Vec::with_capacity(count);
+            let mut params_unparsed: Vec<Option<String>> = Vec::with_capacity(count);
+            let mut params_hash: Vec<Vec<u8>> = Vec::with_capacity(count);
+            let mut params_source: Vec<&'static str> = Vec::with_capacity(count);
+
+            for msg in &messages {
+                match msg {
+                    PendingRawMessage::Aprs(m) => {
+                        params_ids.push(m.id);
+                        params_raw.push(m.raw_message.clone());
+                        params_received.push(m.received_at);
+                        params_receiver.push(Some(m.receiver_id));
+                        params_unparsed.push(m.unparsed.clone());
+                        params_hash.push(m.raw_message_hash.clone());
+                        params_source.push("aprs");
+                    }
+                    PendingRawMessage::Beast(m) => {
+                        params_ids.push(m.id);
+                        params_raw.push(m.raw_message.clone());
+                        params_received.push(m.received_at);
+                        params_receiver.push(m.receiver_id);
+                        params_unparsed.push(m.unparsed.clone());
+                        params_hash.push(m.raw_message_hash.clone());
+                        params_source.push("beast");
+                    }
+                    PendingRawMessage::Sbs(m) => {
+                        params_ids.push(m.id);
+                        params_raw.push(m.raw_message.clone());
+                        params_received.push(m.received_at);
+                        params_receiver.push(m.receiver_id);
+                        params_unparsed.push(m.unparsed.clone());
+                        params_hash.push(m.raw_message_hash.clone());
+                        params_source.push("sbs");
+                    }
+                }
+            }
+
+            // Use unnest arrays for efficient multi-row insert
+            diesel::sql_query(
+                "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
+                 SELECT * FROM unnest($1::uuid[], $2::bytea[], $3::timestamptz[], $4::uuid[], $5::text[], $6::bytea[], $7::message_source[])
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&params_ids)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Bytea>, _>(&params_raw)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Timestamptz>, _>(&params_received)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Uuid>>, _>(&params_receiver)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>, _>(&params_unparsed)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Bytea>, _>(&params_hash)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&params_source)
+            .execute(&mut conn)?;
+
+            Ok(count)
+        })
+        .await;
+
+        match result {
+            Ok(Ok(count)) => {
+                let duration = start.elapsed();
+                metrics::histogram!("raw_messages_batcher.flush_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("raw_messages_batcher.inserted_total").increment(count as u64);
+                metrics::histogram!("raw_messages_batcher.batch_size").record(count as f64);
+            }
+            Ok(Err(e)) => {
+                warn!("Raw message batch insert failed: {:#}", e);
+                metrics::counter!("raw_messages_batcher.flush_errors_total").increment(1);
+                metrics::counter!("raw_messages_batcher.lost_total").increment(batch_size as u64);
+            }
+            Err(e) => {
+                warn!("Raw message batch insert task panicked: {:#}", e);
+                metrics::counter!("raw_messages_batcher.flush_errors_total").increment(1);
+                metrics::counter!("raw_messages_batcher.lost_total").increment(batch_size as u64);
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
