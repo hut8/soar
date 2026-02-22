@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     protobuf-compiler \
     python3 \
     jq \
+    file \
     && rm -rf /var/lib/apt/lists/*
 
 # PostgreSQL 17 client
