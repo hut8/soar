@@ -36,6 +36,11 @@ export default ts.config(
 				parser: ts.parser,
 				svelteConfig
 			}
+		},
+		rules: {
+			// $bindable() defaults are meaningful in Svelte's reactivity system
+			// but ESLint sees them as useless assignments
+			'no-useless-assignment': 'off'
 		}
 	}
 );
