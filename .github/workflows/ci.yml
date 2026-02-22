@@ -81,6 +81,7 @@ jobs:
         image: axllent/mailpit:v1.20
     defaults:
       run:
+        shell: bash
         working-directory: ./web
 
     steps:
@@ -247,6 +248,9 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout code
@@ -316,6 +320,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout code
@@ -402,6 +409,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout code
