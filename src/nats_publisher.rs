@@ -2,9 +2,14 @@ use anyhow::Result;
 use async_nats::{Client, Event};
 use serde_json;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::fixes::Fix;
+
+/// Timeout for individual NATS publish operations.
+/// If NATS is slow or disconnected, we drop the message rather than blocking forever.
+const NATS_PUBLISH_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Queue size for NATS publish queue
 const NATS_PUBLISH_QUEUE_SIZE: usize = 200;
@@ -120,14 +125,27 @@ impl NatsFixPublisher {
                 metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
                 let aircraft_id = fix.aircraft_id.to_string();
 
-                match publish_to_nats(&client_clone, &aircraft_id, &fix).await {
-                    Ok(()) => {
+                match tokio::time::timeout(
+                    NATS_PUBLISH_TIMEOUT,
+                    publish_to_nats(&client_clone, &aircraft_id, &fix),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {
                         fixes_published += 1;
                         metrics::counter!("nats.fix_publisher.published_total").increment(1);
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         error!("Failed to publish fix for device {}: {}", aircraft_id, e);
                         metrics::counter!("nats.fix_publisher.errors_total").increment(1);
+                    }
+                    Err(_) => {
+                        warn!(
+                            "NATS publish timed out after {}s for device {}",
+                            NATS_PUBLISH_TIMEOUT.as_secs(),
+                            aircraft_id
+                        );
+                        metrics::counter!("nats.fix_publisher.timeout_total").increment(1);
                     }
                 }
                 metrics::gauge!("worker.active", "type" => "nats_publisher").decrement(1.0);

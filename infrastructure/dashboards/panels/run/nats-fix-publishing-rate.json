@@ -69,6 +69,21 @@
             }
           }
         ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Timeouts/sec"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "orange",
+              "mode": "fixed"
+            }
+          }
+        ]
       }
     ]
   },
@@ -112,6 +127,17 @@
       "legendFormat": "Errors/sec",
       "range": true,
       "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "(rate(nats_fix_publisher_timeout_total{component=\"run\",environment=\"$environment\"}[5m]) or vector(0))",
+      "legendFormat": "Timeouts/sec",
+      "range": true,
+      "refId": "D"
     }
   ],
   "title": "NATS Fix Publishing Rate",
