@@ -713,7 +713,7 @@ mod tests {
         let pool = create_test_pool();
 
         let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let callsign = format!("TEST{}", receiver_id);
         let mut message_id = Uuid::nil();
 
         // Insert receiver and message in a single transaction
@@ -782,7 +782,7 @@ mod tests {
         let pool = create_test_pool();
 
         let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let callsign = format!("TEST{}", receiver_id);
         let mut message_ids: Vec<Uuid> = Vec::new();
 
         // Insert receiver and messages in a single transaction
@@ -847,7 +847,7 @@ mod tests {
         let pool = create_test_pool();
 
         let receiver_id = Uuid::new_v4();
-        let callsign = format!("TEST{}", &receiver_id.to_string()[..8]);
+        let callsign = format!("TEST{}", receiver_id);
         let mut existing_id = Uuid::nil();
 
         // Insert receiver and message in a single transaction
