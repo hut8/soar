@@ -691,7 +691,7 @@ mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
     use diesel::r2d2::{ConnectionManager, Pool};
-    use serial_test::serial;
+    use serial_test::file_serial;
 
     /// Helper to create a test database pool
     /// Uses TEST_DATABASE_URL environment variable or defaults to local test database
@@ -708,7 +708,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
+    #[file_serial]
     async fn test_insert_and_get_by_id() {
         let pool = create_test_pool();
 
@@ -761,7 +761,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
+    #[file_serial]
     async fn test_get_by_id_not_found() {
         let pool = create_test_pool();
 
@@ -777,7 +777,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
+    #[file_serial]
     async fn test_get_by_ids_multiple() {
         let pool = create_test_pool();
 
@@ -842,7 +842,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
+    #[file_serial]
     async fn test_get_by_ids_partial_match() {
         let pool = create_test_pool();
 
@@ -898,7 +898,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
+    #[file_serial]
     async fn test_get_by_ids_empty_list() {
         let pool = create_test_pool();
 
