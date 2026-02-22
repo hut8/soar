@@ -690,11 +690,13 @@ impl AdsbAccumulator {
             } else {
                 state.consecutive_no_fix += 1;
                 if state.consecutive_no_fix > NO_FIX_WARNING_THRESHOLD && !state.warned_no_fix {
+                    let pos_valid = state.position.as_ref().map(|p| p.is_valid());
                     error!(
-                        "Aircraft {:06X}: {} consecutive messages without fix (has_position={}, has_velocity={}, has_callsign={}, on_ground={:?})",
+                        "Aircraft {:06X}: {} consecutive messages without fix (has_position={}, position_valid={:?}, has_velocity={}, has_callsign={}, on_ground={:?})",
                         icao_address,
                         state.consecutive_no_fix,
                         state.position.is_some(),
+                        pos_valid,
                         state.velocity.is_some(),
                         state.callsign.is_some(),
                         state.on_ground,
