@@ -853,8 +853,17 @@ impl AircraftRepository {
                 // Each merge is wrapped in a transaction so partial merges don't occur,
                 // and errors on one aircraft don't abort the entire batch.
                 // Returns None for "claimed" (no target found), Some(...) for merged.
-                let result: Result<Option<(usize, usize)>, anyhow::Error> =
-                    conn.transaction(|conn| {
+                //
+                // Retry up to 3 times: the live ingestion process (`run`) may insert
+                // new fixes for this aircraft between our UPDATE (reassign fixes) and
+                // DELETE (remove duplicate), causing an FK violation. The window is
+                // tiny so a retry almost always succeeds.
+                const MAX_MERGE_ATTEMPTS: usize = 3;
+                let mut result: Result<Option<(usize, usize)>, anyhow::Error> =
+                    Err(anyhow::anyhow!("not yet attempted"));
+
+                for attempt in 1..=MAX_MERGE_ATTEMPTS {
+                    result = conn.transaction(|conn| {
                         // Find the target aircraft that owns this registration
                         let target = match aircraft::table
                             .filter(aircraft::registration.eq(&pending_reg))
@@ -987,6 +996,16 @@ impl AircraftRepository {
 
                         Ok(Some((fixes_updated, flights_updated)))
                     });
+
+                    if result.is_ok() || attempt == MAX_MERGE_ATTEMPTS {
+                        break;
+                    }
+                    warn!(
+                        "Merge attempt {}/{} failed for aircraft {} (pending_registration={:?}), retrying: {:#}",
+                        attempt, MAX_MERGE_ATTEMPTS, dup.id, pending_reg,
+                        result.as_ref().unwrap_err()
+                    );
+                }
 
                 match result {
                     Ok(None) => {
