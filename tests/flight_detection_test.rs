@@ -163,7 +163,7 @@ async fn test_message_parsing_from_source() {
 async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     use soar::fix_processor::FixProcessor;
     use soar::message_sources::{RawMessageSource, TestMessageSource};
-    use soar::packet_processors::generic::GenericProcessor;
+    use soar::ogn::OgnGenericProcessor;
     use soar::raw_messages_repo::RawMessagesRepository;
     use soar::receiver_repo::ReceiverRepository;
 
@@ -178,7 +178,7 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
     // Create repositories and processors
     let receiver_repo = ReceiverRepository::new(pool.clone());
     let raw_messages_repo = RawMessagesRepository::new(pool.clone());
-    let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
+    let generic_processor = OgnGenericProcessor::new(receiver_repo, raw_messages_repo);
 
     // Set up elevation service for AGL calculation (required for flight creation)
     // Use with_path() with S3 support to avoid env var pollution between tests
@@ -369,7 +369,7 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
 async fn test_no_active_fixes_should_not_create_flight() {
     use soar::fix_processor::FixProcessor;
     use soar::message_sources::{RawMessageSource, TestMessageSource};
-    use soar::packet_processors::generic::GenericProcessor;
+    use soar::ogn::OgnGenericProcessor;
     use soar::raw_messages_repo::RawMessagesRepository;
     use soar::receiver_repo::ReceiverRepository;
 
@@ -384,7 +384,7 @@ async fn test_no_active_fixes_should_not_create_flight() {
     // Create repositories and processors
     let receiver_repo = ReceiverRepository::new(pool.clone());
     let raw_messages_repo = RawMessagesRepository::new(pool.clone());
-    let generic_processor = GenericProcessor::new(receiver_repo, raw_messages_repo);
+    let generic_processor = OgnGenericProcessor::new(receiver_repo, raw_messages_repo);
 
     // Set up elevation service for AGL calculation (required for activity detection)
     // Use with_path() with S3 support to avoid env var pollution between tests

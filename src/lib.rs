@@ -59,9 +59,9 @@ pub mod magnetic;
 pub mod message_sources;
 pub mod metrics;
 pub mod nats_publisher;
+pub mod ogn;
 pub mod ogn_aprs_aircraft;
 pub mod openaip_client;
-pub mod packet_processors;
 pub mod persistent_queue;
 pub mod pilots;
 pub mod pilots_repo;
@@ -92,9 +92,9 @@ pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder};
 pub use archive_service::ArchiveService;
 pub use fixes::Fix;
 pub use nats_publisher::NatsFixPublisher;
-pub use packet_processors::{
-    AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
-    ReceiverStatusProcessor, ServerStatusProcessor,
+pub use ogn::{
+    OgnGenericProcessor, PacketContext, ReceiverPositionProcessor, ReceiverStatusProcessor,
+    ServerStatusProcessor,
 };
 
 #[cfg(test)]

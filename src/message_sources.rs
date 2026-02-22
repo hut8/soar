@@ -19,7 +19,7 @@ use futures_util::StreamExt;
 use std::path::Path;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, warn};
 
 /// Trait for sources of raw APRS messages
 ///
@@ -41,35 +41,20 @@ pub trait RawMessageSource: Send + Sync {
     }
 }
 
-/// Process messages from a source through the packet processing pipeline
+/// Process messages from a source through the OGN processing pipeline
 ///
-/// This function reads messages from a `RawMessageSource` and processes them through
-/// the `PacketRouter`, handling timestamp extraction, parsing, and routing.
-///
-/// # Arguments
-/// * `source` - The message source (NATS, file, etc.)
-/// * `packet_router` - The packet router that handles message processing
+/// This function reads messages from a `RawMessageSource`, extracts timestamps,
+/// and delegates to the shared `process_ogn_message` for parsing and routing.
 ///
 /// # Returns
 /// The number of messages successfully processed
-///
-/// # Example
-/// ```ignore
-/// use soar::message_sources::{TestMessageSource, process_messages_from_source};
-/// use soar::packet_processors::PacketRouter;
-///
-/// # async fn example() -> anyhow::Result<()> {
-/// let mut source = TestMessageSource::from_file("test.txt").await?;
-/// let packet_router = PacketRouter::new(/* ... */);
-///
-/// let count = process_messages_from_source(&mut source, &packet_router).await?;
-/// println!("Processed {} messages", count);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn process_messages_from_source(
     source: &mut dyn RawMessageSource,
-    packet_router: &crate::packet_processors::PacketRouter,
+    generic_processor: &crate::ogn::OgnGenericProcessor,
+    fix_processor: &crate::fix_processor::FixProcessor,
+    receiver_status_processor: &crate::ogn::ReceiverStatusProcessor,
+    receiver_position_processor: &crate::ogn::ReceiverPositionProcessor,
+    server_status_processor: &crate::ogn::ServerStatusProcessor,
 ) -> Result<usize> {
     let mut messages_processed = 0;
 
@@ -94,39 +79,20 @@ pub async fn process_messages_from_source(
             }
         };
 
-        // Route server messages (starting with #) differently
-        // Server messages don't create PacketContext
-        if actual_message.starts_with('#') {
-            debug!("Server message: {}", actual_message);
-            packet_router
-                .process_server_message(actual_message, received_at)
-                .await;
-            messages_processed += 1;
-            continue;
-        }
+        // Delegate to the shared OGN processing logic
+        let processed = crate::ogn::process_ogn_message(
+            received_at,
+            actual_message,
+            generic_processor,
+            fix_processor,
+            receiver_status_processor,
+            receiver_position_processor,
+            server_status_processor,
+        )
+        .await;
 
-        // Try to parse the message using ogn-parser
-        match ogn_parser::parse(actual_message) {
-            Ok(parsed) => {
-                // Call PacketRouter to archive, process, and route to queues
-                packet_router
-                    .process_packet(parsed, actual_message, received_at)
-                    .await;
-                messages_processed += 1;
-            }
-            Err(e) => {
-                // For OGNFNT sources with invalid lat/lon, log as trace instead of error
-                // These are common and expected issues with this data source
-                let error_str = e.to_string();
-                if actual_message.contains("OGNFNT")
-                    && (error_str.contains("Invalid Latitude")
-                        || error_str.contains("Invalid Longitude"))
-                {
-                    trace!("Failed to parse APRS message '{actual_message}': {e}");
-                } else {
-                    info!("Failed to parse APRS message '{actual_message}': {e}");
-                }
-            }
+        if processed {
+            messages_processed += 1;
         }
     }
 

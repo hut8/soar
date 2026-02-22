@@ -17,9 +17,8 @@ use soar::aircraft_types::AircraftCategory;
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
-use soar::packet_processors::{
-    AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
-    ReceiverStatusProcessor, ServerStatusProcessor,
+use soar::ogn::{
+    OgnGenericProcessor, ReceiverPositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
 };
 use soar::raw_messages_repo::RawMessagesRepository;
 use soar::receiver_repo::ReceiverRepository;
@@ -237,13 +236,13 @@ pub async fn handle_run(
     let aprs_messages_repo =
         soar::raw_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
 
-    // Create GenericProcessor for archiving, receiver identification, and APRS message insertion
+    // Create OgnGenericProcessor for archiving, receiver identification, and APRS message insertion
     let generic_processor = if let Some(archive_path) = archive_dir.clone() {
         let archive_service = soar::ArchiveService::new(archive_path).await?;
-        GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
+        OgnGenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
             .with_archive_service(archive_service)
     } else {
-        GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
+        OgnGenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
     };
 
     // Create receiver status processor for receiver status messages
@@ -252,11 +251,6 @@ pub async fn handle_run(
 
     // Create receiver position processor for receiver position messages
     let receiver_position_processor = ReceiverPositionProcessor::new(receiver_repo.clone());
-
-    // Create aircraft position processor
-    // Note: FlightDetectionProcessor is now handled inside FixProcessor
-    let aircraft_position_processor =
-        AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
     // Create Beast/SBS processing infrastructure (only if ADS-B is enabled)
     // Both Beast (binary ADS-B) and SBS (text CSV) share the same accumulator
@@ -274,39 +268,8 @@ pub async fn handle_run(
     };
 
     info!(
-        "Setting up APRS client with PacketRouter - archive directory: {:?}, NATS URL: {}",
-        archive_dir, nats_url
-    );
-
-    // Create bounded channels for per-processor queues
-    // Aircraft positions: highest volume processing path
-    let (aircraft_tx, aircraft_rx) = flume::bounded(AIRCRAFT_QUEUE_SIZE);
-    info!(
-        "Created aircraft position queue with capacity {}",
-        AIRCRAFT_QUEUE_SIZE
-    );
-
-    // Receiver status: low volume
-    let (receiver_status_tx, receiver_status_rx) = flume::bounded(RECEIVER_STATUS_QUEUE_SIZE);
-    info!(
-        "Created receiver status queue with capacity {}",
-        RECEIVER_STATUS_QUEUE_SIZE
-    );
-
-    // Receiver position: low volume
-    let (receiver_position_tx, receiver_position_rx) = flume::bounded(RECEIVER_POSITION_QUEUE_SIZE);
-    info!(
-        "Created receiver position queue with capacity {}",
-        RECEIVER_POSITION_QUEUE_SIZE
-    );
-
-    // Server status: low capacity (rare messages)
-    // Channel now includes timestamp: (message, received_at)
-    let (server_status_tx, server_status_rx) =
-        flume::bounded::<(String, chrono::DateTime<chrono::Utc>)>(SERVER_STATUS_QUEUE_SIZE);
-    info!(
-        "Created server status queue with capacity {}",
-        SERVER_STATUS_QUEUE_SIZE
+        "Setting up APRS processing with {} OGN intake workers - archive directory: {:?}, NATS URL: {}",
+        OGN_INTAKE_WORKERS, archive_dir, nats_url
     );
 
     // OGN intake queue: buffers raw OGN/APRS messages from unix socket
@@ -455,22 +418,17 @@ pub async fn handle_run(
     });
     info!("Spawned envelope router task");
 
-    // Create PacketRouter with per-processor queues and internal worker pool
-    let packet_router = PacketRouter::new(generic_processor)
-        .with_aircraft_position_queue(aircraft_tx)
-        .with_receiver_status_queue(receiver_status_tx)
-        .with_receiver_position_queue(receiver_position_tx)
-        .with_server_status_queue(server_status_tx)
-        .start(PACKET_ROUTER_WORKERS); // Start workers AFTER configuration
-
-    info!(
-        "Created PacketRouter with {} workers and per-processor queues",
-        PACKET_ROUTER_WORKERS
-    );
-
-    // Spawn intake queue processor (only if APRS is enabled)
+    // Spawn OGN intake queue workers (only if APRS is enabled)
     if let Some((_, ogn_intake_rx)) = ogn_intake_opt.as_ref() {
-        workers::spawn_ogn_intake_worker(ogn_intake_rx.clone(), packet_router.clone());
+        workers::spawn_ogn_intake_workers(
+            ogn_intake_rx.clone(),
+            &generic_processor,
+            &fix_processor,
+            &receiver_status_processor,
+            &receiver_position_processor,
+            &server_status_processor,
+            OGN_INTAKE_WORKERS,
+        );
     }
 
     // Spawn Beast intake queue workers (only if ADS-B is enabled)
@@ -501,22 +459,9 @@ pub async fn handle_run(
         );
     }
 
-    // Spawn dedicated worker pools for each APRS processor type
-    workers::spawn_aprs_processor_workers(
-        (aircraft_rx.clone(), aircraft_position_processor),
-        (receiver_status_rx.clone(), receiver_status_processor),
-        (receiver_position_rx.clone(), receiver_position_processor),
-        (server_status_rx.clone(), server_status_processor),
-    );
-
     // Spawn queue depth and system metrics reporter
     monitoring::spawn_metrics_reporter(
         metrics_envelope_rx,
-        packet_router.clone(),
-        aircraft_rx.clone(),
-        receiver_status_rx.clone(),
-        receiver_position_rx.clone(),
-        server_status_rx.clone(),
         diesel_pool.clone(),
         router_packets_total,
         router_lag_ms,
@@ -525,10 +470,6 @@ pub async fn handle_run(
 
     // Set up graceful shutdown handler
     shutdown::spawn_shutdown_handler(
-        aircraft_rx.clone(),
-        receiver_status_rx.clone(),
-        receiver_position_rx.clone(),
-        server_status_rx.clone(),
         ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone()),
         beast_intake_opt.as_ref().map(|(tx, _)| tx.clone()),
     );

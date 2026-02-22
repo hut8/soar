@@ -419,23 +419,20 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let sbs_enabled_for_stats = sbs_enabled;
 
     tokio::spawn(async move {
-        const STATS_INTERVAL_SECS: f64 = 30.0;
-        const HALF_LIFE_SECS: f64 = 15.0 * 60.0; // 15-minute half-life
+        const STATS_INTERVAL_SECS: u64 = 30;
 
         let mut interval =
-            tokio::time::interval(tokio::time::Duration::from_secs(STATS_INTERVAL_SECS as u64));
+            tokio::time::interval(tokio::time::Duration::from_secs(STATS_INTERVAL_SECS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        // EWMA smoothers for send and receive rates (15-minute half-life)
-        let mut ewma_sent = soar::metrics::Ewma::new(HALF_LIFE_SECS);
-        let mut ewma_bytes_sent = soar::metrics::Ewma::new(HALF_LIFE_SECS);
-        let mut ewma_incoming = soar::metrics::Ewma::new(HALF_LIFE_SECS);
-        let mut ewma_ogn = soar::metrics::Ewma::new(HALF_LIFE_SECS);
-        let mut ewma_beast = soar::metrics::Ewma::new(HALF_LIFE_SECS);
-        let mut ewma_sbs = soar::metrics::Ewma::new(HALF_LIFE_SECS);
+        let mut last_stats_time = std::time::Instant::now();
 
         loop {
             interval.tick().await;
+
+            // Measure actual elapsed time since last stats log
+            let elapsed = last_stats_time.elapsed().as_secs_f64();
+            last_stats_time = std::time::Instant::now();
 
             // Get and reset counters atomically
             let total_frames = stats_frames_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
@@ -448,40 +445,51 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             let beast_frames = stats_beast_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
             let sbs_frames = stats_sbs_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
 
-            // Calculate instantaneous rates (per second) for this window
-            let instant_incoming = total_frames as f64 / STATS_INTERVAL_SECS;
-            let instant_sent = sent_count as f64 / STATS_INTERVAL_SECS;
-            let instant_bytes_sent = bytes_sent as f64 / STATS_INTERVAL_SECS;
-            let instant_ogn = ogn_frames as f64 / STATS_INTERVAL_SECS;
-            let instant_beast = beast_frames as f64 / STATS_INTERVAL_SECS;
-            let instant_sbs = sbs_frames as f64 / STATS_INTERVAL_SECS;
-
-            // Update EWMAs with this window's samples
-            ewma_sent.update(instant_sent, STATS_INTERVAL_SECS);
-            ewma_bytes_sent.update(instant_bytes_sent, STATS_INTERVAL_SECS);
-            ewma_incoming.update(instant_incoming, STATS_INTERVAL_SECS);
-            ewma_ogn.update(instant_ogn, STATS_INTERVAL_SECS);
-            ewma_beast.update(instant_beast, STATS_INTERVAL_SECS);
-            ewma_sbs.update(instant_sbs, STATS_INTERVAL_SECS);
-
-            let sent_per_sec = ewma_sent.value();
-            let incoming_per_sec = ewma_incoming.value();
+            // Calculate rates from count / actual elapsed time
+            let incoming_per_sec = if elapsed > 0.0 {
+                total_frames as f64 / elapsed
+            } else {
+                0.0
+            };
+            let sent_per_sec = if elapsed > 0.0 {
+                sent_count as f64 / elapsed
+            } else {
+                0.0
+            };
+            let bytes_sent_per_sec = if elapsed > 0.0 {
+                bytes_sent as f64 / elapsed
+            } else {
+                0.0
+            };
+            let ogn_per_sec = if elapsed > 0.0 {
+                ogn_frames as f64 / elapsed
+            } else {
+                0.0
+            };
+            let beast_per_sec = if elapsed > 0.0 {
+                beast_frames as f64 / elapsed
+            } else {
+                0.0
+            };
+            let sbs_per_sec = if elapsed > 0.0 {
+                sbs_frames as f64 / elapsed
+            } else {
+                0.0
+            };
 
             // Update aggregate metrics
             metrics::gauge!("ingest.messages_per_second").set(incoming_per_sec);
 
             // Update per-source metrics
-            if ogn_frames > 0 || ewma_ogn.value() > 0.0 {
-                metrics::gauge!("ingest.messages_per_second", "source" => "OGN")
-                    .set(ewma_ogn.value());
+            if ogn_frames > 0 {
+                metrics::gauge!("ingest.messages_per_second", "source" => "OGN").set(ogn_per_sec);
             }
-            if beast_frames > 0 || ewma_beast.value() > 0.0 {
+            if beast_frames > 0 {
                 metrics::gauge!("ingest.messages_per_second", "source" => "Beast")
-                    .set(ewma_beast.value());
+                    .set(beast_per_sec);
             }
-            if sbs_frames > 0 || ewma_sbs.value() > 0.0 {
-                metrics::gauge!("ingest.messages_per_second", "source" => "SBS")
-                    .set(ewma_sbs.value());
+            if sbs_frames > 0 {
+                metrics::gauge!("ingest.messages_per_second", "source" => "SBS").set(sbs_per_sec);
             }
 
             // Format sent stats (rate + avg send time combined)
@@ -519,12 +527,8 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             metrics::gauge!("ingest.queue_segment_count").set(queue_depth.segment_count as f64);
 
             // Calculate estimated drain time from actual byte throughput.
-            // bytes_sent_per_sec is measured directly from serialized envelope sizes,
-            // so no per-message size estimate is needed.
-            let bytes_sent_per_sec = ewma_bytes_sent.value();
             let drain_time_estimate = if queue_depth.disk_data_bytes > 0 {
                 if bytes_sent_per_sec < 1.0 {
-                    // Rate is effectively zero (EWMA decayed to near-nothing) — show infinity
                     "∞".to_string()
                 } else {
                     let est_seconds = queue_depth.disk_data_bytes as f64 / bytes_sent_per_sec;
@@ -563,30 +567,27 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 )
             };
 
-            // Build read stats section for enabled sources (using EWMA rates)
+            // Build read stats section for enabled sources
             let mut read_parts = Vec::new();
             if ogn_enabled_for_stats {
                 let health = aprs_health_for_stats.read().await;
                 read_parts.push(format!(
                     "ogn={{records:{} rate:{:.1}/s}}",
-                    health.total_messages,
-                    ewma_ogn.value()
+                    health.total_messages, ogn_per_sec
                 ));
             }
             if beast_enabled_for_stats {
                 let health = beast_health_for_stats.read().await;
                 read_parts.push(format!(
                     "beast={{records:{} rate:{:.1}/s}}",
-                    health.total_messages,
-                    ewma_beast.value()
+                    health.total_messages, beast_per_sec
                 ));
             }
             if sbs_enabled_for_stats {
                 let health = sbs_health_for_stats.read().await;
                 read_parts.push(format!(
                     "sbs={{records:{} rate:{:.1}/s}}",
-                    health.total_messages,
-                    ewma_sbs.value()
+                    health.total_messages, sbs_per_sec
                 ));
             }
 
