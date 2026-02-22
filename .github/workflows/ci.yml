@@ -103,7 +103,7 @@ jobs:
       - name: Build SvelteKit project
         run: npm run build
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (if not pre-installed in image)
         run: npx playwright install --with-deps chromium
 
       - name: Wait for Mailpit to be ready

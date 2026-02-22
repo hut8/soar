@@ -41,8 +41,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Playwright system dependencies (browser binaries installed per-job to match version)
-RUN npx playwright install-deps chromium 2>/dev/null || true
+# Playwright: install system deps and Chromium browser binary.
+# Pin version to match web/package.json @playwright/test version.
+# When bumping Playwright in package.json, update this version too.
+ENV PLAYWRIGHT_VERSION=1.58.2
+RUN npx playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium
 
 # Rust toolchain (stable with clippy, rustfmt, musl target)
 ENV RUSTUP_HOME=/usr/local/rustup
