@@ -109,6 +109,17 @@
       "legendFormat": "Fix Publish Errors (soar run)",
       "range": true,
       "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "rate(nats_fix_publisher_timeout_total{component=\"run\",environment=\"$environment\"}[1m])",
+      "legendFormat": "Fix Publish Timeouts (soar run)",
+      "range": true,
+      "refId": "D"
     }
   ],
   "title": "NATS Publishing Errors",
