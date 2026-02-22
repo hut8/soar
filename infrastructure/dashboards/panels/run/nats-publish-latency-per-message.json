@@ -77,32 +77,10 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "nats_fix_publisher_publish_latency_us{quantile=\"0.5\",component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "p50",
+      "expr": "rate(nats_fix_publisher_publish_latency_us_sum{component=\"run\",environment=\"$environment\"}[5m]) / rate(nats_fix_publisher_publish_latency_us_count{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Average Latency (\u00b5s)",
       "range": true,
       "refId": "A"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "nats_fix_publisher_publish_latency_us{quantile=\"0.9\",component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "p90",
-      "range": true,
-      "refId": "B"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "editorMode": "code",
-      "expr": "nats_fix_publisher_publish_latency_us{quantile=\"0.99\",component=\"run\",environment=\"$environment\"}",
-      "legendFormat": "p99",
-      "range": true,
-      "refId": "C"
     }
   ],
   "title": "NATS Publish Latency (per message)",

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_nats::{Client, Event};
+use futures_util::FutureExt;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,6 +20,9 @@ const NATS_PUBLISH_QUEUE_SIZE: usize = 200;
 /// The fix is already saved to the database at this point, so this only
 /// affects live streaming — not data persistence.
 const NATS_QUEUE_SEND_TIMEOUT: Duration = Duration::from_millis(100);
+
+/// Interval between heartbeat log messages from the publisher task.
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
@@ -60,6 +64,69 @@ fn get_area_subject(topic_prefix: &str, latitude: f64, longitude: f64) -> String
     let lat_floor = latitude.floor() as i32;
     let lon_floor = longitude.floor() as i32;
     format!("{}.area.{}.{}", topic_prefix, lat_floor, lon_floor)
+}
+
+/// Run the NATS publisher loop. Returns Ok(()) when the channel is closed (clean shutdown).
+/// Panics are caught by the supervisor that calls this function.
+async fn run_publisher_loop(client: &Client, rx: &flume::Receiver<Fix>) {
+    info!("NATS publisher loop started");
+    metrics::gauge!("nats.fix_publisher.alive").set(1.0);
+
+    let mut fixes_published = 0u64;
+    let mut last_heartbeat = std::time::Instant::now();
+
+    while let Ok(fix) = rx.recv_async().await {
+        metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
+        let aircraft_id = fix.aircraft_id.to_string();
+
+        match tokio::time::timeout(
+            NATS_PUBLISH_TIMEOUT,
+            publish_to_nats(client, &aircraft_id, &fix),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                fixes_published += 1;
+                metrics::counter!("nats.fix_publisher.published_total").increment(1);
+            }
+            Ok(Err(e)) => {
+                error!("Failed to publish fix for device {}: {}", aircraft_id, e);
+                metrics::counter!("nats.fix_publisher.errors_total").increment(1);
+            }
+            Err(_) => {
+                warn!(
+                    "NATS publish timed out after {}s for device {}",
+                    NATS_PUBLISH_TIMEOUT.as_secs(),
+                    aircraft_id
+                );
+                metrics::counter!("nats.fix_publisher.timeout_total").increment(1);
+            }
+        }
+        metrics::gauge!("worker.active", "type" => "nats_publisher").decrement(1.0);
+
+        // Update queue depth metric
+        metrics::gauge!("nats.fix_publisher.queue_depth").set(rx.len() as f64);
+
+        // Log heartbeat every 60 seconds
+        if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
+            let queue_len = rx.len();
+            info!(
+                "NATS publisher alive: {} published since last heartbeat, {} in queue",
+                fixes_published, queue_len
+            );
+            if queue_len > 100 {
+                warn!(
+                    "NATS publisher queue is building up ({} fixes) - NATS publishing may be slow",
+                    queue_len
+                );
+            }
+            fixes_published = 0;
+            last_heartbeat = std::time::Instant::now();
+        }
+    }
+
+    warn!("NATS publisher loop exited (channel closed)");
+    metrics::gauge!("nats.fix_publisher.alive").set(0.0);
 }
 
 /// NATS publisher for aircraft position fixes
@@ -120,64 +187,35 @@ impl NatsFixPublisher {
             NATS_PUBLISH_QUEUE_SIZE
         );
 
-        // Spawn SINGLE background task to publish all fixes
+        // Spawn supervisor task that restarts the publisher on panic
         let client_clone = Arc::clone(&nats_client);
         tokio::spawn(async move {
-            info!("NATS publisher background task started");
-            let mut fixes_published = 0u64;
-            let mut last_stats_log = std::time::Instant::now();
+            info!("NATS publisher supervisor started");
+            loop {
+                let result =
+                    std::panic::AssertUnwindSafe(run_publisher_loop(&client_clone, &fix_receiver))
+                        .catch_unwind()
+                        .await;
 
-            while let Ok(fix) = fix_receiver.recv_async().await {
-                metrics::gauge!("worker.active", "type" => "nats_publisher").increment(1.0);
-                let aircraft_id = fix.aircraft_id.to_string();
-
-                match tokio::time::timeout(
-                    NATS_PUBLISH_TIMEOUT,
-                    publish_to_nats(&client_clone, &aircraft_id, &fix),
-                )
-                .await
-                {
-                    Ok(Ok(())) => {
-                        fixes_published += 1;
-                        metrics::counter!("nats.fix_publisher.published_total").increment(1);
+                match result {
+                    Ok(()) => {
+                        // Channel closed — clean shutdown
+                        warn!("NATS publisher supervisor: loop exited cleanly (channel closed)");
+                        metrics::gauge!("nats.fix_publisher.alive").set(0.0);
+                        break;
                     }
-                    Ok(Err(e)) => {
-                        error!("Failed to publish fix for device {}: {}", aircraft_id, e);
-                        metrics::counter!("nats.fix_publisher.errors_total").increment(1);
-                    }
-                    Err(_) => {
-                        warn!(
-                            "NATS publish timed out after {}s for device {}",
-                            NATS_PUBLISH_TIMEOUT.as_secs(),
-                            aircraft_id
+                    Err(panic_info) => {
+                        error!(
+                            "NATS publisher task panicked: {:?}. Restarting in 1s...",
+                            panic_info
                         );
-                        metrics::counter!("nats.fix_publisher.timeout_total").increment(1);
+                        metrics::gauge!("nats.fix_publisher.alive").set(0.0);
+                        metrics::counter!("nats.fix_publisher.panic_total").increment(1);
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     }
-                }
-                metrics::gauge!("worker.active", "type" => "nats_publisher").decrement(1.0);
-
-                // Update queue depth metric
-                metrics::gauge!("nats.fix_publisher.queue_depth").set(fix_receiver.len() as f64);
-
-                // Log statistics every 5 minutes
-                if last_stats_log.elapsed().as_secs() >= 300 {
-                    let queue_len = fix_receiver.len();
-                    info!(
-                        "NATS publisher stats: {} fixes published in last 5min, {} fixes queued",
-                        fixes_published, queue_len
-                    );
-                    if queue_len > 500 {
-                        warn!(
-                            "NATS publisher queue is building up ({} fixes) - NATS publishing may be slow",
-                            queue_len
-                        );
-                    }
-                    fixes_published = 0;
-                    last_stats_log = std::time::Instant::now();
                 }
             }
-
-            warn!("NATS publisher background task stopped");
+            warn!("NATS publisher supervisor exiting");
         });
 
         Ok(Self {
@@ -215,6 +253,10 @@ impl NatsFixPublisher {
             Err(_) => {
                 // Queue full for too long — skip NATS publish to keep pipeline flowing.
                 // The fix is already in the database; only live streaming is affected.
+                warn!(
+                    "NATS publish queue full for >{}ms - dropping fix (live streaming affected, data saved to DB)",
+                    NATS_QUEUE_SEND_TIMEOUT.as_millis()
+                );
                 metrics::counter!("nats.fix_publisher.queue_full_drops_total").increment(1);
             }
         }

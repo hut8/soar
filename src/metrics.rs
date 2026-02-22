@@ -665,14 +665,6 @@ pub fn initialize_run_metrics() {
 
     // Queue drop/close counters
     metrics::counter!("aprs.raw_message_queue.full_total").absolute(0);
-    metrics::counter!("aprs.aircraft_queue.full_total").absolute(0);
-    metrics::counter!("aprs.aircraft_queue.closed_total").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.full_total").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.closed_total").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.full_total").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.closed_total").absolute(0);
-    metrics::counter!("aprs.server_status_queue.full_total").absolute(0);
-    metrics::counter!("aprs.server_status_queue.closed_total").absolute(0);
 
     // APRS intake queue metrics (soar-run receives from socket, not NATS)
     metrics::gauge!("aprs.intake_queue.depth").set(0.0);
@@ -682,23 +674,12 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.intake.receive_error_total").absolute(0);
     metrics::counter!("aprs.intake_queue.full_total").absolute(0);
 
-    // Message processing counters by type
-    metrics::counter!("aprs.messages.processed.aircraft_total").absolute(0);
-    metrics::counter!("aprs.messages.processed.receiver_status_total").absolute(0);
-    metrics::counter!("aprs.messages.processed.receiver_position_total").absolute(0);
-    metrics::counter!("aprs.messages.processed.server_total").absolute(0);
-    metrics::counter!("aprs.messages.processed.total_total").absolute(0);
-
     // APRS parsing metrics
-    metrics::counter!("aprs.parse.success_total").absolute(0);
     metrics::counter!("aprs.parse.failed_total").absolute(0);
 
     // Fix filtering metrics
     metrics::counter!("aprs.fixes.suppressed_total").absolute(0);
     metrics::counter!("aprs.fixes.skipped_aircraft_type_total").absolute(0);
-
-    // Router metrics
-    metrics::counter!("aprs.router_queue.disconnected_total").absolute(0);
 
     // Socket router metrics
     metrics::gauge!("socket.router.lag_seconds").set(0.0);
@@ -797,29 +778,14 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("sbs.run.message_processing_latency_ms").record(0.0);
     metrics::histogram!("sbs.run.process_message_duration_ms").record(0.0);
 
-    // Queue depth metrics (pipeline order)
-    metrics::gauge!("aprs.router_queue.depth").set(0.0);
-    metrics::gauge!("aprs.aircraft_queue.depth").set(0.0);
-    metrics::gauge!("aprs.receiver_status_queue.depth").set(0.0);
-    metrics::gauge!("aprs.receiver_position_queue.depth").set(0.0);
-    metrics::gauge!("aprs.server_status_queue.depth").set(0.0);
-
     // Worker activity gauges (tracks how many workers are actively processing)
-    metrics::gauge!("worker.active", "type" => "intake").set(0.0);
-    metrics::gauge!("worker.active", "type" => "router").set(0.0);
-    metrics::gauge!("worker.active", "type" => "aircraft").set(0.0);
-    metrics::gauge!("worker.active", "type" => "receiver_status").set(0.0);
-    metrics::gauge!("worker.active", "type" => "receiver_position").set(0.0);
-    metrics::gauge!("worker.active", "type" => "server_status").set(0.0);
+    metrics::gauge!("worker.active", "type" => "ogn_intake").set(0.0);
+    metrics::gauge!("worker.active", "type" => "beast_intake").set(0.0);
+    metrics::gauge!("worker.active", "type" => "sbs_intake").set(0.0);
     metrics::gauge!("worker.active", "type" => "nats_publisher").set(0.0);
 
     // Processing rate counters (one per worker type)
     metrics::counter!("aprs.intake.processed_total").absolute(0);
-    metrics::counter!("aprs.router.processed_total").absolute(0);
-    metrics::counter!("aprs.aircraft.processed_total").absolute(0);
-    metrics::counter!("aprs.receiver_status.processed_total").absolute(0);
-    metrics::counter!("aprs.receiver_position.processed_total").absolute(0);
-    metrics::counter!("aprs.server_status.processed_total").absolute(0);
 
     // Aircraft worker stage tracking (for debugging pipeline jams)
     metrics::counter!("aprs.aircraft.stage_total", "stage" => "entered").absolute(0);
@@ -834,12 +800,11 @@ pub fn initialize_run_metrics() {
     // Queue send blocked counters (tracks when send_async has to wait for space)
     metrics::counter!("queue.send_blocked_total", "queue" => "aprs_intake").absolute(0);
     metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").absolute(0);
-    metrics::counter!("queue.send_blocked_total", "queue" => "router").absolute(0);
-    metrics::counter!("queue.send_blocked_total", "queue" => "aircraft").absolute(0);
-    metrics::counter!("queue.send_blocked_total", "queue" => "receiver_status").absolute(0);
-    metrics::counter!("queue.send_blocked_total", "queue" => "receiver_position").absolute(0);
-    metrics::counter!("queue.send_blocked_total", "queue" => "server_status").absolute(0);
     metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").absolute(0);
+
+    // NATS publisher liveness gauge
+    metrics::gauge!("nats.fix_publisher.alive").set(0.0);
+    metrics::counter!("nats.fix_publisher.panic_total").absolute(0);
 }
 
 /// Initialize analytics metrics to zero/default values
