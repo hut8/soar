@@ -2,6 +2,7 @@ name: CI
 
 permissions:
   contents: read
+  packages: read  # Required to pull container images from GHCR
 
 on:
   push:
@@ -56,6 +57,28 @@ jobs:
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/hut8/soar-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: ghcr.io/hut8/postgis-timescaledb:latest
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: soar_test
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      mailpit:
+        image: axllent/mailpit:v1.20
     defaults:
       run:
         working-directory: ./web
@@ -66,57 +89,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Pull or build PostgreSQL image
-        working-directory: .
-        run: |
-          if docker pull ghcr.io/hut8/postgis-timescaledb:latest; then
-            echo "Using pre-built image from GHCR"
-            docker tag ghcr.io/hut8/postgis-timescaledb:latest postgis-timescaledb:test
-          else
-            echo "GHCR image not available, building locally"
-            docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
-          fi
-
-      - name: Start PostgreSQL service with TimescaleDB
-        working-directory: .
-        run: |
-          docker run -d \
-            --name postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_DB=soar_test \
-            -p 5432:5432 \
-            --health-cmd="pg_isready" \
-            --health-interval=10s \
-            --health-timeout=5s \
-            --health-retries=5 \
-            postgis-timescaledb:test
-
-      - name: Wait for PostgreSQL to be ready
-        working-directory: .
-        run: |
-          timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
-
-      - name: Start Mailpit service for email testing
-        working-directory: .
-        run: |
-          docker run -d \
-            --name mailpit \
-            -p 8025:8025 \
-            -p 1025:1025 \
-            axllent/mailpit:v1.20
-
-      - name: Wait for Mailpit to be ready
-        working-directory: .
-        run: |
-          timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-on-failure: true
+          shared-key: "e2e-debug"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install web dependencies
         run: npm ci
@@ -127,50 +105,22 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Install PostgreSQL 17 client and build tools
+      - name: Wait for Mailpit to be ready
+        working-directory: .
         run: |
-          sudo apt-get update
-          # Add PostgreSQL apt repository for version 17
-          sudo apt-get install -y curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          sudo apt-get update
-          # Install PostgreSQL 17 client, build tools, and protobuf compiler
-          sudo apt-get install -y postgresql-client-17 protobuf-compiler
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "e2e-debug"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Cache Diesel CLI
-        id: cache-diesel
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/diesel
-          key: ${{ runner.os }}-diesel-cli-2.2.0
-
-      - name: Install Diesel CLI
-        if: steps.cache-diesel.outputs.cache-hit != 'true'
-        run: cargo install diesel_cli --no-default-features --features postgres --version 2.2.0
+          timeout 30s bash -c 'until curl -s http://mailpit:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
 
       - name: Setup test database
         working-directory: .
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
           PGPASSWORD: postgres
           TEST_USER_EMAIL: test@example.com
           TEST_USER_PASSWORD: testpassword123
           SEED_COUNT: 20
         run: |
           # Create PostGIS extension
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -h postgres -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
           # Run migrations (includes h3 extension setup)
           diesel migration run
@@ -186,11 +136,11 @@ jobs:
       - name: Start Rust backend server
         working-directory: .
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
           SENTRY_DSN: ''
           SOAR_ENV: test
           JWT_SECRET: test-jwt-secret-for-e2e-tests-only
-          SMTP_SERVER: localhost
+          SMTP_SERVER: mailpit
           SMTP_PORT: 1025
           SMTP_USERNAME: test
           SMTP_PASSWORD: test
@@ -246,7 +196,7 @@ jobs:
         env:
           TEST_USER_EMAIL: test@example.com
           TEST_USER_PASSWORD: testpassword123
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
         run: npm test
 
       - name: Stop servers
@@ -261,13 +211,6 @@ jobs:
           if [ -f web/preview.pid ]; then
             kill $(cat web/preview.pid) || true
           fi
-
-      - name: Cleanup containers
-        if: always()
-        working-directory: .
-        run: |
-          docker stop postgres mailpit || true
-          docker rm postgres mailpit || true
 
       - name: Upload E2E test artifacts
         if: always()
@@ -284,6 +227,26 @@ jobs:
   test-rust:
     name: Test Rust Project
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/hut8/soar-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: ghcr.io/hut8/postgis-timescaledb:latest
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: soar_test
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - name: Checkout code
@@ -291,61 +254,9 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Pull or build PostgreSQL image
-        run: |
-          if docker pull ghcr.io/hut8/postgis-timescaledb:latest; then
-            echo "Using pre-built image from GHCR"
-            docker tag ghcr.io/hut8/postgis-timescaledb:latest postgis-timescaledb:test
-          else
-            echo "GHCR image not available, building locally"
-            docker build -t postgis-timescaledb:test -f .github/postgis-timescaledb.Dockerfile .
-          fi
-
-      - name: Start PostgreSQL service with TimescaleDB
-        run: |
-          docker run -d \
-            --name postgres \
-            -e POSTGRES_PASSWORD=postgres \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_DB=soar_test \
-            -p 5432:5432 \
-            --health-cmd="pg_isready" \
-            --health-interval=10s \
-            --health-timeout=5s \
-            --health-retries=5 \
-            postgis-timescaledb:test
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-
       - name: Install web dependencies
         working-directory: ./web
         run: npm ci
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: clippy, rustfmt
-
-      - name: Install PostgreSQL 17 client and build tools
-        run: |
-          sudo apt-get update
-          # Add PostgreSQL apt repository for version 17
-          sudo apt-get install -y curl ca-certificates
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          sudo apt-get update
-          # Install PostgreSQL 17 client, build tools, and protobuf compiler
-          sudo apt-get install -y postgresql-client-17 protobuf-compiler
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -360,98 +271,57 @@ jobs:
           PGPASSWORD: postgres
         run: |
           # Create PostGIS extension (already available in postgis/postgis image)
-          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -h postgres -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
           # H3 extensions will be created by migrations
 
       - name: Check Rust formatting
         run: cargo fmt --check
 
-      - name: Cache diesel-guard
-        id: cache-diesel-guard
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/diesel-guard
-          key: ${{ runner.os }}-diesel-guard-0.5.0
-
-      - name: Install diesel-guard
-        if: steps.cache-diesel-guard.outputs.cache-hit != 'true'
-        run: cargo install diesel-guard --version 0.5.0
-
       - name: Check migrations for unsafe operations
         run: diesel-guard check migrations/
 
-      - name: Cache Diesel CLI
-        id: cache-diesel
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/diesel
-          key: ${{ runner.os }}-diesel-cli-2.2.0
-
-      - name: Install Diesel CLI
-        if: steps.cache-diesel.outputs.cache-hit != 'true'
-        run: cargo install diesel_cli --no-default-features --features postgres --version 2.2.0
-
       - name: Run migrations
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
         run: diesel migration run
 
       - name: Setup test template database
         env:
           PGPASSWORD: postgres
-          PGHOST: localhost
+          PGHOST: postgres
           PGPORT: 5432
           PGUSER: postgres
         run: ./scripts/setup-test-template.sh
 
-      - name: Cache cargo-nextest
-        id: cache-nextest
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cargo-nextest
-          key: ${{ runner.os }}-cargo-nextest-0.9.68
-
-      - name: Install cargo-nextest
-        if: steps.cache-nextest.outputs.cache-hit != 'true'
-        run: cargo install cargo-nextest --version 0.9.68 --locked
-
       - name: Run Clippy
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run Rust tests
         env:
-          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          TEST_DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
           ELEVATION_DATA_PATH: /tmp/elevation
           ELEVATION_S3_BUCKET: elevation-tiles-prod
           ELEVATION_S3_PREFIX: skadi
           AWS_REGION: us-east-1
         run: cargo nextest run
 
-      - name: Cleanup PostgreSQL container
-        if: always()
-        run: |
-          docker stop postgres || true
-          docker rm postgres || true
-
   build-release:
     name: Build Release Binary (Native Static musl)
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/hut8/soar-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
 
       - name: Install web dependencies
         working-directory: ./web
@@ -465,11 +335,6 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: npm run build
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: x86_64-unknown-linux-musl
-
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -477,9 +342,6 @@ jobs:
           shared-key: "release-build-native-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
-
-      - name: Install musl tools and protobuf compiler
-        run: sudo apt-get update && sudo apt-get install -y musl-tools protobuf-compiler
 
       - name: Build static release binary
         env:
@@ -498,9 +360,9 @@ jobs:
 
           # Check for dynamic dependencies (should show "statically linked")
           if ldd target/x86_64-unknown-linux-musl/release/soar 2>&1 | grep -q "not a dynamic executable"; then
-            echo "✓ Binary is statically linked (no dynamic dependencies)"
+            echo "Binary is statically linked (no dynamic dependencies)"
           else
-            echo "⚠ Binary has dynamic dependencies:"
+            echo "Binary has dynamic dependencies:"
             ldd target/x86_64-unknown-linux-musl/release/soar || true
           fi
 
@@ -535,6 +397,11 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/hut8/soar-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -542,19 +409,11 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
       - name: Run security audit
         run: cargo audit
 
       - name: Check for outdated dependencies
-        run: |
-          cargo install cargo-outdated
-          cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
+        run: cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
 
   deploy-staging:
     name: Deploy to Staging
