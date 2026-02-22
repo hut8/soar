@@ -53,17 +53,9 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: npm run build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: web-build
-          path: web/build/
-          retention-days: 1
-
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-22.04
-    needs: test-sveltekit
     defaults:
       run:
         working-directory: ./web
@@ -129,11 +121,8 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Download web build artifacts
-        uses: actions/download-artifact@v7
-        with:
-          name: web-build
-          path: web/build/
+      - name: Build SvelteKit project
+        run: npm run build
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -157,7 +146,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "e2e-build"
+          shared-key: "e2e-debug"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Cache Diesel CLI
@@ -188,10 +177,11 @@ jobs:
 
           # Build the project to get the seed-test-data command
           # IMPORTANT: Must use --cfg tokio_unstable for console-subscriber
-          RUSTFLAGS="--cfg tokio_unstable" cargo build --release
+          # Use debug build for E2E - faster to compile, perf doesn't matter for tests
+          RUSTFLAGS="--cfg tokio_unstable" cargo build
 
           # Seed test data
-          ./target/release/soar seed-test-data
+          ./target/debug/soar seed-test-data
 
       - name: Start Rust backend server
         working-directory: .
@@ -209,7 +199,7 @@ jobs:
           BASE_URL: http://localhost:4173
         run: |
           # Start backend server in background
-          ./target/release/soar web --port 61225 --interface localhost > backend.log 2>&1 &
+          ./target/debug/soar web --port 61225 --interface localhost > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "Backend PID: $BACKEND_PID"
           echo $BACKEND_PID > backend.pid
@@ -449,7 +439,6 @@ jobs:
   build-release:
     name: Build Release Binary (Native Static musl)
     runs-on: ubuntu-22.04
-    needs: test-sveltekit
 
     steps:
       - name: Checkout code
@@ -457,11 +446,24 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Download web build artifacts
-        uses: actions/download-artifact@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          name: web-build
-          path: web/build/
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Build SvelteKit project
+        working-directory: ./web
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: npm run build
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -481,7 +483,7 @@ jobs:
 
       - name: Build static release binary
         env:
-          SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
+          SKIP_WEB_BUILD: "1"  # Frontend already built via npm run build above
           # CRITICAL: tokio_unstable is required for tokio-console support
           # Without this flag, --enable-tokio-console will cause exit code 101 with no output
           # CRITICAL: force-frame-pointers=yes is required for Pyroscope profiling
