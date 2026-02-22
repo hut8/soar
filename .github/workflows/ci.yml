@@ -170,47 +170,22 @@ jobs:
             sleep 1
           done
 
-      - name: Start SvelteKit preview server
-        run: |
-          # Start preview server in background
-          npm run preview > preview.log 2>&1 &
-          PREVIEW_PID=$!
-          echo "Preview PID: $PREVIEW_PID"
-          echo $PREVIEW_PID > preview.pid
-
-          # Wait for preview server to be ready (max 30 seconds)
-          for i in {1..30}; do
-            if curl -s http://localhost:4173 > /dev/null 2>&1; then
-              echo "Preview server is ready!"
-              break
-            fi
-            if [ $i -eq 30 ]; then
-              echo "Preview server failed to start within 30 seconds"
-              cat preview.log
-              exit 1
-            fi
-            echo "Waiting for preview server... ($i/30)"
-            sleep 1
-          done
-
       - name: Run E2E tests
         env:
           TEST_USER_EMAIL: test@example.com
           TEST_USER_PASSWORD: testpassword123
           DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
+          # Point Playwright at the Rust backend which serves both
+          # embedded static files (from web/build/) and the API (/data/*)
+          PLAYWRIGHT_BASE_URL: http://localhost:61225
         run: npm test
 
-      - name: Stop servers
+      - name: Stop backend server
         if: always()
         working-directory: .
         run: |
-          # Kill backend server
           if [ -f backend.pid ]; then
             kill $(cat backend.pid) || true
-          fi
-          # Kill preview server
-          if [ -f web/preview.pid ]; then
-            kill $(cat web/preview.pid) || true
           fi
 
       - name: Upload E2E test artifacts
@@ -222,7 +197,6 @@ jobs:
             web/playwright-report/
             web/test-results/
             backend.log
-            web/preview.log
           retention-days: 30
 
   test-rust:

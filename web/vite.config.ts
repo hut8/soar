@@ -74,5 +74,14 @@ export default defineConfig({
 				changeOrigin: true
 			}
 		}
+	},
+	// Also proxy for preview mode (npm run preview) so E2E tests work
+	preview: {
+		proxy: {
+			'/data': {
+				target: 'http://localhost:61225',
+				changeOrigin: true
+			}
+		}
 	}
 });
