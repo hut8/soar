@@ -84,6 +84,21 @@
             }
           }
         ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Queue Full Drops/sec"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "fixedColor": "yellow",
+              "mode": "fixed"
+            }
+          }
+        ]
       }
     ]
   },
@@ -138,6 +153,17 @@
       "legendFormat": "Timeouts/sec",
       "range": true,
       "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "(rate(nats_fix_publisher_queue_full_drops_total{component=\"run\",environment=\"$environment\"}[5m]) or vector(0))",
+      "legendFormat": "Queue Full Drops/sec",
+      "range": true,
+      "refId": "E"
     }
   ],
   "title": "NATS Fix Publishing Rate",

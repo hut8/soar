@@ -14,6 +14,12 @@ const NATS_PUBLISH_TIMEOUT: Duration = Duration::from_secs(5);
 // Queue size for NATS publish queue
 const NATS_PUBLISH_QUEUE_SIZE: usize = 200;
 
+/// Timeout for enqueuing a fix to the NATS publish queue.
+/// If the queue is full for longer than this, we skip the NATS publish.
+/// The fix is already saved to the database at this point, so this only
+/// affects live streaming — not data persistence.
+const NATS_QUEUE_SEND_TIMEOUT: Duration = Duration::from_millis(100);
+
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
     match std::env::var("SOAR_ENV") {
@@ -182,23 +188,34 @@ impl NatsFixPublisher {
 }
 
 impl NatsFixPublisher {
-    /// Process a fix and publish it to NATS (blocking)
-    /// This will block if the queue is full, applying backpressure to the caller
+    /// Process a fix and publish it to NATS (non-blocking with timeout)
+    ///
+    /// The fix has already been saved to the database before this is called.
+    /// If the NATS queue is full (e.g., NATS is slow/disconnected), we skip
+    /// the publish after a short timeout rather than blocking the processing
+    /// pipeline. This prevents a slow NATS connection from stalling all workers.
     pub async fn process_fix(&self, fix: Fix, _raw_message: &str) {
         // Track if send will block (queue is full)
         if self.fix_sender.is_full() {
             metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").increment(1);
         }
 
-        // Use send_async to block until space is available - never drop fixes
-        match self.fix_sender.send_async(fix).await {
-            Ok(_) => {
+        // Use send_async with a timeout to prevent blocking the processing pipeline.
+        // If the NATS publisher can't keep up (slow connection, disconnected), the queue
+        // fills up and workers would block indefinitely without this timeout.
+        match tokio::time::timeout(NATS_QUEUE_SEND_TIMEOUT, self.fix_sender.send_async(fix)).await {
+            Ok(Ok(_)) => {
                 // Fix successfully queued for publishing
             }
-            Err(flume::SendError(_)) => {
+            Ok(Err(flume::SendError(_))) => {
                 // NATS publisher task has shut down
                 error!("NATS publisher channel is closed - cannot publish fix");
                 metrics::counter!("nats.fix_publisher.errors_total").increment(1);
+            }
+            Err(_) => {
+                // Queue full for too long — skip NATS publish to keep pipeline flowing.
+                // The fix is already in the database; only live streaming is affected.
+                metrics::counter!("nats.fix_publisher.queue_full_drops_total").increment(1);
             }
         }
     }
