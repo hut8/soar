@@ -27,6 +27,8 @@
     "build-details",
     "message-routing-rates",
     "processing-lag",
+    "processing-rate-ratio",
+    "processing-catchup-eta",
     "process-uptime",
     "process-status",
     "process-memory-usage",
