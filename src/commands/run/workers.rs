@@ -71,7 +71,7 @@ pub(crate) fn spawn_beast_intake_workers(
     fix_processor: &FixProcessor,
     accumulator: &Arc<AdsbAccumulator>,
 ) {
-    let num_beast_workers = 200;
+    let num_beast_workers = 50;
     info!("Spawning {} Beast intake queue workers", num_beast_workers);
 
     for worker_id in 0..num_beast_workers {

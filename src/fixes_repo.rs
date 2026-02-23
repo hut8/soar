@@ -1,7 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
-use tracing::{debug, info, instrument, trace};
+use std::collections::HashMap;
+use tracing::{debug, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
@@ -102,14 +103,204 @@ pub struct ClusterResult {
     pub max_lng: f64,
 }
 
+/// Pending aircraft position update data
+struct AircraftPositionUpdate {
+    aircraft_id: Uuid,
+    current_fix: serde_json::Value,
+    latitude: f64,
+    longitude: f64,
+    last_fix_at: DateTime<Utc>,
+}
+
+/// Batches aircraft position UPDATEs (current_fix, latitude, longitude, last_fix_at)
+/// to reduce per-fix DB round-trips. Only the latest update per aircraft_id is kept.
+#[derive(Clone)]
+pub struct AircraftPositionBatcher {
+    tx: tokio::sync::mpsc::Sender<AircraftPositionUpdate>,
+}
+
+impl AircraftPositionBatcher {
+    const MAX_BATCH_SIZE: usize = 500;
+    const FLUSH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+    pub fn new(pool: PgPool) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel::<AircraftPositionUpdate>(10_000);
+        tokio::spawn(Self::flush_loop(pool, rx));
+        Self { tx }
+    }
+
+    /// Queue an aircraft position update. Fire-and-forget.
+    pub fn queue(&self, fix: &Fix) {
+        if let Ok(fix_json) = serde_json::to_value(fix) {
+            let update = AircraftPositionUpdate {
+                aircraft_id: fix.aircraft_id,
+                current_fix: fix_json,
+                latitude: fix.latitude,
+                longitude: fix.longitude,
+                last_fix_at: fix.received_at,
+            };
+            if self.tx.try_send(update).is_err() {
+                metrics::counter!("aircraft_position_batcher.dropped_total").increment(1);
+            }
+        }
+    }
+
+    async fn flush_loop(pool: PgPool, mut rx: tokio::sync::mpsc::Receiver<AircraftPositionUpdate>) {
+        let mut batch: Vec<AircraftPositionUpdate> = Vec::with_capacity(Self::MAX_BATCH_SIZE);
+
+        loop {
+            match rx.recv().await {
+                Some(msg) => batch.push(msg),
+                None => {
+                    if !batch.is_empty() {
+                        Self::flush_batch(&pool, &mut batch).await;
+                    }
+                    return;
+                }
+            }
+
+            // Drain available without waiting
+            while batch.len() < Self::MAX_BATCH_SIZE {
+                match rx.try_recv() {
+                    Ok(msg) => batch.push(msg),
+                    Err(_) => break,
+                }
+            }
+
+            // Wait briefly for more if not full
+            if batch.len() < Self::MAX_BATCH_SIZE {
+                let deadline = tokio::time::Instant::now() + Self::FLUSH_INTERVAL;
+                loop {
+                    match tokio::time::timeout_at(deadline, rx.recv()).await {
+                        Ok(Some(msg)) => {
+                            batch.push(msg);
+                            if batch.len() >= Self::MAX_BATCH_SIZE {
+                                break;
+                            }
+                        }
+                        Ok(None) => {
+                            if !batch.is_empty() {
+                                Self::flush_batch(&pool, &mut batch).await;
+                            }
+                            return;
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+
+            if !batch.is_empty() {
+                Self::flush_batch(&pool, &mut batch).await;
+            }
+        }
+    }
+
+    async fn flush_batch(pool: &PgPool, batch: &mut Vec<AircraftPositionUpdate>) {
+        let start = std::time::Instant::now();
+
+        // Deduplicate: keep only the latest update per aircraft_id
+        let mut latest: HashMap<Uuid, AircraftPositionUpdate> = HashMap::new();
+        for update in batch.drain(..) {
+            match latest.entry(update.aircraft_id) {
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    if update.last_fix_at > e.get().last_fix_at {
+                        e.insert(update);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(update);
+                }
+            }
+        }
+
+        let updates: Vec<AircraftPositionUpdate> = latest.into_values().collect();
+        let count = updates.len();
+        let pool = pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build parallel arrays for unnest-based batch UPDATE
+            let mut ids: Vec<Uuid> = Vec::with_capacity(count);
+            let mut fixes: Vec<serde_json::Value> = Vec::with_capacity(count);
+            let mut lats: Vec<f64> = Vec::with_capacity(count);
+            let mut lngs: Vec<f64> = Vec::with_capacity(count);
+            let mut timestamps: Vec<DateTime<Utc>> = Vec::with_capacity(count);
+
+            for u in &updates {
+                ids.push(u.aircraft_id);
+                fixes.push(u.current_fix.clone());
+                lats.push(u.latitude);
+                lngs.push(u.longitude);
+                timestamps.push(u.last_fix_at);
+            }
+
+            diesel::sql_query(
+                "UPDATE aircraft SET
+                    current_fix = batch.current_fix,
+                    latitude = batch.latitude,
+                    longitude = batch.longitude,
+                    last_fix_at = batch.last_fix_at
+                 FROM (SELECT unnest($1::uuid[]) AS id,
+                              unnest($2::jsonb[]) AS current_fix,
+                              unnest($3::float8[]) AS latitude,
+                              unnest($4::float8[]) AS longitude,
+                              unnest($5::timestamptz[]) AS last_fix_at) AS batch
+                 WHERE aircraft.id = batch.id",
+            )
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&ids)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Jsonb>, _>(&fixes)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Double>, _>(&lats)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Double>, _>(&lngs)
+            .bind::<diesel::sql_types::Array<diesel::sql_types::Timestamptz>, _>(&timestamps)
+            .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(count)
+        })
+        .await;
+
+        match result {
+            Ok(Ok(count)) => {
+                let duration = start.elapsed();
+                metrics::histogram!("aircraft_position_batcher.flush_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aircraft_position_batcher.updated_total")
+                    .increment(count as u64);
+                metrics::histogram!("aircraft_position_batcher.batch_size").record(count as f64);
+            }
+            Ok(Err(e)) => {
+                warn!("Aircraft position batch update failed: {:#}", e);
+                metrics::counter!("aircraft_position_batcher.flush_errors_total").increment(1);
+            }
+            Err(e) => {
+                warn!("Aircraft position batch update task panicked: {:#}", e);
+                metrics::counter!("aircraft_position_batcher.flush_errors_total").increment(1);
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct FixesRepository {
     pool: PgPool,
+    position_batcher: Option<AircraftPositionBatcher>,
 }
 
 impl FixesRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            position_batcher: None,
+        }
+    }
+
+    /// Create a repository with a batched aircraft position updater.
+    pub fn with_position_batcher(pool: PgPool) -> Self {
+        let batcher = AircraftPositionBatcher::new(pool.clone());
+        Self {
+            pool,
+            position_batcher: Some(batcher),
+        }
     }
 
     /// Insert a new fix into the database
@@ -164,28 +355,34 @@ impl FixesRepository {
 
         // Schedule async update of aircraft position fields.
         // This data is only read by web API queries, not the fix processing pipeline,
-        // so a few milliseconds of staleness is acceptable.
+        // so staleness of up to 100ms is acceptable.
         if inserted {
-            let fix_for_update = fix.clone();
-            tokio::spawn(async move {
-                let _ = tokio::task::spawn_blocking(move || {
-                    if let Ok(fix_json) = serde_json::to_value(&fix_for_update)
-                        && let Ok(mut conn) = pool.get()
-                    {
-                        use crate::schema::aircraft;
-                        let _ = diesel::update(aircraft::table)
-                            .filter(aircraft::id.eq(fix_for_update.aircraft_id))
-                            .set((
-                                aircraft::current_fix.eq(fix_json),
-                                aircraft::latitude.eq(fix_for_update.latitude),
-                                aircraft::longitude.eq(fix_for_update.longitude),
-                                aircraft::last_fix_at.eq(fix_for_update.received_at),
-                            ))
-                            .execute(&mut conn);
-                    }
-                })
-                .await;
-            });
+            if let Some(ref batcher) = self.position_batcher {
+                // Fast path: queue for batched update
+                batcher.queue(fix);
+            } else {
+                // Slow path: individual update (tests, non-run code paths)
+                let fix_for_update = fix.clone();
+                tokio::spawn(async move {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(fix_json) = serde_json::to_value(&fix_for_update)
+                            && let Ok(mut conn) = pool.get()
+                        {
+                            use crate::schema::aircraft;
+                            let _ = diesel::update(aircraft::table)
+                                .filter(aircraft::id.eq(fix_for_update.aircraft_id))
+                                .set((
+                                    aircraft::current_fix.eq(fix_json),
+                                    aircraft::latitude.eq(fix_for_update.latitude),
+                                    aircraft::longitude.eq(fix_for_update.longitude),
+                                    aircraft::last_fix_at.eq(fix_for_update.received_at),
+                                ))
+                                .execute(&mut conn);
+                        }
+                    })
+                    .await;
+                });
+            }
         }
 
         Ok(())

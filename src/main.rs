@@ -494,16 +494,20 @@ async fn setup_diesel_database(
     // - pgbouncer max_client_conn: 1000
     // - pgbouncer default_pool_size: 100 (actual PG connections)
     // - pgbouncer max_db_connections: 120
-    // Application pool can be larger since pgbouncer multiplexes connections
-    // Workers: 80 aircraft + 50 router + 6 receiver_status + 4 receiver_position + 2 server_status + misc
+    // With batched raw_message INSERTs and batched aircraft position UPDATEs,
+    // the per-message DB round-trips are dramatically reduced, so we need fewer
+    // pooled connections. 50 connections is sufficient for:
+    // - 50 OGN workers + 50 Beast workers (but with batching, most DB work
+    //   goes through 2 batcher tasks, not the workers directly)
+    // - Web API handlers, flight lifecycle, receiver updates, etc.
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
-        .max_size(150)
-        .min_idle(Some(10))
+        .max_size(50)
+        .min_idle(Some(5))
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 150, via pgbouncer)");
+    info!("Successfully created Diesel connection pool (max connections: 50, via pgbouncer)");
 
     // Skip migrations if not requested (staging/production services should use `soar migrate`)
     if !run_migrations {

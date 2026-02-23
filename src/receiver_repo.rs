@@ -913,21 +913,23 @@ impl ReceiverRepository {
     }
 
     /// Update the latest_packet_at timestamp for a receiver
-    /// This is cached - we only update the database if >5 seconds have passed since the last update
+    /// This is cached - we only update the database if >60 seconds have passed since the last update.
+    /// The latest_packet_at field is only used for receiver status display pages,
+    /// so 60-second freshness is more than adequate.
     pub async fn update_latest_packet_at(&self, receiver_id: Uuid) -> Result<bool> {
         let now = Utc::now();
 
         // Check if we recently updated this receiver
         if let Some(last_update) = self.latest_packet_at_cache.get(&receiver_id) {
             let elapsed = now.signed_duration_since(last_update);
-            if elapsed.num_seconds() < 5 {
-                // Less than 5 seconds since last update - skip database write
+            if elapsed.num_seconds() < 60 {
+                // Less than 60 seconds since last update - skip database write
                 metrics::counter!("receiver_repo.latest_packet_at.skipped_total").increment(1);
                 return Ok(true);
             }
         }
 
-        // More than 5 seconds (or never updated) - perform database update
+        // More than 60 seconds (or never updated) - perform database update
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || -> Result<bool> {

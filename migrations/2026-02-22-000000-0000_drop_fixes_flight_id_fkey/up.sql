@@ -1,0 +1,13 @@
+-- Drop the fixes_flight_id_fkey foreign key constraint.
+--
+-- This FK causes catastrophic performance on flight DELETEs (3.7 seconds each)
+-- because PostgreSQL must acquire FOR KEY SHARE locks across all 31 TimescaleDB
+-- hypertable chunks to verify no child rows reference the flight being deleted.
+--
+-- The application already enforces referential integrity:
+-- - clear_flight_id() is called before deleting flights
+-- - Flight IDs are only set by the flight tracker which validates flight existence
+--
+-- Additionally, this eliminates ~234M FOR KEY SHARE lock acquisitions per cycle
+-- from the fix INSERT path (FK validation on every insert).
+ALTER TABLE fixes DROP CONSTRAINT IF EXISTS fixes_flight_id_fkey;

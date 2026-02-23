@@ -206,6 +206,7 @@ pub async fn handle_run(
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
             processor_with_nats
+                .with_position_batcher(diesel_pool.clone())
                 .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
                 .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
                 .with_sync_elevation(flight_tracker.elevation_db().clone())
@@ -220,6 +221,7 @@ pub async fn handle_run(
                 aircraft_cache.clone(),
                 flight_tracker.clone(),
             )
+            .with_position_batcher(diesel_pool.clone())
             .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
             .with_suppressed_aircraft_categories(parsed_aircraft_categories.clone())
             .with_sync_elevation(flight_tracker.elevation_db().clone())
@@ -234,7 +236,7 @@ pub async fn handle_run(
     let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
     let receiver_status_repo = ReceiverStatusRepository::new(diesel_pool.clone());
     let aprs_messages_repo =
-        soar::raw_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
+        soar::raw_messages_repo::AprsMessagesRepository::with_batcher(diesel_pool.clone());
 
     // Create OgnGenericProcessor for archiving, receiver identification, and APRS message insertion
     let generic_processor = if let Some(archive_path) = archive_dir.clone() {
@@ -256,7 +258,7 @@ pub async fn handle_run(
     // Both Beast (binary ADS-B) and SBS (text CSV) share the same accumulator
     let beast_infrastructure = if !no_adsb {
         let aircraft_repo = AircraftRepository::new(diesel_pool.clone());
-        let beast_repo = RawMessagesRepository::new(diesel_pool.clone());
+        let beast_repo = RawMessagesRepository::with_batcher(diesel_pool.clone());
 
         // Create ADS-B accumulator for combining position/velocity/callsign data
         // Wraps CPR decoder and adds state accumulation across message types
