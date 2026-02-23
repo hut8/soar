@@ -725,6 +725,64 @@ impl RawMessagesRepository {
 pub type AprsMessagesRepository = RawMessagesRepository;
 pub type BeastMessagesRepository = RawMessagesRepository;
 
+/// Unified insertable struct for batch raw_messages INSERTs via Diesel DSL.
+/// Unlike the source-specific structs (NewAprsMessage, NewBeastMessage, NewSbsMessage),
+/// this includes the `source` field so all message types can be batched together.
+#[derive(Insertable, Clone)]
+#[diesel(table_name = crate::schema::raw_messages)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+struct NewRawMessage {
+    id: Uuid,
+    raw_message: Vec<u8>,
+    received_at: DateTime<Utc>,
+    receiver_id: Option<Uuid>,
+    unparsed: Option<String>,
+    raw_message_hash: Vec<u8>,
+    source: MessageSourceType,
+}
+
+impl From<NewAprsMessage> for NewRawMessage {
+    fn from(m: NewAprsMessage) -> Self {
+        Self {
+            id: m.id,
+            raw_message: m.raw_message,
+            received_at: m.received_at,
+            receiver_id: Some(m.receiver_id),
+            unparsed: m.unparsed,
+            raw_message_hash: m.raw_message_hash,
+            source: MessageSourceType::Aprs,
+        }
+    }
+}
+
+impl From<NewBeastMessage> for NewRawMessage {
+    fn from(m: NewBeastMessage) -> Self {
+        Self {
+            id: m.id,
+            raw_message: m.raw_message,
+            received_at: m.received_at,
+            receiver_id: m.receiver_id,
+            unparsed: m.unparsed,
+            raw_message_hash: m.raw_message_hash,
+            source: MessageSourceType::Beast,
+        }
+    }
+}
+
+impl From<NewSbsMessage> for NewRawMessage {
+    fn from(m: NewSbsMessage) -> Self {
+        Self {
+            id: m.id,
+            raw_message: m.raw_message,
+            received_at: m.received_at,
+            receiver_id: m.receiver_id,
+            unparsed: m.unparsed,
+            raw_message_hash: m.raw_message_hash,
+            source: MessageSourceType::Sbs,
+        }
+    }
+}
+
 /// A raw message pending batch insert, with its source type encoded.
 enum PendingRawMessage {
     Aprs(NewAprsMessage),
@@ -841,82 +899,35 @@ impl RawMessageBatcher {
         }
     }
 
-    /// Flush a batch of pending messages as a single multi-row INSERT.
+    /// Flush a batch of pending messages as a single multi-row INSERT using Diesel DSL.
     async fn flush_batch(pool: &PgPool, batch: &mut Vec<PendingRawMessage>) {
+        use crate::schema::raw_messages::dsl::*;
+
         let batch_size = batch.len();
         let start = std::time::Instant::now();
 
-        let messages: Vec<PendingRawMessage> = std::mem::take(batch);
+        // Convert to unified Insertable structs
+        let rows: Vec<NewRawMessage> = std::mem::take(batch)
+            .into_iter()
+            .map(|msg| match msg {
+                PendingRawMessage::Aprs(m) => NewRawMessage::from(m),
+                PendingRawMessage::Beast(m) => NewRawMessage::from(m),
+                PendingRawMessage::Sbs(m) => NewRawMessage::from(m),
+            })
+            .collect();
+
+        let count = rows.len();
         let pool = pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build multi-row INSERT using raw SQL with ON CONFLICT DO NOTHING
-            // to handle duplicates gracefully without failing the batch.
-            //
-            // We build the VALUES clause dynamically and bind parameters positionally.
-            let count = messages.len();
-            if count == 0 {
-                return Ok::<usize, anyhow::Error>(0);
-            }
+            diesel::insert_into(raw_messages)
+                .values(&rows)
+                .on_conflict_do_nothing()
+                .execute(&mut conn)?;
 
-            let mut params_ids: Vec<Uuid> = Vec::with_capacity(count);
-            let mut params_raw: Vec<Vec<u8>> = Vec::with_capacity(count);
-            let mut params_received: Vec<DateTime<Utc>> = Vec::with_capacity(count);
-            let mut params_receiver: Vec<Option<Uuid>> = Vec::with_capacity(count);
-            let mut params_unparsed: Vec<Option<String>> = Vec::with_capacity(count);
-            let mut params_hash: Vec<Vec<u8>> = Vec::with_capacity(count);
-            let mut params_source: Vec<&'static str> = Vec::with_capacity(count);
-
-            for msg in &messages {
-                match msg {
-                    PendingRawMessage::Aprs(m) => {
-                        params_ids.push(m.id);
-                        params_raw.push(m.raw_message.clone());
-                        params_received.push(m.received_at);
-                        params_receiver.push(Some(m.receiver_id));
-                        params_unparsed.push(m.unparsed.clone());
-                        params_hash.push(m.raw_message_hash.clone());
-                        params_source.push("aprs");
-                    }
-                    PendingRawMessage::Beast(m) => {
-                        params_ids.push(m.id);
-                        params_raw.push(m.raw_message.clone());
-                        params_received.push(m.received_at);
-                        params_receiver.push(m.receiver_id);
-                        params_unparsed.push(m.unparsed.clone());
-                        params_hash.push(m.raw_message_hash.clone());
-                        params_source.push("beast");
-                    }
-                    PendingRawMessage::Sbs(m) => {
-                        params_ids.push(m.id);
-                        params_raw.push(m.raw_message.clone());
-                        params_received.push(m.received_at);
-                        params_receiver.push(m.receiver_id);
-                        params_unparsed.push(m.unparsed.clone());
-                        params_hash.push(m.raw_message_hash.clone());
-                        params_source.push("sbs");
-                    }
-                }
-            }
-
-            // Use unnest arrays for efficient multi-row insert
-            diesel::sql_query(
-                "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                 SELECT * FROM unnest($1::uuid[], $2::bytea[], $3::timestamptz[], $4::uuid[], $5::text[], $6::bytea[], $7::message_source[])
-                 ON CONFLICT DO NOTHING",
-            )
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&params_ids)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Bytea>, _>(&params_raw)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Timestamptz>, _>(&params_received)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Uuid>>, _>(&params_receiver)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>, _>(&params_unparsed)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Bytea>, _>(&params_hash)
-            .bind::<diesel::sql_types::Array<diesel::sql_types::Text>, _>(&params_source)
-            .execute(&mut conn)?;
-
-            Ok(count)
+            Ok::<usize, anyhow::Error>(count)
         })
         .await;
 
