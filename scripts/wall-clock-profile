@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# wall-clock-profile - Capture a wall-clock flamegraph of a running SOAR process
+#
+# Unlike CPU profiling (which only samples on-CPU time), this uses perf to
+# sample ALL threads regardless of state — capturing time spent blocked on
+# I/O, futexes, channel receives, mutex contention, etc.
+#
+# Requires: perf, flamegraph (cargo install flamegraph)
+#
+# Usage:
+#   wall-clock-profile <service> [seconds]
+#
+# Examples:
+#   wall-clock-profile soar-run-staging 30
+#   wall-clock-profile soar-run 10
+#   wall-clock-profile soar-ingest-staging 60
+#
+# Output: SVG flamegraph written to /tmp/wall-clock-<service>-<timestamp>.svg
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 <service-name> [seconds]"
+    echo ""
+    echo "  service-name  systemd service name (e.g. soar-run-staging, soar-run)"
+    echo "  seconds       profiling duration (default: 30, max: 300)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 soar-run-staging 30"
+    echo "  $0 soar-run 10"
+    exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+SERVICE="$1"
+DURATION="${2:-30}"
+
+if (( DURATION > 300 )); then
+    echo "Error: duration capped at 300 seconds"
+    exit 1
+fi
+
+# Find the PID from the systemd service
+PID=$(systemctl show --property=MainPID --value "$SERVICE" 2>/dev/null || true)
+if [[ -z "$PID" || "$PID" == "0" ]]; then
+    echo "Error: service '$SERVICE' is not running (or not found)"
+    exit 1
+fi
+
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+PERF_DATA=$(mktemp /tmp/perf-wall-clock-XXXXXX.data)
+OUTPUT="/tmp/wall-clock-${SERVICE}-${TIMESTAMP}.svg"
+
+echo "Profiling PID $PID ($SERVICE) for ${DURATION}s (wall-clock)..."
+echo "  perf data: $PERF_DATA"
+echo "  output:    $OUTPUT"
+echo ""
+
+# Sample at 99 Hz with DWARF call graphs for accurate Rust stack unwinding.
+# Key: --call-graph dwarf gives us full backtraces through async Rust code.
+# perf record samples all threads by default, including sleeping ones,
+# giving us wall-clock coverage (not just on-CPU time).
+sudo perf record \
+    -g --call-graph dwarf \
+    -F 99 \
+    -p "$PID" \
+    -o "$PERF_DATA" \
+    -- sleep "$DURATION"
+
+echo ""
+echo "Generating flamegraph..."
+
+# Generate the flamegraph from perf data
+sudo perf script -i "$PERF_DATA" \
+    | flamegraph --title "Wall-clock: $SERVICE (${DURATION}s @ $(date))" \
+    > "$OUTPUT"
+
+# Clean up perf data (can be large)
+sudo rm -f "$PERF_DATA"
+
+echo "Done: $OUTPUT"
+echo ""
+echo "View in browser:  open $OUTPUT"
+echo "View in terminal: flamelens $OUTPUT"

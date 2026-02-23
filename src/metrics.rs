@@ -341,73 +341,6 @@ async fn profile_handler(
     }
 }
 
-/// Heap profiling handler compatible with Pyroscope scraping
-/// Returns profiling data in pprof protobuf format
-/// Accepts `seconds` query parameter to control duration (default: 10s, max: 60s)
-///
-/// Profiling runs on the blocking thread pool via `spawn_blocking` so that
-/// the sleep duration is not affected by async runtime saturation.
-async fn heap_profile_handler(
-    axum::extract::Query(params): axum::extract::Query<ProfileParams>,
-) -> impl IntoResponse {
-    let duration_secs = params
-        .seconds
-        .unwrap_or(MAX_PROFILE_SECONDS)
-        .min(MAX_PROFILE_SECONDS);
-    info!("Generating heap profile ({} seconds)", duration_secs);
-
-    // Run profiling on blocking thread pool — immune to async runtime overload
-    let result = tokio::task::spawn_blocking(move || {
-        let guard = pprof::ProfilerGuardBuilder::default()
-            .frequency(99)
-            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-            .build()?;
-
-        // Sleep the OS thread directly, not dependent on the tokio timer wheel
-        std::thread::sleep(std::time::Duration::from_secs(duration_secs));
-
-        let report = guard.report().build()?;
-        let profile = report.pprof()?;
-        let mut body = Vec::new();
-        profile.write_to_vec(&mut body)?;
-        Ok::<_, anyhow::Error>(body)
-    })
-    .await;
-
-    match result {
-        Ok(Ok(body)) => {
-            info!("Heap profile generated ({} bytes)", body.len());
-            (
-                StatusCode::OK,
-                [(axum::http::header::CONTENT_TYPE, "application/octet-stream")],
-                body,
-            )
-        }
-        Ok(Err(e)) => {
-            warn!("Heap profiling failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(
-                    axum::http::header::CONTENT_TYPE,
-                    "text/plain; charset=utf-8",
-                )],
-                Vec::new(),
-            )
-        }
-        Err(e) => {
-            warn!("Heap profiling task panicked: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [(
-                    axum::http::header::CONTENT_TYPE,
-                    "text/plain; charset=utf-8",
-                )],
-                Vec::new(),
-            )
-        }
-    }
-}
-
 /// Background task to update process metrics
 /// Updates uptime, CPU usage, and memory usage metrics every 5 seconds
 pub async fn process_metrics_task() {
@@ -1017,8 +950,7 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
         )
         .route("/health", get(health_check_handler))
         .route("/ready", get(readiness_check_handler))
-        .route("/debug/pprof/profile", get(profile_handler))
-        .route("/debug/pprof/heap", get(heap_profile_handler));
+        .route("/debug/pprof/profile", get(profile_handler));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("Starting metrics server on http://{}/metrics", addr);
@@ -1028,12 +960,8 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
     info!("Health check available at http://{}/health", addr);
     info!("Readiness check available at http://{}/ready", addr);
     info!(
-        "CPU profiling available at http://{}/debug/pprof/profile?seconds=N (pprof format, default 10s)",
-        addr
-    );
-    info!(
-        "Heap profiling available at http://{}/debug/pprof/heap?seconds=N (pprof format, default 10s)",
-        addr
+        "CPU profiling available at http://{}/debug/pprof/profile?seconds=N (pprof format, max {}s)",
+        addr, MAX_PROFILE_SECONDS
     );
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
