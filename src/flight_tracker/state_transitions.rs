@@ -315,6 +315,16 @@ pub(crate) async fn process_state_transition(
                     // Continue existing flight
                     fix.flight_id = Some(flight_id);
 
+                    // Update in-memory callsign when first learned on an existing flight.
+                    // Without this, current_callsign stays None and subsequent fixes with
+                    // a different callsign won't trigger a flight split.
+                    if fix.flight_number.is_some()
+                        && let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                        && state.current_callsign.is_none()
+                    {
+                        state.current_callsign = fix.flight_number.clone();
+                    }
+
                     // Calculate time gap
                     if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
                         && let Some(last_fix_time) = state.last_fix_timestamp()
