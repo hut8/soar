@@ -41,7 +41,7 @@ pub(crate) async fn process_aprs_message(
     .await;
 
     if processed {
-        metrics::counter!("aprs.messages.processed.total_total").increment(1);
+        metrics::counter!("aprs.messages.processed_total").increment(1);
     } else {
         metrics::counter!("aprs.parse.failed_total").increment(1);
     }

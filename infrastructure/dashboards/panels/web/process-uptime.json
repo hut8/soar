@@ -8,13 +8,28 @@
       "color": {
         "mode": "thresholds"
       },
-      "mappings": [],
+      "mappings": [
+        {
+          "type": "value",
+          "options": {
+            "0": {
+              "text": "Down",
+              "color": "red",
+              "index": 0
+            }
+          }
+        }
+      ],
       "thresholds": {
         "mode": "absolute",
         "steps": [
           {
-            "color": "green",
+            "color": "red",
             "value": null
+          },
+          {
+            "color": "green",
+            "value": 1
           },
           {
             "color": "yellow",
@@ -52,7 +67,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "process_uptime_seconds{component=\"web\",environment=\"$environment\"}",
+      "expr": "process_uptime_seconds{component=\"web\",environment=\"$environment\"} or on() vector(0)",
       "legendFormat": "__auto",
       "range": true,
       "refId": "A"
