@@ -156,8 +156,7 @@ impl FixProcessor {
     /// This is used when the fix has already been created from a non-APRS source
     #[tracing::instrument(skip(self, fix), fields(aircraft_id = %fix.aircraft_id))]
     pub async fn process_fix(&self, fix: Fix) -> anyhow::Result<()> {
-        // Use an empty raw message for non-APRS fixes
-        self.process_fix_internal(fix, "").await;
+        self.process_fix_internal(fix).await;
         Ok(())
     }
 }
@@ -166,13 +165,8 @@ impl FixProcessor {
     /// Process an APRS packet by looking up device and creating a Fix
     /// This is the main entry point that orchestrates the entire pipeline
     /// Note: Receiver is guaranteed to exist and APRS message already inserted by OgnGenericProcessor
-    #[tracing::instrument(skip(self, packet, raw_message, context))]
-    pub async fn process_aprs_packet(
-        &self,
-        packet: AprsPacket,
-        raw_message: &str,
-        context: PacketContext,
-    ) {
+    #[tracing::instrument(skip(self, packet, context))]
+    pub async fn process_aprs_packet(&self, packet: AprsPacket, context: PacketContext) {
         metrics::counter!("aprs.aircraft.stage_total", "stage" => "entered").increment(1);
         let total_start = std::time::Instant::now();
 
@@ -317,7 +311,7 @@ impl FixProcessor {
                                 );
 
                                 let process_internal_start = std::time::Instant::now();
-                                self.process_fix_internal(fix, raw_message).await;
+                                self.process_fix_internal(fix).await;
                                 metrics::histogram!("aprs.aircraft.process_fix_internal_ms")
                                     .record(
                                         process_internal_start.elapsed().as_micros() as f64
@@ -352,8 +346,8 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.aircraft_id))]
-    async fn process_fix_internal(&self, mut fix: Fix, raw_message: &str) {
+    #[tracing::instrument(skip(self, fix), fields(device_id = %fix.aircraft_id))]
+    async fn process_fix_internal(&self, mut fix: Fix) {
         // Step 0: Calculate elevation synchronously if in sync mode (before database insert)
         // This ensures the fix is inserted with complete data including AGL altitude
         if let Some(ElevationMode::Sync { elevation_db }) = &self.elevation_mode
@@ -491,9 +485,7 @@ impl FixProcessor {
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
             metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_nats").increment(1);
-            nats_publisher
-                .process_fix(updated_fix.clone(), raw_message)
-                .await;
+            nats_publisher.process_fix(updated_fix.clone()).await;
             metrics::histogram!("aprs.aircraft.nats_publish_ms")
                 .record(nats_publish_start.elapsed().as_micros() as f64 / 1000.0);
         }

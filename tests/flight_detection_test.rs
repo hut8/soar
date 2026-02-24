@@ -240,9 +240,7 @@ async fn test_descended_out_of_range_while_landing_then_took_off_hours_later() {
                 .await
             {
                 // Process through fix processor with the context from generic processor
-                fix_processor
-                    .process_aprs_packet(packet, aprs_message, context)
-                    .await;
+                fix_processor.process_aprs_packet(packet, context).await;
             }
         }
 
@@ -447,9 +445,7 @@ async fn test_no_active_fixes_should_not_create_flight() {
                 .await
             {
                 // Process through fix processor with the context from generic processor
-                fix_processor
-                    .process_aprs_packet(packet, aprs_message, context)
-                    .await;
+                fix_processor.process_aprs_packet(packet, context).await;
             }
         }
 

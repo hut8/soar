@@ -402,7 +402,10 @@ impl AircraftRepository {
 
             // If we have a computed registration and the aircraft doesn't already have one,
             // try to set it — but only if no other aircraft already owns that registration.
-            if !registration.is_empty() && model.registration.as_deref().unwrap_or("").is_empty() {
+            if !registration.is_empty()
+                && model.registration.as_deref().unwrap_or("").is_empty()
+                && model.pending_registration.as_deref() != Some(registration.as_str())
+            {
                 let duplicate_exists = diesel::dsl::select(diesel::dsl::exists(
                     aircraft::table
                         .filter(aircraft::registration.eq(&registration))
@@ -417,16 +420,16 @@ impl AircraftRepository {
                             .set(aircraft::pending_registration.eq(&registration))
                             .execute(&mut conn)?;
                         model.pending_registration = Some(registration.clone());
+                        warn!(
+                            "Duplicate registration: address={:06X}, address_type={:?}, \
+                             computed_registration={:?}, kept_registration={:?} \
+                             (set pending_registration for async merge)",
+                            address,
+                            address_type,
+                            registration,
+                            model.registration.as_deref().unwrap_or(""),
+                        );
                     }
-                    warn!(
-                        "Duplicate registration: address={:06X}, address_type={:?}, \
-                         computed_registration={:?}, kept_registration={:?} \
-                         (set pending_registration for async merge)",
-                        address,
-                        address_type,
-                        registration,
-                        model.registration.as_deref().unwrap_or(""),
-                    );
                 } else {
                     diesel::update(aircraft::table.filter(aircraft::id.eq(model.id)))
                         .set(aircraft::registration.eq(&registration))
@@ -639,13 +642,13 @@ impl AircraftRepository {
                             .set(aircraft::pending_registration.eq(&registration))
                             .execute(&mut conn)?;
                         model.pending_registration = Some(registration.clone());
+                        warn!(
+                            "Duplicate registration: address={:06X}, address_type={:?}, \
+                             packet_registration={:?}, kept_registration={:?} \
+                             (set pending_registration for async merge)",
+                            address, address_type, registration, model_reg
+                        );
                     }
-                    warn!(
-                        "Duplicate registration: address={:06X}, address_type={:?}, \
-                         packet_registration={:?}, kept_registration={:?} \
-                         (set pending_registration for async merge)",
-                        address, address_type, registration, model_reg
-                    );
                 }
             }
 
