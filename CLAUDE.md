@@ -101,8 +101,9 @@ This ensures config changes are tracked in version control and can be reproduced
 ### METRICS AND MONITORING
 
 **CRITICAL - Grafana Dashboard Synchronization:**
-- **ALWAYS update Grafana dashboards when changing metrics** - Any metric rename, addition, or removal MUST be reflected in the corresponding dashboard files in `infrastructure/`
-- **Verify dashboard queries after changes** - After updating code, search all dashboard files for the old metric name and update them
+- **ANY code change that adds, removes, or renames a metric MUST include corresponding Grafana dashboard updates** in the same commit/PR. This includes removing code that emitted metrics — search `infrastructure/dashboards/` for the metric name and remove/update any panels that reference it.
+- **Verify dashboard queries after changes** - After updating code, run `grep -r "old_metric_name" infrastructure/dashboards/` to find all references and update them
+- **Run `python3 infrastructure/dashboards/build.py --verify`** after any dashboard changes to ensure all dashboards build correctly
 - **Dashboard locations** (generated from `infrastructure/dashboards/`):
   - `grafana-dashboard-run.json` - Main run command metrics (core, routing, flights)
   - `grafana-dashboard-run-geocoding.json` - Pelias geocoding service

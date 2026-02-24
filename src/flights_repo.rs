@@ -1002,38 +1002,6 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
-    /// Resume a timed-out flight by clearing the timeout and updating last_fix_at atomically
-    /// This ensures the check_timeout_after_last_fix constraint is not violated
-    /// Used when flight coalescing resumes tracking of a timed-out flight
-    pub async fn resume_timed_out_flight(
-        &self,
-        flight_id: Uuid,
-        fix_timestamp: DateTime<Utc>,
-    ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
-        let pool = self.pool.clone();
-
-        let rows_affected = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Atomically clear timeout and update last_fix_at in a single UPDATE
-            // This prevents violating check_timeout_after_last_fix constraint
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    timed_out_at.eq(None::<DateTime<Utc>>),
-                    last_fix_at.eq(fix_timestamp),
-                    updated_at.eq(fix_timestamp),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(rows)
-        })
-        .await??;
-
-        Ok(rows_affected > 0)
-    }
-
     /// Update the callsign for a flight
     /// Only updates if the provided callsign is different from the current one
     pub async fn update_callsign(
@@ -1513,7 +1481,7 @@ impl FlightsRepository {
                  SET landing_time = $1, \
                      last_fix_at = GREATEST(last_fix_at, $1), \
                      updated_at = $1 \
-                 WHERE id = $2 AND landing_time IS NULL",
+                 WHERE id = $2 AND landing_time IS NULL AND timed_out_at IS NULL",
             )
             .bind::<diesel::sql_types::Timestamptz, _>(landing_time_param)
             .bind::<diesel::sql_types::Uuid, _>(flight_id)
@@ -1526,10 +1494,8 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
-    /// Get all flights for tracker initialization
-    /// Returns:
-    /// - Active flights (timed_out_at IS NULL) from last `timeout_duration` (e.g., 1 hour)
-    /// - Timed-out flights (timed_out_at IS NOT NULL) from last 18 hours (for resumption)
+    /// Get active flights for tracker initialization
+    /// Returns active flights (timed_out_at IS NULL, landing_time IS NULL) from last `timeout_duration`
     pub async fn get_active_flights_for_tracker(
         &self,
         timeout_duration: chrono::Duration,
@@ -1538,27 +1504,14 @@ impl FlightsRepository {
 
         let pool = self.pool.clone();
         let active_cutoff = Utc::now() - timeout_duration;
-        let timed_out_cutoff = Utc::now() - chrono::Duration::hours(18);
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Get flights where landing_time is NULL and either:
-            // 1. Active (timed_out_at IS NULL) with last_fix_at within timeout_duration
-            // 2. Timed-out (timed_out_at IS NOT NULL) with last_fix_at within 18 hours
-            //
-            // We need the longer window for timed-out flights to support resumption
-            // (state_transitions.rs has an 18-hour hard limit for resuming timed-out flights)
             let flight_models: Vec<FlightModel> = flights
                 .filter(landing_time.is_null())
-                .filter(
-                    timed_out_at
-                        .is_null()
-                        .and(last_fix_at.ge(active_cutoff))
-                        .or(timed_out_at
-                            .is_not_null()
-                            .and(last_fix_at.ge(timed_out_cutoff))),
-                )
+                .filter(timed_out_at.is_null())
+                .filter(last_fix_at.ge(active_cutoff))
                 .order(last_fix_at.desc())
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;

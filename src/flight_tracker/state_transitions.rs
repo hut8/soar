@@ -134,7 +134,7 @@ pub(crate) async fn process_state_transition(
                     .set_preliminary_landing_time(flight_id, fix.received_at)
                     .await
                 {
-                    Ok(_) => {
+                    Ok(true) => {
                         // Old flight is now inactive - safe to create new one
                         pending_work = PendingBackgroundWork::CompleteFlight {
                             flight_id,
@@ -155,9 +155,28 @@ pub(crate) async fn process_state_transition(
                             }
                             Err(e) => {
                                 error!("Failed to create new flight after callsign change: {}", e);
+                                // Old flight already ended in DB — clear stale state
+                                if let Some(mut state) =
+                                    ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                {
+                                    state.current_flight_id = None;
+                                    state.current_callsign = None;
+                                }
                                 fix.flight_id = None;
                             }
                         }
+                    }
+                    Ok(false) => {
+                        // No rows updated — flight already timed out or landed in DB.
+                        // Clear stale in-memory state so next fix creates a new flight.
+                        warn!(
+                            "Flight {} already ended in DB (timed out or landed), clearing stale in-memory state",
+                            flight_id
+                        );
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = None;
+                        }
+                        fix.flight_id = None;
                     }
                     Err(e) => {
                         // DB error - keep old flight active in memory to maintain sync
@@ -238,7 +257,7 @@ pub(crate) async fn process_state_transition(
                         .set_preliminary_landing_time(flight_id, fix.received_at)
                         .await
                     {
-                        Ok(_) => {
+                        Ok(true) => {
                             // Old flight is now inactive - safe to create new one
                             pending_work = PendingBackgroundWork::CompleteFlight {
                                 flight_id,
@@ -259,9 +278,28 @@ pub(crate) async fn process_state_transition(
                                 }
                                 Err(e) => {
                                     error!("Failed to create new flight after gap: {}", e);
+                                    // Old flight already ended in DB — clear stale state
+                                    if let Some(mut state) =
+                                        ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                    {
+                                        state.current_flight_id = None;
+                                        state.current_callsign = None;
+                                    }
                                     fix.flight_id = None;
                                 }
                             }
+                        }
+                        Ok(false) => {
+                            // No rows updated — flight already timed out or landed in DB.
+                            // Clear stale in-memory state so next fix creates a new flight.
+                            warn!(
+                                "Flight {} already ended in DB (timed out or landed), clearing stale in-memory state",
+                                flight_id
+                            );
+                            if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                                state.current_flight_id = None;
+                            }
+                            fix.flight_id = None;
                         }
                         Err(e) => {
                             // DB error - keep old flight active in memory to maintain sync
@@ -321,193 +359,8 @@ pub(crate) async fn process_state_transition(
             }
         }
 
-        // Case 2: No active flight AND fix is active -> Create new flight or resume timed-out
+        // Case 2: No active flight AND fix is active -> Create new flight
         (None, true) => {
-            // Check if we should resume a timed-out flight (using in-memory state)
-            let timed_out_info = if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
-                if let Some(flight_id) = state.last_timed_out_flight_id {
-                    Some((
-                        flight_id,
-                        state.last_timed_out_callsign.clone(),
-                        state.last_timed_out_at,
-                    ))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            if let Some((timed_out_flight_id, timed_out_callsign, timed_out_at)) = timed_out_info {
-                // Calculate gap from when it timed out
-                let gap_seconds = if let Some(timed_out_time) = timed_out_at {
-                    (fix.received_at - timed_out_time).num_seconds()
-                } else {
-                    // No timeout timestamp - use last fix timestamp
-                    if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
-                        && let Some(last_fix_time) = state.last_fix_timestamp()
-                    {
-                        (fix.received_at - last_fix_time).num_seconds()
-                    } else {
-                        i64::MAX // Unknown - don't resume
-                    }
-                };
-                let gap_hours = gap_seconds as f64 / 3600.0;
-
-                // Check callsign mismatch
-                let callsign_matches = match (&timed_out_callsign, &fix.flight_number) {
-                    (Some(prev), Some(new)) if prev != new => {
-                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch_total")
-                            .increment(1);
-                        false
-                    }
-                    _ => true,
-                };
-
-                // Check position/distance reasonableness based on time and speed
-                // Track distance for histogram recording
-                let mut coalesce_distance_km: Option<f64> = None;
-                let position_reasonable = if let Some(state) =
-                    ctx.aircraft_states.get(&fix.aircraft_id)
-                    && let Some((last_lat, last_lng)) = state.last_position()
-                {
-                    let actual_distance_m =
-                        haversine_distance(last_lat, last_lng, fix.latitude, fix.longitude);
-                    coalesce_distance_km = Some(actual_distance_m / 1000.0);
-
-                    // Get last known ground speed to estimate expected travel distance
-                    let last_speed_knots = state
-                        .last_fix()
-                        .and_then(|f| f.ground_speed_knots)
-                        .unwrap_or(0.0) as f64;
-
-                    // Convert knots to m/s (1 knot = 0.514444 m/s)
-                    let last_speed_ms = last_speed_knots * 0.514444;
-
-                    // Calculate expected distance if aircraft continued at last speed
-                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
-
-                    // Calculate minimum expected distance (aircraft could slow down but not stop if flying)
-                    // If aircraft was flying (>25 knots), it should have traveled at least 30% of expected distance
-                    // (accounting for slowdowns, holding patterns, but not landing)
-                    let min_expected_distance_m = if last_speed_knots > 25.0 {
-                        expected_distance_m * 0.3
-                    } else {
-                        0.0
-                    };
-
-                    // Calculate absolute max based on generous upper limit (700 mph for jets)
-                    // 700 mph = 312.928 m/s
-                    let absolute_max_distance_m = gap_seconds as f64 * 312.928;
-
-                    // Check for impossible/unlikely scenarios
-                    if actual_distance_m > absolute_max_distance_m {
-                        // Teleported - distance impossible even at 700 mph
-                        trace!(
-                            "Flight resumption rejected: teleported {:.1}km in {:.1}h (max possible at 700mph: {:.1}km)",
-                            actual_distance_m / 1000.0,
-                            gap_hours,
-                            absolute_max_distance_m / 1000.0
-                        );
-                        metrics::counter!("flight_tracker.coalesce.rejected.speed_distance_total")
-                            .increment(1);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                            .record(actual_distance_m / 1000.0);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                            .record(gap_hours);
-                        false
-                    } else if last_speed_knots > 25.0 && actual_distance_m < min_expected_distance_m
-                    {
-                        // Aircraft was flying fast but moved way too little - must have landed
-                        trace!(
-                            "Flight resumption rejected: moved too little ({:.1}km in {:.1}h, was going {:.0} knots, expected min {:.1}km)",
-                            actual_distance_m / 1000.0,
-                            gap_hours,
-                            last_speed_knots,
-                            min_expected_distance_m / 1000.0
-                        );
-                        metrics::counter!(
-                            "flight_tracker.coalesce.rejected.probable_landing_total"
-                        )
-                        .increment(1);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                            .record(actual_distance_m / 1000.0);
-                        metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                            .record(gap_hours);
-                        false
-                    } else {
-                        // Distance is reasonable for the time gap and last known speed
-                        true
-                    }
-                } else {
-                    // No position data - can't validate distance
-                    true
-                };
-
-                let should_coalesce = callsign_matches && position_reasonable;
-
-                if should_coalesce && gap_hours < 8.0 {
-                    // Resume the flight
-                    info!(
-                        "Resuming timed-out flight {} after {:.1}h gap",
-                        timed_out_flight_id, gap_hours
-                    );
-
-                    fix.flight_id = Some(timed_out_flight_id);
-
-                    // Clear timeout and update last_fix_at in database
-                    let _ = ctx
-                        .flights_repo
-                        .resume_timed_out_flight(timed_out_flight_id, fix.received_at)
-                        .await;
-
-                    // Update state - move from timed_out to current
-                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
-                        state.current_flight_id = Some(timed_out_flight_id);
-                        state.current_callsign = timed_out_callsign;
-                        state.last_timed_out_flight_id = None;
-                        state.last_timed_out_callsign = None;
-                        state.last_timed_out_at = None;
-                    }
-
-                    metrics::counter!("flight_tracker.coalesce.resumed_total").increment(1);
-                    if let Some(dist_km) = coalesce_distance_km {
-                        metrics::histogram!("flight_tracker.coalesce.resumed.distance_km")
-                            .record(dist_km);
-                    }
-                    return Ok(StateTransitionResult {
-                        fix,
-                        pending_work: PendingBackgroundWork::None,
-                    });
-                } else if gap_hours >= 8.0 {
-                    // Too long - create new flight
-                    metrics::counter!("flight_tracker.coalesce.rejected.hard_limit_total")
-                        .increment(1);
-                    metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                        .record(gap_hours);
-                    if let Some(dist_km) = coalesce_distance_km {
-                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                            .record(dist_km);
-                    }
-                    // Fall through to create new flight
-                } else if !callsign_matches {
-                    // Callsign mismatch - create new flight
-                    metrics::counter!("flight_tracker.coalesce.rejected.callsign_total")
-                        .increment(1);
-                    metrics::histogram!("flight_tracker.coalesce.rejected.gap_hours")
-                        .record(gap_hours);
-                    if let Some(dist_km) = coalesce_distance_km {
-                        metrics::histogram!("flight_tracker.coalesce.rejected.distance_km")
-                            .record(dist_km);
-                    }
-                    // Fall through to create new flight
-                }
-                // If position_reasonable is false, metrics are already recorded in the position_reasonable validation above
-            } else {
-                // No timed-out flight to consider coalescing with
-                metrics::counter!("flight_tracker.coalesce.no_timeout_flight_total").increment(1);
-            }
-
             // Before creating a new flight, check if there's an orphaned active flight in DB.
             // This handles cases where in-memory state got out of sync with the database
             // (e.g., set_preliminary_landing_time failed but current_flight_id was cleared,
@@ -554,12 +407,20 @@ pub(crate) async fn process_state_transition(
                             .set_preliminary_landing_time(existing_flight_id, fix.received_at)
                             .await
                         {
-                            Ok(_) => {
+                            Ok(true) => {
                                 pending_work = PendingBackgroundWork::CompleteFlight {
                                     flight_id: existing_flight_id,
                                     aircraft: Box::new(aircraft.clone()),
                                     fix: Box::new(fix.clone()),
                                 };
+                            }
+                            Ok(false) => {
+                                // Orphaned flight was already timed out or landed concurrently.
+                                // Safe to fall through to create a new flight.
+                                warn!(
+                                    "Orphaned flight {} already ended in DB, proceeding to create new flight",
+                                    existing_flight_id
+                                );
                             }
                             Err(e) => {
                                 // DB error - orphaned flight stays active, so adopt it
@@ -679,8 +540,8 @@ pub(crate) async fn process_state_transition(
                     .set_preliminary_landing_time(flight_id, fix.received_at)
                     .await
                 {
-                    Ok(_) => {
-                        // Landing time set (or already set) - safe to clear state
+                    Ok(true) => {
+                        // Landing time set - safe to clear state
                         fix.flight_id = Some(flight_id);
                         pending_work = PendingBackgroundWork::CompleteFlight {
                             flight_id,
@@ -691,6 +552,18 @@ pub(crate) async fn process_state_transition(
                             state.current_flight_id = None;
                         }
                         metrics::counter!("flight_tracker.flight_ended.landed_total").increment(1);
+                    }
+                    Ok(false) => {
+                        // Flight already timed out or landed in DB — clear stale in-memory state
+                        warn!(
+                            "Flight {} already ended in DB (timed out or landed), clearing stale in-memory state",
+                            flight_id
+                        );
+                        if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                            state.current_flight_id = None;
+                            state.current_callsign = None;
+                        }
+                        fix.flight_id = None;
                     }
                     Err(e) => {
                         // DB error - keep flight active in memory to maintain sync
@@ -735,7 +608,7 @@ pub(crate) async fn process_state_transition(
                                 .set_preliminary_landing_time(flight_id, fix.received_at)
                                 .await
                             {
-                                Ok(_) => {
+                                Ok(true) => {
                                     // Landing confirmed
                                     fix.flight_id = Some(flight_id);
                                     pending_work = PendingBackgroundWork::CompleteFlight {
@@ -750,6 +623,20 @@ pub(crate) async fn process_state_transition(
                                     }
                                     metrics::counter!("flight_tracker.flight_ended.landed_total")
                                         .increment(1);
+                                }
+                                Ok(false) => {
+                                    // Flight already timed out or landed in DB — clear stale state
+                                    warn!(
+                                        "Flight {} already ended in DB (timed out or landed), clearing stale in-memory state",
+                                        flight_id
+                                    );
+                                    if let Some(mut state) =
+                                        ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                    {
+                                        state.current_flight_id = None;
+                                        state.current_callsign = None;
+                                    }
+                                    fix.flight_id = None;
                                 }
                                 Err(e) => {
                                     // DB error - keep flight active in memory to maintain sync

@@ -46,7 +46,6 @@ pub struct AircraftState {
     /// - Takeoff detection (check if last 3 are inactive)
     /// - Landing detection (check if last 5 are inactive)
     /// - Flight phase determination (calculate climb rate from altitude changes)
-    /// - Flight coalescing (validate distance/speed consistency)
     pub recent_fixes: VecDeque<CompactFix>,
 
     /// Current flight ID, if aircraft is flying
@@ -54,11 +53,6 @@ pub struct AircraftState {
 
     /// Current flight callsign (for detecting callsign changes without DB query)
     pub current_callsign: Option<String>,
-
-    /// Last timed-out flight info (for resumption without DB query)
-    pub last_timed_out_flight_id: Option<Uuid>,
-    pub last_timed_out_callsign: Option<String>,
-    pub last_timed_out_at: Option<DateTime<Utc>>, // When the flight timed out
 
     /// Wall clock time of last update (for cleanup and timeout detection)
     pub last_update_time: DateTime<Utc>,
@@ -86,9 +80,6 @@ impl AircraftState {
             recent_fixes,
             current_flight_id: None,
             current_callsign: None,
-            last_timed_out_flight_id: None,
-            last_timed_out_callsign: None,
-            last_timed_out_at: None,
             last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
@@ -106,9 +97,6 @@ impl AircraftState {
             recent_fixes,
             current_flight_id: None,
             current_callsign: None,
-            last_timed_out_flight_id: None,
-            last_timed_out_callsign: None,
-            last_timed_out_at: None,
             last_update_time: fix.received_at, // Use fix timestamp, not wall clock
             towing_info: None,
             takeoff_runway_inferred: None,
@@ -228,7 +216,7 @@ impl AircraftState {
     }
 
     /// Determine the flight phase based on current state
-    /// Used to decide coalescing behavior when flight times out
+    /// Used to record the phase at which a flight was timed out
     pub(crate) fn determine_flight_phase(&self) -> super::FlightPhase {
         let climb = self.calculate_climb_rate();
 
@@ -312,9 +300,6 @@ mod tests {
             recent_fixes,
             current_flight_id: None,
             current_callsign: None,
-            last_timed_out_flight_id: None,
-            last_timed_out_callsign: None,
-            last_timed_out_at: None,
             last_update_time: Utc::now(),
             towing_info: None,
             takeoff_runway_inferred: None,

@@ -39,7 +39,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 /// Represents the flight state when timeout occurs
-/// Used to determine coalescing strategy when aircraft reappears
+/// Recorded for analytics/debugging purposes
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum FlightPhase {
     /// Aircraft is climbing (climb_fpm > 300)
@@ -237,17 +237,14 @@ impl FlightTracker {
             info!("No orphaned flights to complete");
         }
 
-        // Restore aircraft states from active and timed-out flights
+        // Restore aircraft states from active flights
         info!("Restoring aircraft states from database...");
         let flights = self
             .flights_repo
             .get_active_flights_for_tracker(timeout_duration)
             .await?;
 
-        info!(
-            "Found {} flights to restore (active and timed-out)",
-            flights.len()
-        );
+        info!("Found {} active flights to restore", flights.len());
 
         let mut restored_count: usize = 0;
         for flight in flights {
@@ -281,17 +278,8 @@ impl FlightTracker {
             let is_active = state_transitions::should_be_active(first_fix);
             let mut state = aircraft_state::AircraftState::new_for_restore(first_fix, is_active);
 
-            // Determine if this is an active or timed-out flight
-            if flight.timed_out_at.is_some() {
-                // Timed-out flight - track separately for potential resumption
-                state.last_timed_out_flight_id = Some(flight.id);
-                state.last_timed_out_callsign = flight.callsign.clone();
-                state.last_timed_out_at = flight.timed_out_at;
-            } else {
-                // Active flight - set as current flight
-                state.current_flight_id = Some(flight.id);
-                state.current_callsign = flight.callsign.clone();
-            }
+            state.current_flight_id = Some(flight.id);
+            state.current_callsign = flight.callsign.clone();
 
             // Add remaining fixes in chronological order (oldest to newest)
             // Use add_fix_for_restore to preserve fix timestamps for timeout detection
@@ -543,7 +531,16 @@ impl FlightTracker {
 
         // Timeout each stale flight
         for (flight_id, aircraft_id) in flights_to_timeout {
+            // Acquire device lock to prevent race with concurrent fix processing
+            let device_lock = self
+                .device_locks
+                .entry(aircraft_id)
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone();
+            let _guard = device_lock.lock().await;
+
             // Double-check that the flight still exists before timing it out
+            // (may have landed while waiting for lock)
             let should_timeout = self
                 .aircraft_states
                 .get(&aircraft_id)
@@ -646,6 +643,30 @@ impl FlightTracker {
                 Some(updated_fix)
             }
             Err(e) => {
+                // Check if this is a check constraint violation indicating a
+                // timed-out flight — clear stale state so the next fix creates a new flight
+                let is_flight_constraint_violation =
+                    e.downcast_ref::<diesel::result::Error>().is_some_and(|de| {
+                        matches!(
+                            de,
+                            diesel::result::Error::DatabaseError(
+                                diesel::result::DatabaseErrorKind::CheckViolation,
+                                _
+                            )
+                        )
+                    });
+                if is_flight_constraint_violation {
+                    if let Some(stale_flight_id) = updated_fix.flight_id {
+                        warn!(
+                            "Flight {} has a check constraint violation, clearing from in-memory state",
+                            stale_flight_id
+                        );
+                    }
+                    if let Some(mut state) = self.aircraft_states.get_mut(&updated_fix.aircraft_id)
+                    {
+                        state.current_flight_id = None;
+                    }
+                }
                 error!(
                     "Failed to save fix: aircraft={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
                     updated_fix.aircraft_id,
