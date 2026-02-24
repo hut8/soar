@@ -62,10 +62,7 @@ pub async fn process_ogn_message(
             match &parsed.data {
                 AprsData::Position(_) => match position_source {
                     PositionSourceType::Aircraft => {
-                        let raw_message = parsed.raw.clone().unwrap_or_default();
-                        fix_processor
-                            .process_aprs_packet(parsed, &raw_message, context)
-                            .await;
+                        fix_processor.process_aprs_packet(parsed, context).await;
                     }
                     PositionSourceType::Receiver => {
                         receiver_position_processor

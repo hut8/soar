@@ -13,7 +13,13 @@ use crate::fixes::Fix;
 const NATS_PUBLISH_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Queue size for NATS publish queue
-const NATS_PUBLISH_QUEUE_SIZE: usize = 200;
+const NATS_PUBLISH_QUEUE_SIZE: usize = 5000;
+
+/// Number of concurrent publisher workers draining the queue.
+/// async_nats::Client is cheaply cloneable and internally multiplexes
+/// over a single TCP connection, so multiple workers can publish in
+/// parallel without opening extra connections.
+const NATS_PUBLISHER_WORKERS: usize = 4;
 
 /// Timeout for enqueuing a fix to the NATS publish queue.
 /// If the queue is full for longer than this, we skip the NATS publish.
@@ -68,9 +74,9 @@ fn get_area_subject(topic_prefix: &str, latitude: f64, longitude: f64) -> String
 
 /// Run the NATS publisher loop. Returns Ok(()) when the channel is closed (clean shutdown).
 /// Panics are caught by the supervisor that calls this function.
-async fn run_publisher_loop(client: &Client, rx: &flume::Receiver<Fix>) {
-    info!("NATS publisher loop started");
-    metrics::gauge!("nats.fix_publisher.alive").set(1.0);
+async fn run_publisher_loop(worker_id: usize, client: &Client, rx: &flume::Receiver<Fix>) {
+    info!(worker_id, "NATS publisher loop started");
+    metrics::gauge!("nats.fix_publisher.alive").increment(1.0);
 
     let mut fixes_published = 0u64;
     let mut last_heartbeat = std::time::Instant::now();
@@ -111,11 +117,14 @@ async fn run_publisher_loop(client: &Client, rx: &flume::Receiver<Fix>) {
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
             let queue_len = rx.len();
             info!(
+                worker_id,
                 "NATS publisher alive: {} published since last heartbeat, {} in queue",
-                fixes_published, queue_len
+                fixes_published,
+                queue_len
             );
             if queue_len > 100 {
                 warn!(
+                    worker_id,
                     "NATS publisher queue is building up ({} fixes) - NATS publishing may be slow",
                     queue_len
                 );
@@ -125,8 +134,8 @@ async fn run_publisher_loop(client: &Client, rx: &flume::Receiver<Fix>) {
         }
     }
 
-    warn!("NATS publisher loop exited (channel closed)");
-    metrics::gauge!("nats.fix_publisher.alive").set(0.0);
+    warn!(worker_id, "NATS publisher loop exited (channel closed)");
+    metrics::gauge!("nats.fix_publisher.alive").decrement(1.0);
 }
 
 /// NATS publisher for aircraft position fixes
@@ -183,40 +192,52 @@ impl NatsFixPublisher {
         let (fix_sender, fix_receiver) = flume::bounded::<Fix>(NATS_PUBLISH_QUEUE_SIZE);
 
         info!(
-            "NATS publisher initialized with bounded channel (capacity: {} fixes)",
-            NATS_PUBLISH_QUEUE_SIZE
+            "NATS publisher initialized with bounded channel (capacity: {} fixes, {} workers)",
+            NATS_PUBLISH_QUEUE_SIZE, NATS_PUBLISHER_WORKERS,
         );
 
-        // Spawn supervisor task that restarts the publisher on panic
-        let client_clone = Arc::clone(&nats_client);
-        tokio::spawn(async move {
-            info!("NATS publisher supervisor started");
-            loop {
-                let result =
-                    std::panic::AssertUnwindSafe(run_publisher_loop(&client_clone, &fix_receiver))
-                        .catch_unwind()
-                        .await;
+        // Spawn supervisor tasks that restart each publisher worker on panic.
+        // All workers share the same flume receiver (multi-consumer) and the
+        // same async_nats::Client (internally multiplexed over one TCP conn).
+        for worker_id in 0..NATS_PUBLISHER_WORKERS {
+            let client_clone = Arc::clone(&nats_client);
+            let rx = fix_receiver.clone();
+            tokio::spawn(async move {
+                info!(worker_id, "NATS publisher worker supervisor started");
+                loop {
+                    let result = std::panic::AssertUnwindSafe(run_publisher_loop(
+                        worker_id,
+                        &client_clone,
+                        &rx,
+                    ))
+                    .catch_unwind()
+                    .await;
 
-                match result {
-                    Ok(()) => {
-                        // Channel closed — clean shutdown
-                        warn!("NATS publisher supervisor: loop exited cleanly (channel closed)");
-                        metrics::gauge!("nats.fix_publisher.alive").set(0.0);
-                        break;
-                    }
-                    Err(panic_info) => {
-                        error!(
-                            panic_info = ?panic_info,
-                            "NATS publisher task panicked, restarting in 1s"
-                        );
-                        metrics::gauge!("nats.fix_publisher.alive").set(0.0);
-                        metrics::counter!("nats.fix_publisher.panic_total").increment(1);
-                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    match result {
+                        Ok(()) => {
+                            // Channel closed — clean shutdown
+                            warn!(
+                                worker_id,
+                                "NATS publisher supervisor: loop exited cleanly (channel closed)"
+                            );
+                            metrics::gauge!("nats.fix_publisher.alive").decrement(1.0);
+                            break;
+                        }
+                        Err(panic_info) => {
+                            error!(
+                                worker_id,
+                                panic_info = ?panic_info,
+                                "NATS publisher task panicked, restarting in 1s"
+                            );
+                            metrics::gauge!("nats.fix_publisher.alive").decrement(1.0);
+                            metrics::counter!("nats.fix_publisher.panic_total").increment(1);
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
                     }
                 }
-            }
-            warn!("NATS publisher supervisor exiting");
-        });
+                warn!(worker_id, "NATS publisher supervisor exiting");
+            });
+        }
 
         Ok(Self {
             _nats_client: nats_client,
@@ -232,7 +253,7 @@ impl NatsFixPublisher {
     /// If the NATS queue is full (e.g., NATS is slow/disconnected), we skip
     /// the publish after a short timeout rather than blocking the processing
     /// pipeline. This prevents a slow NATS connection from stalling all workers.
-    pub async fn process_fix(&self, fix: Fix, _raw_message: &str) {
+    pub async fn process_fix(&self, fix: Fix) {
         // Track if send will block (queue is full)
         if self.fix_sender.is_full() {
             metrics::counter!("queue.send_blocked_total", "queue" => "nats_publisher").increment(1);
