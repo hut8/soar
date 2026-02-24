@@ -230,6 +230,8 @@ fn parse_optional_bool(field: Option<&str>) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::io::{BufRead, BufReader};
 
     #[test]
     fn test_parse_msg_1_identification() {
@@ -320,5 +322,110 @@ mod tests {
         let line = "MSG,3,,,,,,,,,,5000,,,51.5074,-0.1278,,,0,0,0,0";
         let result = parse_sbs_message(line);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_real_sbs_file() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/sbs/adsbhub-sbs-sample-20260224.txt.gz");
+        let file = std::fs::File::open(&path)
+            .unwrap_or_else(|e| panic!("Failed to open {}: {}", path.display(), e));
+        let decoder = flate2::read::GzDecoder::new(file);
+        let reader = BufReader::new(decoder);
+
+        let mut total = 0u64;
+        let mut failures = 0u64;
+        let mut type_counts: HashMap<u8, u64> = HashMap::new();
+        let mut unique_aircraft: HashSet<String> = HashSet::new();
+
+        // Spot-check counters
+        let mut msg1_with_callsign = 0u64;
+        let mut msg1_total = 0u64;
+        let mut msg3_with_position = 0u64;
+        let mut msg3_total = 0u64;
+        let mut msg4_with_velocity = 0u64;
+        let mut msg4_total = 0u64;
+
+        for line in reader.lines() {
+            let line = line.expect("Failed to read line");
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            total += 1;
+
+            match parse_sbs_message(line) {
+                Ok(msg) => {
+                    let type_num = msg.message_type as u8;
+                    *type_counts.entry(type_num).or_default() += 1;
+                    unique_aircraft.insert(msg.aircraft_id.clone());
+
+                    match msg.message_type {
+                        SbsMessageType::EsIdentification => {
+                            msg1_total += 1;
+                            if msg.callsign.is_some() {
+                                msg1_with_callsign += 1;
+                            }
+                        }
+                        SbsMessageType::EsAirbornePosition => {
+                            msg3_total += 1;
+                            if msg.has_position() && msg.altitude.is_some() {
+                                msg3_with_position += 1;
+                            }
+                        }
+                        SbsMessageType::EsAirborneVelocity => {
+                            msg4_total += 1;
+                            if msg.has_velocity() {
+                                msg4_with_velocity += 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Err(e) => {
+                    failures += 1;
+                    eprintln!("Parse failure on line {}: {} — {:?}", total, line, e);
+                }
+            }
+        }
+
+        // Print summary for manual review
+        eprintln!("\n=== SBS Parse Summary ===");
+        eprintln!("Total lines:      {total}");
+        eprintln!("Failures:         {failures}");
+        eprintln!("Unique aircraft:  {}", unique_aircraft.len());
+        let mut sorted_types: Vec<_> = type_counts.iter().collect();
+        sorted_types.sort_by_key(|(k, _)| *k);
+        for (t, count) in &sorted_types {
+            eprintln!("  MSG,{t}: {count}");
+        }
+        eprintln!("MSG,1 with callsign:           {msg1_with_callsign}/{msg1_total}");
+        eprintln!("MSG,3 with position+altitude:  {msg3_with_position}/{msg3_total}");
+        eprintln!("MSG,4 with velocity:           {msg4_with_velocity}/{msg4_total}");
+
+        // All lines must parse successfully
+        assert_eq!(
+            failures, 0,
+            "{failures} out of {total} lines failed to parse"
+        );
+
+        // Spot-checks: the majority of typed messages should have their expected fields
+        assert!(msg1_total > 0, "Expected some MSG,1 messages in the sample");
+        assert!(
+            msg1_with_callsign as f64 / msg1_total as f64 > 0.9,
+            "Expected >90% of MSG,1 to have callsign, got {msg1_with_callsign}/{msg1_total}"
+        );
+
+        assert!(msg3_total > 0, "Expected some MSG,3 messages in the sample");
+        assert!(
+            msg3_with_position as f64 / msg3_total as f64 > 0.9,
+            "Expected >90% of MSG,3 to have position+altitude, got {msg3_with_position}/{msg3_total}"
+        );
+
+        assert!(msg4_total > 0, "Expected some MSG,4 messages in the sample");
+        assert!(
+            msg4_with_velocity as f64 / msg4_total as f64 > 0.9,
+            "Expected >90% of MSG,4 to have velocity, got {msg4_with_velocity}/{msg4_total}"
+        );
     }
 }
