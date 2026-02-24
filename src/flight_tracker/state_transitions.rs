@@ -155,6 +155,13 @@ pub(crate) async fn process_state_transition(
                             }
                             Err(e) => {
                                 error!("Failed to create new flight after callsign change: {}", e);
+                                // Old flight already ended in DB — clear stale state
+                                if let Some(mut state) =
+                                    ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                {
+                                    state.current_flight_id = None;
+                                    state.current_callsign = None;
+                                }
                                 fix.flight_id = None;
                             }
                         }
@@ -271,6 +278,13 @@ pub(crate) async fn process_state_transition(
                                 }
                                 Err(e) => {
                                     error!("Failed to create new flight after gap: {}", e);
+                                    // Old flight already ended in DB — clear stale state
+                                    if let Some(mut state) =
+                                        ctx.aircraft_states.get_mut(&fix.aircraft_id)
+                                    {
+                                        state.current_flight_id = None;
+                                        state.current_callsign = None;
+                                    }
                                     fix.flight_id = None;
                                 }
                             }
@@ -547,8 +561,9 @@ pub(crate) async fn process_state_transition(
                         );
                         if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
                             state.current_flight_id = None;
+                            state.current_callsign = None;
                         }
-                        fix.flight_id = Some(flight_id);
+                        fix.flight_id = None;
                     }
                     Err(e) => {
                         // DB error - keep flight active in memory to maintain sync
@@ -619,8 +634,9 @@ pub(crate) async fn process_state_transition(
                                         ctx.aircraft_states.get_mut(&fix.aircraft_id)
                                     {
                                         state.current_flight_id = None;
+                                        state.current_callsign = None;
                                     }
-                                    fix.flight_id = Some(flight_id);
+                                    fix.flight_id = None;
                                 }
                                 Err(e) => {
                                     // DB error - keep flight active in memory to maintain sync

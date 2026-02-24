@@ -349,9 +349,9 @@ pub(crate) async fn timeout_flight(
         .await
     {
         Ok(true) => {
-            // FIRST: Clear current_flight_id and set last_timed_out info.
+            // FIRST: Clear the in-memory current_flight_id/current_callsign for this aircraft.
             // This must happen before any fallible operations to prevent state desync
-            // where the flight is timed out in DB but still active in memory.
+            // where the flight is timed out in the DB but still referenced as active in memory.
             if let Some(mut state) = ctx.aircraft_states.get_mut(&aircraft_id) {
                 state.current_flight_id = None;
                 state.current_callsign = None;

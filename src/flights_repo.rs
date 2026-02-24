@@ -1002,9 +1002,6 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
-    /// Resume a timed-out flight by clearing the timeout and updating last_fix_at atomically
-    /// This ensures the check_timeout_after_last_fix constraint is not violated
-    /// Used when flight coalescing resumes tracking of a timed-out flight
     /// Update the callsign for a flight
     /// Only updates if the provided callsign is different from the current one
     pub async fn update_callsign(

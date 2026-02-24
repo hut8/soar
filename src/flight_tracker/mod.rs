@@ -643,15 +643,22 @@ impl FlightTracker {
                 Some(updated_fix)
             }
             Err(e) => {
-                let err_str = e.to_string();
-                if err_str.contains("check_timeout_after_last_fix")
-                    || err_str.contains("check_timed_out_or_landed")
-                {
-                    // Flight was timed out externally — clear stale state so next fix
-                    // creates a new flight instead of repeatedly failing
+                // Check if this is a check constraint violation indicating a
+                // timed-out flight — clear stale state so the next fix creates a new flight
+                let is_flight_constraint_violation =
+                    e.downcast_ref::<diesel::result::Error>().is_some_and(|de| {
+                        matches!(
+                            de,
+                            diesel::result::Error::DatabaseError(
+                                diesel::result::DatabaseErrorKind::CheckViolation,
+                                _
+                            )
+                        )
+                    });
+                if is_flight_constraint_violation {
                     if let Some(stale_flight_id) = updated_fix.flight_id {
                         warn!(
-                            "Flight {} appears timed out in DB, clearing from in-memory state",
+                            "Flight {} has a check constraint violation, clearing from in-memory state",
                             stale_flight_id
                         );
                     }
