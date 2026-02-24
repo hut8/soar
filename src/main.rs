@@ -736,10 +736,11 @@ async fn main() -> Result<()> {
     let is_staging = soar_env == "staging";
 
     // Initialize Sentry for error tracking (must be done early, guard must stay alive)
-    // Rate limit: max 10 error events per minute to avoid exhausting monthly quota
-    static SENTRY_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
-    static SENTRY_CURRENT_MINUTE: AtomicU64 = AtomicU64::new(0);
-    const SENTRY_MAX_EVENTS_PER_MINUTE: u64 = 10;
+    // Rate limit: max 10 error events per minute to avoid exhausting monthly quota.
+    // Packs (minute, count) into a single AtomicU64 for lock-free thread safety:
+    // upper 32 bits = minute, lower 32 bits = event count.
+    static SENTRY_RATE_LIMIT: AtomicU64 = AtomicU64::new(0);
+    const SENTRY_MAX_EVENTS_PER_MINUTE: u32 = 10;
 
     let _sentry_guard = if let Ok(dsn) = env::var("SENTRY_DSN") {
         if !dsn.is_empty() {
@@ -751,20 +752,43 @@ async fn main() -> Result<()> {
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
                     before_send: Some(std::sync::Arc::new(|event| {
-                        let now_minute = SystemTime::now()
+                        let now_minute = (SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_secs()
-                            / 60;
-                        let prev_minute = SENTRY_CURRENT_MINUTE.swap(now_minute, Ordering::Relaxed);
-                        if prev_minute != now_minute {
-                            SENTRY_EVENT_COUNT.store(1, Ordering::Relaxed);
-                        } else if SENTRY_EVENT_COUNT.fetch_add(1, Ordering::Relaxed)
-                            >= SENTRY_MAX_EVENTS_PER_MINUTE
-                        {
-                            return None;
+                            / 60) as u32;
+
+                        loop {
+                            let current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
+                            let stored_minute = (current >> 32) as u32;
+                            let count = current as u32;
+
+                            // Use max to ensure monotonic minutes (handles NTP adjustments)
+                            let effective_minute = std::cmp::max(now_minute, stored_minute);
+
+                            let (new_count, allow) = if effective_minute != stored_minute {
+                                // New minute bucket: reset counter to 1
+                                (1u32, true)
+                            } else if count < SENTRY_MAX_EVENTS_PER_MINUTE {
+                                (count + 1, true)
+                            } else {
+                                return None; // Over limit, drop event
+                            };
+
+                            let new_val = ((effective_minute as u64) << 32) | (new_count as u64);
+                            if SENTRY_RATE_LIMIT
+                                .compare_exchange_weak(
+                                    current,
+                                    new_val,
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                )
+                                .is_ok()
+                            {
+                                return if allow { Some(event) } else { None };
+                            }
+                            // CAS failed, another thread updated — retry
                         }
-                        Some(event)
                     })),
                     ..Default::default()
                 },
