@@ -7,8 +7,9 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
 mod commands;
@@ -735,6 +736,11 @@ async fn main() -> Result<()> {
     let is_staging = soar_env == "staging";
 
     // Initialize Sentry for error tracking (must be done early, guard must stay alive)
+    // Rate limit: max 10 error events per minute to avoid exhausting monthly quota
+    static SENTRY_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
+    static SENTRY_CURRENT_MINUTE: AtomicU64 = AtomicU64::new(0);
+    const SENTRY_MAX_EVENTS_PER_MINUTE: u64 = 10;
+
     let _sentry_guard = if let Ok(dsn) = env::var("SENTRY_DSN") {
         if !dsn.is_empty() {
             let guard = sentry::init((
@@ -744,6 +750,22 @@ async fn main() -> Result<()> {
                     environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
+                    before_send: Some(std::sync::Arc::new(|event| {
+                        let now_minute = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs()
+                            / 60;
+                        let prev_minute = SENTRY_CURRENT_MINUTE.swap(now_minute, Ordering::Relaxed);
+                        if prev_minute != now_minute {
+                            SENTRY_EVENT_COUNT.store(1, Ordering::Relaxed);
+                        } else if SENTRY_EVENT_COUNT.fetch_add(1, Ordering::Relaxed)
+                            >= SENTRY_MAX_EVENTS_PER_MINUTE
+                        {
+                            return None;
+                        }
+                        Some(event)
+                    })),
                     ..Default::default()
                 },
             ));
