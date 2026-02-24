@@ -389,9 +389,8 @@ impl AprsClient {
                         Ok(0) => {
                             let duration = connection_start.elapsed();
                             // Use error! so sentry_tracing forwards this as a Sentry event
-                            let duration_secs = format!("{:.1}", duration.as_secs_f64());
                             error!(
-                                duration_secs = %duration_secs,
+                                duration_secs = duration.as_secs_f64(),
                                 "APRS connection closed by server"
                             );
                             metrics::counter!("aprs.connection.server_closed_total").increment(1);

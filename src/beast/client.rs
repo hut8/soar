@@ -390,10 +390,9 @@ impl BeastClient {
                 }
                 Ok(Err(e)) => {
                     let duration = connection_start.elapsed();
-                    let duration_secs = format!("{:.1}", duration.as_secs_f64());
                     error!(
                         peer_addr = %peer_addr_str,
-                        duration_secs = %duration_secs,
+                        duration_secs = duration.as_secs_f64(),
                         error = %e,
                         "Beast read error"
                     );
