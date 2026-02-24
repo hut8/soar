@@ -63,6 +63,19 @@ pub(crate) async fn process_sbs_message(
         }
     };
 
+    // Track message type distribution
+    let type_label = match sbs_msg.message_type {
+        soar::sbs::SbsMessageType::EsIdentification => "MSG,1 Identification",
+        soar::sbs::SbsMessageType::EsSurfacePosition => "MSG,2 Surface Position",
+        soar::sbs::SbsMessageType::EsAirbornePosition => "MSG,3 Airborne Position",
+        soar::sbs::SbsMessageType::EsAirborneVelocity => "MSG,4 Airborne Velocity",
+        soar::sbs::SbsMessageType::SurveillanceAlt => "MSG,5 Surveillance Alt",
+        soar::sbs::SbsMessageType::SurveillanceId => "MSG,6 Surveillance ID",
+        soar::sbs::SbsMessageType::AirToAir => "MSG,7 Air-to-Air",
+        soar::sbs::SbsMessageType::AllCallReply => "MSG,8 All Call Reply",
+    };
+    metrics::counter!("sbs.run.message_type_total", "type" => type_label).increment(1);
+
     // Extract ICAO address from the aircraft_id field (hex string)
     let icao_address = match sbs_msg.icao_address() {
         Some(icao) => icao,
