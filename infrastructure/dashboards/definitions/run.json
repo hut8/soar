@@ -57,6 +57,8 @@
       "row": "Data Ingestion Pipelines"
     },
     "aprs-type-distribution-before-filtering",
+    "sbs-message-type-distribution",
+    ["beast-df-type-distribution", "beast-adsb-bds-type-distribution"],
     "receiver-cache-hit-rate",
     "receiver-cache-hitmiss",
     "beast-fixes-processed",

@@ -1,5 +1,7 @@
 use anyhow::Result;
 use chrono::DateTime;
+use rs1090::decode::DF;
+use rs1090::decode::adsb::ME;
 use soar::adsb_accumulator::AdsbAccumulator;
 use soar::aircraft::AddressType;
 use soar::aircraft_repo::AircraftRepository;
@@ -54,6 +56,16 @@ pub(crate) async fn process_beast_message(
             return;
         }
     };
+
+    // Track downlink format (DF) distribution
+    let df_label = df_type_label(&decoded.message.df);
+    metrics::counter!("beast.run.df_type_total", "df" => df_label).increment(1);
+
+    // For ADS-B (DF17), also track the message entity (ME/BDS) subtype
+    if let DF::ExtendedSquitterADSB(ref adsb) = decoded.message.df {
+        let me_label = me_type_label(&adsb.message);
+        metrics::counter!("beast.run.adsb_bds_type_total", "bds" => me_label).increment(1);
+    }
 
     // Extract ICAO address from the decoded message for aircraft lookup
     let icao_address = match extract_icao_from_message(&decoded.message) {
@@ -197,6 +209,40 @@ pub(crate) async fn process_beast_message(
     // Record processing latency
     let elapsed_ms = start_time.elapsed().as_millis() as f64;
     metrics::histogram!("beast.run.message_processing_latency_ms").record(elapsed_ms);
+}
+
+/// Return a human-readable label for the Mode S Downlink Format
+fn df_type_label(df: &DF) -> &'static str {
+    match df {
+        DF::ShortAirAirSurveillance { .. } => "DF0 Short Air-Air",
+        DF::SurveillanceAltitudeReply { .. } => "DF4 Surveillance Alt",
+        DF::SurveillanceIdentityReply { .. } => "DF5 Surveillance ID",
+        DF::AllCallReply { .. } => "DF11 All Call Reply",
+        DF::LongAirAirSurveillance { .. } => "DF16 Long Air-Air",
+        DF::ExtendedSquitterADSB(_) => "DF17 ADS-B",
+        DF::ExtendedSquitterTisB { .. } => "DF18 TIS-B",
+        DF::ExtendedSquitterMilitary { .. } => "DF19 Military",
+        DF::CommBAltitudeReply { .. } => "DF20 Comm-B Alt",
+        DF::CommBIdentityReply { .. } => "DF21 Comm-B ID",
+        DF::CommDExtended { .. } => "DF24 Comm-D",
+    }
+}
+
+/// Return a human-readable label for the ADS-B Message Entity (ME/BDS) subtype
+fn me_type_label(me: &ME) -> &'static str {
+    match me {
+        ME::NoPosition(_) => "No Position",
+        ME::BDS08 { .. } => "BDS08 Identification",
+        ME::BDS06 { .. } => "BDS06 Surface Position",
+        ME::BDS05 { .. } => "BDS05 Airborne Position",
+        ME::BDS09(_) => "BDS09 Airborne Velocity",
+        ME::BDS61(_) => "BDS61 Aircraft Status",
+        ME::BDS62(_) => "BDS62 Target State",
+        ME::BDS65(_) => "BDS65 Operation Status",
+        ME::Reserved0(_) | ME::Reserved1 { .. } => "Reserved",
+        ME::SurfaceSystemStatus(_) => "Surface System Status",
+        ME::AircraftOperationalCoordination(_) => "Operational Coordination",
+    }
 }
 
 /// Extract ICAO address from decoded ADS-B message
