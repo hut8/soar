@@ -349,14 +349,24 @@ pub(crate) async fn timeout_flight(
         .await
     {
         Ok(true) => {
-            // Calculate and update bounding box now that flight is timed out
-            ctx.flights_repo
-                .calculate_and_update_bounding_box(flight_id)
-                .await?;
-
-            // Clear current_flight_id from aircraft state (but keep the state for 18 hours)
+            // FIRST: Clear current_flight_id and set last_timed_out info.
+            // This must happen before any fallible operations to prevent state desync
+            // where the flight is timed out in DB but still active in memory.
             if let Some(mut state) = ctx.aircraft_states.get_mut(&aircraft_id) {
                 state.current_flight_id = None;
+                state.current_callsign = None;
+            }
+
+            // THEN: Non-fatal bounding box calculation
+            if let Err(e) = ctx
+                .flights_repo
+                .calculate_and_update_bounding_box(flight_id)
+                .await
+            {
+                error!(
+                    "Failed to calculate bounding box for timed-out flight {}: {}",
+                    flight_id, e
+                );
             }
 
             metrics::counter!("flight_tracker.flight_ended.timed_out_total").increment(1);
