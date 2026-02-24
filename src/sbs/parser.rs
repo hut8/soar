@@ -345,6 +345,8 @@ mod tests {
         let mut msg3_total = 0u64;
         let mut msg4_with_velocity = 0u64;
         let mut msg4_total = 0u64;
+        let mut failure_samples: Vec<String> = Vec::new();
+        const MAX_FAILURE_SAMPLES: usize = 10;
 
         for line in reader.lines() {
             let line = line.expect("Failed to read line");
@@ -384,7 +386,9 @@ mod tests {
                 }
                 Err(e) => {
                     failures += 1;
-                    eprintln!("Parse failure on line {}: {} — {:?}", total, line, e);
+                    if failure_samples.len() < MAX_FAILURE_SAMPLES {
+                        failure_samples.push(format!("  line {total}: {e} — {line}"));
+                    }
                 }
             }
         }
@@ -402,6 +406,19 @@ mod tests {
         eprintln!("MSG,1 with callsign:           {msg1_with_callsign}/{msg1_total}");
         eprintln!("MSG,3 with position+altitude:  {msg3_with_position}/{msg3_total}");
         eprintln!("MSG,4 with velocity:           {msg4_with_velocity}/{msg4_total}");
+
+        if !failure_samples.is_empty() {
+            eprintln!("First {} failure(s):", failure_samples.len());
+            for sample in &failure_samples {
+                eprintln!("{sample}");
+            }
+            if failures > MAX_FAILURE_SAMPLES as u64 {
+                eprintln!(
+                    "  ... and {} more failures suppressed",
+                    failures - MAX_FAILURE_SAMPLES as u64
+                );
+            }
+        }
 
         // All lines must parse successfully
         assert_eq!(
