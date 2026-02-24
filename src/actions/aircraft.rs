@@ -27,7 +27,7 @@ pub async fn get_aircraft_registrations_by_club(
     let aircraft_list = match aircraft_repository.search_by_club_id(club_id).await {
         Ok(aircraft) => aircraft,
         Err(e) => {
-            error!("Failed to get aircraft by club: {}", e);
+            error!(error = %e, "Failed to get aircraft by club");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft by club",
@@ -48,11 +48,7 @@ pub async fn get_aircraft_registrations_by_club(
             Ok(Some(reg)) => reg,
             Ok(None) => continue, // No aircraft registration for this aircraft
             Err(e) => {
-                error!(
-                    "Failed to get aircraft registration for aircraft {}: {}",
-                    aircraft.id.unwrap(),
-                    e
-                );
+                error!(aircraft_id = %aircraft.id.unwrap(), error = %e, "Failed to get aircraft registration for aircraft");
                 continue;
             }
         };
@@ -83,10 +79,7 @@ pub async fn get_aircraft_registrations_by_club(
                 // No model found, leave as None
             }
             Err(e) => {
-                error!(
-                    "Failed to get aircraft model for {}: {}",
-                    aircraft_registration.registration_number, e
-                );
+                error!(registration_number = %aircraft_registration.registration_number, error = %e, "Failed to get aircraft model");
                 // Continue without model data
             }
         }
@@ -126,11 +119,7 @@ pub async fn get_aircraft_registration(
             );
         }
         Err(e) => {
-            tracing::error!(
-                "Failed to get aircraft registration by aircraft_id {}: {}",
-                id,
-                e
-            );
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to get aircraft registration by aircraft_id");
         }
     }
 
@@ -151,12 +140,7 @@ pub async fn get_aircraft_registration(
                     }
                     Ok(None) => (StatusCode::NO_CONTENT).into_response(),
                     Err(e) => {
-                        tracing::error!(
-                            "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
-                            id,
-                            registration,
-                            e
-                        );
+                        tracing::error!(aircraft_id = %id, registration = %registration, error = %e, "Failed to get aircraft registration by n-number");
                         json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to get aircraft registration",
@@ -171,7 +155,7 @@ pub async fn get_aircraft_registration(
         }
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to get aircraft by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft").into_response()
         }
     }
@@ -232,12 +216,7 @@ pub async fn get_aircraft_model(
                                 return (StatusCode::NO_CONTENT).into_response();
                             }
                             Err(e) => {
-                                tracing::error!(
-                                    "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
-                                    id,
-                                    registration,
-                                    e
-                                );
+                                tracing::error!(aircraft_id = %id, registration = %registration, error = %e, "Failed to get aircraft registration by n-number");
                                 return json_error(
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     "Failed to get aircraft registration",
@@ -254,18 +233,14 @@ pub async fn get_aircraft_model(
                     return (StatusCode::NOT_FOUND).into_response();
                 }
                 Err(e) => {
-                    tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+                    tracing::error!(aircraft_id = %id, error = %e, "Failed to get aircraft by ID");
                     return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft")
                         .into_response();
                 }
             }
         }
         Err(e) => {
-            tracing::error!(
-                "Failed to get aircraft registration for aircraft {}: {}",
-                id,
-                e
-            );
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to get aircraft registration for aircraft");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft registration",
@@ -290,12 +265,12 @@ pub async fn get_aircraft_model(
         Ok(None) => (StatusCode::NO_CONTENT).into_response(),
         Err(e) => {
             tracing::error!(
-                "Failed to get aircraft model for aircraft {} with codes {}-{}-{}: {}",
-                id,
-                aircraft_registration.manufacturer_code,
-                aircraft_registration.model_code,
-                aircraft_registration.series_code,
-                e
+                aircraft_id = %id,
+                manufacturer_code = %aircraft_registration.manufacturer_code,
+                model_code = %aircraft_registration.model_code,
+                series_code = %aircraft_registration.series_code,
+                error = %e,
+                "Failed to get aircraft model"
             );
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,

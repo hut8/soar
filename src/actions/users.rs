@@ -38,7 +38,7 @@ pub async fn get_all_users(
             Json(user_views).into_response()
         }
         Err(e) => {
-            error!("Failed to get all users: {}", e);
+            error!(error = %e, "Failed to get all users");
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get users").into_response()
         }
     }
@@ -60,7 +60,7 @@ pub async fn get_user_by_id(
         Ok(Some(user)) => Json(UserView::from(user)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to get user: {}", e);
+            error!(error = %e, "Failed to get user");
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get user").into_response()
         }
     }
@@ -78,7 +78,7 @@ pub async fn update_user_by_id(
         Ok(Some(user)) => Json(UserView::from(user)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to update user: {}", e);
+            error!(error = %e, "Failed to update user");
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update user").into_response()
         }
     }
@@ -95,7 +95,7 @@ pub async fn delete_user_by_id(
         Ok(true) => (StatusCode::NO_CONTENT, "").into_response(),
         Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to delete user: {}", e);
+            error!(error = %e, "Failed to delete user");
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response()
         }
     }
@@ -119,7 +119,7 @@ pub async fn get_users_by_club(
             Json(user_views).into_response()
         }
         Err(e) => {
-            error!("Failed to get users by club: {}", e);
+            error!(error = %e, "Failed to get users by club");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get users by club",
@@ -153,7 +153,7 @@ pub async fn set_user_club(
         Ok(Some(user)) => Json(UserView::from(user)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to set user club: {}", e);
+            error!(error = %e, "Failed to set user club");
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to set user club").into_response()
         }
     }
@@ -190,7 +190,7 @@ pub async fn create_pilot(
     match users_repo.create_pilot(pilot.clone()).await {
         Ok(_) => Json(UserView::from(pilot)).into_response(),
         Err(e) => {
-            error!("Failed to create pilot: {}", e);
+            error!(error = %e, "Failed to create pilot");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pilot").into_response()
         }
     }
@@ -219,7 +219,7 @@ pub async fn get_pilots_by_club(
             Json(DataListResponse { data: pilot_views }).into_response()
         }
         Err(e) => {
-            error!("Failed to get pilots for club {}: {}", club_id, e);
+            error!(club_id = %club_id, error = %e, "Failed to get pilots for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get pilots for club",
@@ -244,7 +244,7 @@ pub async fn send_pilot_invitation(
         Ok(Some(user)) => user,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
         Err(e) => {
-            error!("Failed to get pilot: {}", e);
+            error!(error = %e, "Failed to get pilot");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get pilot")
                 .into_response();
         }
@@ -275,7 +275,7 @@ pub async fn send_pilot_invitation(
     {
         Ok(token) => token,
         Err(e) => {
-            error!("Failed to set email and generate token: {}", e);
+            error!(error = %e, "Failed to set email and generate token");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to generate invitation",
@@ -291,7 +291,7 @@ pub async fn send_pilot_invitation(
                 .send_pilot_invitation_email(&payload.email, &pilot.full_name(), &token)
                 .await
             {
-                error!("Failed to send pilot invitation email: {}", e);
+                error!(error = %e, "Failed to send pilot invitation email");
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to send invitation email",
@@ -300,7 +300,7 @@ pub async fn send_pilot_invitation(
             }
         }
         Err(e) => {
-            error!("Email service initialization failed: {}", e);
+            error!(error = %e, "Email service initialization failed");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Email service not configured",

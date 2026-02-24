@@ -62,7 +62,7 @@ pub async fn list_geofences(
             Json(GeofenceListResponse { geofences }).into_response()
         }
         Err(e) => {
-            error!("Failed to list geofences: {}", e);
+            error!(error = %e, "Failed to list geofences");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to list geofences",
@@ -109,7 +109,7 @@ pub async fn create_geofence(
         )
             .into_response(),
         Err(e) => {
-            error!("Failed to create geofence: {}", e);
+            error!(error = %e, "Failed to create geofence");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create geofence",
@@ -159,7 +159,7 @@ pub async fn get_geofence(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get geofence").into_response()
         }
     }
@@ -194,7 +194,7 @@ pub async fn update_geofence(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence for update: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to get geofence for update");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update geofence",
@@ -225,7 +225,7 @@ pub async fn update_geofence(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to update geofence: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to update geofence");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update geofence",
@@ -258,7 +258,7 @@ pub async fn delete_geofence(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence for delete: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to get geofence for delete");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete geofence",
@@ -271,7 +271,7 @@ pub async fn delete_geofence(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to delete geofence: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to delete geofence");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete geofence",
@@ -304,7 +304,7 @@ pub async fn get_geofence_aircraft(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft")
                 .into_response();
         }
@@ -313,7 +313,7 @@ pub async fn get_geofence_aircraft(
     match repo.get_aircraft(geofence_id).await {
         Ok(aircraft_ids) => Json(DataListResponse { data: aircraft_ids }).into_response(),
         Err(e) => {
-            error!("Failed to get geofence aircraft: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to get geofence aircraft");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft").into_response()
         }
     }
@@ -342,7 +342,7 @@ pub async fn add_geofence_aircraft(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to add aircraft")
                 .into_response();
         }
@@ -353,7 +353,7 @@ pub async fn add_geofence_aircraft(
     match repo.add_aircraft(geofence_id, req.aircraft_id).await {
         Ok(link) => (StatusCode::CREATED, Json(DataResponse { data: link })).into_response(),
         Err(e) => {
-            error!("Failed to add aircraft to geofence: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to add aircraft to geofence");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to add aircraft").into_response()
         }
     }
@@ -380,7 +380,7 @@ pub async fn remove_geofence_aircraft(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to remove aircraft",
@@ -395,7 +395,7 @@ pub async fn remove_geofence_aircraft(
             json_error(StatusCode::NOT_FOUND, "Aircraft not linked to geofence").into_response()
         }
         Err(e) => {
-            error!("Failed to remove aircraft from geofence: {}", e);
+            error!(geofence_id = %geofence_id, aircraft_id = %aircraft_id, error = %e, "Failed to remove aircraft from geofence");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to remove aircraft",
@@ -428,7 +428,7 @@ pub async fn get_geofence_subscribers(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get subscribers",
@@ -440,7 +440,7 @@ pub async fn get_geofence_subscribers(
     match repo.get_subscribers(geofence_id).await {
         Ok(subscribers) => Json(DataListResponse { data: subscribers }).into_response(),
         Err(e) => {
-            error!("Failed to get geofence subscribers: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to get geofence subscribers");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get subscribers",
@@ -472,7 +472,7 @@ pub async fn subscribe_to_geofence(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to subscribe")
                 .into_response();
         }
@@ -486,7 +486,7 @@ pub async fn subscribe_to_geofence(
             (StatusCode::CREATED, Json(DataResponse { data: subscriber })).into_response()
         }
         Err(e) => {
-            error!("Failed to subscribe to geofence: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to subscribe to geofence");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to subscribe").into_response()
         }
     }
@@ -514,7 +514,7 @@ pub async fn unsubscribe_from_geofence(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to unsubscribe")
                 .into_response();
         }
@@ -524,7 +524,7 @@ pub async fn unsubscribe_from_geofence(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Subscription not found").into_response(),
         Err(e) => {
-            error!("Failed to unsubscribe from geofence: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to unsubscribe from geofence");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to unsubscribe").into_response()
         }
     }
@@ -554,7 +554,7 @@ pub async fn get_geofence_events(
         }
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Geofence not found").into_response(),
         Err(e) => {
-            error!("Failed to get geofence: {}", e);
+            error!(error = %e, "Failed to get geofence");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get events")
                 .into_response();
         }
@@ -566,7 +566,7 @@ pub async fn get_geofence_events(
     {
         Ok(events) => Json(GeofenceExitEventsResponse { events }).into_response(),
         Err(e) => {
-            error!("Failed to get geofence events: {}", e);
+            error!(geofence_id = %geofence_id, error = %e, "Failed to get geofence events");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get events").into_response()
         }
     }
@@ -587,7 +587,7 @@ pub async fn get_flight_geofence_events(
     match repo.get_exit_events_for_flight(flight_id).await {
         Ok(events) => Json(GeofenceExitEventsResponse { events }).into_response(),
         Err(e) => {
-            error!("Failed to get flight geofence events: {}", e);
+            error!(flight_id = %flight_id, error = %e, "Failed to get flight geofence events");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get events").into_response()
         }
     }

@@ -89,9 +89,8 @@ impl MessageArchive {
             let archive_path = PathBuf::from(&self.base_dir);
             if let Err(e) = create_dir_all(&archive_path) {
                 error!(
-                    "Failed to create archive directory {}: {}",
-                    archive_path.display(),
-                    e
+                    path = %archive_path.display(), error = %e,
+                    "Failed to create archive directory"
                 );
                 return;
             }
@@ -110,9 +109,8 @@ impl MessageArchive {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to open archive log file {}: {}",
-                        log_file_path.display(),
-                        e
+                        path = %log_file_path.display(), error = %e,
+                        "Failed to open archive log file"
                     );
                     return;
                 }
@@ -123,9 +121,9 @@ impl MessageArchive {
         if let Some(ref mut file) = *current_file {
             let timestamp = now.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
             if let Err(e) = writeln!(file, "[{timestamp}] {message}") {
-                error!("Failed to write to archive log file: {}", e);
+                error!(error = %e, "Failed to write to archive log file");
             } else if let Err(e) = file.flush() {
-                error!("Failed to flush archive log file: {}", e);
+                error!(error = %e, "Failed to flush archive log file");
             }
         }
     }
@@ -168,9 +166,8 @@ impl MessageArchive {
                     }
                     Err(e) => {
                         error!(
-                            "Failed to compress log file {}: {}",
-                            log_file_path.display(),
-                            e
+                            path = %log_file_path.display(), error = %e,
+                            "Failed to compress log file"
                         );
                         // Remove the incomplete compressed file
                         let _ = std::fs::remove_file(&compressed_file_path);
@@ -179,16 +176,14 @@ impl MessageArchive {
             }
             (Err(e), _) => {
                 error!(
-                    "Failed to open log file {} for compression: {}",
-                    log_file_path.display(),
-                    e
+                    path = %log_file_path.display(), error = %e,
+                    "Failed to open log file for compression"
                 );
             }
             (_, Err(e)) => {
                 error!(
-                    "Failed to create compressed file {}: {}",
-                    compressed_file_path.display(),
-                    e
+                    path = %compressed_file_path.display(), error = %e,
+                    "Failed to create compressed file"
                 );
             }
         }

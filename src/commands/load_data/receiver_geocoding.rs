@@ -87,8 +87,9 @@ pub async fn geocode_receivers(
                     }
                     Err(e) => {
                         error!(
-                            "Failed to update receiver {} with geocoded address: {}",
-                            receiver.callsign, e
+                            error = %e,
+                            callsign = %receiver.callsign,
+                            "Failed to update receiver with geocoded address"
                         );
                         failure_count += 1;
                         failed_callsigns.push(format!("{}|{},{}", receiver.callsign, lat, lng));
@@ -183,7 +184,7 @@ pub async fn geocode_receivers_with_metrics(
         }
         Err(e) => {
             // Only mark as failed if there's a critical error (e.g., database connection issue)
-            error!("Failed to geocode receivers: {}", e);
+            error!(error = %e, "Failed to geocode receivers");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }

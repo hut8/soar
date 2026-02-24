@@ -254,7 +254,7 @@ impl SbsClient {
                     ) {
                         Ok(bytes) => bytes,
                         Err(e) => {
-                            error!("Failed to create SBS envelope: {}", e);
+                            error!(error = %e, "Failed to create SBS envelope");
                             metrics::counter!("sbs.envelope.creation_error_total").increment(1);
                             continue;
                         }
@@ -314,7 +314,7 @@ impl SbsClient {
                     }
                 }
                 Ok(Err(e)) => {
-                    error!("Error reading from SBS stream: {}", e);
+                    error!(error = %e, "Error reading from SBS stream");
                     metrics::gauge!("sbs.connection.connected").set(0.0);
 
                     {
@@ -363,7 +363,7 @@ impl SbsClient {
                 metrics::counter!("sbs.lines.published_total").increment(1);
             }
             Err(e) => {
-                error!("Failed to send SBS line to queue: {}", e);
+                error!(error = %e, "Failed to send SBS line to queue");
                 metrics::counter!("sbs.lines.dropped_total").increment(1);
             }
         }

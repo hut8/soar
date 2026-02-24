@@ -37,7 +37,7 @@ pub async fn get_aircraft_images(
             return json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response();
         }
         Err(e) => {
-            error!("Failed to fetch aircraft {}: {}", id, e);
+            error!(aircraft_id = %id, error = %e, "Failed to fetch aircraft");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to fetch aircraft",
@@ -137,7 +137,7 @@ pub async fn get_aircraft_images(
         let images_json = match serde_json::to_value(&collection) {
             Ok(json) => json,
             Err(e) => {
-                error!("Failed to serialize images for aircraft {}: {}", id, e);
+                error!(aircraft_id = %id, error = %e, "Failed to serialize images for aircraft");
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to serialize images",

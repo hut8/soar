@@ -174,12 +174,12 @@ impl AprsClient {
                         current_delay = config.retry_delay_seconds;
                     }
                     ConnectionResult::ConnectionFailed(e) => {
-                        error!("APRS connection failed: {}", e);
+                        error!(error = %e, "APRS connection failed");
                         retry_count += 1;
                         metrics::counter!("aprs.connection_failed_total").increment(1);
                     }
                     ConnectionResult::OperationFailed(e) => {
-                        error!("APRS operation failed: {}", e);
+                        error!(error = %e, "APRS operation failed");
                         retry_count = 0;
                         metrics::counter!("aprs.connection.operation_failed_total").increment(1);
                     }
@@ -389,9 +389,10 @@ impl AprsClient {
                         Ok(0) => {
                             let duration = connection_start.elapsed();
                             // Use error! so sentry_tracing forwards this as a Sentry event
+                            let duration_secs = format!("{:.1}", duration.as_secs_f64());
                             error!(
-                                "APRS connection closed by server after {:.1}s",
-                                duration.as_secs_f64()
+                                duration_secs = %duration_secs,
+                                "APRS connection closed by server"
                             );
                             metrics::counter!("aprs.connection.server_closed_total").increment(1);
                             metrics::gauge!("aprs.connection.connected").set(0.0);
@@ -438,7 +439,7 @@ impl AprsClient {
                                 ) {
                                     Ok(bytes) => bytes,
                                     Err(e) => {
-                                        error!("Failed to create envelope: {}", e);
+                                        error!(error = %e, "Failed to create envelope");
                                         continue;
                                     }
                                 };

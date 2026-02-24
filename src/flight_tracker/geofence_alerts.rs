@@ -109,8 +109,8 @@ pub async fn process_geofence_exits(
             }
             Err(e) => {
                 error!(
-                    "Failed to create geofence exit event for geofence {}: {}",
-                    geofence.id, e
+                    geofence_id = %geofence.id, error = %e,
+                    "Failed to create geofence exit event"
                 );
                 continue;
             }
@@ -159,8 +159,8 @@ async fn send_geofence_exit_alerts(
         Ok(ids) => ids,
         Err(e) => {
             error!(
-                "Failed to get subscribers for geofence {}: {}",
-                geofence.id, e
+                geofence_id = %geofence.id, error = %e,
+                "Failed to get subscribers for geofence"
             );
             return;
         }
@@ -174,7 +174,7 @@ async fn send_geofence_exit_alerts(
     let email_service = match EmailService::new() {
         Ok(service) => Arc::new(service),
         Err(e) => {
-            error!("Failed to create email service for geofence alerts: {}", e);
+            error!(error = %e, "Failed to create email service for geofence alerts");
             return;
         }
     };
@@ -210,7 +210,7 @@ async fn send_geofence_exit_alerts(
                 continue;
             }
             Err(e) => {
-                error!("Failed to get user {} for geofence email: {}", user_id, e);
+                error!(user_id = %user_id, error = %e, "Failed to get user for geofence email");
                 continue;
             }
         };
@@ -232,7 +232,7 @@ async fn send_geofence_exit_alerts(
                 metrics::counter!("geofence.alert_emails_sent_total").increment(1);
             }
             Err(e) => {
-                error!("Failed to send geofence exit email to {}: {}", email, e);
+                error!(email = %email, error = %e, "Failed to send geofence exit email");
                 metrics::counter!("geofence.alert_emails_failed_total").increment(1);
             }
         }
@@ -245,8 +245,8 @@ async fn send_geofence_exit_alerts(
             .await
         {
             error!(
-                "Failed to update email count for exit event {}: {}",
-                event.id, e
+                event_id = %event.id, error = %e,
+                "Failed to update email count for exit event"
             );
         }
 

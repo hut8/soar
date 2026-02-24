@@ -353,10 +353,10 @@ pub async fn load_adsb_exchange_data(
                     inserted_count += rows_affected;
                 }
                 Ok(Err(e)) => {
-                    error!("Failed to insert/update batch: {}", e);
+                    error!(error = %e, "Failed to insert/update batch");
                 }
                 Err(e) => {
-                    error!("Task failed for batch: {}", e);
+                    error!(error = %e, "Task failed for batch");
                 }
             }
         }
@@ -388,7 +388,7 @@ pub async fn load_adsb_exchange_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load ADS-B Exchange data: {}", e);
+                error!(error = %e, "Failed to load ADS-B Exchange data");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }

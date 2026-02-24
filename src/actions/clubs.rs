@@ -39,7 +39,7 @@ pub async fn get_club_by_id(
         .into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
         Err(e) => {
-            error!("Failed to get club by ID: {}", e);
+            error!(error = %e, "Failed to get club by ID");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get club by ID",
@@ -95,7 +95,7 @@ pub async fn search_clubs(
                 Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
-                error!("Failed to search nearby clubs: {}", e);
+                error!(error = %e, "Failed to search nearby clubs");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search nearby clubs",
@@ -119,7 +119,7 @@ pub async fn search_clubs(
                 Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
-                error!("Failed to search clubs: {}", e);
+                error!(error = %e, "Failed to search clubs");
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search clubs")
                     .into_response()
             }
@@ -139,7 +139,7 @@ pub async fn search_clubs(
                 Json(DataListResponse { data: club_views }).into_response()
             }
             Err(e) => {
-                error!("Failed to get clubs: {}", e);
+                error!(error = %e, "Failed to get clubs");
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
             }
         }
@@ -208,7 +208,7 @@ pub async fn get_club_flights(
             Json(DataListResponse { data: flight_views }).into_response()
         }
         Err(e) => {
-            error!("Failed to get flights for club {}: {}", club_id, e);
+            error!(club_id = %club_id, error = %e, "Failed to get flights for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get club flights",

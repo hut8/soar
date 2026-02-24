@@ -374,16 +374,16 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
                                 // Successfully delivered - commit the message
                                 if let Err(e) = queue_for_publisher.commit().await {
-                                    error!("Failed to commit message offset: {}", e);
+                                    error!(error = %e, "Failed to commit message offset");
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to send message to socket: {}", e);
+                                error!(error = %e, "Failed to send message to socket");
                                 metrics::counter!("ingest.socket_send_error_total").increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
                                 if let Err(e) = socket_client.reconnect().await {
-                                    error!("Failed to reconnect socket: {}", e);
+                                    error!(error = %e, "Failed to reconnect socket");
                                 }
                             }
                         }
@@ -392,7 +392,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         // Don't die on queue errors - they may be transient (e.g., race
                         // between overflow writes and drain reads, corrupted segment that
                         // gets cleaned up). Log and retry after a delay.
-                        error!("Failed to receive from queue: {} (will retry)", e);
+                        error!(error = %e, "Failed to receive from queue (will retry)");
                         metrics::counter!("ingest.queue_recv_error_total").increment(1);
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     }
@@ -652,7 +652,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         break;
                     }
                     Err(e) => {
-                        error!("OGN client failed: {}", e);
+                        error!(error = %e, "OGN client failed");
                         // Will retry via internal retry logic
                     }
                 }
@@ -687,7 +687,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 Ok(_) => {
                     info!("Beast client {}:{} stopped normally", server, port);
                 }
-                Err(e) => error!("Beast client {}:{} failed: {}", server, port, e),
+                Err(e) => error!(error = %e, server = %server, port = %port, "Beast client failed"),
             }
         });
     }
@@ -719,7 +719,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 Ok(_) => {
                     info!("SBS client {}:{} stopped normally", server, port);
                 }
-                Err(e) => error!("SBS client {}:{} failed: {}", server, port, e),
+                Err(e) => error!(error = %e, server = %server, port = %port, "SBS client failed"),
             }
         });
     }

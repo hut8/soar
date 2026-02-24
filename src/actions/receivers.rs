@@ -44,7 +44,7 @@ pub async fn get_receiver_by_id(
         Ok(Some(receiver)) => Json(DataResponse { data: receiver }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver by ID {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver").into_response()
         }
     }
@@ -93,11 +93,7 @@ pub async fn search_receivers(
                 .into_response();
             }
             Err(e) => {
-                tracing::error!(
-                    "Failed to search receivers by query {}: {}",
-                    search_query,
-                    e
-                );
+                tracing::error!(query = %search_query, error = %e, "Failed to search receivers by query");
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search receivers",
@@ -156,7 +152,7 @@ pub async fn search_receivers(
                 .into_response();
             }
             Err(e) => {
-                tracing::error!("Failed to search receivers by location: {}", e);
+                tracing::error!(error = %e, "Failed to search receivers by location");
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search receivers by location",
@@ -231,7 +227,7 @@ pub async fn search_receivers(
                         }).into_response()
                     }
                     Err(e) => {
-                        tracing::error!("Failed to get receivers in bounding box: {}", e);
+                        tracing::error!(error = %e, "Failed to get receivers in bounding box");
                         json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to get receivers in bounding box",
@@ -271,7 +267,7 @@ pub async fn search_receivers(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to search receivers by callsign {}: {}", callsign, e);
+                tracing::error!(callsign = %callsign, error = %e, "Failed to search receivers by callsign");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search receivers",
@@ -306,7 +302,7 @@ pub async fn search_receivers(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get receivers with coordinates: {}", e);
+                tracing::error!(error = %e, "Failed to get receivers with coordinates");
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receivers")
                     .into_response()
             }
@@ -330,7 +326,7 @@ pub async fn get_receiver_fixes(
         Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
                 .into_response();
         }
@@ -357,7 +353,7 @@ pub async fn get_receiver_fixes(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get fixes for receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get fixes for receiver");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get receiver fixes",
@@ -383,7 +379,7 @@ pub async fn get_receiver_statuses(
         Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
                 .into_response();
         }
@@ -410,7 +406,7 @@ pub async fn get_receiver_statuses(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get statuses for receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get statuses for receiver");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get receiver statuses",
@@ -448,7 +444,7 @@ pub async fn get_receiver_raw_messages(
         Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
                 .into_response();
         }
@@ -475,7 +471,7 @@ pub async fn get_receiver_raw_messages(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get raw messages for receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get raw messages for receiver");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get receiver raw messages",
@@ -537,7 +533,7 @@ pub async fn get_receiver_statistics(
         Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
                 .into_response();
         }
@@ -559,11 +555,7 @@ pub async fn get_receiver_statistics(
     {
         Ok(interval) => interval,
         Err(e) => {
-            tracing::error!(
-                "Failed to get average update interval for receiver {}: {}",
-                id,
-                e
-            );
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get average update interval for receiver");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to calculate statistics",
@@ -576,7 +568,7 @@ pub async fn get_receiver_statistics(
     let total_count = match status_repo.count_for_receiver(id).await {
         Ok(count) => count,
         Err(e) => {
-            tracing::error!("Failed to count statuses for receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to count statuses for receiver");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to calculate statistics",
@@ -608,7 +600,7 @@ pub async fn get_receiver_aggregate_stats(
         Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get receiver");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
                 .into_response();
         }
@@ -621,11 +613,7 @@ pub async fn get_receiver_aggregate_stats(
     {
         Ok(counts) => counts,
         Err(e) => {
-            tracing::error!(
-                "Failed to get fix counts by APRS type for receiver {}: {}",
-                id,
-                e
-            );
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get fix counts by APRS type for receiver");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get fix counts by APRS type",
@@ -638,11 +626,7 @@ pub async fn get_receiver_aggregate_stats(
     let device_fix_counts = match fixes_repo.get_fix_counts_by_aircraft_for_receiver(id).await {
         Ok(counts) => counts,
         Err(e) => {
-            tracing::error!(
-                "Failed to get fix counts by device for receiver {}: {}",
-                id,
-                e
-            );
+            tracing::error!(receiver_id = %id, error = %e, "Failed to get fix counts by device for receiver");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get fix counts by device",

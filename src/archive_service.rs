@@ -105,7 +105,7 @@ impl ArchiveService {
                             current_date = Some(today);
                         }
                         Err(e) => {
-                            error!("Failed to open archive file {:?}: {}", log_path, e);
+                            error!(path = ?log_path, error = %e, "Failed to open archive file");
                             continue;
                         }
                     }
@@ -120,8 +120,8 @@ impl ArchiveService {
                 if let Some(file) = &mut current_file {
                     if let Err(e) = writeln!(file, "{}", message) {
                         error!(
-                            "Failed to write to archive file: {} - this may cause message backlog",
-                            e
+                            error = %e,
+                            "Failed to write to archive file, this may cause message backlog"
                         );
                     } else {
                         messages_written += 1;

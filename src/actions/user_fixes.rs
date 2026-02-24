@@ -60,7 +60,7 @@ pub async fn create_user_fix(
             (StatusCode::CREATED, Json(response)).into_response()
         }
         Err(e) => {
-            error!("Failed to create user fix: {}", e);
+            error!(error = %e, "Failed to create user fix");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to record location",

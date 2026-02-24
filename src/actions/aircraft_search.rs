@@ -136,7 +136,7 @@ pub async fn get_aircraft_by_id(
     let mut conn = match state.pool.get() {
         Ok(conn) => conn,
         Err(e) => {
-            tracing::error!("Failed to get database connection: {}", e);
+            tracing::error!(error = %e, "Failed to get database connection");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Database connection failed",
@@ -163,7 +163,7 @@ pub async fn get_aircraft_by_id(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to get aircraft by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft").into_response()
         }
     }
@@ -203,7 +203,7 @@ pub async fn get_aircraft_fixes(
                     .into_response()
                 }
                 Err(e) => {
-                    tracing::error!("Failed to get fixes for aircraft {}: {}", id, e);
+                    tracing::error!(aircraft_id = %id, error = %e, "Failed to get fixes for aircraft");
                     json_error(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to get aircraft fixes",
@@ -214,7 +214,7 @@ pub async fn get_aircraft_fixes(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to verify aircraft exists {}: {}", id, e);
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to verify aircraft exists");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to verify aircraft",
@@ -288,7 +288,7 @@ async fn search_aircraft_by_bbox(
     {
         Ok(count) => count,
         Err(e) => {
-            tracing::error!("Failed to count aircraft in bounding box: {}", e);
+            tracing::error!(error = %e, "Failed to count aircraft in bounding box");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to count aircraft in bounding box",
@@ -362,7 +362,7 @@ async fn search_aircraft_by_bbox(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get clustered aircraft: {}", e);
+                tracing::error!(error = %e, "Failed to get clustered aircraft");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get clustered aircraft",
@@ -410,7 +410,7 @@ async fn search_aircraft_by_bbox(
                 .into_response()
             }
             Err(e) => {
-                tracing::error!("Failed to get aircraft in bounding box: {}", e);
+                tracing::error!(error = %e, "Failed to get aircraft in bounding box");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get aircraft in bounding box",
@@ -440,11 +440,7 @@ async fn search_aircraft_by_registration(
             .into_response()
         }
         Err(e) => {
-            tracing::error!(
-                "Failed to search aircraft by registration {}: {}",
-                registration,
-                e
-            );
+            tracing::error!(registration = %registration, error = %e, "Failed to search aircraft by registration");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to search aircraft",
@@ -488,7 +484,7 @@ async fn search_aircraft_by_address(
         }
         Ok(None) => Json(DataListResponse::<AircraftView> { data: vec![] }).into_response(),
         Err(e) => {
-            tracing::error!("Failed to search aircraft by address {}: {}", address, e);
+            tracing::error!(address = %address, error = %e, "Failed to search aircraft by address");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to search aircraft",
@@ -586,7 +582,7 @@ async fn get_recent_aircraft_response(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get recent aircraft: {}", e);
+            tracing::error!(error = %e, "Failed to get recent aircraft");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get recent aircraft",
@@ -614,7 +610,7 @@ pub async fn get_aircraft_by_club(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get aircraft for club {}: {}", club_id, e);
+            tracing::error!(club_id = %club_id, error = %e, "Failed to get aircraft for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft for club",
@@ -690,7 +686,7 @@ pub async fn get_aircraft_flights(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get flights for aircraft {}: {}", id, e);
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to get flights for aircraft");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flights for aircraft",
@@ -731,7 +727,7 @@ pub async fn update_aircraft_club(
         .into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to update aircraft club assignment: {}", e);
+            tracing::error!(aircraft_id = %id, error = %e, "Failed to update aircraft club assignment");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update aircraft club assignment",

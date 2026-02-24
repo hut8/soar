@@ -59,8 +59,8 @@ pub(crate) async fn create_flight_fast(
         }
         Err(e) => {
             error!(
-                "Error fetching aircraft {} for flight {}: {}",
-                fix.aircraft_id, flight_id, e
+                aircraft_id = %fix.aircraft_id, flight_id = %flight_id, error = %e,
+                "Error fetching aircraft for flight"
             );
             return Err(anyhow::anyhow!("Failed to fetch aircraft: {}", e));
         }
@@ -151,7 +151,7 @@ fn spawn_flight_enrichment_on_creation(
                     return;
                 }
                 Err(e) => {
-                    error!("Failed to fetch flight {} for enrichment: {}", flight_id, e);
+                    error!(flight_id = %flight_id, error = %e, "Failed to fetch flight for enrichment");
                     return;
                 }
             };
@@ -218,8 +218,8 @@ fn spawn_flight_enrichment_on_creation(
                 .await
             {
                 error!(
-                    "Failed to update flight {} with enrichment data: {}",
-                    flight_id, e
+                    flight_id = %flight_id, error = %e,
+                    "Failed to update flight with enrichment data"
                 );
             }
 
@@ -264,8 +264,8 @@ fn spawn_flight_enrichment_airborne(ctx: &FlightProcessorContext<'_>, fix: Fix, 
                 .await
             {
                 error!(
-                    "Failed to update airborne flight {} with start location: {}",
-                    flight_id, e
+                    flight_id = %flight_id, error = %e,
+                    "Failed to update airborne flight with start location"
                 );
             }
 
@@ -364,8 +364,8 @@ pub(crate) async fn timeout_flight(
                 .await
             {
                 error!(
-                    "Failed to calculate bounding box for timed-out flight {}: {}",
-                    flight_id, e
+                    flight_id = %flight_id, error = %e,
+                    "Failed to calculate bounding box for timed-out flight"
                 );
             }
 
@@ -390,7 +390,7 @@ pub(crate) async fn timeout_flight(
             Ok(())
         }
         Err(e) => {
-            error!("Failed to timeout flight {}: {}", flight_id, e);
+            error!(flight_id = %flight_id, error = %e, "Failed to timeout flight");
             Err(e)
         }
     }
@@ -444,8 +444,8 @@ pub(crate) fn spawn_complete_flight(
             .await
             {
                 error!(
-                    "Background flight completion failed for flight {}: {}",
-                    flight_id, e
+                    flight_id = %flight_id, error = %e,
+                    "Background flight completion failed"
                 );
             }
         }
@@ -474,11 +474,11 @@ async fn complete_flight_in_background(
     let flight = match flights_repo.get_flight_by_id(flight_id).await {
         Ok(Some(f)) => f,
         Ok(None) => {
-            error!("Flight {} not found when completing", flight_id);
+            error!(flight_id = %flight_id, "Flight not found when completing");
             return Err(anyhow::anyhow!("Flight not found"));
         }
         Err(e) => {
-            error!("Failed to fetch flight {}: {}", flight_id, e);
+            error!(flight_id = %flight_id, error = %e, "Failed to fetch flight");
             return Err(e);
         }
     };
@@ -648,7 +648,7 @@ async fn complete_flight_in_background(
                 .clear_flight_id(flight_id, clear_start, clear_end)
                 .await
             {
-                error!("Failed to clear flight_id from fixes: {}", e);
+                error!(error = %e, "Failed to clear flight_id from fixes");
             }
 
             // Archive the flight to spurious_flights table, then delete from flights
@@ -784,7 +784,7 @@ async fn complete_flight_in_background(
                     let kml_content = match flight.make_kml(&fixes_repo, Some(&aircraft)).await {
                         Ok(kml) => kml,
                         Err(e) => {
-                            tracing::error!("Failed to generate KML: {}", e);
+                            tracing::error!(error = %e, "Failed to generate KML");
                             metrics::counter!("watchlist.emails.failed_total").increment(1);
                             return;
                         }
@@ -793,7 +793,7 @@ async fn complete_flight_in_background(
                     let igc_content = match flight.make_igc(&fixes_repo, Some(&aircraft)).await {
                         Ok(igc) => igc,
                         Err(e) => {
-                            tracing::error!("Failed to generate IGC: {}", e);
+                            tracing::error!(error = %e, "Failed to generate IGC");
                             metrics::counter!("watchlist.emails.failed_total").increment(1);
                             return;
                         }
@@ -856,7 +856,7 @@ async fn complete_flight_in_background(
                     let email_service = match crate::email::EmailService::new() {
                         Ok(service) => service,
                         Err(e) => {
-                            tracing::error!("Failed to initialize email service: {}", e);
+                            tracing::error!(error = %e, "Failed to initialize email service");
                             metrics::counter!("watchlist.emails.failed_total").increment(1);
                             return;
                         }
@@ -889,9 +889,8 @@ async fn complete_flight_in_background(
                                         }
                                         Err(e) => {
                                             tracing::error!(
-                                                "Failed to send email to {}: {}",
-                                                email,
-                                                e
+                                                email = %email, error = %e,
+                                                "Failed to send email"
                                             );
                                             metrics::counter!("watchlist.emails.failed_total")
                                                 .increment(1);
@@ -901,8 +900,8 @@ async fn complete_flight_in_background(
                             }
                             _ => {
                                 tracing::error!(
-                                    "Failed to get user {} for email notification",
-                                    user_id
+                                    user_id = %user_id,
+                                    "Failed to get user for email notification"
                                 );
                                 metrics::counter!("watchlist.emails.failed_total").increment(1);
                             }
@@ -913,7 +912,7 @@ async fn complete_flight_in_background(
                     tracing::debug!("No email watchers for aircraft {}", device_address);
                 }
                 Err(e) => {
-                    tracing::error!("Failed to get watchlist users: {}", e);
+                    tracing::error!(error = %e, "Failed to get watchlist users");
                     metrics::counter!("watchlist.emails.failed_total").increment(1);
                 }
             }
@@ -959,8 +958,8 @@ pub(crate) async fn enrich_flight_on_startup(
         }
         Err(e) => {
             error!(
-                "Failed to fetch flight {} for startup enrichment: {}",
-                flight_id, e
+                flight_id = %flight_id, error = %e,
+                "Failed to fetch flight for startup enrichment"
             );
             return;
         }
@@ -979,8 +978,8 @@ pub(crate) async fn enrich_flight_on_startup(
         Ok(fixes) => fixes,
         Err(e) => {
             error!(
-                "Failed to fetch fixes for startup enrichment of flight {}: {}",
-                flight_id, e
+                flight_id = %flight_id, error = %e,
+                "Failed to fetch fixes for startup enrichment"
             );
             return;
         }
@@ -1034,8 +1033,8 @@ pub(crate) async fn enrich_flight_on_startup(
         .await
     {
         error!(
-            "Failed to update flight {} during startup enrichment: {}",
-            flight_id, e
+            flight_id = %flight_id, error = %e,
+            "Failed to update flight during startup enrichment"
         );
         return;
     }
@@ -1046,8 +1045,8 @@ pub(crate) async fn enrich_flight_on_startup(
         .await
     {
         error!(
-            "Failed to calculate bounding box for flight {} during startup enrichment: {}",
-            flight_id, e
+            flight_id = %flight_id, error = %e,
+            "Failed to calculate bounding box during startup enrichment"
         );
     }
 
@@ -1129,8 +1128,8 @@ fn spawn_flight_enrichment_on_completion_direct(
                 }
                 Err(e) => {
                     error!(
-                        "Failed to fetch flight {} for enrichment on completion: {}",
-                        flight_id, e
+                        flight_id = %flight_id, error = %e,
+                        "Failed to fetch flight for enrichment on completion"
                     );
                     return;
                 }
@@ -1193,8 +1192,8 @@ fn spawn_flight_enrichment_on_completion_direct(
                 .await
             {
                 error!(
-                    "Failed to update flight {} with enriched landing data: {}",
-                    flight_id, e
+                    flight_id = %flight_id, error = %e,
+                    "Failed to update flight with enriched landing data"
                 );
             }
 

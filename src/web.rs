@@ -370,7 +370,7 @@ async fn error_recording_middleware(request: Request<Body>, next: Next) -> Respo
     // Record HTTP 5xx errors on the current span
     if response.status().is_server_error() {
         let status = response.status();
-        error!("HTTP {} error on {} {}", status.as_u16(), method, uri);
+        error!(status = status.as_u16(), method = %method, uri = %uri, "HTTP server error");
 
         // Get the current OpenTelemetry span and record the error
         let span = Span::current();
@@ -597,7 +597,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
                     Some(service)
                 }
                 Err(e) => {
-                    error!("Failed to create live fix service: {}", e);
+                    error!(error = %e, "Failed to create live fix service");
                     None
                 }
             }

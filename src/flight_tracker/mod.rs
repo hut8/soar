@@ -220,8 +220,8 @@ impl FlightTracker {
             Err(e) => {
                 // Don't abort initialization if orphan cleanup fails — still restore states
                 error!(
-                    "Failed to complete orphaned flights on startup: {}. Continuing with state restoration.",
-                    e
+                    error = %e,
+                    "Failed to complete orphaned flights on startup, continuing with state restoration"
                 );
                 Vec::new()
             }
@@ -325,9 +325,8 @@ impl FlightTracker {
                         Ok(permit) => permit,
                         Err(err) => {
                             error!(
-                                "Failed to acquire semaphore for startup flight enrichment: {}; \
-                                 skipping remaining flights",
-                                err
+                                error = %err,
+                                "Failed to acquire semaphore for startup flight enrichment, skipping remaining flights"
                             );
                             break;
                         }
@@ -558,8 +557,8 @@ impl FlightTracker {
 
             if let Err(e) = flight_lifecycle::timeout_flight(&ctx, flight_id, aircraft_id).await {
                 error!(
-                    "Failed to timeout flight {} for device {}: {}",
-                    flight_id, aircraft_id, e
+                    flight_id = %flight_id, aircraft_id = %aircraft_id, error = %e,
+                    "Failed to timeout flight"
                 );
             } else {
                 // Clean up the device lock after successful timeout
@@ -623,7 +622,7 @@ impl FlightTracker {
             match state_transitions::process_state_transition(&self.context(), fix).await {
                 Ok(result) => result,
                 Err(e) => {
-                    error!("Failed to process state transition: {}", e);
+                    error!(error = %e, "Failed to process state transition");
                     return None;
                 }
             };
@@ -668,12 +667,12 @@ impl FlightTracker {
                     }
                 }
                 error!(
-                    "Failed to save fix: aircraft={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
-                    updated_fix.aircraft_id,
-                    updated_fix.flight_id,
-                    updated_fix.ground_speed_knots,
-                    updated_fix.altitude_msl_feet,
-                    e
+                    aircraft_id = %updated_fix.aircraft_id,
+                    flight_id = ?updated_fix.flight_id,
+                    speed_knots = ?updated_fix.ground_speed_knots,
+                    alt_msl_ft = ?updated_fix.altitude_msl_feet,
+                    error = %e,
+                    "Failed to save fix"
                 );
                 None
             }

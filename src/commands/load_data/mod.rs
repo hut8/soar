@@ -614,7 +614,7 @@ async fn geocode_aircraft_registration_locations(
     {
         Ok(Ok(locations)) => locations,
         Ok(Err(e)) => {
-            error!("Failed to query aircraft registration locations: {}", e);
+            error!(error = %e, "Failed to query aircraft registration locations");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
             metrics.duration_secs = start.elapsed().as_secs_f64();
@@ -622,8 +622,8 @@ async fn geocode_aircraft_registration_locations(
         }
         Err(e) => {
             error!(
-                "Task join error querying aircraft registration locations: {}",
-                e
+                error = %e,
+                "Task join error querying aircraft registration locations"
             );
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
@@ -870,7 +870,7 @@ async fn geocode_soaring_clubs(
             metrics.success = true;
         }
         Err(e) => {
-            error!("Failed to get locations for geocoding: {}", e);
+            error!(error = %e, "Failed to get locations for geocoding");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }
@@ -1015,7 +1015,7 @@ async fn geocode_airports(
             metrics.success = true;
         }
         Err(e) => {
-            error!("Failed to get airports for geocoding: {}", e);
+            error!(error = %e, "Failed to get airports for geocoding");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }

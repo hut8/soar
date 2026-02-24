@@ -52,7 +52,7 @@ pub async fn get_pilot_by_id(
         Ok(Some(pilot)) => Json(DataResponse { data: pilot }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get pilot by ID {}: {}", id, e);
+            tracing::error!(pilot_id = %id, error = %e, "Failed to get pilot by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get pilot").into_response()
         }
     }
@@ -79,7 +79,7 @@ pub async fn get_pilots_by_club(
     match users_repo.get_pilots_by_club(club_id).await {
         Ok(pilots) => Json(DataListResponse { data: pilots }).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get pilots for club {}: {}", club_id, e);
+            tracing::error!(club_id = %club_id, error = %e, "Failed to get pilots for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get pilots for club",
@@ -109,7 +109,7 @@ pub async fn create_pilot(
     match users_repo.create_pilot(pilot.clone()).await {
         Ok(_) => Json(DataResponse { data: pilot }).into_response(),
         Err(e) => {
-            tracing::error!("Failed to create pilot: {}", e);
+            tracing::error!(error = %e, "Failed to create pilot");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pilot").into_response()
         }
     }
@@ -143,7 +143,7 @@ pub async fn get_pilots_for_flight(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get pilots for flight {}: {}", flight_id, e);
+            tracing::error!(flight_id = %flight_id, error = %e, "Failed to get pilots for flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get pilots for flight",
@@ -177,7 +177,7 @@ pub async fn link_pilot_to_flight(
             return json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response();
         }
         Err(e) => {
-            tracing::error!("Failed to verify pilot {}: {}", request.pilot_id, e);
+            tracing::error!(pilot_id = %request.pilot_id, error = %e, "Failed to verify pilot");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify pilot")
                 .into_response();
         }
@@ -194,12 +194,7 @@ pub async fn link_pilot_to_flight(
     match pilots_repo.link_pilot_to_flight(&flight_pilot).await {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(e) => {
-            tracing::error!(
-                "Failed to link pilot {} to flight {}: {}",
-                request.pilot_id,
-                flight_id,
-                e
-            );
+            tracing::error!(pilot_id = %request.pilot_id, flight_id = %flight_id, error = %e, "Failed to link pilot to flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to link pilot to flight",
@@ -227,12 +222,7 @@ pub async fn unlink_pilot_from_flight(
             json_error(StatusCode::NOT_FOUND, "Flight-pilot link not found").into_response()
         }
         Err(e) => {
-            tracing::error!(
-                "Failed to unlink pilot {} from flight {}: {}",
-                pilot_id,
-                flight_id,
-                e
-            );
+            tracing::error!(pilot_id = %pilot_id, flight_id = %flight_id, error = %e, "Failed to unlink pilot from flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to unlink pilot from flight",
@@ -253,7 +243,7 @@ pub async fn delete_pilot(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to delete pilot {}: {}", pilot_id, e);
+            tracing::error!(pilot_id = %pilot_id, error = %e, "Failed to delete pilot");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete pilot").into_response()
         }
     }
