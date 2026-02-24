@@ -82,7 +82,7 @@ impl SocketServer {
                     let intake_tx = intake_tx.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_connection(stream, intake_tx, id).await {
-                            error!("Connection #{} error: {}", id, e);
+                            error!(connection_id = id, error = %e, "Connection error");
                         }
                         metrics::gauge!("socket.connections.active").decrement(1.0);
                         metrics::counter!("socket.connections.closed_total").increment(1);
@@ -90,7 +90,7 @@ impl SocketServer {
                     });
                 }
                 Err(e) => {
-                    error!("Accept error: {}", e);
+                    error!(error = %e, "Accept error");
                     metrics::counter!("socket.errors.accept_total").increment(1);
                 }
             }
@@ -156,7 +156,7 @@ async fn handle_connection(
         let envelope = match deserialize_envelope(&payload) {
             Ok(env) => env,
             Err(e) => {
-                error!("Failed to deserialize envelope: {}", e);
+                error!(error = %e, "Failed to deserialize envelope");
                 metrics::counter!("socket.errors.parse_total").increment(1);
                 continue;
             }
@@ -164,7 +164,7 @@ async fn handle_connection(
 
         // Send to intake queue
         if let Err(e) = intake_tx.send_async(envelope).await {
-            error!("Failed to send to intake queue: {}", e);
+            error!(error = %e, "Failed to send to intake queue");
             metrics::counter!("socket.errors.queue_send_total").increment(1);
             return Err(e.into());
         }

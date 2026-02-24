@@ -137,7 +137,7 @@ impl NominatimClient {
                 "Nominatim geocoding request forbidden (403) for address '{}' - possible rate limit violation",
                 address
             );
-            error!("{}", error_msg);
+            error!(address = %address, "Nominatim geocoding request forbidden (403) - possible rate limit violation");
 
             // Report to Sentry
 
@@ -230,7 +230,7 @@ impl NominatimClient {
                 "Nominatim reverse geocoding request forbidden (403) for coordinates ({}, {}) - possible rate limit violation",
                 latitude, longitude
             );
-            error!("{}", error_msg);
+            error!(latitude = %latitude, longitude = %longitude, "Nominatim reverse geocoding request forbidden (403) - possible rate limit violation");
 
             // Report to Sentry
 

@@ -47,7 +47,7 @@ pub async fn load_airports_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load airports: {}", e);
+                error!(error = %e, "Failed to load airports");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }
@@ -97,7 +97,7 @@ pub async fn load_runways_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load runways: {}", e);
+                error!(error = %e, "Failed to load runways");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }

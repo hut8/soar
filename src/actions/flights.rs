@@ -205,7 +205,7 @@ pub async fn get_flight_by_id(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight").into_response()
         }
     }
@@ -237,7 +237,7 @@ pub async fn get_flight_device(
                         json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
                     Err(e) => {
-                        tracing::error!("Failed to get aircraft {}: {}", aircraft_id, e);
+                        tracing::error!(aircraft_id = %aircraft_id, error = %e, "Failed to get aircraft");
                         json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft")
                             .into_response()
                     }
@@ -249,7 +249,7 @@ pub async fn get_flight_device(
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight").into_response()
         }
     }
@@ -269,7 +269,7 @@ pub async fn get_flight_kml(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -305,7 +305,7 @@ pub async fn get_flight_kml(
             (StatusCode::OK, headers, kml_content).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to generate KML for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to generate KML for flight");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate KML").into_response()
         }
     }
@@ -325,7 +325,7 @@ pub async fn get_flight_igc(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -360,7 +360,7 @@ pub async fn get_flight_igc(
             (StatusCode::OK, headers, igc_content).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to generate IGC for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to generate IGC for flight");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate IGC").into_response()
         }
     }
@@ -380,7 +380,7 @@ pub async fn get_flight_fixes(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -413,7 +413,7 @@ pub async fn get_flight_fixes(
     {
         Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get fixes for flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flight fixes",
@@ -445,7 +445,7 @@ pub async fn get_flight_path(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -509,7 +509,7 @@ pub async fn get_flight_path(
             Json(DataListResponse { data: path }).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get fixes for flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flight path",
@@ -533,7 +533,7 @@ pub async fn get_flight_spline_path(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -554,7 +554,7 @@ pub async fn get_flight_spline_path(
     {
         Ok(fixes) => fixes,
         Err(e) => {
-            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get fixes for flight");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flight fixes",
@@ -846,7 +846,7 @@ pub async fn get_airport_flights(
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get flights for airport {}: {}", airport_id, e);
+            tracing::error!(airport_id = %airport_id, error = %e, "Failed to get flights for airport");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get airport flights",
@@ -893,7 +893,7 @@ pub async fn get_nearby_flights(
             Json(DataListResponse { data: flight_views }).into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get nearby flights for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get nearby flights for flight");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get nearby flights",
@@ -943,7 +943,7 @@ pub async fn get_flight_gaps(
         Ok(Some(flight)) => flight,
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get flight by ID");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
                 .into_response();
         }
@@ -964,7 +964,7 @@ pub async fn get_flight_gaps(
     {
         Ok(fixes) => fixes,
         Err(e) => {
-            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            tracing::error!(flight_id = %id, error = %e, "Failed to get fixes for flight");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flight fixes",

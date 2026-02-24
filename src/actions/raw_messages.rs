@@ -42,7 +42,7 @@ pub async fn get_raw_message(
         Ok(Some(message)) => Json(DataResponse { data: message }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Raw message not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get raw message {}: {}", id, e);
+            tracing::error!(message_id = %id, error = %e, "Failed to get raw message");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get raw message",

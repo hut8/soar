@@ -51,7 +51,7 @@ pub async fn load_aircraft_models_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load aircraft models: {}", e);
+                error!(error = %e, "Failed to load aircraft models");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }

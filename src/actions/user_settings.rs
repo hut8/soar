@@ -24,7 +24,7 @@ pub async fn get_user_settings(
         Ok(Some(user)) => Json(user.settings).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to get user settings: {}", e);
+            error!(error = %e, "Failed to get user settings");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get user settings",
@@ -49,7 +49,7 @@ pub async fn update_user_settings(
         Ok(true) => (StatusCode::NO_CONTENT, "").into_response(),
         Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to update user settings: {}", e);
+            error!(error = %e, "Failed to update user settings");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update user settings",

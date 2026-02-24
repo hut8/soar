@@ -83,7 +83,7 @@ pub async fn get_airspaces(
             .into_response()
         }
         Err(e) => {
-            error!("Failed to fetch airspaces: {}", e);
+            error!(error = %e, "Failed to fetch airspaces");
             metrics::counter!("api.airspaces.errors_total").increment(1);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,

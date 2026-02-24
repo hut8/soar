@@ -57,7 +57,7 @@ pub async fn register_user(
                                 .send_email_verification(email, &user.full_name(), &token)
                                 .await
                             {
-                                error!("Failed to send email verification: {}", e);
+                                error!(error = %e, "Failed to send email verification");
                                 return json_error(
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     "Failed to send email verification",
@@ -90,7 +90,7 @@ pub async fn register_user(
                             });
                         }
                         Err(e) => {
-                            error!("Email service initialization failed: {}", e);
+                            error!(error = %e, "Email service initialization failed");
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Email service not configured",
@@ -105,7 +105,7 @@ pub async fn register_user(
                     .into_response()
                 }
                 Err(e) => {
-                    error!("Failed to generate email verification token: {}", e);
+                    error!(error = %e, "Failed to generate email verification token");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to generate email verification token",
@@ -115,7 +115,7 @@ pub async fn register_user(
             }
         }
         Err(e) => {
-            error!("Failed to create user: {}", e);
+            error!(error = %e, "Failed to create user");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response()
         }
     }
@@ -144,7 +144,7 @@ pub async fn login_user(
                                 .send_email_verification(email, &user.full_name(), &token)
                                 .await
                         {
-                            error!("Failed to send email verification: {}", e);
+                            error!(error = %e, "Failed to send email verification");
                         }
                         return json_error(
                             StatusCode::FORBIDDEN,
@@ -152,7 +152,7 @@ pub async fn login_user(
                         ).into_response();
                     }
                     Err(e) => {
-                        error!("Failed to generate email verification token: {}", e);
+                        error!(error = %e, "Failed to generate email verification token");
                         return json_error(
                             StatusCode::FORBIDDEN,
                             "Email not verified. Please contact support.",
@@ -175,7 +175,7 @@ pub async fn login_user(
                             Json(response).into_response()
                         }
                         Err(e) => {
-                            error!("Failed to generate token: {}", e);
+                            error!(error = %e, "Failed to generate token");
                             (
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to generate authentication token",
@@ -185,7 +185,7 @@ pub async fn login_user(
                     }
                 }
                 Err(e) => {
-                    error!("JWT secret not configured: {}", e);
+                    error!(error = %e, "JWT secret not configured");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Authentication configuration error",
@@ -196,7 +196,7 @@ pub async fn login_user(
         }
         Ok(None) => (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response(),
         Err(e) => {
-            error!("Authentication error: {}", e);
+            error!(error = %e, "Authentication error");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Authentication failed").into_response()
         }
     }
@@ -222,7 +222,7 @@ pub async fn verify_email(
                         return json_error(StatusCode::NOT_FOUND, "User not found").into_response();
                     }
                     Err(e) => {
-                        error!("Failed to get user after verification: {}", e);
+                        error!(error = %e, "Failed to get user after verification");
                         return json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to verify email",
@@ -244,7 +244,7 @@ pub async fn verify_email(
                                 Json(response).into_response()
                             }
                             Err(e) => {
-                                error!("Failed to generate token: {}", e);
+                                error!(error = %e, "Failed to generate token");
                                 json_error(
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     "Failed to generate authentication token",
@@ -254,7 +254,7 @@ pub async fn verify_email(
                         }
                     }
                     Err(e) => {
-                        error!("JWT secret not configured: {}", e);
+                        error!(error = %e, "JWT secret not configured");
                         json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Authentication configuration error",
@@ -265,7 +265,7 @@ pub async fn verify_email(
             }
             Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
             Err(e) => {
-                error!("Failed to verify email: {}", e);
+                error!(error = %e, "Failed to verify email");
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify email")
                     .into_response()
             }
@@ -276,7 +276,7 @@ pub async fn verify_email(
         )
             .into_response(),
         Err(e) => {
-            error!("Database error during email verification: {}", e);
+            error!(error = %e, "Database error during email verification");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify email").into_response()
         }
     }
@@ -301,7 +301,7 @@ pub async fn request_password_reset(
                             .send_password_reset_email(email, &user.full_name(), &token)
                             .await
                         {
-                            error!("Failed to send password reset email: {}", e);
+                            error!(error = %e, "Failed to send password reset email");
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to send password reset email",
@@ -319,7 +319,7 @@ pub async fn request_password_reset(
                     json_error(StatusCode::OK, "Password reset email sent").into_response()
                 }
                 Err(e) => {
-                    error!("Failed to generate password reset token: {}", e);
+                    error!(error = %e, "Failed to generate password reset token");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to generate password reset token",
@@ -333,7 +333,7 @@ pub async fn request_password_reset(
             json_error(StatusCode::OK, "Password reset email sent").into_response()
         }
         Err(e) => {
-            error!("Database error during password reset request: {}", e);
+            error!(error = %e, "Database error during password reset request");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to request password reset",
@@ -358,7 +358,7 @@ pub async fn confirm_password_reset(
                 Ok(true) => StatusCode::NO_CONTENT.into_response(),
                 Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
                 Err(e) => {
-                    error!("Failed to update password: {}", e);
+                    error!(error = %e, "Failed to update password");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to update password",
@@ -369,7 +369,7 @@ pub async fn confirm_password_reset(
         }
         Ok(None) => (StatusCode::BAD_REQUEST, "Invalid or expired reset token").into_response(),
         Err(e) => {
-            error!("Database error during password reset: {}", e);
+            error!(error = %e, "Database error during password reset");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to reset password",
@@ -398,7 +398,7 @@ pub async fn complete_pilot_registration(
             .into_response();
         }
         Err(e) => {
-            error!("Database error during pilot registration: {}", e);
+            error!(error = %e, "Database error during pilot registration");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to complete registration",
@@ -420,7 +420,7 @@ pub async fn complete_pilot_registration(
                     return json_error(StatusCode::NOT_FOUND, "User not found").into_response();
                 }
                 Err(e) => {
-                    error!("Failed to get user after registration: {}", e);
+                    error!(error = %e, "Failed to get user after registration");
                     return json_error(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Failed to complete registration",
@@ -442,7 +442,7 @@ pub async fn complete_pilot_registration(
                             Json(response).into_response()
                         }
                         Err(e) => {
-                            error!("Failed to generate token: {}", e);
+                            error!(error = %e, "Failed to generate token");
                             json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to generate authentication token",
@@ -452,7 +452,7 @@ pub async fn complete_pilot_registration(
                     }
                 }
                 Err(e) => {
-                    error!("JWT secret not configured: {}", e);
+                    error!(error = %e, "JWT secret not configured");
                     json_error(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Authentication configuration error",
@@ -463,7 +463,7 @@ pub async fn complete_pilot_registration(
         }
         Ok(false) => json_error(StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            error!("Failed to set password and verify email: {}", e);
+            error!(error = %e, "Failed to set password and verify email");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to complete registration",

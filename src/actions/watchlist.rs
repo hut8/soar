@@ -23,7 +23,7 @@ pub async fn get_watchlist(
     match repo.get_by_user(user_id).await {
         Ok(entries) => Json(DataListResponse { data: entries }).into_response(),
         Err(e) => {
-            error!("Failed to get watchlist: {}", e);
+            error!(error = %e, "Failed to get watchlist");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get watchlist").into_response()
         }
     }
@@ -41,7 +41,7 @@ pub async fn add_to_watchlist(
     match repo.add(user_id, req.aircraft_id, req.send_email).await {
         Ok(entry) => (StatusCode::CREATED, Json(DataResponse { data: entry })).into_response(),
         Err(e) => {
-            error!("Failed to add to watchlist: {}", e);
+            error!(error = %e, "Failed to add to watchlist");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to add to watchlist",
@@ -68,7 +68,7 @@ pub async fn update_watchlist_email(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
         Err(e) => {
-            error!("Failed to update watchlist: {}", e);
+            error!(error = %e, "Failed to update watchlist");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update watchlist",
@@ -91,7 +91,7 @@ pub async fn remove_from_watchlist(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Watchlist entry not found").into_response(),
         Err(e) => {
-            error!("Failed to remove from watchlist: {}", e);
+            error!(error = %e, "Failed to remove from watchlist");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to remove from watchlist",
@@ -112,7 +112,7 @@ pub async fn clear_watchlist(
     match repo.clear_user(user_id).await {
         Ok(_count) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
-            error!("Failed to clear watchlist: {}", e);
+            error!(error = %e, "Failed to clear watchlist");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to clear watchlist",

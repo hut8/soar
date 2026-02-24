@@ -20,7 +20,7 @@ use rs1090::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tracing::{debug, error, trace};
+use tracing::{debug, trace};
 
 use crate::beast::cpr_decoder::CprDecoder;
 use crate::sbs::parser::{SbsMessage, SbsMessageType};
@@ -690,16 +690,17 @@ impl AdsbAccumulator {
             } else {
                 state.consecutive_no_fix += 1;
                 if state.consecutive_no_fix > NO_FIX_WARNING_THRESHOLD && !state.warned_no_fix {
+                    let icao_hex = format!("{:06X}", icao_address);
                     let pos_valid = state.position.as_ref().map(|p| p.is_valid());
-                    error!(
-                        "Aircraft {:06X}: {} consecutive messages without fix (has_position={}, position_valid={:?}, has_velocity={}, has_callsign={}, on_ground={:?})",
-                        icao_address,
-                        state.consecutive_no_fix,
-                        state.position.is_some(),
-                        pos_valid,
-                        state.velocity.is_some(),
-                        state.callsign.is_some(),
-                        state.on_ground,
+                    debug!(
+                        icao = %icao_hex,
+                        consecutive_no_fix = state.consecutive_no_fix,
+                        has_position = state.position.is_some(),
+                        position_valid = ?pos_valid,
+                        has_velocity = state.velocity.is_some(),
+                        has_callsign = state.callsign.is_some(),
+                        on_ground = ?state.on_ground,
+                        "Aircraft has too many consecutive messages without fix"
                     );
                     state.warned_no_fix = true;
                 }

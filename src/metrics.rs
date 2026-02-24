@@ -967,12 +967,12 @@ pub async fn start_metrics_server(port: u16, component: Option<&str>) {
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
-            error!("Failed to bind metrics server on {}: {}", addr, e);
+            error!(addr = %addr, error = %e, "Failed to bind metrics server");
             return;
         }
     };
 
     if let Err(e) = axum::serve(listener, app).await {
-        error!("Metrics server failed: {}", e);
+        error!(error = %e, "Metrics server failed");
     }
 }

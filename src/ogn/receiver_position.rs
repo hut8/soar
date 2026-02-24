@@ -48,7 +48,7 @@ impl ReceiverPositionProcessor {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to update position for receiver {}: {}", callsign, e);
+                    error!(callsign = %callsign, error = %e, "Failed to update position for receiver");
                 }
             }
         } else {

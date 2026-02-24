@@ -224,7 +224,7 @@ pub async fn load_aircraft_types_with_metrics(
             metrics.success = true;
         }
         Err(e) => {
-            error!("Failed to load aircraft types: {}", e);
+            error!(error = %e, "Failed to load aircraft types");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }

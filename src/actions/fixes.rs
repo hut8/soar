@@ -220,7 +220,7 @@ async fn handle_bulk_area_subscription(
                         metrics::counter!("websocket_area_subscribes_total").increment(1);
                     }
                     Err(e) => {
-                        error!("Failed to subscribe to area {}: {}", area_key, e);
+                        error!(area_key = %area_key, error = %e, "Failed to subscribe to area");
                         return Err(e);
                     }
                 }
@@ -341,7 +341,7 @@ async fn handle_websocket_read(
                     }
                 }
                 Err(e) => {
-                    error!("Failed to parse subscription message [{text}]: {e}");
+                    error!(message = %text, error = %e, "Failed to parse subscription message");
                 }
             },
             Ok(Message::Close(_)) => {
@@ -367,7 +367,7 @@ async fn handle_websocket_read(
                         e
                     );
                 } else {
-                    error!("WebSocket error: {}", e);
+                    error!(error = %e, "WebSocket error");
                 }
                 break;
             }
@@ -396,14 +396,14 @@ async fn handle_websocket_write(
         let fix_json = match serde_json::to_string(&websocket_message) {
             Ok(json) => json,
             Err(e) => {
-                error!("Failed to serialize WebSocket message: {}", e);
+                error!(error = %e, "Failed to serialize WebSocket message");
                 metrics::counter!("websocket_serialization_errors_total").increment(1);
                 continue;
             }
         };
 
         if let Err(e) = sender.send(Message::Text(fix_json.into())).await {
-            error!("Failed to send WebSocket message to client: {}", e);
+            error!(error = %e, "Failed to send WebSocket message to client");
             metrics::counter!("websocket_send_errors_total").increment(1);
             break;
         }
@@ -457,7 +457,7 @@ async fn handle_subscriptions(
                                                     info!("Successfully subscribed to aircraft: {}", id);
                                                 }
                                                 Err(e) => {
-                                                    error!("Failed to subscribe to aircraft {}: {}", id, e);
+                                                    error!(aircraft_id = %id, error = %e, "Failed to subscribe to aircraft");
                                                 }
                                             }
                                         }
@@ -470,7 +470,7 @@ async fn handle_subscriptions(
                                             metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
                                             metrics::counter!("websocket_aircraft_unsubscribes_total").increment(1);
                                             if let Err(e) = live_fix_service.unsubscribe_from_aircraft(&id).await {
-                                                error!("Failed to unsubscribe from aircraft {}: {}", id, e);
+                                                error!(aircraft_id = %id, error = %e, "Failed to unsubscribe from aircraft");
                                             } else {
                                                 info!("Successfully unsubscribed from aircraft: {}", id);
                                             }
@@ -497,7 +497,7 @@ async fn handle_subscriptions(
                                         info!("Successfully handled bulk area subscription");
                                     }
                                     Err(e) => {
-                                        error!("Failed to handle bulk area subscription: {}", e);
+                                        error!(error = %e, "Failed to handle bulk area subscription");
                                         metrics::counter!("websocket_area_bulk_validation_errors_total").increment(1);
                                     }
                                 }
@@ -539,7 +539,7 @@ async fn handle_subscriptions(
                                 Some(websocket_message)
                             }
                             Err(broadcast::error::RecvError::Closed) => {
-                                error!("Receiver closed for device: {}", device_id);
+                                error!(device_id = %device_id, "Receiver closed for device");
                                 None
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -579,14 +579,14 @@ async fn handle_subscriptions(
         match parse_area_key(area_key) {
             Ok((lat, lon)) => {
                 if let Err(e) = live_fix_service.unsubscribe_from_area(lat, lon).await {
-                    error!("Failed to cleanup area subscription {}: {}", area_key, e);
+                    error!(area_key = %area_key, error = %e, "Failed to cleanup area subscription");
                 } else {
                     metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
                     info!("Cleaned up area subscription: {}", area_key);
                 }
             }
             Err(e) => {
-                error!("Failed to parse area key during cleanup: {}", e);
+                error!(error = %e, "Failed to parse area key during cleanup");
             }
         }
     }
@@ -597,10 +597,7 @@ async fn handle_subscriptions(
             .unsubscribe_from_aircraft(aircraft_id)
             .await
         {
-            error!(
-                "Failed to cleanup aircraft subscription {}: {}",
-                aircraft_id, e
-            );
+            error!(aircraft_id = %aircraft_id, error = %e, "Failed to cleanup aircraft subscription");
         } else {
             metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
             info!("Cleaned up aircraft subscription: {}", aircraft_id);
@@ -622,7 +619,7 @@ async fn get_fixes_by_device_id(
     {
         Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
-            error!("Failed to get fixes by device ID: {}", e);
+            error!(error = %e, "Failed to get fixes by device ID");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get fixes by device ID",
@@ -652,7 +649,7 @@ async fn get_fixes_by_flight_id(
             return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response();
         }
         Err(e) => {
-            error!("Failed to fetch flight record: {}", e);
+            error!(flight_id = %flight_id, error = %e, "Failed to fetch flight record");
             // Fall back to 18-hour window if flight lookup fails
             let start = chrono::Utc::now() - chrono::Duration::hours(18);
             (start, None)
@@ -665,7 +662,7 @@ async fn get_fixes_by_flight_id(
     {
         Ok(fixes) => Json(DataListResponse { data: fixes }).into_response(),
         Err(e) => {
-            error!("Failed to get fixes by flight ID: {}", e);
+            error!(flight_id = %flight_id, error = %e, "Failed to get fixes by flight ID");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get fixes by flight ID",

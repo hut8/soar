@@ -109,7 +109,7 @@ pub async fn link_home_bases(
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to update club {} home base: {}", club.name, e);
+                                error!(error = %e, club_name = %club.name, "Failed to update club home base");
                                 failed_count += 1;
                             }
                         }
@@ -122,7 +122,7 @@ pub async fn link_home_bases(
                     }
                 }
                 Err(e) => {
-                    error!("Failed to find airports near club {}: {}", club.name, e);
+                    error!(error = %e, club_name = %club.name, "Failed to find airports near club");
                     failed_count += 1;
                 }
             }
@@ -171,7 +171,7 @@ pub async fn link_home_bases_with_metrics(
             }
         }
         Err(e) => {
-            error!("Failed to link home bases: {}", e);
+            error!(error = %e, "Failed to link home bases");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }

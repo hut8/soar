@@ -319,7 +319,9 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
                     .expect("Failed to query device ID after upsert");
                 device_ids.push(actual_device_id);
             }
-            Err(e) => tracing::error!("Failed to create test device {} ({}): {}", reg, addr, e),
+            Err(e) => {
+                tracing::error!(error = %e, registration = %reg, address = %addr, "Failed to create test device")
+            }
         }
     }
 

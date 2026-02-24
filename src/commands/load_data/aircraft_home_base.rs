@@ -39,7 +39,7 @@ pub async fn calculate_aircraft_home_bases_with_metrics(pool: PgPool) -> EntityM
             metrics.success = true;
         }
         Err(e) => {
-            error!("Failed to calculate aircraft home bases: {}", e);
+            error!(error = %e, "Failed to calculate aircraft home bases");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }

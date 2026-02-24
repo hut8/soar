@@ -112,7 +112,7 @@ pub async fn handle_pull_airspaces(
                         }
                         Err(e) => {
                             let msg = format!("Failed to fetch airspaces for {}: {}", country, e);
-                            error!("{}", msg);
+                            error!(detail = %msg, "Airspace fetch error");
                             errors.push(msg);
                             continue;
                         }
@@ -137,7 +137,7 @@ pub async fn handle_pull_airspaces(
                                             "Failed to upsert airspaces for {}: {}",
                                             country, e
                                         );
-                                        error!("{}", msg);
+                                        error!(detail = %msg, "Airspace upsert error");
                                         errors.push(msg);
                                     }
                                 },
@@ -146,7 +146,7 @@ pub async fn handle_pull_airspaces(
                                         "Failed to convert airspaces for {}: {}",
                                         country, e
                                     );
-                                    error!("{}", msg);
+                                    error!(detail = %msg, "Airspace conversion error");
                                     errors.push(msg);
                                 }
                             },
@@ -155,14 +155,14 @@ pub async fn handle_pull_airspaces(
                                     "Failed to parse airspaces JSON for {}: {}",
                                     country, e
                                 );
-                                error!("{}", msg);
+                                error!(detail = %msg, "Airspace JSON parse error");
                                 errors.push(msg);
                             }
                         }
                     }
                     Err(e) => {
                         let msg = format!("Failed to read airspaces file for {}: {}", country, e);
-                        error!("{}", msg);
+                        error!(detail = %msg, "Airspace file read error");
                         errors.push(msg);
                     }
                 }
@@ -192,7 +192,7 @@ pub async fn handle_pull_airspaces(
                     }
                     Err(e) => {
                         let msg = format!("Failed to fetch airspaces: {}", e);
-                        error!("{}", msg);
+                        error!(detail = %msg, "Airspace fetch error");
                         errors.push(msg);
                     }
                 }
@@ -216,26 +216,26 @@ pub async fn handle_pull_airspaces(
                                     }
                                     Err(e) => {
                                         let msg = format!("Failed to upsert airspaces: {}", e);
-                                        error!("{}", msg);
+                                        error!(detail = %msg, "Airspace upsert error");
                                         errors.push(msg);
                                     }
                                 },
                                 Err(e) => {
                                     let msg = format!("Failed to convert airspaces: {}", e);
-                                    error!("{}", msg);
+                                    error!(detail = %msg, "Airspace conversion error");
                                     errors.push(msg);
                                 }
                             },
                             Err(e) => {
                                 let msg = format!("Failed to parse airspaces JSON: {}", e);
-                                error!("{}", msg);
+                                error!(detail = %msg, "Airspace JSON parse error");
                                 errors.push(msg);
                             }
                         }
                     }
                     Err(e) => {
                         let msg = format!("Failed to read airspaces file: {}", e);
-                        error!("{}", msg);
+                        error!(detail = %msg, "Airspace file read error");
                         errors.push(msg);
                     }
                 }

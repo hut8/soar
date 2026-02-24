@@ -65,13 +65,13 @@ impl ReceiverStatusProcessor {
                         .await
                     {
                         error!(
-                            "Failed to update latest_packet_at for receiver {}: {}",
-                            callsign, e
+                            callsign = %callsign, error = %e,
+                            "Failed to update latest_packet_at for receiver"
                         );
                     }
                 }
                 Err(e) => {
-                    error!("Failed to insert receiver status for {}: {}", callsign, e);
+                    error!(callsign = %callsign, error = %e, "Failed to insert receiver status");
                 }
             }
         } else {

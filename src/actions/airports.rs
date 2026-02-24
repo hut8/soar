@@ -41,7 +41,7 @@ pub async fn get_airport_by_id(
             let runways = match runways_repo.get_runways_by_airport_id(airport.id).await {
                 Ok(runways) => runways,
                 Err(e) => {
-                    error!("Failed to get runways for airport {}: {}", airport.id, e);
+                    error!(airport_id = %airport.id, error = %e, "Failed to get runways for airport");
                     Vec::new()
                 }
             };
@@ -55,7 +55,7 @@ pub async fn get_airport_by_id(
         )
         .into_response(),
         Err(e) => {
-            error!("Failed to get airport by ID {}: {}", airport_id, e);
+            error!(airport_id = %airport_id, error = %e, "Failed to get airport by ID");
             json_error(
                 StatusCode::BAD_REQUEST,
                 &format!("Failed to get airport by ID {}: {}", airport_id, e),
@@ -115,7 +115,7 @@ pub async fn search_airports(
                     let runways = match runways_repo.get_runways_by_airport_id(airport.id).await {
                         Ok(runways) => runways,
                         Err(e) => {
-                            error!("Failed to get runways for airport {}: {}", airport.id, e);
+                            error!(airport_id = %airport.id, error = %e, "Failed to get runways for airport");
                             // Continue processing other airports even if runways fail
                             Vec::new()
                         }
@@ -130,7 +130,7 @@ pub async fn search_airports(
                 .into_response()
             }
             Err(e) => {
-                error!("Failed to get airports in bounding box: {}", e);
+                error!(error = %e, "Failed to get airports in bounding box");
                 json_error(
                     StatusCode::BAD_REQUEST,
                     &format!("Failed to get airports in bounding box: {}", e),
@@ -176,7 +176,7 @@ pub async fn search_airports(
         {
             Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
-                error!("Failed to search nearby airports: {}", e);
+                error!(error = %e, "Failed to search nearby airports");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search nearby airports",
@@ -197,7 +197,7 @@ pub async fn search_airports(
         match airports_repo.fuzzy_search(&query, params.limit).await {
             Ok(airports) => Json(DataListResponse { data: airports }).into_response(),
             Err(e) => {
-                error!("Failed to search airports: {}", e);
+                error!(error = %e, "Failed to search airports");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search airports",
@@ -234,7 +234,7 @@ pub async fn get_clubs_by_airport(
             Json(DataListResponse { data: club_views }).into_response()
         }
         Err(e) => {
-            error!("Failed to get clubs for airport {}: {}", airport_id, e);
+            error!(airport_id = %airport_id, error = %e, "Failed to get clubs for airport");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get clubs for airport",

@@ -154,7 +154,7 @@ pub(crate) async fn process_state_transition(
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to create new flight after callsign change: {}", e);
+                                error!(error = %e, "Failed to create new flight after callsign change");
                                 // Old flight already ended in DB — clear stale state
                                 if let Some(mut state) =
                                     ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -277,7 +277,7 @@ pub(crate) async fn process_state_transition(
                                     }
                                 }
                                 Err(e) => {
-                                    error!("Failed to create new flight after gap: {}", e);
+                                    error!(error = %e, "Failed to create new flight after gap");
                                     // Old flight already ended in DB — clear stale state
                                     if let Some(mut state) =
                                         ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -523,7 +523,7 @@ pub(crate) async fn process_state_transition(
                     }
                 }
                 Err(e) => {
-                    error!("Failed to create flight: {}", e);
+                    error!(error = %e, "Failed to create flight");
                     fix.flight_id = None;
                 }
             }

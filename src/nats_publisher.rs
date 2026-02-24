@@ -90,7 +90,7 @@ async fn run_publisher_loop(client: &Client, rx: &flume::Receiver<Fix>) {
                 metrics::counter!("nats.fix_publisher.published_total").increment(1);
             }
             Ok(Err(e)) => {
-                error!("Failed to publish fix for device {}: {}", aircraft_id, e);
+                error!(aircraft_id = %aircraft_id, error = %e, "Failed to publish fix");
                 metrics::counter!("nats.fix_publisher.errors_total").increment(1);
             }
             Err(_) => {
@@ -161,11 +161,11 @@ impl NatsFixPublisher {
                         metrics::counter!("nats.fix_publisher.slow_consumer_total").increment(1);
                     }
                     Event::ServerError(err) => {
-                        error!("NATS server error: {}", err);
+                        error!(error = %err, "NATS server error");
                         metrics::counter!("nats.fix_publisher.server_error_total").increment(1);
                     }
                     Event::ClientError(err) => {
-                        error!("NATS client error: {}", err);
+                        error!(error = %err, "NATS client error");
                         metrics::counter!("nats.fix_publisher.client_error_total").increment(1);
                     }
                     Event::LameDuckMode => {
@@ -206,8 +206,8 @@ impl NatsFixPublisher {
                     }
                     Err(panic_info) => {
                         error!(
-                            "NATS publisher task panicked: {:?}. Restarting in 1s...",
-                            panic_info
+                            panic_info = ?panic_info,
+                            "NATS publisher task panicked, restarting in 1s"
                         );
                         metrics::gauge!("nats.fix_publisher.alive").set(0.0);
                         metrics::counter!("nats.fix_publisher.panic_total").increment(1);

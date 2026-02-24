@@ -91,7 +91,7 @@ pub async fn handle_run(
         tokio::spawn(async move {
             match metrics_handle.await {
                 Ok(()) => error!("Metrics server exited unexpectedly"),
-                Err(e) => error!("Metrics server task panicked: {}", e),
+                Err(e) => error!(error = %e, "Metrics server task panicked"),
             }
         });
     }
@@ -372,7 +372,7 @@ pub async fn handle_run(
                                     metrics::counter!("queue.send_blocked_total", "queue" => "ogn_intake").increment(1);
                                 }
                                 if let Err(e) = ogn_tx.send_async((received_at, message)).await {
-                                    error!("Failed to send OGN message to intake queue: {}", e);
+                                    error!(error = %e, "Failed to send OGN message to intake queue");
                                     metrics::counter!("socket.router.aprs_send_error_total")
                                         .increment(1);
                                 } else {
@@ -381,7 +381,7 @@ pub async fn handle_run(
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to decode OGN message as UTF-8: {}", e);
+                                error!(error = %e, "Failed to decode OGN message as UTF-8");
                                 metrics::counter!("socket.router.decode_error_total").increment(1);
                             }
                         }
@@ -393,7 +393,7 @@ pub async fn handle_run(
                             metrics::counter!("queue.send_blocked_total", "queue" => "beast_intake").increment(1);
                         }
                         if let Err(e) = beast_tx.send_async((received_at, envelope.data)).await {
-                            error!("Failed to send Beast message to intake queue: {}", e);
+                            error!(error = %e, "Failed to send Beast message to intake queue");
                             metrics::counter!("socket.router.beast_send_error_total").increment(1);
                         } else {
                             metrics::counter!("socket.router.beast_routed_total").increment(1);
@@ -407,7 +407,7 @@ pub async fn handle_run(
                                 .increment(1);
                         }
                         if let Err(e) = sbs_tx.send_async((received_at, envelope.data)).await {
-                            error!("Failed to send SBS message to intake queue: {}", e);
+                            error!(error = %e, "Failed to send SBS message to intake queue");
                             metrics::counter!("socket.router.sbs_send_error_total").increment(1);
                         } else {
                             metrics::counter!("socket.router.sbs_routed_total").increment(1);

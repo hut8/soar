@@ -134,13 +134,13 @@ impl BeastClient {
                     retry_delay = config.retry_delay_seconds;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
-                    error!("Beast connection failed: {}", e);
+                    error!(error = %e, "Beast connection failed");
                     retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
                     info!("Retrying in {} seconds", retry_delay);
                     sleep(Duration::from_secs(retry_delay)).await;
                 }
                 ConnectionResult::OperationFailed(e) => {
-                    error!("Beast operation failed: {}", e);
+                    error!(error = %e, "Beast operation failed");
                     let operation_retry_delay = std::cmp::min(retry_delay, 5);
                     info!("Retrying in {} seconds", operation_retry_delay);
                     sleep(Duration::from_secs(operation_retry_delay)).await;
@@ -391,10 +391,10 @@ impl BeastClient {
                 Ok(Err(e)) => {
                     let duration = connection_start.elapsed();
                     error!(
-                        "Beast read error from {} after {:.1}s: {}",
-                        peer_addr_str,
-                        duration.as_secs_f64(),
-                        e
+                        peer_addr = %peer_addr_str,
+                        duration_secs = duration.as_secs_f64(),
+                        error = %e,
+                        "Beast read error"
                     );
                     metrics::gauge!("beast.connection.connected").set(0.0);
 
@@ -452,7 +452,7 @@ impl BeastClient {
         let envelope_bytes = match create_serialized_envelope(IngestSource::Beast, frame.clone()) {
             Ok(bytes) => bytes,
             Err(e) => {
-                error!("Failed to create Beast envelope: {}", e);
+                error!(error = %e, "Failed to create Beast envelope");
                 metrics::counter!("beast.envelope.creation_error_total").increment(1);
                 return;
             }
@@ -472,7 +472,7 @@ impl BeastClient {
                 }
             }
             Err(e) => {
-                error!("Failed to send Beast envelope to channel: {}", e);
+                error!(error = %e, "Failed to send Beast envelope to channel");
                 metrics::counter!("beast.frames.dropped_total").increment(1);
             }
         }

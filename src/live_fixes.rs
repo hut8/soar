@@ -292,8 +292,8 @@ impl LiveFixService {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to process fix message for aircraft {}: {}",
-                        aircraft_id, e
+                        aircraft_id = %aircraft_id, error = %e,
+                        "Failed to process fix message for aircraft"
                     );
                 }
             }
@@ -343,7 +343,7 @@ impl LiveFixService {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to process fix message for area {}: {}", area_key, e);
+                    error!(area_key = %area_key, error = %e, "Failed to process fix message for area");
                 }
             }
         }

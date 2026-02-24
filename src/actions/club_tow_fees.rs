@@ -87,7 +87,7 @@ pub async fn get_club_tow_fees(
             Json(DataListResponse { data: fee_views }).into_response()
         }
         Err(e) => {
-            error!("Failed to get tow fees for club {}: {}", club_id, e);
+            error!(club_id = %club_id, error = %e, "Failed to get tow fees for club");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get tow fees").into_response()
         }
     }
@@ -139,7 +139,7 @@ pub async fn create_club_tow_fee(
             }
             Ok(false) => {}
             Err(e) => {
-                error!("Failed to check fallback tier for club {}: {}", club_id, e);
+                error!(club_id = %club_id, error = %e, "Failed to check fallback tier for club");
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to validate fallback tier",
@@ -165,7 +165,7 @@ pub async fn create_club_tow_fee(
         )
             .into_response(),
         Err(e) => {
-            error!("Failed to create tow fee for club {}: {}", club_id, e);
+            error!(club_id = %club_id, error = %e, "Failed to create tow fee for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create tow fee",
@@ -224,7 +224,7 @@ pub async fn update_club_tow_fee(
             return json_error(StatusCode::NOT_FOUND, "Tow fee not found").into_response();
         }
         Err(e) => {
-            error!("Failed to get tow fee {}: {}", fee_id, e);
+            error!(fee_id = %fee_id, error = %e, "Failed to get tow fee");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get tow fee")
                 .into_response();
         }
@@ -243,7 +243,7 @@ pub async fn update_club_tow_fee(
         })
         .into_response(),
         Err(e) => {
-            error!("Failed to update tow fee {}: {}", fee_id, e);
+            error!(fee_id = %fee_id, error = %e, "Failed to update tow fee");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update tow fee",
@@ -283,7 +283,7 @@ pub async fn delete_club_tow_fee(
             return json_error(StatusCode::NOT_FOUND, "Tow fee not found").into_response();
         }
         Err(e) => {
-            error!("Failed to get tow fee {}: {}", fee_id, e);
+            error!(fee_id = %fee_id, error = %e, "Failed to get tow fee");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get tow fee")
                 .into_response();
         }
@@ -293,7 +293,7 @@ pub async fn delete_club_tow_fee(
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => json_error(StatusCode::NOT_FOUND, "Tow fee not found").into_response(),
         Err(e) => {
-            error!("Failed to delete tow fee {}: {}", fee_id, e);
+            error!(fee_id = %fee_id, error = %e, "Failed to delete tow fee");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete tow fee",

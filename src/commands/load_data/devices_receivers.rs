@@ -48,7 +48,7 @@ pub async fn load_receivers_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load receivers: {}", e);
+                error!(error = %e, "Failed to load receivers");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }
@@ -98,7 +98,7 @@ pub async fn load_devices_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load devices: {}", e);
+                error!(error = %e, "Failed to load devices");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }

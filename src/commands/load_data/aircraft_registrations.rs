@@ -59,7 +59,7 @@ pub async fn load_aircraft_registrations_with_metrics(
                 metrics.success = true;
             }
             Err(e) => {
-                error!("Failed to load aircraft registrations: {}", e);
+                error!(error = %e, "Failed to load aircraft registrations");
                 metrics.success = false;
                 metrics.error_message = Some(e.to_string());
             }
@@ -163,7 +163,7 @@ pub async fn copy_owners_to_aircraft_with_metrics(
             }
         }
         Err(e) => {
-            error!("Failed to copy owners to aircraft: {}", e);
+            error!(error = %e, "Failed to copy owners to aircraft");
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
         }
