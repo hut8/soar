@@ -71,22 +71,6 @@ pub(crate) async fn process_beast_message(
         return;
     }
 
-    // Get or create aircraft by ICAO address
-    let aircraft = match aircraft_repo
-        .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
-        .await
-    {
-        Ok(aircraft) => aircraft,
-        Err(e) => {
-            warn!(
-                "Failed to get/create aircraft for ICAO {:06X}: {}",
-                icao_address, e
-            );
-            metrics::counter!("beast.run.aircraft_lookup_failed_total").increment(1);
-            return;
-        }
-    };
-
     // Store raw Beast message in database
     // ADS-B/Beast messages don't have a receiver concept, so receiver_id is None
     let raw_message_id = match beast_repo
@@ -124,8 +108,25 @@ pub(crate) async fn process_beast_message(
         }
     };
 
-    // If we got a partial fix, complete it and process through FixProcessor
+    // If we got a partial fix, look up the aircraft and process through FixProcessor
     if let Some((partial_fix, trigger)) = fix_result {
+        // Get or create aircraft by ICAO address (deferred until we have a fix to avoid
+        // redundant lookups on non-fix-producing frames like velocity/squawk updates)
+        let aircraft = match aircraft_repo
+            .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
+            .await
+        {
+            Ok(aircraft) => aircraft,
+            Err(e) => {
+                warn!(
+                    "Failed to get/create aircraft for ICAO {:06X}: {}",
+                    icao_address, e
+                );
+                metrics::counter!("beast.run.aircraft_lookup_failed_total").increment(1);
+                return;
+            }
+        };
+
         // Determine if aircraft is active (in flight vs on ground)
         // The accumulator guarantees on_ground is set before emitting a fix,
         // but handle missing values defensively to avoid panics.
