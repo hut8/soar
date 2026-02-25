@@ -173,7 +173,7 @@ pub(crate) async fn process_state_transition(
                         };
 
                         let new_flight_id = Uuid::now_v7();
-                        match create_flight_fast(ctx, &fix, new_flight_id, false).await {
+                        match create_flight_fast(ctx, &fix, &aircraft, new_flight_id, false).await {
                             Ok(flight_id) => {
                                 fix.flight_id = Some(flight_id);
                                 if let Some(mut state) =
@@ -296,7 +296,9 @@ pub(crate) async fn process_state_transition(
                             };
 
                             let new_flight_id = Uuid::now_v7();
-                            match create_flight_fast(ctx, &fix, new_flight_id, false).await {
+                            match create_flight_fast(ctx, &fix, &aircraft, new_flight_id, false)
+                                .await
+                            {
                                 Ok(flight_id) => {
                                     fix.flight_id = Some(flight_id);
                                     if let Some(mut state) =
@@ -530,7 +532,7 @@ pub(crate) async fn process_state_transition(
 
             let flight_id = Uuid::now_v7();
 
-            match create_flight_fast(ctx, &fix, flight_id, !is_takeoff).await {
+            match create_flight_fast(ctx, &fix, &aircraft, flight_id, !is_takeoff).await {
                 Ok(flight_id) => {
                     fix.flight_id = Some(flight_id);
 

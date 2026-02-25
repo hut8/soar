@@ -42,34 +42,16 @@ const FIXES_TIME_RANGE_END_BUFFER_MINUTES: i64 = 1;
 pub(crate) async fn create_flight_fast(
     ctx: &FlightProcessorContext<'_>,
     fix: &Fix,
+    aircraft: &Aircraft,
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
     let start = std::time::Instant::now();
 
-    // Fetch aircraft (fast - cached)
-    let aircraft = match ctx.aircraft_repo.get_aircraft_by_id(fix.aircraft_id).await {
-        Ok(Some(aircraft)) => aircraft,
-        Ok(None) => {
-            warn!(
-                "Aircraft {} not found when creating flight {}",
-                fix.aircraft_id, flight_id
-            );
-            return Err(anyhow::anyhow!("Aircraft not found"));
-        }
-        Err(e) => {
-            error!(
-                aircraft_id = %fix.aircraft_id, flight_id = %flight_id, error = %e,
-                "Error fetching aircraft for flight"
-            );
-            return Err(anyhow::anyhow!("Failed to fetch aircraft: {}", e));
-        }
-    };
-
     // Create minimal flight record WITHOUT slow operations
     let mut flight = if skip_airport_runway_lookup {
         // Mid-flight appearance - minimal data
-        Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id)
+        Flight::new_airborne_from_fix_with_id(fix, aircraft, flight_id)
     } else {
         // Takeoff - calculate altitude offset (fast, uses elevation db) but skip runway/location
         let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
@@ -79,7 +61,7 @@ pub(crate) async fn create_flight_fast(
             find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
 
         let mut flight =
-            Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.received_at);
+            Flight::new_with_takeoff_from_fix_with_id(fix, aircraft, flight_id, fix.received_at);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
 
@@ -111,7 +93,7 @@ pub(crate) async fn create_flight_fast(
         spawn_flight_enrichment_airborne(ctx, fix.clone(), flight_id);
     } else {
         // Takeoff flight - full enrichment including runway detection
-        spawn_flight_enrichment_on_creation(ctx, fix.clone(), aircraft, flight_id);
+        spawn_flight_enrichment_on_creation(ctx, fix.clone(), aircraft.clone(), flight_id);
     }
 
     Ok(flight_id)
