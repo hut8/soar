@@ -66,7 +66,10 @@ RUN cargo install diesel_cli --no-default-features --features postgres --version
     rm -rf /usr/local/cargo/registry /usr/local/cargo/git
 
 # Mark all directories as safe for git (needed for actions/checkout in containers)
-RUN git config --global --add safe.directory '*'
+# Use --system instead of --global because GitHub Actions overrides HOME=/github/home
+# at container runtime, making the global gitconfig (written to /root/.gitconfig at
+# build time) invisible. System-level config (/etc/gitconfig) persists regardless of HOME.
+RUN git config --system --add safe.directory '*'
 
 # Disable incremental compilation for CI (standard practice)
 ENV CARGO_INCREMENTAL=0
