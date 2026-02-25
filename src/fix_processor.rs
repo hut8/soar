@@ -457,7 +457,7 @@ impl FixProcessor {
                             // Callsign changed from one value to another - this should not happen
                             // because flight tracker should have created a new flight
                             error!(
-                                "Flight {} callsign mismatch: has '{}' but fix has '{}' - this indicates a bug in flight coalescing",
+                                "Flight {} callsign mismatch: has '{}' but fix has '{}' - flight tracker should have created a new flight",
                                 flight_id, existing, flight_number
                             );
                         }

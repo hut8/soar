@@ -33,6 +33,44 @@ pub struct StateTransitionResult {
     pub pending_work: PendingBackgroundWork,
 }
 
+/// Normalize a callsign: trim whitespace and treat empty strings as None.
+fn normalize_callsign(callsign: &Option<String>) -> Option<&str> {
+    callsign
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+}
+
+/// Determine if a callsign change warrants ending the current flight.
+///
+/// Returns `true` if the fix has a callsign that differs from the current in-memory callsign.
+/// Returns `false` if either callsign is absent (None, empty, or whitespace-only).
+fn is_callsign_change(current_callsign: &Option<String>, fix_callsign: &Option<String>) -> bool {
+    match (
+        normalize_callsign(current_callsign),
+        normalize_callsign(fix_callsign),
+    ) {
+        (Some(current), Some(new)) => current != new,
+        _ => false,
+    }
+}
+
+/// Update in-memory callsign when first learned on an existing flight.
+///
+/// When a flight is created without a callsign (e.g. APRS source), the first fix
+/// that carries a non-empty callsign should record it so subsequent changes are detected.
+/// Returns the new callsign value for the state.
+fn learn_callsign(
+    current_callsign: &Option<String>,
+    fix_callsign: &Option<String>,
+) -> Option<String> {
+    if current_callsign.is_none() {
+        normalize_callsign(fix_callsign).map(|s| s.to_string())
+    } else {
+        current_callsign.clone()
+    }
+}
+
 /// Determine if aircraft should be active based on fix data
 pub fn should_be_active(fix: &Fix) -> bool {
     // Special case: If no altitude data and speed < 80 knots, consider inactive
@@ -112,19 +150,11 @@ pub(crate) async fn process_state_transition(
         // Case 1: Has active flight AND fix is active -> Continue flight
         (Some(flight_id), true) => {
             // Check for callsign change (using in-memory state, not DB)
-            let should_end_flight = if let Some(new_callsign) = &fix.flight_number {
-                if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id) {
-                    if let Some(current_callsign) = &state.current_callsign {
-                        current_callsign != new_callsign
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
+            let should_end_flight = ctx
+                .aircraft_states
+                .get(&fix.aircraft_id)
+                .map(|state| is_callsign_change(&state.current_callsign, &fix.flight_number))
+                .unwrap_or(false);
 
             if should_end_flight {
                 // Set preliminary landing_time before creating new flight to prevent
@@ -314,6 +344,14 @@ pub(crate) async fn process_state_transition(
                 } else {
                     // Continue existing flight
                     fix.flight_id = Some(flight_id);
+
+                    // Update in-memory callsign when first learned on an existing flight.
+                    // Without this, current_callsign stays None and subsequent fixes with
+                    // a different callsign won't trigger a flight split.
+                    if let Some(mut state) = ctx.aircraft_states.get_mut(&fix.aircraft_id) {
+                        state.current_callsign =
+                            learn_callsign(&state.current_callsign, &fix.flight_number);
+                    }
 
                     // Calculate time gap
                     if let Some(state) = ctx.aircraft_states.get(&fix.aircraft_id)
@@ -668,4 +706,151 @@ pub(crate) async fn process_state_transition(
     }
 
     Ok(StateTransitionResult { fix, pending_work })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- is_callsign_change tests ---
+
+    #[test]
+    fn callsign_change_both_present_and_different() {
+        assert!(is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("WMT2574".to_string())
+        ));
+    }
+
+    #[test]
+    fn callsign_change_both_present_and_same() {
+        assert!(!is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("WMT437".to_string())
+        ));
+    }
+
+    #[test]
+    fn callsign_change_current_none_fix_has_value() {
+        assert!(!is_callsign_change(&None, &Some("WMT437".to_string())));
+    }
+
+    #[test]
+    fn callsign_change_current_has_value_fix_none() {
+        assert!(!is_callsign_change(&Some("WMT437".to_string()), &None));
+    }
+
+    #[test]
+    fn callsign_change_both_none() {
+        assert!(!is_callsign_change(&None, &None));
+    }
+
+    // --- learn_callsign tests ---
+
+    #[test]
+    fn learn_callsign_from_none_to_value() {
+        let result = learn_callsign(&None, &Some("WMT437".to_string()));
+        assert_eq!(result, Some("WMT437".to_string()));
+    }
+
+    #[test]
+    fn learn_callsign_does_not_overwrite_existing() {
+        let result = learn_callsign(&Some("WMT437".to_string()), &Some("WMT2574".to_string()));
+        assert_eq!(result, Some("WMT437".to_string()));
+    }
+
+    #[test]
+    fn learn_callsign_both_none_stays_none() {
+        let result = learn_callsign(&None, &None);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn learn_callsign_existing_with_no_fix_callsign_unchanged() {
+        let result = learn_callsign(&Some("WMT437".to_string()), &None);
+        assert_eq!(result, Some("WMT437".to_string()));
+    }
+
+    // --- Combined scenario: the bug that was fixed ---
+
+    /// Reproduces the exact scenario from the bug report:
+    /// 1. Flight starts with no callsign (current_callsign = None)
+    /// 2. First fix arrives with callsign "WMT437" → should be learned
+    /// 3. Second fix arrives with callsign "WMT2574" → should detect a change
+    ///
+    /// Before the fix, step 2 would NOT update current_callsign, so step 3
+    /// would also see None and not detect the change.
+    #[test]
+    fn callsign_mismatch_bug_scenario() {
+        let mut current_callsign: Option<String> = None;
+
+        // Fix 1: aircraft sends callsign "WMT437" for the first time
+        let fix1_callsign = Some("WMT437".to_string());
+        assert!(
+            !is_callsign_change(&current_callsign, &fix1_callsign),
+            "First callsign on a flight should not trigger a change"
+        );
+        current_callsign = learn_callsign(&current_callsign, &fix1_callsign);
+        assert_eq!(
+            current_callsign,
+            Some("WMT437".to_string()),
+            "Callsign should be learned after first fix"
+        );
+
+        // Fix 2: same callsign - no change
+        let fix2_callsign = Some("WMT437".to_string());
+        assert!(
+            !is_callsign_change(&current_callsign, &fix2_callsign),
+            "Same callsign should not trigger a change"
+        );
+        current_callsign = learn_callsign(&current_callsign, &fix2_callsign);
+        assert_eq!(current_callsign, Some("WMT437".to_string()));
+
+        // Fix 3: DIFFERENT callsign - must detect the change
+        let fix3_callsign = Some("WMT2574".to_string());
+        assert!(
+            is_callsign_change(&current_callsign, &fix3_callsign),
+            "Different callsign must trigger a flight split"
+        );
+    }
+
+    // --- Empty/whitespace callsign edge cases ---
+
+    #[test]
+    fn empty_callsign_treated_as_none_for_change_detection() {
+        // Empty string on fix should not trigger a change from a real callsign
+        assert!(!is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("".to_string())
+        ));
+    }
+
+    #[test]
+    fn empty_callsign_not_learned() {
+        let result = learn_callsign(&None, &Some("".to_string()));
+        assert_eq!(result, None, "Empty callsign should not be stored");
+    }
+
+    #[test]
+    fn whitespace_callsign_not_learned() {
+        let result = learn_callsign(&None, &Some("  ".to_string()));
+        assert_eq!(
+            result, None,
+            "Whitespace-only callsign should not be stored"
+        );
+    }
+
+    #[test]
+    fn whitespace_callsign_treated_as_none_for_change_detection() {
+        assert!(!is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("  ".to_string())
+        ));
+    }
+
+    #[test]
+    fn callsign_with_whitespace_is_trimmed_when_learned() {
+        let result = learn_callsign(&None, &Some(" WMT437 ".to_string()));
+        assert_eq!(result, Some("WMT437".to_string()));
+    }
 }
