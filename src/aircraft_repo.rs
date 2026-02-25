@@ -1562,8 +1562,18 @@ impl AircraftCache {
     /// stale cache entries from causing repeated FK violations.
     pub fn evict_by_id(&self, aircraft_id: Uuid) {
         if let Some((_, aircraft)) = self.by_id.remove(&aircraft_id) {
-            self.by_address
-                .remove(&(aircraft.address_type, aircraft.address as i32));
+            let key = (aircraft.address_type, aircraft.address as i32);
+            // Only remove the by_address entry if it still points at the same aircraft.
+            // A concurrent upsert may have already replaced it with a new aircraft record.
+            // We must check-then-drop-then-remove to avoid holding the DashMap read guard
+            // while calling remove (which needs a write guard).
+            let should_remove = self
+                .by_address
+                .get(&key)
+                .is_some_and(|entry| entry.id == aircraft.id);
+            if should_remove {
+                self.by_address.remove(&key);
+            }
             self.update_size_gauge();
         }
     }
@@ -1597,5 +1607,102 @@ mod tests {
             // Skip test if we can't connect to test database
             println!("Skipping test - no test database connection");
         }
+    }
+
+    /// Helper to create a minimal Aircraft for cache tests
+    fn make_test_aircraft(id: Uuid, address: u32, address_type: AddressType) -> Aircraft {
+        Aircraft {
+            id: Some(id),
+            address_type,
+            address,
+            icao_address: None,
+            flarm_address: None,
+            ogn_address: None,
+            other_address: None,
+            aircraft_model: String::new(),
+            registration: None,
+            competition_number: String::new(),
+            tracked: true,
+            identified: true,
+            frequency_mhz: None,
+            pilot_name: None,
+            home_base_airport_ident: None,
+            last_fix_at: None,
+            club_id: None,
+            icao_model_code: None,
+            adsb_emitter_category: None,
+            tracker_device_type: None,
+            country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
+            from_ogn_ddb: None,
+            from_adsbx_ddb: None,
+            created_at: None,
+            updated_at: None,
+            latitude: None,
+            longitude: None,
+            current_fix: None,
+        }
+    }
+
+    #[test]
+    fn test_evict_by_id_removes_both_maps() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+        let id = Uuid::now_v7();
+        let aircraft = make_test_aircraft(id, 12345, AddressType::Icao);
+        let addr_key = (AddressType::Icao, 12345_i32);
+
+        cache.by_id.insert(id, aircraft.clone());
+        cache.by_address.insert(addr_key, aircraft);
+
+        assert!(cache.by_id.contains_key(&id));
+        assert!(cache.by_address.contains_key(&addr_key));
+
+        cache.evict_by_id(id);
+
+        assert!(!cache.by_id.contains_key(&id));
+        assert!(!cache.by_address.contains_key(&addr_key));
+    }
+
+    #[test]
+    fn test_evict_by_id_does_not_remove_newer_address_entry() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+
+        let old_id = Uuid::now_v7();
+        let new_id = Uuid::now_v7();
+        let old_aircraft = make_test_aircraft(old_id, 12345, AddressType::Icao);
+        let new_aircraft = make_test_aircraft(new_id, 12345, AddressType::Icao);
+        let addr_key = (AddressType::Icao, 12345_i32);
+
+        // Old aircraft in by_id, but by_address already points to new aircraft
+        cache.by_id.insert(old_id, old_aircraft);
+        cache.by_address.insert(addr_key, new_aircraft);
+
+        cache.evict_by_id(old_id);
+
+        // by_id should be evicted
+        assert!(!cache.by_id.contains_key(&old_id));
+        // by_address should NOT be evicted — it points to the newer aircraft
+        assert!(cache.by_address.contains_key(&addr_key));
+        assert_eq!(cache.by_address.get(&addr_key).unwrap().id, Some(new_id));
+    }
+
+    #[test]
+    fn test_evict_by_id_noop_for_unknown_id() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+
+        // Evicting a nonexistent ID should be a no-op
+        cache.evict_by_id(Uuid::now_v7());
+        assert_eq!(cache.by_id.len(), 0);
+        assert_eq!(cache.by_address.len(), 0);
     }
 }

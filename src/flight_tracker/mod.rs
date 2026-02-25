@@ -668,22 +668,28 @@ impl FlightTracker {
                     }
                 }
 
-                // FK violation means the aircraft was deleted (e.g., by a merge operation)
-                // between lookup and fix insert. Evict the stale entry from the cache so
-                // subsequent fixes for this address get a fresh aircraft record.
-                let is_fk_violation = diesel_error.is_some_and(|de| {
-                    matches!(
-                        de,
-                        diesel::result::Error::DatabaseError(
-                            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
-                            _
-                        )
-                    )
+                // FK violation on the aircraft_id constraint means the aircraft was deleted
+                // (e.g., by a merge operation) between lookup and fix insert. Evict the
+                // stale entry from the cache so subsequent fixes for this address get a
+                // fresh aircraft record. Other FK violations are treated as regular errors.
+                let is_aircraft_fk_violation = diesel_error.is_some_and(|de| {
+                    if let diesel::result::Error::DatabaseError(
+                        diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+                        info,
+                    ) = de
+                    {
+                        // TimescaleDB chunks use names like "9155_34122_fixes_aircraft_id_fkey"
+                        info.constraint_name()
+                            .is_some_and(|name| name.ends_with("fixes_aircraft_id_fkey"))
+                    } else {
+                        false
+                    }
                 });
-                if is_fk_violation {
+                if is_aircraft_fk_violation {
                     warn!(
-                        "FK violation for aircraft {} - aircraft was likely deleted by a concurrent merge, evicting from cache",
-                        updated_fix.aircraft_id
+                        aircraft_id = %updated_fix.aircraft_id,
+                        error = %e,
+                        "FK violation on aircraft_id - aircraft was likely deleted by a concurrent merge, evicting from cache",
                     );
                     self.aircraft_cache.evict_by_id(updated_fix.aircraft_id);
                     self.aircraft_states.remove(&updated_fix.aircraft_id);
