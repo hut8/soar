@@ -1,3 +1,7 @@
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use diesel::connection::{Instrumentation, InstrumentationEvent, set_default_instrumentation};
