@@ -33,12 +33,23 @@ pub struct StateTransitionResult {
     pub pending_work: PendingBackgroundWork,
 }
 
+/// Normalize a callsign: trim whitespace and treat empty strings as None.
+fn normalize_callsign(callsign: &Option<String>) -> Option<&str> {
+    callsign
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+}
+
 /// Determine if a callsign change warrants ending the current flight.
 ///
 /// Returns `true` if the fix has a callsign that differs from the current in-memory callsign.
-/// Returns `false` if either callsign is absent (None or no flight_number on fix).
+/// Returns `false` if either callsign is absent (None, empty, or whitespace-only).
 fn is_callsign_change(current_callsign: &Option<String>, fix_callsign: &Option<String>) -> bool {
-    match (current_callsign, fix_callsign) {
+    match (
+        normalize_callsign(current_callsign),
+        normalize_callsign(fix_callsign),
+    ) {
         (Some(current), Some(new)) => current != new,
         _ => false,
     }
@@ -47,14 +58,14 @@ fn is_callsign_change(current_callsign: &Option<String>, fix_callsign: &Option<S
 /// Update in-memory callsign when first learned on an existing flight.
 ///
 /// When a flight is created without a callsign (e.g. APRS source), the first fix
-/// that carries a callsign should record it so subsequent changes are detected.
+/// that carries a non-empty callsign should record it so subsequent changes are detected.
 /// Returns the new callsign value for the state.
 fn learn_callsign(
     current_callsign: &Option<String>,
     fix_callsign: &Option<String>,
 ) -> Option<String> {
-    if current_callsign.is_none() && fix_callsign.is_some() {
-        fix_callsign.clone()
+    if current_callsign.is_none() {
+        normalize_callsign(fix_callsign).map(|s| s.to_string())
     } else {
         current_callsign.clone()
     }
@@ -801,5 +812,45 @@ mod tests {
             is_callsign_change(&current_callsign, &fix3_callsign),
             "Different callsign must trigger a flight split"
         );
+    }
+
+    // --- Empty/whitespace callsign edge cases ---
+
+    #[test]
+    fn empty_callsign_treated_as_none_for_change_detection() {
+        // Empty string on fix should not trigger a change from a real callsign
+        assert!(!is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("".to_string())
+        ));
+    }
+
+    #[test]
+    fn empty_callsign_not_learned() {
+        let result = learn_callsign(&None, &Some("".to_string()));
+        assert_eq!(result, None, "Empty callsign should not be stored");
+    }
+
+    #[test]
+    fn whitespace_callsign_not_learned() {
+        let result = learn_callsign(&None, &Some("  ".to_string()));
+        assert_eq!(
+            result, None,
+            "Whitespace-only callsign should not be stored"
+        );
+    }
+
+    #[test]
+    fn whitespace_callsign_treated_as_none_for_change_detection() {
+        assert!(!is_callsign_change(
+            &Some("WMT437".to_string()),
+            &Some("  ".to_string())
+        ));
+    }
+
+    #[test]
+    fn callsign_with_whitespace_is_trimmed_when_learned() {
+        let result = learn_callsign(&None, &Some(" WMT437 ".to_string()));
+        assert_eq!(result, Some("WMT437".to_string()));
     }
 }
