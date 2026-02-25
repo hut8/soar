@@ -1557,6 +1557,17 @@ impl AircraftCache {
         Ok(result)
     }
 
+    /// Remove an aircraft from the cache by its ID.
+    /// Used when an aircraft is deleted (e.g., by a merge operation) to prevent
+    /// stale cache entries from causing repeated FK violations.
+    pub fn evict_by_id(&self, aircraft_id: Uuid) {
+        if let Some((_, aircraft)) = self.by_id.remove(&aircraft_id) {
+            self.by_address
+                .remove(&(aircraft.address_type, aircraft.address as i32));
+            self.update_size_gauge();
+        }
+    }
+
     fn update_size_gauge(&self) {
         metrics::gauge!("aircraft_cache.size").set(self.by_id.len() as f64);
     }

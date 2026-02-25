@@ -644,16 +644,17 @@ impl FlightTracker {
             Err(e) => {
                 // Check if this is a check constraint violation indicating a
                 // timed-out flight — clear stale state so the next fix creates a new flight
-                let is_flight_constraint_violation =
-                    e.downcast_ref::<diesel::result::Error>().is_some_and(|de| {
-                        matches!(
-                            de,
-                            diesel::result::Error::DatabaseError(
-                                diesel::result::DatabaseErrorKind::CheckViolation,
-                                _
-                            )
+                let diesel_error = e.downcast_ref::<diesel::result::Error>();
+
+                let is_flight_constraint_violation = diesel_error.is_some_and(|de| {
+                    matches!(
+                        de,
+                        diesel::result::Error::DatabaseError(
+                            diesel::result::DatabaseErrorKind::CheckViolation,
+                            _
                         )
-                    });
+                    )
+                });
                 if is_flight_constraint_violation {
                     if let Some(stale_flight_id) = updated_fix.flight_id {
                         warn!(
@@ -666,14 +667,37 @@ impl FlightTracker {
                         state.current_flight_id = None;
                     }
                 }
-                error!(
-                    aircraft_id = %updated_fix.aircraft_id,
-                    flight_id = ?updated_fix.flight_id,
-                    speed_knots = ?updated_fix.ground_speed_knots,
-                    alt_msl_ft = ?updated_fix.altitude_msl_feet,
-                    error = %e,
-                    "Failed to save fix"
-                );
+
+                // FK violation means the aircraft was deleted (e.g., by a merge operation)
+                // between lookup and fix insert. Evict the stale entry from the cache so
+                // subsequent fixes for this address get a fresh aircraft record.
+                let is_fk_violation = diesel_error.is_some_and(|de| {
+                    matches!(
+                        de,
+                        diesel::result::Error::DatabaseError(
+                            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+                            _
+                        )
+                    )
+                });
+                if is_fk_violation {
+                    warn!(
+                        "FK violation for aircraft {} - aircraft was likely deleted by a concurrent merge, evicting from cache",
+                        updated_fix.aircraft_id
+                    );
+                    self.aircraft_cache.evict_by_id(updated_fix.aircraft_id);
+                    self.aircraft_states.remove(&updated_fix.aircraft_id);
+                    metrics::counter!("aprs.fixes.fk_violation_total").increment(1);
+                } else {
+                    error!(
+                        aircraft_id = %updated_fix.aircraft_id,
+                        flight_id = ?updated_fix.flight_id,
+                        speed_knots = ?updated_fix.ground_speed_knots,
+                        alt_msl_ft = ?updated_fix.altitude_msl_feet,
+                        error = %e,
+                        "Failed to save fix"
+                    );
+                }
                 None
             }
         };
