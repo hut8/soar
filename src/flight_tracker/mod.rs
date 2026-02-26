@@ -827,20 +827,33 @@ impl FlightTracker {
             .update_callsign(flight_id, callsign.clone(), event_timestamp)
             .await;
 
-        // Update in-memory state to keep it in sync with database
-        // This prevents callsign mismatch bugs where DB has one value but memory has another
-        // IMPORTANT: Only update if this flight is still the current flight for this aircraft.
-        // This method runs outside the device lock, so a newer flight may have already
-        // replaced the current one (e.g., callsign change split). Without this check,
-        // a stale callsign update for an old flight can overwrite the new flight's callsign.
-        if result.is_ok()
-            && let Some(mut state) = self.aircraft_states.get_mut(&aircraft_id)
-            && state.current_flight_id == Some(flight_id)
-        {
-            state.current_callsign = callsign;
+        // Only sync in-memory state when the DB row was actually updated
+        if let Ok(true) = result {
+            sync_callsign_if_current_flight(
+                &self.aircraft_states,
+                aircraft_id,
+                flight_id,
+                callsign,
+            );
         }
 
         result
+    }
+}
+
+/// Sync the in-memory callsign for an aircraft, but ONLY if the given flight is still
+/// the aircraft's current flight. This prevents stale callsign updates (from a previous
+/// flight processed outside the device lock) from overwriting the current flight's callsign.
+fn sync_callsign_if_current_flight(
+    aircraft_states: &AircraftStatesMap,
+    aircraft_id: Uuid,
+    flight_id: Uuid,
+    callsign: Option<String>,
+) {
+    if let Some(mut state) = aircraft_states.get_mut(&aircraft_id)
+        && state.current_flight_id == Some(flight_id)
+    {
+        state.current_callsign = callsign;
     }
 }
 
@@ -938,7 +951,7 @@ mod tests {
         assert_eq!(result, None);
     }
 
-    /// Test that the update_flight_callsign guard prevents stale callsign overwrites.
+    /// Test that sync_callsign_if_current_flight prevents stale callsign overwrites.
     ///
     /// Simulates the race condition where fix_processor's callsign update for an OLD flight
     /// runs after state_transitions has already created a NEW flight with a different callsign.
@@ -961,15 +974,12 @@ mod tests {
 
         // Simulate stale update_flight_callsign for flight_1 (the OLD flight)
         // This is what happens when fix_processor step 3 runs late
-        let stale_flight_id = flight_1;
-        let stale_callsign = Some("VOI5584".to_string());
-
-        // The guard: only update if the flight being updated is the current flight
-        if let Some(mut state) = aircraft_states.get_mut(&aircraft_id)
-            && state.current_flight_id == Some(stale_flight_id)
-        {
-            state.current_callsign = stale_callsign;
-        }
+        super::sync_callsign_if_current_flight(
+            &aircraft_states,
+            aircraft_id,
+            flight_1,
+            Some("VOI5584".to_string()),
+        );
 
         // Verify: callsign should NOT have been overwritten
         let state = aircraft_states.get(&aircraft_id).unwrap();
@@ -981,7 +991,7 @@ mod tests {
         assert_eq!(state.current_flight_id, Some(flight_2));
     }
 
-    /// Test that update_flight_callsign DOES update when the flight matches.
+    /// Test that sync_callsign_if_current_flight DOES update when the flight matches.
     #[test]
     fn test_callsign_update_applies_when_flight_matches() {
         let aircraft_id = Uuid::new_v4();
@@ -998,14 +1008,12 @@ mod tests {
         aircraft_states.insert(aircraft_id, state);
 
         // Update callsign for the CURRENT flight — should apply
-        let update_flight_id = flight_1;
-        let new_callsign = Some("VOI5584".to_string());
-
-        if let Some(mut state) = aircraft_states.get_mut(&aircraft_id)
-            && state.current_flight_id == Some(update_flight_id)
-        {
-            state.current_callsign = new_callsign;
-        }
+        super::sync_callsign_if_current_flight(
+            &aircraft_states,
+            aircraft_id,
+            flight_1,
+            Some("VOI5584".to_string()),
+        );
 
         // Verify: callsign should have been updated
         let state = aircraft_states.get(&aircraft_id).unwrap();
