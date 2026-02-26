@@ -367,7 +367,7 @@ export class FixFeed {
 			aircraftId
 		});
 
-		// Disconnect if no subscriptions and operations page not active
+		// Disconnect if no subscriptions and live page is not active
 		if (this.subscribedAircraft.size === 0 && !this.livePageActive) {
 			this.disconnect();
 		}
