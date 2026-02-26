@@ -166,15 +166,15 @@ impl Archivable for RawMessageCsv {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            use diesel::connection::SimpleConnection;
 
-            let drop_sql = format!(
-                "SELECT drop_chunks('raw_messages', older_than => '{}'::timestamptz, newer_than => '{}'::timestamptz)",
-                day_end.format("%Y-%m-%d %H:%M:%S%z"),
-                day_start.format("%Y-%m-%d %H:%M:%S%z"),
-            );
-            conn.batch_execute(&drop_sql)
-                .context("Failed to drop chunks for raw_messages")?;
+            diesel::sql_query(
+                "SELECT drop_chunks('raw_messages', older_than => $1, newer_than => $2)",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(day_end)
+            .bind::<diesel::sql_types::Timestamptz, _>(day_start)
+            .execute(&mut conn)
+            .context("Failed to drop chunks for raw_messages")?;
+
             info!(
                 "Dropped TimescaleDB chunks for raw_messages between {} and {}",
                 day_start, day_end
