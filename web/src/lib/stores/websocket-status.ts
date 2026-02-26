@@ -19,7 +19,6 @@ interface DebugStatus {
 	activeWatchlistEntries: string[];
 	subscribedAircraft: string[];
 	activeAreaSubscriptions: number;
-	operationsPageActive: boolean;
 }
 
 const initialWebSocketStatus: WebSocketStatus = {
@@ -36,8 +35,7 @@ const initialWebSocketStatus: WebSocketStatus = {
 const initialDebugStatus: DebugStatus = {
 	activeWatchlistEntries: [],
 	subscribedAircraft: [],
-	activeAreaSubscriptions: 0,
-	operationsPageActive: false
+	activeAreaSubscriptions: 0
 };
 
 export const websocketStatus = writable<WebSocketStatus>(initialWebSocketStatus);
@@ -122,8 +120,7 @@ if (browser) {
 		const status = fixFeed.getConnectionStatus();
 		debugStatus.update((current) => ({
 			...current,
-			subscribedAircraft: status.subscribedAircraft,
-			operationsPageActive: status.operationsPageActive
+			subscribedAircraft: status.subscribedAircraft
 		}));
 	}
 

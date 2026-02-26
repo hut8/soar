@@ -12,7 +12,7 @@ SOAR is an application under active development that will automate many duty-man
 - **Midnight Rollover**: Automatically switches to new log files at UTC midnight
 - **Configurable Filters**: Support for APRS-IS filters to limit received messages
 - **Retry Logic**: Built-in connection retry with configurable parameters
-- **Airspace Boundaries**: Import and display airspace data from OpenAIP on the operations map
+- **Airspace Boundaries**: Import and display airspace data from OpenAIP on the live map
   - Color-coded by classification (controlled, uncontrolled, special use)
   - Interactive polygons with detailed information
   - Incremental sync support for efficient updates
@@ -436,7 +436,7 @@ For the easiest setup, use Docker Compose to run the entire development environm
 # 1. Copy Docker environment file
 cp .env.docker.example .env.docker
 
-# 2. Add your Google Maps API key (required for operations map)
+# 2. Add your Google Maps API key (required for live map)
 # Edit .env.docker and set: GOOGLE_MAPS_API_KEY=your_key_here
 
 # 3. Start everything with one command

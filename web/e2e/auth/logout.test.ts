@@ -24,8 +24,8 @@ test.describe('Logout', () => {
 		// Log in
 		await login(page, testUsers.validUser.email, testUsers.validUser.password);
 
-		// Navigate to protected page (club operations)
-		const protectedPage = `/clubs/${testClubs.validClubId}/operations`;
+		// Navigate to protected page (club pilots)
+		const protectedPage = `/clubs/${testClubs.validClubId}/pilots`;
 		await page.goto(protectedPage);
 		await expect(page).toHaveURL(protectedPage);
 

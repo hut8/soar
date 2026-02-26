@@ -12,7 +12,6 @@
 		UserCheck,
 		ExternalLink,
 		Image,
-		ClipboardList,
 		Users
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
@@ -269,13 +268,6 @@
 								<UserCheck class="h-4 w-4" />
 								My Club
 							</div>
-							<a
-								href={resolve(`/clubs/${clubId}/operations`)}
-								class="btn preset-filled-secondary-500 btn-sm"
-							>
-								<ClipboardList class="mr-2 h-4 w-4" />
-								Club Operations
-							</a>
 							<a
 								href={resolve(`/clubs/${clubId}/pilots`)}
 								class="btn preset-filled-secondary-500 btn-sm"

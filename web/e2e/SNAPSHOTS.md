@@ -15,7 +15,6 @@ The following tests require baseline snapshots:
 - `aircraft-detail.test.ts`: 3 screenshot tests
 - `aircraft-list.test.ts`: 2 screenshot tests
 - `auth/forgot-password.test.ts`: 1 screenshot test
-- `operations/operations.test.ts`: 2 screenshot tests
 
 ## Generating Baseline Snapshots
 

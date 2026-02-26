@@ -44,20 +44,17 @@ test.describe('Club Detail', () => {
 		await expect(authenticatedPage.getByText(testClubs.validClubName)).toBeVisible();
 	});
 
-	test('should have navigation to pilots and operations tabs', async ({ authenticatedPage }) => {
+	test('should have navigation to pilots tab', async ({ authenticatedPage }) => {
 		await authenticatedPage.goto(`/clubs/${testClubs.validClubId}`);
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Look for links to pilots and operations
+		// Look for link to pilots
 		const pilotsLink = authenticatedPage.getByRole('link', { name: /pilots/i });
-		const operationsLink = authenticatedPage.getByRole('link', { name: /operations/i });
 
-		// At least one tab navigation should be visible
 		const hasPilotsLink = await pilotsLink.isVisible().catch(() => false);
-		const hasOperationsLink = await operationsLink.isVisible().catch(() => false);
 
-		if (hasPilotsLink || hasOperationsLink) {
-			expect(hasPilotsLink || hasOperationsLink).toBe(true);
+		if (hasPilotsLink) {
+			expect(hasPilotsLink).toBe(true);
 		}
 	});
 

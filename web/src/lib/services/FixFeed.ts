@@ -54,7 +54,7 @@ export class FixFeed {
 	private subscribedAircraft = new Set<string>();
 	private reconnectAttempts = 0;
 	private readonly reconnectDelay = 5000; // Fixed 5 second delay
-	private operationsPageActive = false;
+	private livePageActive = false;
 	private aircraftRegistry: AircraftRegistry;
 
 	private constructor() {
@@ -262,7 +262,7 @@ export class FixFeed {
 
 		// Reset state
 		this.reconnectAttempts = 0;
-		this.operationsPageActive = false;
+		this.livePageActive = false;
 	}
 
 	// Attempt to reconnect with fixed delay (keeps retrying indefinitely)
@@ -368,7 +368,7 @@ export class FixFeed {
 		});
 
 		// Disconnect if no subscriptions and operations page not active
-		if (this.subscribedAircraft.size === 0 && !this.operationsPageActive) {
+		if (this.subscribedAircraft.size === 0 && !this.livePageActive) {
 			this.disconnect();
 		}
 	}
@@ -392,21 +392,21 @@ export class FixFeed {
 		}
 	}
 
-	// Start live fixes feed for operations page (connects without specific subscriptions)
+	// Start live fixes feed for live page (connects without specific subscriptions)
 	public startLiveFixesFeed(): void {
 		if (!browser) return;
 
-		logger.info('Starting live fixes feed for operations page');
-		this.operationsPageActive = true;
+		logger.info('Starting live fixes feed for live page');
+		this.livePageActive = true;
 		this.connect();
 	}
 
-	// Stop live fixes feed for operations page
+	// Stop live fixes feed for live page
 	public stopLiveFixesFeed(): void {
 		if (!browser) return;
 
-		logger.info('Stopping live fixes feed for operations page');
-		this.operationsPageActive = false;
+		logger.info('Stopping live fixes feed for live page');
+		this.livePageActive = false;
 
 		// Only disconnect if there are no active aircraft subscriptions
 		if (this.subscribedAircraft.size === 0) {
@@ -419,13 +419,13 @@ export class FixFeed {
 		connected: boolean;
 		reconnecting: boolean;
 		subscribedAircraft: string[];
-		operationsPageActive: boolean;
+		livePageActive: boolean;
 	} {
 		return {
 			connected: this.websocket?.readyState === WebSocket.OPEN,
 			reconnecting: this.reconnectAttempts > 0,
 			subscribedAircraft: Array.from(this.subscribedAircraft),
-			operationsPageActive: this.operationsPageActive
+			livePageActive: this.livePageActive
 		};
 	}
 

@@ -14,7 +14,7 @@
 		BACKEND_SHORT_LABELS,
 		type BackendMode
 	} from '$lib/stores/backend';
-	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
+	import { websocketStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev, browser } from '$app/environment';
@@ -23,7 +23,6 @@
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
 	import {
-		Radar,
 		Users,
 		Plane,
 		PlaneTakeoff,
@@ -47,7 +46,6 @@
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
-	const operationsPath = resolve('/operations');
 	const livePath = resolve('/live');
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
@@ -65,12 +63,6 @@
 	let showMobileMenu = $state(false);
 	let showDesktopMenu = $state(false);
 	let showBackendDropdown = $state(false);
-
-	// Reactive club operations path
-	let clubOpsPath = $derived(
-		$auth.user?.clubId ? resolve(`/clubs/${$auth.user.clubId}/operations`) : ''
-	);
-	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
 
 	// Invert favicon colors for staging environment
 	function invertFavicon() {
@@ -232,7 +224,7 @@
 								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
 								title="{label} - WebSocket connected{delay !== null
 									? `, feed delay: ${formatDelay(delay)}`
-									: ''}{$debugStatus.operationsPageActive ? ', Operations page active' : ''}"
+									: ''}"
 							>
 								<Wifi size={16} />
 								<span class="text-xs font-medium">{label}</span>
@@ -273,12 +265,6 @@
 					<div class="relative z-10 flex items-center gap-4">
 						<!-- Desktop Navigation -->
 						<nav class="hidden space-x-4 md:flex">
-							{#if hasClub}
-								<a href={clubOpsPath} class="btn preset-filled-success-500 btn-sm">
-									<Radar /> Club Ops
-								</a>
-							{/if}
-
 							<!-- Desktop Hamburger Menu -->
 							<div class="desktop-menu relative">
 								<button
@@ -366,9 +352,6 @@
 								{/if}
 							</div>
 
-							<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
-								<Radar /> Operations
-							</a>
 							<!-- 3D Globe link temporarily disabled
 						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
 							<Globe /> 3D Globe
@@ -504,15 +487,6 @@
 				class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
 			>
 				<nav class="flex flex-col space-y-4 p-6">
-					{#if hasClub}
-						<a
-							href={clubOpsPath}
-							class="btn w-full justify-start preset-filled-success-500"
-							onclick={() => (showMobileMenu = false)}
-						>
-							<Radar size={16} /> Club Ops
-						</a>
-					{/if}
 					<a
 						href={livePath}
 						class="btn w-full justify-start preset-filled-primary-500"
@@ -526,13 +500,6 @@
 						onclick={() => (showMobileMenu = false)}
 					>
 						<Users size={16} /> Clubs
-					</a>
-					<a
-						href={operationsPath}
-						class="btn w-full justify-start preset-filled-primary-500"
-						onclick={() => (showMobileMenu = false)}
-					>
-						<Radar size={16} /> Operations
 					</a>
 					<a
 						href={arPath}
@@ -676,7 +643,7 @@
 			{@render children?.()}
 		</main>
 
-		{#if !page.route.id?.includes('operations') && !page.route.id?.includes('/flights/[id]/map') && !page.route.id?.includes('receivers/coverage')}
+		{#if !page.route.id?.includes('/flights/[id]/map') && !page.route.id?.includes('receivers/coverage')}
 			<footer class="bg-surface-100-800-token p-4 text-center text-sm">
 				<p>&copy; 2025 Liam Bowen</p>
 			</footer>
