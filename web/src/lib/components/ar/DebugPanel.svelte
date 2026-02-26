@@ -42,7 +42,7 @@
 
 	<div class="debug-section">
 		<div class="debug-label">Aircraft:</div>
-		<div class="debug-value">{visibleCount} on screen / {aircraftCount} in range</div>
+		<div class="debug-value">{visibleCount} on screen / {aircraftCount} tracked</div>
 	</div>
 </div>
 
