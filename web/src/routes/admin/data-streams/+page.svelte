@@ -123,12 +123,8 @@
 			enabled: formEnabled
 		};
 		if (formFormat === 'aprs') {
-			if (formCallsign.trim()) {
-				body.callsign = formCallsign.trim();
-			}
-			if (formFilter.trim()) {
-				body.filter = formFilter.trim();
-			}
+			body.callsign = formCallsign.trim() || null;
+			body.filter = formFilter.trim() || null;
 		}
 		return body;
 	}

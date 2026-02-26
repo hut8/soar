@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
-use anyhow::Result;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -56,6 +55,7 @@ impl StreamManager {
 
     /// Apply a new config, starting/stopping/restarting streams as needed.
     pub fn apply_config(&mut self, config: &IngestConfigFile) {
+        let retry_delay_changed = self.retry_delay != config.retry_delay;
         self.retry_delay = config.retry_delay;
 
         let desired: HashMap<Uuid, DataStream> = config
@@ -76,10 +76,10 @@ impl StreamManager {
             self.stop_stream(id);
         }
 
-        // Restart streams whose config changed, start new ones
+        // Restart streams whose config changed (including retry_delay), start new ones
         for (id, stream) in &desired {
             if let Some(running) = self.running.get(id) {
-                if stream_config_changed(&running.config, stream) {
+                if retry_delay_changed || stream_config_changed(&running.config, stream) {
                     info!(
                         stream_id = %id,
                         name = %stream.name,
@@ -330,7 +330,7 @@ pub fn spawn_config_watcher(
         let watch_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let config_path = path.clone();
 
-        let mut watcher = match notify::recommended_watcher(move |res: Result<Event, _>| {
+        let mut watcher = match notify::recommended_watcher(move |res: notify::Result<Event>| {
             if let Ok(event) = res {
                 match event.kind {
                     EventKind::Create(_) | EventKind::Modify(_) => {

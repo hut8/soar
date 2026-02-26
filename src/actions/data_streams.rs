@@ -75,6 +75,20 @@ pub async fn create_data_stream(
 ) -> impl IntoResponse {
     let config_path = ingest_config_path();
 
+    // Validate input
+    let name = req.name.trim().to_string();
+    let host = req.host.trim().to_string();
+    if name.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Name is required").into_response();
+    }
+    if host.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Host is required").into_response();
+    }
+    if req.port == 0 {
+        return json_error(StatusCode::BAD_REQUEST, "Port must be between 1 and 65535")
+            .into_response();
+    }
+
     let mut config = match IngestConfigFile::load(&config_path) {
         Ok(c) => c,
         Err(e) => {
@@ -90,9 +104,9 @@ pub async fn create_data_stream(
     let now = Utc::now();
     let stream = TomlDataStream {
         id: Uuid::new_v4(),
-        name: req.name,
+        name,
         format: req.format,
-        host: req.host,
+        host,
         port: req.port,
         enabled: req.enabled,
         callsign: req.callsign,
@@ -197,7 +211,7 @@ pub async fn delete_data_stream(_admin: AdminUser, Path(id): Path<Uuid>) -> impl
             error!(error = %e, "Failed to load ingest config");
             return json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to save config: {}", e),
+                &format!("Failed to load config: {}", e),
             )
             .into_response();
         }

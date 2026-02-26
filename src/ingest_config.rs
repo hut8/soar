@@ -36,9 +36,7 @@ pub struct DataStream {
     pub host: String,
     pub port: u16,
     pub enabled: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub callsign: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

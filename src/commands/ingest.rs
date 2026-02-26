@@ -367,8 +367,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let aprs_health_for_stats = aprs_health_shared.clone();
     let beast_health_for_stats = beast_health_shared.clone();
     let sbs_health_for_stats = sbs_health_shared.clone();
-    let manager_for_stats = manager.clone();
-
     tokio::spawn(async move {
         const STATS_INTERVAL_SECS: u64 = 30;
 
@@ -515,37 +513,38 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 )
             };
 
-            // Build read stats section from running streams
-            let running_streams = {
-                let mgr = manager_for_stats.lock().await;
-                mgr.running_streams()
-            };
-
+            // Build read stats section aggregated by format type
+            // Health objects are shared per format, so we report one entry per format
             let mut read_parts = Vec::new();
-            for (_id, name, format) in &running_streams {
-                match format {
-                    soar::ingest_config::StreamFormat::Aprs => {
-                        let health = aprs_health_for_stats.read().await;
-                        read_parts.push(format!(
-                            "{}={{records:{} rate:{:.1}/s}}",
-                            name, health.total_messages, ogn_per_sec
-                        ));
-                    }
-                    soar::ingest_config::StreamFormat::Adsb => {
-                        let health = beast_health_for_stats.read().await;
-                        read_parts.push(format!(
-                            "{}={{records:{} rate:{:.1}/s}}",
-                            name, health.total_messages, beast_per_sec
-                        ));
-                    }
-                    soar::ingest_config::StreamFormat::Sbs => {
-                        let health = sbs_health_for_stats.read().await;
-                        read_parts.push(format!(
-                            "{}={{records:{} rate:{:.1}/s}}",
-                            name, health.total_messages, sbs_per_sec
-                        ));
-                    }
-                }
+            if ogn_frames > 0 || {
+                let h = aprs_health_for_stats.read().await;
+                h.aprs_connected
+            } {
+                let health = aprs_health_for_stats.read().await;
+                read_parts.push(format!(
+                    "aprs={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, ogn_per_sec
+                ));
+            }
+            if beast_frames > 0 || {
+                let h = beast_health_for_stats.read().await;
+                h.beast_connected
+            } {
+                let health = beast_health_for_stats.read().await;
+                read_parts.push(format!(
+                    "beast={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, beast_per_sec
+                ));
+            }
+            if sbs_frames > 0 || {
+                let h = sbs_health_for_stats.read().await;
+                h.beast_connected
+            } {
+                let health = sbs_health_for_stats.read().await;
+                read_parts.push(format!(
+                    "sbs={{records:{} rate:{:.1}/s}}",
+                    health.total_messages, sbs_per_sec
+                ));
             }
 
             // Format read section
