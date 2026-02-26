@@ -236,9 +236,7 @@ impl LocationsRepository {
                   AND NOT EXISTS (SELECT 1 FROM airports WHERE location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM clubs WHERE location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM flights WHERE end_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE landing_location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM flights WHERE start_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE takeoff_location_id = l.id)
                 "#,
             )
             .get_result::<CountQueryResult>(&mut conn)?
@@ -283,9 +281,7 @@ impl LocationsRepository {
                   AND NOT EXISTS (SELECT 1 FROM airports WHERE location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM clubs WHERE location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM flights WHERE end_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE landing_location_id = l.id)
                   AND NOT EXISTS (SELECT 1 FROM flights WHERE start_location_id = l.id)
-                  AND NOT EXISTS (SELECT 1 FROM flights WHERE takeoff_location_id = l.id)
                 "#,
             )
             .bind::<diesel::sql_types::Timestamptz, _>(start_datetime)
@@ -327,21 +323,15 @@ impl LocationsRepository {
             let clubs_exists = clubs_dsl::clubs.filter(clubs_dsl::location_id.eq(id.nullable()));
             let flights_end_exists =
                 flights_dsl::flights.filter(flights_dsl::end_location_id.eq(id.nullable()));
-            let flights_landing_exists =
-                flights_dsl::flights.filter(flights_dsl::landing_location_id.eq(id.nullable()));
             let flights_start_exists =
                 flights_dsl::flights.filter(flights_dsl::start_location_id.eq(id.nullable()));
-            let flights_takeoff_exists =
-                flights_dsl::flights.filter(flights_dsl::takeoff_location_id.eq(id.nullable()));
 
             let location_models: Vec<LocationModel> = locations
                 .filter(not(exists(ar_exists)))
                 .filter(not(exists(airports_exists)))
                 .filter(not(exists(clubs_exists)))
                 .filter(not(exists(flights_end_exists)))
-                .filter(not(exists(flights_landing_exists)))
                 .filter(not(exists(flights_start_exists)))
-                .filter(not(exists(flights_takeoff_exists)))
                 .order(created_at.desc())
                 .limit(limit)
                 .offset(offset)

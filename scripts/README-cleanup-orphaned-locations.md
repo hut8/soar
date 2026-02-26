@@ -10,8 +10,8 @@ Due to a bug in the `locations_address_unique_idx` unique index (which treats NU
 Locations that are NOT referenced by any of these tables:
 - `aircraft_registrations.location_id`
 - `clubs.location_id`
-- `flights.landing_location_id`
-- `flights.takeoff_location_id`
+- `flights.start_location_id`
+- `flights.end_location_id`
 
 ## Usage
 

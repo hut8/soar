@@ -57,6 +57,7 @@
           }
         ]
       },
+      "min": 0,
       "unit": "none"
     },
     "overrides": []

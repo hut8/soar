@@ -3,18 +3,13 @@ use crate::geocoding::Geocoder;
 use crate::locations::Location;
 use crate::locations_repo::LocationsRepository;
 use std::sync::OnceLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 /// Cached geocoder for real-time flight tracking.
 /// Created once on first use to reuse the underlying HTTP connection pool,
 /// avoiding per-request TCP+TLS handshake overhead.
 static REALTIME_GEOCODER: OnceLock<Geocoder> = OnceLock::new();
-
-/// DEPRECATED: Reverse geocoding for takeoff_location_id/landing_location_id fields (no longer used)
-/// These fields have been replaced by start_location_id/end_location_id
-/// This constant and create_or_find_location() are kept for backward compatibility only
-const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
 
 /// Enable reverse geocoding for start/end locations using Pelias
 /// When true, create_start_end_location() will use Pelias city-level reverse geocoding
@@ -46,90 +41,6 @@ pub(crate) async fn get_airport_location_id(
     match airports_repo.get_airport_by_id(airport_id).await {
         Ok(Some(airport)) => airport.location_id,
         _ => None,
-    }
-}
-
-/// DEPRECATED: Create or find a location for takeoff_location_id/landing_location_id (no longer used)
-/// This function is kept for backward compatibility but is not called in production.
-/// Use create_start_end_location() for start_location_id/end_location_id instead.
-///
-/// Note: Geocoding is permanently disabled via GEOCODING_ENABLED_FOR_TAKEOFF_LANDING constant
-#[allow(dead_code)]
-pub(crate) async fn create_or_find_location(
-    _airports_repo: &AirportsRepository,
-    locations_repo: &LocationsRepository,
-    latitude: f64,
-    longitude: f64,
-    _airport_id: Option<i32>,
-) -> Option<Uuid> {
-    // Check if geocoding is enabled
-    if !GEOCODING_ENABLED_FOR_TAKEOFF_LANDING {
-        debug!(
-            "Geocoding disabled for takeoff/landing at coordinates ({}, {}), skipping location creation",
-            latitude, longitude
-        );
-        return None;
-    }
-
-    // Perform reverse geocoding
-    debug!(
-        "Performing reverse geocoding for coordinates ({}, {})",
-        latitude, longitude
-    );
-
-    let geocoder = Geocoder::new();
-    match geocoder.reverse_geocode(latitude, longitude).await {
-        Ok(result) => {
-            debug!(
-                "Reverse geocoded ({}, {}) to: {}",
-                latitude, longitude, result.display_name
-            );
-
-            // Create a location with the reverse geocoded address
-            let location = Location::new(
-                result.street1,
-                None, // street2
-                result.city,
-                result.state,
-                result.zip_code,
-                result.country.map(|c| c.chars().take(2).collect()), // country code (first 2 chars)
-                Some(crate::locations::Point::new(latitude, longitude)),
-            );
-
-            // Use find_or_create to avoid duplicate locations
-            let params = crate::locations_repo::LocationParams {
-                street1: location.street1.clone(),
-                street2: location.street2.clone(),
-                city: location.city.clone(),
-                state: location.state.clone(),
-                zip_code: location.zip_code.clone(),
-                country_code: location.country_code.clone(),
-                geolocation: location.geolocation,
-            };
-            match locations_repo.find_or_create(params).await {
-                Ok(created_location) => {
-                    debug!(
-                        "Created/found location {} for coordinates ({}, {}): {}",
-                        created_location.id, latitude, longitude, result.display_name
-                    );
-                    Some(created_location.id)
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to create location for coordinates ({}, {}): {}",
-                        latitude, longitude, e
-                    );
-                    None
-                }
-            }
-        }
-        Err(e) => {
-            info!(
-                "Pelias reverse geocoding returned no result for coordinates ({}, {}): {}",
-                latitude, longitude, e
-            );
-            None
-        }
     }
 }
 

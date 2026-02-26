@@ -94,7 +94,6 @@ impl FlightsRepository {
         flight_id: Uuid,
         takeoff_runway_ident_param: Option<String>,
         start_location_id_param: Option<Uuid>,
-        takeoff_location_id_param: Option<Uuid>,
         event_timestamp: DateTime<Utc>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
@@ -108,7 +107,6 @@ impl FlightsRepository {
                 .set((
                     takeoff_runway_ident.eq(&takeoff_runway_ident_param),
                     start_location_id.eq(&start_location_id_param),
-                    takeoff_location_id.eq(&takeoff_location_id_param),
                     updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
@@ -128,7 +126,6 @@ impl FlightsRepository {
         landing_runway_ident_param: Option<String>,
         runways_inferred_param: Option<bool>,
         end_location_id_param: Option<Uuid>,
-        landing_location_id_param: Option<Uuid>,
         event_timestamp: DateTime<Utc>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
@@ -143,7 +140,6 @@ impl FlightsRepository {
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     runways_inferred.eq(&runways_inferred_param),
                     end_location_id.eq(&end_location_id_param),
-                    landing_location_id.eq(&landing_location_id_param),
                     updated_at.eq(event_timestamp),
                 ))
                 .execute(&mut conn)?;
@@ -191,7 +187,6 @@ impl FlightsRepository {
         flight_id: Uuid,
         landing_time_param: DateTime<Utc>,
         arrival_airport_id_param: Option<i32>,
-        landing_location_id_param: Option<Uuid>,
         end_location_id_param: Option<Uuid>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
@@ -215,23 +210,19 @@ impl FlightsRepository {
                 "UPDATE flights \
                  SET landing_time = $1, \
                      arrival_airport_id = $2, \
-                     landing_location_id = $3, \
-                     end_location_id = $4, \
-                     landing_altitude_offset_ft = $5, \
-                     landing_runway_ident = $6, \
-                     total_distance_meters = $7, \
-                     maximum_displacement_meters = $8, \
-                     runways_inferred = $9, \
-                     last_fix_at = GREATEST(last_fix_at, $10), \
-                     updated_at = $10 \
-                 WHERE id = $11",
+                     end_location_id = $3, \
+                     landing_altitude_offset_ft = $4, \
+                     landing_runway_ident = $5, \
+                     total_distance_meters = $6, \
+                     maximum_displacement_meters = $7, \
+                     runways_inferred = $8, \
+                     last_fix_at = GREATEST(last_fix_at, $9), \
+                     updated_at = $9 \
+                 WHERE id = $10",
             )
             .bind::<diesel::sql_types::Timestamptz, _>(landing_time_param)
             .bind::<diesel::sql_types::Nullable<diesel::sql_types::Integer>, _>(
                 arrival_airport_id_param,
-            )
-            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(
-                landing_location_id_param,
             )
             .bind::<diesel::sql_types::Nullable<diesel::sql_types::Uuid>, _>(end_location_id_param)
             .bind::<diesel::sql_types::Nullable<diesel::sql_types::Integer>, _>(
