@@ -235,6 +235,15 @@
 	// Get all aircraft positions as array for the modal
 	const allAircraftList = $derived(Array.from(aircraftPositions.values()).map((p) => p.aircraft));
 
+	// Count aircraft visible on screen (derived once to avoid repeated allocations)
+	const visibleAircraftCount = $derived.by(() => {
+		let count = 0;
+		for (const { screen } of aircraftPositions.values()) {
+			if (screen.visible) count++;
+		}
+		return count;
+	});
+
 	// Check if target aircraft is visible on screen
 	const targetScreenPosition = $derived(() => {
 		if (!targetAircraftId) return null;
@@ -366,6 +375,7 @@
 				position={userPosition}
 				orientation={deviceOrientation}
 				aircraftCount={aircraftPositions.size}
+				visibleCount={visibleAircraftCount}
 			/>
 		{/if}
 
@@ -413,6 +423,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		z-index: 1;
 	}
 
 	.aircraft-layer {
@@ -422,6 +433,7 @@
 		width: 100%;
 		height: 100%;
 		pointer-events: none;
+		z-index: 5;
 	}
 
 	.aircraft-layer :global(button) {
