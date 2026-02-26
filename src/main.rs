@@ -120,44 +120,14 @@ enum Commands {
     },
     /// Unified ingestion service for OGN (APRS) and ADS-B messages (uses persistent queues + Unix socket)
     ///
-    /// This service can ingest from multiple sources simultaneously:
-    /// - OGN/APRS for glider tracking
-    /// - Beast format ADS-B for powered aircraft
-    /// - SBS (BaseStation/port 30003) format for additional ADS-B coverage
+    /// Data sources are configured via a TOML config file. The file is watched for changes
+    /// and streams are hot-reloaded without process restart.
     ///
-    /// All messages are buffered to persistent queues and sent to soar-run via Unix socket.
-    /// Metrics are exported both in aggregate (all sources) and individually per source.
-    /// Socket write times are tracked to monitor performance.
+    /// Config path resolution: SOAR_INGEST_CONFIG env var > /etc/soar/ingest.toml > ./ingest.toml
     Ingest {
-        /// OGN APRS server hostname (optional, omit to disable OGN)
+        /// Path to the ingest config TOML file (overrides default path resolution)
         #[arg(long)]
-        ogn_server: Option<String>,
-
-        /// OGN APRS server port (automatically switches to 10152 for full feed if no filter specified)
-        #[arg(long, default_value = "14580")]
-        ogn_port: Option<u16>,
-
-        /// OGN callsign for APRS authentication
-        #[arg(long, default_value = "N0CALL")]
-        ogn_callsign: Option<String>,
-
-        /// OGN APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
-        #[arg(long)]
-        ogn_filter: Option<String>,
-
-        /// Beast server(s) in format "ip:port" (can specify multiple times, optional)
-        /// Example: --beast 1.2.3.4:30005 --beast 5.6.7.8:30005
-        #[arg(long)]
-        beast: Vec<String>,
-
-        /// SBS (BaseStation/port 30003) server(s) in format "ip:port" (can specify multiple times, optional)
-        /// Example: --sbs data.adsbhub.org:5002
-        #[arg(long)]
-        sbs: Vec<String>,
-
-        /// Delay between reconnection attempts in seconds
-        #[arg(long, default_value = "5")]
-        retry_delay: u64,
+        config: Option<String>,
     },
     /// Run the main APRS processing service
     Run {
@@ -1148,24 +1118,10 @@ async fn main() -> Result<()> {
             info!("Runtime verification PASSED");
             return Ok(());
         }
-        Commands::Ingest {
-            ogn_server,
-            ogn_port,
-            ogn_callsign,
-            ogn_filter,
-            beast,
-            sbs,
-            retry_delay,
-        } => {
+        Commands::Ingest { config } => {
             // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
             return handle_ingest(commands::ingest::IngestConfig {
-                ogn_server: ogn_server.clone(),
-                ogn_port: *ogn_port,
-                ogn_callsign: ogn_callsign.clone(),
-                ogn_filter: ogn_filter.clone(),
-                beast_servers: beast.clone(),
-                sbs_servers: sbs.clone(),
-                retry_delay: *retry_delay,
+                config_path: config.as_ref().map(std::path::PathBuf::from),
             })
             .await;
         }

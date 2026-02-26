@@ -854,6 +854,17 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             get(actions::get_airport_activity),
         )
         .route("/analytics/summary", get(actions::get_summary))
+        // Data streams management (admin only)
+        .route(
+            "/data-streams",
+            get(actions::data_streams::list_data_streams)
+                .post(actions::data_streams::create_data_stream),
+        )
+        .route(
+            "/data-streams/{id}",
+            put(actions::data_streams::update_data_stream)
+                .delete(actions::data_streams::delete_data_stream),
+        )
         // Status endpoint
         .route("/status", get(actions::get_status))
         .with_state(app_state.clone());
