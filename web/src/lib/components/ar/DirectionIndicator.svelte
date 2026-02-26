@@ -26,7 +26,7 @@
 
 	// Calculate relative bearing from device heading to aircraft
 	// Normalize to -180 to 180
-	const relativeBearing = $derived(() => {
+	const relativeBearing = $derived.by(() => {
 		let bearing = targetAircraft.bearing - deviceOrientation.heading;
 		while (bearing > 180) bearing -= 360;
 		while (bearing < -180) bearing += 360;
@@ -34,16 +34,16 @@
 	});
 
 	// Calculate adjusted elevation accounting for device pitch
-	const adjustedElevation = $derived(() => {
+	const adjustedElevation = $derived.by(() => {
 		return targetAircraft.elevation - deviceOrientation.pitch;
 	});
 
 	// Determine which direction to show based on relative bearing and elevation
 	// Use FOV settings for accurate thresholds
 	// Supports diagonal directions when both horizontal and vertical are off-screen
-	const direction = $derived((): Direction => {
-		const rb = relativeBearing();
-		const elev = adjustedElevation();
+	const direction = $derived.by((): Direction => {
+		const rb = relativeBearing;
+		const elev = adjustedElevation;
 		const hFovHalf = settings.fovHorizontal / 2;
 		const vFovHalf = settings.fovVertical / 2;
 
@@ -81,9 +81,9 @@
 
 	// Calculate the arrow rotation angle for diagonal/angled directions
 	// Returns angle in degrees (0 = up, 90 = right, etc.)
-	const arrowAngle = $derived(() => {
-		const rb = relativeBearing();
-		const elev = adjustedElevation();
+	const arrowAngle = $derived.by(() => {
+		const rb = relativeBearing;
+		const elev = adjustedElevation;
 
 		// Calculate angle from center to target position
 		// atan2 gives angle in radians, convert to degrees
@@ -94,9 +94,9 @@
 	});
 
 	// Calculate how far off-screen (for intensity of indicator)
-	const intensity = $derived(() => {
-		const rb = Math.abs(relativeBearing());
-		const elev = Math.abs(adjustedElevation());
+	const intensity = $derived.by(() => {
+		const rb = Math.abs(relativeBearing);
+		const elev = Math.abs(adjustedElevation);
 		const hFovHalf = settings.fovHorizontal / 2;
 		const vFovHalf = settings.fovVertical / 2;
 
@@ -116,9 +116,9 @@
 	}
 </script>
 
-{#if direction() !== 'in-view'}
-	<div class="direction-indicator {direction()}" class:intense={intensity() >= 2}>
-		<div class="indicator-content" style:--arrow-angle="{arrowAngle()}deg">
+{#if direction !== 'in-view'}
+	<div class="direction-indicator {direction}" class:intense={intensity >= 2}>
+		<div class="indicator-content" style:--arrow-angle="{arrowAngle}deg">
 			<!-- Use ChevronUp rotated to point in the actual direction -->
 			<ChevronUp size={40} class="arrow rotated-arrow" />
 			<ChevronUp size={40} class="arrow rotated-arrow arrow-2" />

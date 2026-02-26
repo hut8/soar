@@ -23,7 +23,7 @@
 	);
 
 	// Scale crosshair based on distance (closer = larger)
-	const crosshairSize = $derived(() => {
+	const crosshairSize = $derived.by(() => {
 		if (aircraft.distance < 5) return 64;
 		if (aircraft.distance < 15) return 56;
 		if (aircraft.distance < 30) return 48;
@@ -41,8 +41,8 @@
 		<!-- Crosshair reticle -->
 		<svg
 			class="crosshair"
-			width={crosshairSize()}
-			height={crosshairSize()}
+			width={crosshairSize}
+			height={crosshairSize}
 			viewBox="0 0 64 64"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"

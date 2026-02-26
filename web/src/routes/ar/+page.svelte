@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Camera, AlertCircle, X } from '@lucide/svelte';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { ARTracker } from '$lib/services/arTracker';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
@@ -168,10 +168,7 @@
 		if (!userPosition || !deviceOrientation) return;
 
 		const allAircraft = aircraftRegistry.getAllAircraft();
-		const newPositions = new SvelteMap<
-			string,
-			{ aircraft: ARAircraftPosition; screen: ARScreenPosition }
-		>();
+		const activeIds = new SvelteSet<string>();
 
 		for (const aircraft of allAircraft) {
 			const currentFix = aircraft.currentFix as Fix | null;
@@ -194,13 +191,19 @@
 				screenHeight
 			);
 
-			newPositions.set(aircraft.id, {
+			aircraftPositions.set(aircraft.id, {
 				aircraft: arPosition,
 				screen: screenPosition
 			});
+			activeIds.add(aircraft.id);
 		}
 
-		aircraftPositions = newPositions;
+		// Remove aircraft that are no longer in range or filtered out
+		for (const id of aircraftPositions.keys()) {
+			if (!activeIds.has(id)) {
+				aircraftPositions.delete(id);
+			}
+		}
 	}, 100);
 
 	// Handle aircraft marker click
@@ -245,7 +248,7 @@
 	});
 
 	// Check if target aircraft is visible on screen
-	const targetScreenPosition = $derived(() => {
+	const targetScreenPosition = $derived.by(() => {
 		if (!targetAircraftId) return null;
 		const position = aircraftPositions.get(targetAircraftId);
 		return position?.screen ?? null;
@@ -286,14 +289,13 @@
 		window.removeEventListener('resize', updateDimensions);
 	});
 
-	// Watch settings changes
+	// Watch settings changes - re-subscribe and re-project
+	// Settings reads happen inside the throttled functions, so changes
+	// are picked up on the next orientation/data event (~100ms max)
 	$effect(() => {
-		// Re-subscribe when range changes
 		if (userPosition) {
 			updateAircraftSubscription();
 		}
-
-		// Re-project when filter changes
 		updateAircraftProjections();
 	});
 </script>
@@ -385,7 +387,7 @@
 		</button>
 
 		<!-- Direction indicator for off-screen target -->
-		{#if targetAircraft && deviceOrientation && !targetScreenPosition()?.visible}
+		{#if targetAircraft && deviceOrientation && !targetScreenPosition?.visible}
 			<DirectionIndicator
 				{targetAircraft}
 				{deviceOrientation}
