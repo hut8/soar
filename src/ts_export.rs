@@ -20,6 +20,7 @@ mod tests {
         GeofenceExitEvent, GeofenceExitEventsResponse, GeofenceLayer, GeofenceListResponse,
         GeofenceSubscriber, GeofenceWithCounts, UpdateGeofenceRequest,
     };
+    use crate::ingest_config::{DataStream, StreamFormat};
 
     #[test]
     fn export_types() {
@@ -64,5 +65,9 @@ mod tests {
         GeofenceDetailResponse::export(&cfg).expect("Failed to export GeofenceDetailResponse type");
         GeofenceExitEventsResponse::export(&cfg)
             .expect("Failed to export GeofenceExitEventsResponse type");
+
+        // Data stream types
+        DataStream::export(&cfg).expect("Failed to export DataStream type");
+        StreamFormat::export(&cfg).expect("Failed to export StreamFormat type");
     }
 }

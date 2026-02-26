@@ -8,6 +8,7 @@ pub mod auth;
 pub mod club_tow_fees;
 pub mod clubs;
 pub mod coverage;
+pub mod data_streams;
 pub mod fixes;
 pub mod flights;
 pub mod geocoding;

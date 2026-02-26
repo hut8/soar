@@ -1,28 +1,12 @@
 use anyhow::{Context, Result};
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
-use soar::beast::{BeastClient, BeastClientConfig};
 use soar::connection_status::ConnectionStatusPublisher;
+use soar::ingest_config::{IngestConfigFile, ingest_config_path};
 use soar::instance_lock::InstanceLock;
-use soar::sbs::{SbsClient, SbsClientConfig};
+use soar::stream_manager::{SharedResources, StreamManager};
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
-
-/// Parse a "host:port" string into (hostname, port)
-fn parse_server_address(addr: &str) -> Result<(String, u16)> {
-    let parts: Vec<&str> = addr.split(':').collect();
-    if parts.len() != 2 {
-        return Err(anyhow::anyhow!(
-            "Invalid server address '{}' - expected format 'host:port'",
-            addr
-        ));
-    }
-    let host = parts[0].to_string();
-    let port = parts[1]
-        .parse::<u16>()
-        .context(format!("Invalid port in '{}'", addr))?;
-    Ok((host, port))
-}
 
 /// Unified health state for the consolidated ingest service
 /// Tracks health of OGN (APRS), Beast, and SBS connections
@@ -45,37 +29,22 @@ pub struct IngestHealth {
 
 /// Configuration for the unified ingest service
 pub struct IngestConfig {
-    // OGN parameters
-    pub ogn_server: Option<String>,
-    pub ogn_port: Option<u16>,
-    pub ogn_callsign: Option<String>,
-    pub ogn_filter: Option<String>,
-    // ADS-B parameters
-    pub beast_servers: Vec<String>,
-    pub sbs_servers: Vec<String>,
-    // Common parameters
-    pub retry_delay: u64,
+    /// Optional explicit path to the config file (overrides default resolution)
+    pub config_path: Option<PathBuf>,
 }
 
 pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
-    let IngestConfig {
-        ogn_server,
-        ogn_port,
-        ogn_callsign,
-        ogn_filter,
-        beast_servers,
-        sbs_servers,
-        retry_delay,
-    } = config;
-    // Validate that at least one source is specified
-    let ogn_enabled = ogn_server.is_some();
-    let beast_enabled = !beast_servers.is_empty();
-    let sbs_enabled = !sbs_servers.is_empty();
+    // Resolve config file path
+    let config_path = config.config_path.unwrap_or_else(ingest_config_path);
 
-    if !ogn_enabled && !beast_enabled && !sbs_enabled {
-        return Err(anyhow::anyhow!(
-            "No sources specified - use --ogn-server, --beast, or --sbs to specify at least one source"
-        ));
+    info!("Loading ingest config from {:?}", config_path);
+
+    let ingest_config = IngestConfigFile::load(&config_path)
+        .with_context(|| format!("Failed to load ingest config from {:?}", config_path))?;
+
+    let enabled_count = ingest_config.streams.iter().filter(|s| s.enabled).count();
+    if enabled_count == 0 {
+        warn!("No enabled streams in config file {:?}", config_path);
     }
 
     // Determine environment
@@ -89,18 +58,15 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         socket_path
     );
 
-    if ogn_enabled {
-        info!(
-            "  OGN source enabled: {}:{}",
-            ogn_server.as_ref().unwrap(),
-            ogn_port.unwrap_or(14580)
-        );
-    }
-    if beast_enabled {
-        info!("  Beast sources enabled: {:?}", beast_servers);
-    }
-    if sbs_enabled {
-        info!("  SBS sources enabled: {:?}", sbs_servers);
+    for stream in &ingest_config.streams {
+        if stream.enabled {
+            info!(
+                "  {} ({}) -> {}:{}",
+                stream.name, stream.format, stream.host, stream.port
+            );
+        } else {
+            info!("  {} (disabled)", stream.name);
+        }
     }
 
     info!(
@@ -150,12 +116,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     info!("Instance lock acquired for {}", lock_name);
 
     // Create a single unified persistent queue for all sources
-    // Messages are stored as pre-serialized protobuf Envelopes containing:
-    // - source type (OGN, Beast, SBS)
-    // - timestamp (captured at receive time)
-    // - raw payload data
-    // Queue directory is environment-aware: /var/lib/soar/queues in prod/staging,
-    // ~/.local/share/soar/queues in development (XDG spec)
     let queue_dir = soar::queue_dir();
     std::fs::create_dir_all(&queue_dir)
         .with_context(|| format!("Failed to create queue directory: {:?}", queue_dir))?;
@@ -173,7 +133,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     info!("Created unified ingest queue at {:?}", queue_dir);
 
     // Create shared counters for stats tracking (aggregate across all sources)
-    let stats_frames_received = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_messages_sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_bytes_sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let stats_send_time_total_ms = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -221,17 +180,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         let aprs_health_for_status = aprs_health_shared.clone();
         let beast_health_for_status = beast_health_shared.clone();
         let sbs_health_for_status = sbs_health_shared.clone();
-        let ogn_endpoint = if ogn_enabled {
-            Some(format!(
-                "{}:{}",
-                ogn_server.as_ref().unwrap(),
-                ogn_port.unwrap_or(14580)
-            ))
-        } else {
-            None
-        };
-        let beast_endpoints: Vec<String> = beast_servers.clone();
-        let sbs_endpoints: Vec<String> = sbs_servers.clone();
 
         tokio::spawn(async move {
             let mut last_ogn_connected = false;
@@ -263,24 +211,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
                 // Update OGN status if changed
                 if ogn_connected != last_ogn_connected {
-                    publisher
-                        .set_ogn_status(ogn_connected, ogn_endpoint.clone())
-                        .await;
+                    publisher.set_ogn_status(ogn_connected, None).await;
                     last_ogn_connected = ogn_connected;
                 }
 
                 // Update ADS-B status if changed
                 if adsb_connected != last_adsb_connected {
-                    let endpoints: Vec<String> = if adsb_connected {
-                        beast_endpoints
-                            .iter()
-                            .chain(sbs_endpoints.iter())
-                            .cloned()
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-                    publisher.set_adsb_status(adsb_connected, endpoints).await;
+                    publisher.set_adsb_status(adsb_connected, Vec::new()).await;
                     last_adsb_connected = adsb_connected;
                 }
             }
@@ -288,8 +225,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     }
 
     // Create a single socket client for sending to soar-run
-    // The source type is already encoded in each envelope, so we don't need per-source clients
-    // We use Ogn as a dummy source since send_serialized() doesn't use it
     let mut socket_client = match soar::socket_client::SocketClient::connect(
         &socket_path,
         soar::protocol::IngestSource::Ogn, // Dummy - not used with send_serialized
@@ -315,12 +250,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         health.socket_connected = socket_client.is_connected();
     }
 
-    // Queue starts in Disconnected state and auto-connects on first recv().
-    // This ensures all messages are persisted to disk until a consumer
-    // is actually ready to process them, preventing message loss on restart.
-
     // Spawn unified publisher task: reads from queue → sends to socket
-    // Messages are pre-serialized protobuf Envelopes containing source type and timestamp
     {
         let queue_for_publisher = queue.clone();
         let stats_sent_clone = stats_messages_sent.clone();
@@ -389,9 +319,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                         }
                     }
                     Err(e) => {
-                        // Don't die on queue errors - they may be transient (e.g., race
-                        // between overflow writes and drain reads, corrupted segment that
-                        // gets cleaned up). Log and retry after a delay.
                         error!(error = %e, "Failed to receive from queue (will retry)");
                         metrics::counter!("ingest.queue_recv_error_total").increment(1);
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -401,9 +328,35 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         });
     }
 
+    // Create shared resources for the stream manager
+    let shared_resources = Arc::new(SharedResources {
+        queue: queue.clone(),
+        aprs_health: aprs_health_shared.clone(),
+        beast_health: beast_health_shared.clone(),
+        sbs_health: sbs_health_shared.clone(),
+        stats_ogn_received: stats_ogn_received.clone(),
+        stats_beast_received: stats_beast_received.clone(),
+        stats_sbs_received: stats_sbs_received.clone(),
+    });
+
+    // Create the stream manager and apply initial config
+    let manager = Arc::new(tokio::sync::Mutex::new(StreamManager::new(
+        shared_resources,
+        ingest_config.retry_delay,
+    )));
+
+    {
+        let mut mgr = manager.lock().await;
+        mgr.apply_config(&ingest_config);
+        info!("Started {} stream(s) from config", mgr.running_count());
+    }
+
+    // Spawn config file watcher for hot-reload
+    let _watcher_handle =
+        soar::stream_manager::spawn_config_watcher(config_path.clone(), manager.clone());
+
     // Spawn periodic stats reporting task
     let queue_for_stats = queue.clone();
-    let stats_frames_rx = stats_frames_received.clone();
     let stats_msgs_sent = stats_messages_sent.clone();
     let stats_bytes = stats_bytes_sent.clone();
     let stats_send_time = stats_send_time_total_ms.clone();
@@ -414,10 +367,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let aprs_health_for_stats = aprs_health_shared.clone();
     let beast_health_for_stats = beast_health_shared.clone();
     let sbs_health_for_stats = sbs_health_shared.clone();
-    let ogn_enabled_for_stats = ogn_enabled;
-    let beast_enabled_for_stats = beast_enabled;
-    let sbs_enabled_for_stats = sbs_enabled;
-
     tokio::spawn(async move {
         const STATS_INTERVAL_SECS: u64 = 30;
 
@@ -435,7 +384,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             last_stats_time = std::time::Instant::now();
 
             // Get and reset counters atomically
-            let total_frames = stats_frames_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
             let sent_count = stats_msgs_sent.swap(0, std::sync::atomic::Ordering::Relaxed);
             let bytes_sent = stats_bytes.swap(0, std::sync::atomic::Ordering::Relaxed);
             let total_send_time = stats_send_time.swap(0, std::sync::atomic::Ordering::Relaxed);
@@ -446,6 +394,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             let sbs_frames = stats_sbs_rx.swap(0, std::sync::atomic::Ordering::Relaxed);
 
             // Calculate rates from count / actual elapsed time
+            let total_frames = ogn_frames + beast_frames + sbs_frames;
             let incoming_per_sec = if elapsed > 0.0 {
                 total_frames as f64 / elapsed
             } else {
@@ -493,10 +442,8 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             }
 
             // Format sent stats (rate + avg send time combined)
-            // total_send_time is in microseconds
             let sent_stats = if sent_count > 0 {
                 let avg_us = total_send_time as f64 / sent_count as f64;
-                // Format duration: use µs if < 1000µs, otherwise ms
                 let avg_str = if avg_us < 1000.0 {
                     format!("{:.1}µs", avg_us)
                 } else {
@@ -526,7 +473,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 .set(queue_depth.disk_file_bytes as f64);
             metrics::gauge!("ingest.queue_segment_count").set(queue_depth.segment_count as f64);
 
-            // Calculate estimated drain time from actual byte throughput.
+            // Calculate estimated drain time from actual byte throughput
             let drain_time_estimate = if queue_depth.disk_data_bytes > 0 {
                 if bytes_sent_per_sec < 1.0 {
                     "∞".to_string()
@@ -544,7 +491,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 "done".to_string()
             };
 
-            // Format queue info with data size (not file size) and drain ETA
+            // Format queue info
             let queue_info = if queue_depth.disk_data_bytes == 0 && queue_depth.disk_file_bytes == 0
             {
                 format!(
@@ -557,7 +504,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                     queue_depth.memory, queue_depth.disk_data_bytes, drain_time_estimate
                 )
             } else {
-                // Show both data and file size when different (indicates need for compaction)
                 format!(
                     "mem:{} data:{}B file:{}B drain_eta={}",
                     queue_depth.memory,
@@ -567,23 +513,33 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 )
             };
 
-            // Build read stats section for enabled sources
+            // Build read stats section aggregated by format type
+            // Health objects are shared per format, so we report one entry per format
             let mut read_parts = Vec::new();
-            if ogn_enabled_for_stats {
+            if ogn_frames > 0 || {
+                let h = aprs_health_for_stats.read().await;
+                h.aprs_connected
+            } {
                 let health = aprs_health_for_stats.read().await;
                 read_parts.push(format!(
-                    "ogn={{records:{} rate:{:.1}/s}}",
+                    "aprs={{records:{} rate:{:.1}/s}}",
                     health.total_messages, ogn_per_sec
                 ));
             }
-            if beast_enabled_for_stats {
+            if beast_frames > 0 || {
+                let h = beast_health_for_stats.read().await;
+                h.beast_connected
+            } {
                 let health = beast_health_for_stats.read().await;
                 read_parts.push(format!(
                     "beast={{records:{} rate:{:.1}/s}}",
                     health.total_messages, beast_per_sec
                 ));
             }
-            if sbs_enabled_for_stats {
+            if sbs_frames > 0 || {
+                let h = sbs_health_for_stats.read().await;
+                h.beast_connected
+            } {
                 let health = sbs_health_for_stats.read().await;
                 read_parts.push(format!(
                     "sbs={{records:{} rate:{:.1}/s}}",
@@ -605,131 +561,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
             );
         }
     });
-
-    // Spawn OGN client if enabled
-    if ogn_enabled {
-        let ogn_server = ogn_server.unwrap();
-        let ogn_callsign = ogn_callsign.unwrap_or_else(|| "N0CALL".to_string());
-        let ogn_port_val = ogn_port.unwrap_or(14580);
-
-        // Automatically switch to port 10152 for full feed if no filter specified
-        let ogn_port_final = if ogn_filter.is_none() && ogn_port_val == 14580 {
-            info!("No OGN filter specified, switching from port 14580 to 10152 for full feed");
-            10152
-        } else {
-            ogn_port_val
-        };
-
-        info!("Starting OGN client for {}:{}", ogn_server, ogn_port_final);
-
-        let config = AprsClientConfigBuilder::new()
-            .server(ogn_server)
-            .port(ogn_port_final)
-            .callsign(ogn_callsign)
-            .filter(ogn_filter)
-            .retry_delay_seconds(retry_delay)
-            .build();
-
-        let queue_for_ogn = queue.clone();
-        let aprs_health = aprs_health_shared.clone();
-        let stats_rx = stats_ogn_received.clone();
-
-        tokio::spawn(async move {
-            let mut client = AprsClient::new(config);
-
-            // The AprsClient creates protobuf envelopes with timestamps captured at receive time
-            loop {
-                match client
-                    .start(
-                        queue_for_ogn.clone(),
-                        aprs_health.clone(),
-                        Some(stats_rx.clone()),
-                    )
-                    .await
-                {
-                    Ok(_) => {
-                        info!("OGN client stopped normally");
-                        break;
-                    }
-                    Err(e) => {
-                        error!(error = %e, "OGN client failed");
-                        // Will retry via internal retry logic
-                    }
-                }
-            }
-        });
-    }
-
-    // Spawn Beast clients if enabled
-    for beast_addr in &beast_servers {
-        let (server, port) = parse_server_address(beast_addr)?;
-        let config = BeastClientConfig {
-            server: server.clone(),
-            port,
-            retry_delay_seconds: retry_delay,
-            max_retry_delay_seconds: 60,
-        };
-
-        let queue_for_beast = queue.clone();
-        let stats_rx = stats_beast_received.clone();
-        let beast_health = beast_health_shared.clone();
-
-        info!("Spawning Beast client for {}:{}", server, port);
-
-        tokio::spawn(async move {
-            let mut client = BeastClient::new(config);
-
-            // The Beast client creates protobuf envelopes with timestamps captured at receive time
-            match client
-                .start(queue_for_beast, beast_health, Some(stats_rx))
-                .await
-            {
-                Ok(_) => {
-                    info!("Beast client {}:{} stopped normally", server, port);
-                }
-                Err(e) => error!(error = %e, server = %server, port = %port, "Beast client failed"),
-            }
-        });
-    }
-
-    // Spawn SBS clients if enabled
-    for sbs_addr in &sbs_servers {
-        let (server, port) = parse_server_address(sbs_addr)?;
-        let config = SbsClientConfig {
-            server: server.clone(),
-            port,
-            retry_delay_seconds: retry_delay,
-            max_retry_delay_seconds: 60,
-        };
-
-        let queue_for_sbs = queue.clone();
-        let stats_rx = stats_sbs_received.clone();
-        let sbs_health = sbs_health_shared.clone();
-
-        info!("Spawning SBS client for {}:{}", server, port);
-
-        tokio::spawn(async move {
-            let mut client = SbsClient::new(config);
-
-            // The SBS client creates protobuf envelopes with timestamps captured at receive time
-            match client
-                .start(queue_for_sbs, sbs_health, Some(stats_rx))
-                .await
-            {
-                Ok(_) => {
-                    info!("SBS client {}:{} stopped normally", server, port);
-                }
-                Err(e) => error!(error = %e, server = %server, port = %port, "SBS client failed"),
-            }
-        });
-    }
-
-    info!(
-        "Started {} OGN client(s), {} Beast client(s), and {} SBS client(s)",
-        if ogn_enabled { 1 } else { 0 },
-        beast_servers.len(),
-        sbs_servers.len()
-    );
 
     // Keep running until process is terminated
     loop {
