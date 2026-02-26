@@ -13,7 +13,7 @@ use crate::actions::{
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::fixes::Fix;
-use crate::fixes_repo::FixesRepository;
+use crate::fixes_repo::{FixOrder, FixesRepository};
 use crate::flights::{Flight, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::geometry::rdp::simplify_path_indices;
@@ -408,6 +408,7 @@ pub async fn get_flight_fixes(
             start_time,
             end_time,
             None, // No limit
+            FixOrder::Ascending,
         )
         .await
     {
@@ -461,6 +462,7 @@ pub async fn get_flight_path(
             start_time,
             end_time,
             None,
+            FixOrder::Ascending,
         )
         .await
     {
@@ -549,6 +551,7 @@ pub async fn get_flight_spline_path(
             start_time,
             end_time,
             None,
+            FixOrder::Ascending,
         )
         .await
     {
@@ -953,12 +956,13 @@ pub async fn get_flight_gaps(
     let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
     let end_time = flight.landing_time.unwrap_or_else(chrono::Utc::now);
 
-    let mut fixes = match fixes_repo
+    let fixes = match fixes_repo
         .get_fixes_for_aircraft_with_time_range(
             &flight.aircraft_id.unwrap_or(Uuid::nil()),
             start_time,
             end_time,
             None,
+            FixOrder::Ascending,
         )
         .await
     {
@@ -972,9 +976,6 @@ pub async fn get_flight_gaps(
             .into_response();
         }
     };
-
-    // Reverse to get chronological order (earliest first)
-    fixes.reverse();
 
     const GAP_THRESHOLD_SECONDS: i64 = 5 * 60; // 5 minutes
     const LOOKBACK_COUNT: usize = 10;

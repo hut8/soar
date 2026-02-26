@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::Fix;
 use crate::aircraft::{AddressType, Aircraft};
+use crate::fixes_repo::FixOrder;
 use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spline_path};
 
 /// Flight state enum representing the current status of a flight
@@ -434,6 +435,7 @@ impl Flight {
                     start_time,
                     end_time,
                     None,
+                    FixOrder::Ascending,
                 )
                 .await?
         };
@@ -544,6 +546,7 @@ impl Flight {
                     start_time,
                     end_time,
                     None,
+                    FixOrder::Ascending,
                 )
                 .await?
         };
@@ -595,6 +598,7 @@ impl Flight {
                 start_time,
                 end_time,
                 None,
+                FixOrder::Ascending,
             )
             .await?;
 
@@ -899,6 +903,7 @@ impl Flight {
                 start_time,
                 end_time,
                 None,
+                FixOrder::Ascending,
             )
             .await?;
 

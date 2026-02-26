@@ -1,5 +1,5 @@
 use crate::aircraft::Aircraft;
-use crate::fixes_repo::FixesRepository;
+use crate::fixes_repo::{FixOrder, FixesRepository};
 use crate::magnetic::MagneticService;
 use crate::runways_repo::RunwaysRepository;
 use chrono::{DateTime, Utc};
@@ -95,7 +95,13 @@ pub(crate) async fn determine_runway_identifier(
     }
 
     let fixes = match fixes_repo
-        .get_fixes_for_aircraft_with_time_range(&device_id, start_time, end_time, None)
+        .get_fixes_for_aircraft_with_time_range(
+            &device_id,
+            start_time,
+            end_time,
+            None,
+            FixOrder::Ascending,
+        )
         .await
     {
         Ok(f) if !f.is_empty() => {
