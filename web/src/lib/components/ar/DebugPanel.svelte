@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { ARDeviceOrientation, ARUserPosition } from '$lib/ar/types';
 
-	let { position, orientation, aircraftCount } = $props<{
+	let { position, orientation, aircraftCount, visibleCount } = $props<{
 		position: ARUserPosition | null;
 		orientation: ARDeviceOrientation | null;
 		aircraftCount: number;
+		visibleCount: number;
 	}>();
 </script>
 
@@ -41,7 +42,7 @@
 
 	<div class="debug-section">
 		<div class="debug-label">Aircraft:</div>
-		<div class="debug-value">{aircraftCount} visible</div>
+		<div class="debug-value">{visibleCount} on screen / {aircraftCount} in range</div>
 	</div>
 </div>
 

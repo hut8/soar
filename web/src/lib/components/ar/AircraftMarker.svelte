@@ -25,9 +25,9 @@
 	// Scale crosshair based on distance (closer = larger)
 	const crosshairSize = $derived(() => {
 		if (aircraft.distance < 5) return 64;
-		if (aircraft.distance < 15) return 52;
-		if (aircraft.distance < 30) return 44;
-		return 36;
+		if (aircraft.distance < 15) return 56;
+		if (aircraft.distance < 30) return 48;
+		return 44;
 	});
 </script>
 
@@ -122,12 +122,13 @@
 	}
 
 	.crosshair {
-		filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 1px rgba(0, 0, 0, 1));
+		filter: drop-shadow(0 0 6px rgba(0, 0, 0, 1)) drop-shadow(0 0 2px rgba(0, 0, 0, 1))
+			drop-shadow(0 0 12px rgba(0, 0, 0, 0.6));
 		animation: crosshair-pulse 2s ease-in-out infinite;
 	}
 
 	.marker-info {
-		background: rgba(0, 0, 0, 0.8);
+		background: rgba(0, 0, 0, 0.85);
 		backdrop-filter: blur(8px);
 		color: white;
 		padding: 0.25rem 0.5rem;
@@ -135,8 +136,11 @@
 		font-size: 0.6875rem;
 		line-height: 1.2;
 		text-align: center;
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		border: 1px solid rgba(255, 255, 255, 0.3);
 		white-space: nowrap;
+		box-shadow:
+			0 2px 8px rgba(0, 0, 0, 0.8),
+			0 0 4px rgba(0, 0, 0, 0.6);
 	}
 
 	.marker-registration {

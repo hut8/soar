@@ -366,6 +366,7 @@
 				position={userPosition}
 				orientation={deviceOrientation}
 				aircraftCount={aircraftPositions.size}
+				visibleCount={[...aircraftPositions.values()].filter((p) => p.screen.visible).length}
 			/>
 		{/if}
 
@@ -413,6 +414,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		z-index: 1;
 	}
 
 	.aircraft-layer {
@@ -422,6 +424,7 @@
 		width: 100%;
 		height: 100%;
 		pointer-events: none;
+		z-index: 5;
 	}
 
 	.aircraft-layer :global(button) {
