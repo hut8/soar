@@ -4,7 +4,6 @@
 	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
-	const operationsPath = resolve('/operations');
 	const livePath = resolve('/live');
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
@@ -95,25 +94,6 @@
 						</div>
 						<div class="space-y-2">
 							<h2 class="text-2xl font-bold text-white drop-shadow-lg">Clubs</h2>
-						</div>
-					</div>
-				</a>
-
-				<!-- Operations Button -->
-				<a
-					href={operationsPath}
-					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
-				>
-					<div class="space-y-6 text-center">
-						<div class="flex justify-center">
-							<div
-								class="rounded-full bg-secondary-500/20 p-4 transition-colors group-hover:bg-secondary-500/30"
-							>
-								<Radar size={48} class="text-white drop-shadow-lg" />
-							</div>
-						</div>
-						<div class="space-y-2">
-							<h2 class="text-2xl font-bold text-white drop-shadow-lg">Operations</h2>
 						</div>
 					</div>
 				</a>

@@ -14,7 +14,7 @@
 		BACKEND_SHORT_LABELS,
 		type BackendMode
 	} from '$lib/stores/backend';
-	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
+	import { websocketStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev, browser } from '$app/environment';
@@ -47,7 +47,6 @@
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
-	const operationsPath = resolve('/operations');
 	const livePath = resolve('/live');
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
@@ -61,16 +60,17 @@
 	const arPath = resolve('/ar');
 
 	let { children } = $props();
-	let showUserMenu = $state(false);
-	let showMobileMenu = $state(false);
-	let showDesktopMenu = $state(false);
-	let showBackendDropdown = $state(false);
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
 		$auth.user?.clubId ? resolve(`/clubs/${$auth.user.clubId}/operations`) : ''
 	);
 	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.clubId);
+
+	let showUserMenu = $state(false);
+	let showMobileMenu = $state(false);
+	let showDesktopMenu = $state(false);
+	let showBackendDropdown = $state(false);
 
 	// Invert favicon colors for staging environment
 	function invertFavicon() {
@@ -232,7 +232,7 @@
 								class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
 								title="{label} - WebSocket connected{delay !== null
 									? `, feed delay: ${formatDelay(delay)}`
-									: ''}{$debugStatus.operationsPageActive ? ', Operations page active' : ''}"
+									: ''}"
 							>
 								<Wifi size={16} />
 								<span class="text-xs font-medium">{label}</span>
@@ -366,9 +366,6 @@
 								{/if}
 							</div>
 
-							<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
-								<Radar /> Operations
-							</a>
 							<!-- 3D Globe link temporarily disabled
 						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
 							<Globe /> 3D Globe
@@ -526,13 +523,6 @@
 						onclick={() => (showMobileMenu = false)}
 					>
 						<Users size={16} /> Clubs
-					</a>
-					<a
-						href={operationsPath}
-						class="btn w-full justify-start preset-filled-primary-500"
-						onclick={() => (showMobileMenu = false)}
-					>
-						<Radar size={16} /> Operations
 					</a>
 					<a
 						href={arPath}

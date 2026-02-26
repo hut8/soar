@@ -100,7 +100,7 @@ This uses OpenAIP's `updatedAfter` parameter to minimize data transfer and proce
 
 Once airspace data is imported:
 
-1. Navigate to the Operations page (`/operations`)
+1. Navigate to the Live Map page (`/live`)
 2. Airspaces will automatically load when you zoom in to a specific area
 3. **Visibility Threshold**: Airspaces only appear when the map viewport is less than 100,000 square miles
 4. **Color Coding**:

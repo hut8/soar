@@ -12,10 +12,10 @@
 
 	let { aircraft }: { aircraft: Aircraft } = $props();
 
-	// Build the operations map URL with location parameters from latest fix
+	// Build the live map URL with location parameters from latest fix
 	let mapUrl = $derived(
 		aircraft.latitude && aircraft.longitude
-			? `/operations?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
+			? `/live?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
 			: null
 	);
 
