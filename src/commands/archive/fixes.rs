@@ -7,15 +7,15 @@ use tracing::info;
 use soar::fixes::Fix;
 use soar::schema::fixes;
 
-use super::archiver::{Archivable, PgPool, finalize_pending_detachment, write_records_to_file};
+use super::archiver::{Archivable, PgPool, write_records_to_file};
 
 impl Archivable for Fix {
     fn table_name() -> &'static str {
         "fixes"
     }
 
-    fn is_partitioned() -> bool {
-        true // fixes table is partitioned by received_at date
+    fn is_hypertable() -> bool {
+        true // fixes is a TimescaleDB hypertable partitioned by received_at
     }
 
     async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
@@ -113,53 +113,26 @@ impl Archivable for Fix {
     async fn delete_for_day(
         pool: &PgPool,
         day_start: chrono::DateTime<Utc>,
-        _day_end: chrono::DateTime<Utc>,
+        day_end: chrono::DateTime<Utc>,
     ) -> Result<()> {
-        // Calculate partition name from day_start
-        // Partitions are named like fixes_p20251114 for 2025-11-14
-        let partition_date = day_start.format("%Y%m%d");
-        let partition_name = format!("fixes_p{}", partition_date);
-
-        // First, check for and finalize any pending detachment from a previous interrupted operation
-        // This handles the edge case where a previous DETACH PARTITION CONCURRENTLY was interrupted
-        finalize_pending_detachment(pool, "fixes", &partition_name).await?;
-
+        // Use TimescaleDB drop_chunks to remove the chunk(s) covering this day.
+        // drop_chunks handles compressed chunks automatically (decompresses then drops).
+        // We use older_than = day_end and newer_than = day_start to target exactly one day.
         let pool = pool.clone();
-        let partition_name_clone = partition_name.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             use diesel::connection::SimpleConnection;
 
-            // Drop the partition directly - much faster than DELETE
-            // This works because:
-            // 1. Each partition contains exactly one day's data
-            // 2. Foreign keys are enforced at the partition level
-            // 3. We've already archived the data to disk
-
-            // Detach partition using CONCURRENTLY for non-blocking operation
-            // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
-            // This command blocks until detachment completes (uses two-transaction process)
-            let detach_sql = format!(
-                "ALTER TABLE fixes DETACH PARTITION {} CONCURRENTLY",
-                partition_name_clone
+            let drop_sql = format!(
+                "SELECT drop_chunks('fixes', older_than => '{}'::timestamptz, newer_than => '{}'::timestamptz)",
+                day_end.format("%Y-%m-%d %H:%M:%S%z"),
+                day_start.format("%Y-%m-%d %H:%M:%S%z"),
             );
-            conn.batch_execute(&detach_sql).context(format!(
-                "Failed to detach partition {}",
-                partition_name_clone
-            ))?;
-            info!(
-                "Detached partition {} from fixes table (CONCURRENTLY)",
-                partition_name_clone
-            );
-
-            // Drop the detached partition table
-            // Safe to do immediately because DETACH CONCURRENTLY waits for completion
-            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name_clone);
             conn.batch_execute(&drop_sql)
-                .context(format!("Failed to drop partition {}", partition_name_clone))?;
+                .context("Failed to drop chunks for fixes")?;
             info!(
-                "Dropped partition {} for day starting {}",
-                partition_name_clone, day_start
+                "Dropped TimescaleDB chunks for fixes between {} and {}",
+                day_start, day_end
             );
 
             Ok(())
