@@ -324,7 +324,7 @@ impl Flight {
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: fix.received_at,
-            callsign: None,
+            callsign: fix.flight_number.clone(),
             created_at: fix.received_at,
             updated_at: now,
         }
@@ -381,7 +381,7 @@ impl Flight {
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: fix.received_at,
-            callsign: None,
+            callsign: fix.flight_number.clone(),
             created_at: fix.received_at,
             updated_at: now,
         }
@@ -390,6 +390,77 @@ impl Flight {
     /// Check if the flight is still in progress (no landing time)
     pub fn is_in_progress(&self) -> bool {
         self.landing_time.is_none()
+    }
+
+    #[cfg(test)]
+    /// Helper for tests: create a minimal Aircraft
+    fn test_aircraft() -> Aircraft {
+        Aircraft {
+            id: Some(Uuid::new_v4()),
+            address_type: AddressType::Icao,
+            address: 0xABCDEF,
+            icao_address: Some(0xABCDEF),
+            flarm_address: None,
+            ogn_address: None,
+            other_address: None,
+            aircraft_model: String::new(),
+            registration: None,
+            competition_number: String::new(),
+            tracked: true,
+            identified: true,
+            frequency_mhz: None,
+            pilot_name: None,
+            home_base_airport_ident: None,
+            last_fix_at: None,
+            club_id: None,
+            icao_model_code: None,
+            adsb_emitter_category: None,
+            tracker_device_type: None,
+            country_code: None,
+            owner_operator: None,
+            aircraft_category: None,
+            engine_count: None,
+            engine_type: None,
+            faa_pia: None,
+            faa_ladd: None,
+            year: None,
+            is_military: None,
+            from_ogn_ddb: None,
+            from_adsbx_ddb: None,
+            created_at: None,
+            updated_at: None,
+            latitude: None,
+            longitude: None,
+            current_fix: None,
+        }
+    }
+
+    #[cfg(test)]
+    /// Helper for tests: create a minimal Fix with given flight_number
+    fn test_fix(flight_number: Option<&str>) -> Fix {
+        Fix {
+            id: Uuid::new_v4(),
+            source: "TEST".to_string(),
+            latitude: 42.0,
+            longitude: -122.0,
+            altitude_msl_feet: Some(5000),
+            altitude_agl_feet: None,
+            flight_number: flight_number.map(|s| s.to_string()),
+            squawk: None,
+            ground_speed_knots: Some(150.0),
+            track_degrees: None,
+            climb_fpm: None,
+            turn_rate_rot: None,
+            source_metadata: None,
+            flight_id: None,
+            aircraft_id: Uuid::new_v4(),
+            received_at: Utc::now(),
+            is_active: true,
+            receiver_id: None,
+            raw_message_id: Uuid::new_v4(),
+            altitude_agl_valid: false,
+            time_gap_seconds: None,
+        }
     }
 
     /// Get flight duration if landed, otherwise duration from takeoff to now
@@ -1176,5 +1247,44 @@ impl From<FlightModel> for Flight {
             created_at: model.created_at,
             updated_at: model.updated_at,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_airborne_flight_copies_callsign_from_fix() {
+        let fix = Flight::test_fix(Some("VOI5584"));
+        let device = Flight::test_aircraft();
+        let flight_id = Uuid::new_v4();
+
+        let flight = Flight::new_airborne_from_fix_with_id(&fix, &device, flight_id);
+
+        assert_eq!(flight.callsign, Some("VOI5584".to_string()));
+    }
+
+    #[test]
+    fn test_takeoff_flight_copies_callsign_from_fix() {
+        let fix = Flight::test_fix(Some("SAS1465"));
+        let device = Flight::test_aircraft();
+        let flight_id = Uuid::new_v4();
+
+        let flight =
+            Flight::new_with_takeoff_from_fix_with_id(&fix, &device, flight_id, fix.received_at);
+
+        assert_eq!(flight.callsign, Some("SAS1465".to_string()));
+    }
+
+    #[test]
+    fn test_flight_callsign_none_when_fix_has_no_callsign() {
+        let fix = Flight::test_fix(None);
+        let device = Flight::test_aircraft();
+        let flight_id = Uuid::new_v4();
+
+        let flight = Flight::new_airborne_from_fix_with_id(&fix, &device, flight_id);
+
+        assert_eq!(flight.callsign, None);
     }
 }
