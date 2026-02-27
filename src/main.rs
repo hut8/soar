@@ -475,7 +475,7 @@ async fn setup_diesel_database(
     // their own pool, but periodic jobs only use a handful of connections in practice
     // since r2d2 creates connections on demand. The 75 limit mainly matters for
     // the `run` command which has high concurrency:
-    // - 50 OGN workers + 50 Beast workers (batched, so ~2 batcher tasks)
+    // - 50 OGN workers + 50 Beast workers + 50 SBS workers (batched, so ~3 batcher tasks)
     // - Flight lifecycle (takeoffs, landings, timeouts, bounding box calculations)
     // - Web API handlers, receiver updates, etc.
     let manager = ConnectionManager::<PgConnection>::new(database_url);
