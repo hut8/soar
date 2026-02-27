@@ -113,6 +113,24 @@ pub async fn create_charge(
         }
     };
 
+    // Verify target user belongs to this club
+    let users_repo = crate::users_repo::UsersRepository::new(state.pool.clone());
+    match users_repo.get_by_id(target_user_id).await {
+        Ok(Some(user)) if user.club_id == Some(club_id) => {}
+        Ok(Some(_)) => {
+            return json_error(StatusCode::BAD_REQUEST, "User is not a member of this club")
+                .into_response();
+        }
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "User not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to verify user membership");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify user")
+                .into_response();
+        }
+    }
+
     let payment_type = match request.payment_type.as_str() {
         "tow_charge" => PaymentType::TowCharge,
         "membership_dues" => PaymentType::MembershipDues,
@@ -399,7 +417,17 @@ pub async fn create_checkout(
         error!(error = %e, "Failed to update payment status");
     }
 
-    let checkout_url = session.url.unwrap_or_default();
+    let checkout_url = match session.url {
+        Some(url) => url,
+        None => {
+            error!(payment_id = %payment_id, "Stripe Checkout session missing URL");
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create checkout session",
+            )
+            .into_response();
+        }
+    };
 
     Json(DataResponse {
         data: CheckoutResponse { checkout_url },

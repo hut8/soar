@@ -90,7 +90,17 @@ pub async fn start_onboarding(
         }
         Ok(Some(existing)) => {
             // Onboarding incomplete — generate a new account link
-            let account_id: stripe::AccountId = existing.stripe_account_id.parse().unwrap();
+            let account_id: stripe::AccountId = match existing.stripe_account_id.parse() {
+                Ok(id) => id,
+                Err(e) => {
+                    error!(error = %e, "Invalid Stripe account ID in database");
+                    return json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Invalid Stripe account configuration",
+                    )
+                    .into_response();
+                }
+            };
             match create_account_link(&stripe_config, &account_id).await {
                 Ok(url) => {
                     return Json(DataResponse {
@@ -265,7 +275,17 @@ pub async fn get_dashboard_link(
         }
     };
 
-    let account_id: stripe::AccountId = account.stripe_account_id.parse().unwrap();
+    let account_id: stripe::AccountId = match account.stripe_account_id.parse() {
+        Ok(id) => id,
+        Err(e) => {
+            error!(error = %e, "Invalid Stripe account ID in database");
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid Stripe account configuration",
+            )
+            .into_response();
+        }
+    };
     let base_url =
         std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 

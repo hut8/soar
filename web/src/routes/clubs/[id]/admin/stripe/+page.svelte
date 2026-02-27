@@ -13,19 +13,10 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { ClubView } from '$lib/types/generated/ClubView';
-	import type { DataResponse } from '$lib/types';
-
-	interface StripeConnectStatus {
-		connected: boolean;
-		onboardingComplete: boolean;
-		chargesEnabled: boolean;
-		payoutsEnabled: boolean;
-		detailsSubmitted: boolean;
-		stripeAccountId: string | null;
-	}
+	import type { DataResponse, StripeConnectStatusView } from '$lib/types';
 
 	let club = $state<ClubView | null>(null);
-	let stripeStatus = $state<StripeConnectStatus | null>(null);
+	let stripeStatus = $state<StripeConnectStatusView | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let actionLoading = $state(false);
@@ -51,7 +42,7 @@
 	async function loadStripeStatus() {
 		loading = true;
 		try {
-			const response = await serverCall<DataResponse<StripeConnectStatus>>(
+			const response = await serverCall<DataResponse<StripeConnectStatusView>>(
 				`/clubs/${clubId}/stripe/status`
 			);
 			stripeStatus = response.data;

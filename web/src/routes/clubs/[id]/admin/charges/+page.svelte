@@ -104,7 +104,7 @@
 				method: 'POST',
 				body: JSON.stringify({
 					userId: formUserId,
-					amountCents: Math.round(amount * 100),
+					amountCents: Math.round(parseFloat((amount * 100).toFixed(2))),
 					paymentType: formPaymentType,
 					description: formDescription || null
 				})
