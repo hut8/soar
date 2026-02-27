@@ -726,6 +726,29 @@ async fn main() -> Result<()> {
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
                     before_send: Some(std::sync::Arc::new(|event| {
+                        // Filter out transient database errors (e.g. during PostgreSQL restarts)
+                        const TRANSIENT_PATTERNS: &[&str] = &[
+                            "the database system is shutting down",
+                            "terminating connection due to administrator command",
+                            "server closed the connection unexpectedly",
+                        ];
+
+                        if let Some(ref msg) = event.message
+                            && TRANSIENT_PATTERNS.iter().any(|p| msg.contains(p))
+                        {
+                            warn!(message = %msg, "Filtering transient database error from Sentry");
+                            return None;
+                        }
+
+                        for exc in event.exception.values.iter() {
+                            if let Some(ref val) = exc.value
+                                && TRANSIENT_PATTERNS.iter().any(|p| val.contains(p))
+                            {
+                                warn!(exception = %val, "Filtering transient database error from Sentry");
+                                return None;
+                            }
+                        }
+
                         let now_minute = (SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap_or_default()
