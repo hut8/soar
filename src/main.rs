@@ -466,23 +466,26 @@ async fn setup_diesel_database(
 
     // Create a Diesel connection pool - sized for pgbouncer in front
     // pgbouncer handles actual PostgreSQL connection pooling:
-    // - pgbouncer max_client_conn: 1000
-    // - pgbouncer default_pool_size: 100 (actual PG connections)
+    // - pgbouncer max_client_conn: 1000 (client connections from all processes)
+    // - pgbouncer default_pool_size: 100 (actual PG connections per db/user pair)
     // - pgbouncer max_db_connections: 120
-    // With batched raw_message INSERTs and batched aircraft position UPDATEs,
-    // the per-message DB round-trips are dramatically reduced, so we need fewer
-    // pooled connections. 50 connections is sufficient for:
-    // - 50 OGN workers + 50 Beast workers (but with batching, most DB work
-    //   goes through 2 batcher tasks, not the workers directly)
-    // - Web API handlers, flight lifecycle, receiver updates, etc.
+    // In transaction mode, pgbouncer multiplexes: r2d2 connections are just client
+    // connections to pgbouncer, and actual PG connections are only held during
+    // transactions. Multiple processes (run, web, archive, pull-data) each create
+    // their own pool, but periodic jobs only use a handful of connections in practice
+    // since r2d2 creates connections on demand. The 75 limit mainly matters for
+    // the `run` command which has high concurrency:
+    // - 50 OGN workers + 50 Beast workers (batched, so ~2 batcher tasks)
+    // - Flight lifecycle (takeoffs, landings, timeouts, bounding box calculations)
+    // - Web API handlers, receiver updates, etc.
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
-        .max_size(50)
+        .max_size(75)
         .min_idle(Some(5))
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 50, via pgbouncer)");
+    info!("Successfully created Diesel connection pool (max connections: 75, via pgbouncer)");
 
     // Skip migrations if not requested (staging/production services should use `soar migrate`)
     if !run_migrations {

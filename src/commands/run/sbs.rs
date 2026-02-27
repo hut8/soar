@@ -5,7 +5,7 @@ use soar::aircraft_repo::AircraftRepository;
 use soar::fix_processor::FixProcessor;
 use soar::raw_messages_repo::{NewSbsMessage, RawMessagesRepository};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 /// Process a received SBS (BaseStation) message
@@ -134,7 +134,7 @@ pub(crate) async fn process_sbs_message(
         {
             Ok(aircraft) => aircraft,
             Err(e) => {
-                warn!(
+                error!(
                     "Failed to get/create aircraft for ICAO {:06X}: {}",
                     icao_address, e
                 );
