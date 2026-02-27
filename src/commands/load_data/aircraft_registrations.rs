@@ -113,10 +113,13 @@ pub async fn copy_owners_to_aircraft(
             attempts += 1;
             match diesel::sql_query(query).execute(&mut conn) {
                 Ok(count) => break count,
-                Err(e) if attempts < max_attempts && e.to_string().contains("deadlock") => {
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::SerializationFailure,
+                    ref info,
+                )) if attempts < max_attempts => {
                     warn!(
                         attempt = attempts,
-                        error = %e,
+                        error = %info.message(),
                         "Deadlock detected in copy_owners_to_aircraft, retrying"
                     );
                     std::thread::sleep(std::time::Duration::from_millis(500));
