@@ -308,7 +308,7 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                                 }
                             }
                             Err(e) => {
-                                error!(error = %e, "Failed to send message to socket");
+                                warn!(error = %e, "Failed to send message to socket (will retry)");
                                 metrics::counter!("ingest.socket_send_error_total").increment(1);
 
                                 // DON'T commit - message will be replayed on next recv()
