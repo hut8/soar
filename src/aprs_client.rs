@@ -8,7 +8,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::protocol::{IngestSource, create_serialized_envelope};
 
 // Queue size for raw APRS messages
-const RAW_MESSAGE_QUEUE_SIZE: usize = 200;
+const RAW_MESSAGE_QUEUE_SIZE: usize = 5000;
 
 // AprsClient only publishes raw messages to queue - all parsing happens in the consumer
 
@@ -354,6 +354,12 @@ impl AprsClient {
         let mut last_keepalive = tokio::time::Instant::now();
         let mut last_stats_log = std::time::Instant::now();
 
+        // Track message counts locally to avoid acquiring the health RwLock on every message.
+        // These are flushed to the shared health state periodically (every 10s).
+        let mut local_message_count: u64 = 0;
+        let mut local_interval_messages: u64 = 0;
+        let mut local_interval_start = std::time::Instant::now();
+
         loop {
             line_buffer.clear();
 
@@ -457,40 +463,34 @@ impl AprsClient {
                                             metrics::counter!("aprs.raw_message.queued.aprs_total")
                                                 .increment(1);
 
-                                            {
-                                                let mut health = health_state.write().await;
-                                                health.last_message_time =
-                                                    Some(std::time::Instant::now());
-                                                health.total_messages += 1;
-                                                health.interval_messages += 1;
+                                            // Update local counters (no lock needed)
+                                            local_message_count += 1;
+                                            local_interval_messages += 1;
 
-                                                if health.interval_start.is_none() {
-                                                    health.interval_start =
-                                                        Some(std::time::Instant::now());
-                                                }
-                                            }
-
+                                            // Flush stats to shared health state every 10 seconds
                                             if last_stats_log.elapsed().as_secs() >= 10 {
-                                                let health = health_state.read().await;
-                                                if let Some(interval_start) = health.interval_start
-                                                {
-                                                    let elapsed =
-                                                        interval_start.elapsed().as_secs_f64();
-                                                    if elapsed > 0.0 {
-                                                        let rate = health.interval_messages as f64
-                                                            / elapsed;
-                                                        metrics::gauge!("aprs.message_rate")
-                                                            .set(rate);
-                                                    }
+                                                let elapsed =
+                                                    local_interval_start.elapsed().as_secs_f64();
+                                                if elapsed > 0.0 {
+                                                    let rate =
+                                                        local_interval_messages as f64 / elapsed;
+                                                    metrics::gauge!("aprs.message_rate").set(rate);
                                                 }
-                                                drop(health);
 
                                                 {
                                                     let mut health = health_state.write().await;
-                                                    health.interval_messages = 0;
-                                                    health.interval_start =
+                                                    health.total_messages += local_message_count;
+                                                    health.last_message_time =
                                                         Some(std::time::Instant::now());
+                                                    health.interval_messages =
+                                                        local_interval_messages;
+                                                    health.interval_start =
+                                                        Some(local_interval_start);
                                                 }
+
+                                                local_message_count = 0;
+                                                local_interval_messages = 0;
+                                                local_interval_start = std::time::Instant::now();
                                                 last_stats_log = std::time::Instant::now();
                                             }
                                         }
@@ -533,6 +533,13 @@ impl AprsClient {
                     ));
                 }
             }
+        }
+
+        // Flush any remaining local counts to the shared health state
+        if local_message_count > 0 {
+            let mut health = health_state.write().await;
+            health.total_messages += local_message_count;
+            health.last_message_time = Some(std::time::Instant::now());
         }
 
         ConnectionResult::Success
