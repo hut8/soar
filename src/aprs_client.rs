@@ -467,8 +467,14 @@ impl AprsClient {
                                             local_message_count += 1;
                                             local_interval_messages += 1;
 
-                                            // Flush stats to shared health state every 10 seconds
-                                            if last_stats_log.elapsed().as_secs() >= 10 {
+                                            // On first message, immediately update health so
+                                            // readiness checks don't report stale until first
+                                            // periodic flush (the /ready endpoint uses a 30s
+                                            // threshold on last_message_time).
+                                            let should_flush = local_message_count == 1
+                                                || last_stats_log.elapsed().as_secs() >= 10;
+
+                                            if should_flush {
                                                 let elapsed =
                                                     local_interval_start.elapsed().as_secs_f64();
                                                 if elapsed > 0.0 {
@@ -482,10 +488,9 @@ impl AprsClient {
                                                     health.total_messages += local_message_count;
                                                     health.last_message_time =
                                                         Some(std::time::Instant::now());
-                                                    health.interval_messages =
-                                                        local_interval_messages;
+                                                    health.interval_messages = 0;
                                                     health.interval_start =
-                                                        Some(local_interval_start);
+                                                        Some(std::time::Instant::now());
                                                 }
 
                                                 local_message_count = 0;
