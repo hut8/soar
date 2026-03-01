@@ -831,6 +831,11 @@
 			receiverLayerManager.checkAndUpdate(viewportArea, newSettings.showReceiverMarkers);
 			runwayLayerManager.checkAndUpdate(viewportArea, newSettings.showRunwayOverlays);
 
+			// Clear RF links immediately when receiver markers are toggled off
+			if (!newSettings.showReceiverMarkers) {
+				rfLinkLayerManager.clear();
+			}
+
 			if (clusteringChanged) {
 				fetchAircraftInViewport();
 			}
@@ -865,9 +870,7 @@
 
 				// Draw RF link line if receiver markers are shown and fix has a receiver
 				if (currentSettings.showReceiverMarkers && event.fix.receiverId) {
-					const receiver = receiverLayerManager
-						.getReceivers()
-						.find((r) => r.id === event.fix!.receiverId);
+					const receiver = receiverLayerManager.getReceiverById(event.fix.receiverId);
 					if (receiver?.latitude != null && receiver?.longitude != null) {
 						rfLinkLayerManager.addLink(
 							event.fix.latitude,

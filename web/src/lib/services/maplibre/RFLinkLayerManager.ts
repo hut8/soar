@@ -21,6 +21,9 @@ const LAYER_ID = 'rf-links-layer';
 /** Line color — light sky blue that stands out on both light and dark maps */
 const LINE_COLOR = '#38bdf8';
 
+/** Minimum interval between source updates (~30fps) */
+const MIN_FRAME_MS = 33;
+
 interface ActiveLink {
 	aircraftLng: number;
 	aircraftLat: number;
@@ -34,6 +37,7 @@ export class RFLinkLayerManager {
 	private links: ActiveLink[] = [];
 	private animFrameId: number | null = null;
 	private layerAdded: boolean = false;
+	private lastFrameTime: number = 0;
 
 	/**
 	 * Set the map instance and add the source + layer.
@@ -64,6 +68,18 @@ export class RFLinkLayerManager {
 		if (this.animFrameId === null) {
 			this.tick();
 		}
+	}
+
+	/**
+	 * Clear all active links immediately.
+	 */
+	clear(): void {
+		this.links = [];
+		if (this.animFrameId !== null) {
+			cancelAnimationFrame(this.animFrameId);
+			this.animFrameId = null;
+		}
+		this.updateSource();
 	}
 
 	/**
@@ -136,7 +152,12 @@ export class RFLinkLayerManager {
 			return;
 		}
 
-		this.updateSource(now);
+		// Throttle source updates to ~30fps
+		if (now - this.lastFrameTime >= MIN_FRAME_MS) {
+			this.updateSource(now);
+			this.lastFrameTime = now;
+		}
+
 		this.animFrameId = requestAnimationFrame(this.tick);
 	};
 
