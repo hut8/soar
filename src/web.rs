@@ -27,6 +27,7 @@ use tracing::{error, info, warn};
 
 use crate::actions;
 use crate::live_fixes::LiveFixService;
+use crate::stripe_client::StripeConfig;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
@@ -69,6 +70,7 @@ pub struct AppState {
     pub pool: PgPool,                             // Diesel pool for all operations
     pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
     pub aircraft_types_lookup: std::sync::Arc<crate::actions::views::AircraftTypesLookup>, // Static reference data cache
+    pub stripe_config: Option<StripeConfig>, // Stripe configuration (None if not configured)
 }
 
 async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
@@ -620,10 +622,23 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         }
     };
 
+    // Initialize Stripe configuration (optional - payments won't work without it)
+    let stripe_config = match StripeConfig::from_env() {
+        Ok(config) => {
+            info!("Stripe configuration loaded successfully");
+            Some(config)
+        }
+        Err(e) => {
+            warn!("Stripe not configured: {e}. Payment features will be unavailable.");
+            None
+        }
+    };
+
     let app_state = AppState {
         pool,
         live_fix_service,
         aircraft_types_lookup,
+        stripe_config,
     };
 
     // Create CORS layer that allows all origins and methods
@@ -864,6 +879,39 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/data-streams/{id}",
             put(actions::data_streams::update_data_stream)
                 .delete(actions::data_streams::delete_data_stream),
+        )
+        // Stripe Connect routes
+        .route(
+            "/clubs/{id}/stripe/onboard",
+            post(actions::stripe_connect::start_onboarding),
+        )
+        .route(
+            "/clubs/{id}/stripe/status",
+            get(actions::stripe_connect::get_stripe_status),
+        )
+        .route(
+            "/clubs/{id}/stripe/dashboard",
+            post(actions::stripe_connect::get_dashboard_link),
+        )
+        // Payment routes
+        .route(
+            "/clubs/{id}/charges",
+            post(actions::payments::create_charge),
+        )
+        .route(
+            "/clubs/{id}/charges",
+            get(actions::payments::list_club_charges),
+        )
+        .route("/payments", get(actions::payments::list_my_payments))
+        .route("/payments/{id}", get(actions::payments::get_payment))
+        .route(
+            "/payments/{id}/checkout",
+            post(actions::payments::create_checkout),
+        )
+        // Stripe webhooks (no auth, signature-verified)
+        .route(
+            "/stripe/webhooks",
+            post(actions::stripe_connect::handle_webhook),
         )
         // Status endpoint
         .route("/status", get(actions::get_status))
