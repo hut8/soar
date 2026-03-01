@@ -728,7 +728,7 @@ async fn main() -> Result<()> {
                     environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
-                    before_send: Some(std::sync::Arc::new(|event| {
+                    before_send: Some(std::sync::Arc::new(|mut event| {
                         // Filter out transient database errors (e.g. during PostgreSQL restarts)
                         const TRANSIENT_PATTERNS: &[&str] = &[
                             "the database system is shutting down",
@@ -750,6 +750,16 @@ async fn main() -> Result<()> {
                                 warn!(exception = %val, "Filtering transient database error from Sentry");
                                 return None;
                             }
+                        }
+
+                        // Group known high-volume errors into single Sentry issues
+                        if let Some(ref msg) = event.message
+                            && msg.contains("callsign mismatch")
+                        {
+                            event.fingerprint =
+                                std::borrow::Cow::Owned(vec![std::borrow::Cow::Borrowed(
+                                    "callsign-mismatch",
+                                )]);
                         }
 
                         let now_minute = (SystemTime::now()
