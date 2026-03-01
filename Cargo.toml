@@ -26,7 +26,7 @@ axum-extra = { version = "0.12.5", features = ["typed-header"] }
 bytes = "=1.11.1"
 http-body = "1.0"
 http-body-util = "0.1"
-pin-project = "1.0"
+pin-project = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dashmap = "6.1"
@@ -131,7 +131,7 @@ async-stripe = { version = "0.41", default-features = false, features = [
 [dev-dependencies]
 hex-literal = "1.1"
 serial_test = { version = "3.4", features = ["file_locks"] }
-tempfile = "3.25.0"
+tempfile = "3.26.0"
 
 [build-dependencies]
 vergen-git2 = { version = "9.1", features = ["build", "cargo"] }
