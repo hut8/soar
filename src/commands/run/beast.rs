@@ -9,7 +9,7 @@ use soar::beast::decode_beast_frame;
 use soar::fix_processor::FixProcessor;
 use soar::raw_messages_repo::{NewBeastMessage, RawMessagesRepository};
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 /// Process a received Beast (ADS-B) message
@@ -130,7 +130,7 @@ pub(crate) async fn process_beast_message(
         {
             Ok(aircraft) => aircraft,
             Err(e) => {
-                warn!(
+                error!(
                     "Failed to get/create aircraft for ICAO {:06X}: {}",
                     icao_address, e
                 );

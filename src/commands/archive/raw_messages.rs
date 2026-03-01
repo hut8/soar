@@ -10,7 +10,7 @@ use uuid::Uuid;
 use soar::raw_messages_repo::AprsMessage;
 use soar::schema::raw_messages;
 
-use super::archiver::{Archivable, PgPool, finalize_pending_detachment, write_records_to_file};
+use super::archiver::{Archivable, PgPool, write_records_to_file};
 
 /// Serializable version of RawMessage (AprsMessage) with hex-encoded hash
 /// This is used for archival with text-friendly encoding for binary fields
@@ -56,8 +56,8 @@ impl Archivable for RawMessageCsv {
         "raw_messages"
     }
 
-    fn is_partitioned() -> bool {
-        true // raw_messages table is partitioned by received_at date
+    fn is_hypertable() -> bool {
+        true // raw_messages is a TimescaleDB hypertable partitioned by received_at
     }
 
     async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
@@ -158,54 +158,26 @@ impl Archivable for RawMessageCsv {
     async fn delete_for_day(
         pool: &PgPool,
         day_start: chrono::DateTime<Utc>,
-        _day_end: chrono::DateTime<Utc>,
+        day_end: chrono::DateTime<Utc>,
     ) -> Result<()> {
-        // Calculate partition name from day_start
-        // Partitions are named like raw_messages_p20251114 for 2025-11-14
-        let partition_date = day_start.format("%Y%m%d");
-        let partition_name = format!("raw_messages_p{}", partition_date);
-
-        // First, check for and finalize any pending detachment from a previous interrupted operation
-        // This handles the edge case where a previous DETACH PARTITION CONCURRENTLY was interrupted
-        finalize_pending_detachment(pool, "raw_messages", &partition_name).await?;
-
+        // Use TimescaleDB drop_chunks to remove the chunk(s) covering this day.
+        // drop_chunks handles compressed chunks automatically (decompresses then drops).
+        // We use older_than = day_end and newer_than = day_start to target exactly one day.
         let pool = pool.clone();
-        let partition_name_clone = partition_name.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            use diesel::connection::SimpleConnection;
 
-            // Drop the partition directly - much faster than DELETE
-            // This works because:
-            // 1. Each partition contains exactly one day's data
-            // 2. Foreign keys are enforced at the partition level
-            // 3. We've already archived the data to disk
-            // 4. Child tables (fixes, receiver_statuses) have already been cleaned up
+            diesel::sql_query(
+                "SELECT drop_chunks('raw_messages', older_than => $1, newer_than => $2)",
+            )
+            .bind::<diesel::sql_types::Timestamptz, _>(day_end)
+            .bind::<diesel::sql_types::Timestamptz, _>(day_start)
+            .execute(&mut conn)
+            .context("Failed to drop chunks for raw_messages")?;
 
-            // Detach partition using CONCURRENTLY for non-blocking operation
-            // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
-            // This command blocks until detachment completes (uses two-transaction process)
-            let detach_sql = format!(
-                "ALTER TABLE raw_messages DETACH PARTITION {} CONCURRENTLY",
-                partition_name_clone
-            );
-            conn.batch_execute(&detach_sql).context(format!(
-                "Failed to detach partition {}",
-                partition_name_clone
-            ))?;
             info!(
-                "Detached partition {} from raw_messages table (CONCURRENTLY)",
-                partition_name_clone
-            );
-
-            // Drop the detached partition table
-            // Safe to do immediately because DETACH CONCURRENTLY waits for completion
-            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name_clone);
-            conn.batch_execute(&drop_sql)
-                .context(format!("Failed to drop partition {}", partition_name_clone))?;
-            info!(
-                "Dropped partition {} for day starting {}",
-                partition_name_clone, day_start
+                "Dropped TimescaleDB chunks for raw_messages between {} and {}",
+                day_start, day_end
             );
 
             Ok(())

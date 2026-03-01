@@ -76,6 +76,7 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 - `/etc/pgbouncer/pgbouncer.ini` → `infrastructure/pgbouncer.ini`
 - `/etc/pgbouncer/userlist.txt` → `infrastructure/pgbouncer-userlist.txt`
 - `/etc/grafana/provisioning/datasources/soar-postgres.yaml` → `infrastructure/grafana-provisioning/datasources/soar-postgres.yaml.template` (template - processed by soar-deploy)
+- `/etc/soar/ingest.toml` → `infrastructure/ingest.toml`
 
 **Process for config changes:**
 1. Edit the config file in `infrastructure/` first

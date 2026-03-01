@@ -3,7 +3,7 @@ use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use std::time::Instant;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use soar::aircraft_registrations::read_aircraft_file;
 use soar::aircraft_registrations_repo::AircraftRegistrationsRepository;
@@ -107,7 +107,26 @@ pub async fn copy_owners_to_aircraft(
               )
         "#;
 
-        let updated_count = diesel::sql_query(query).execute(&mut conn)?;
+        let mut attempts = 0;
+        let max_attempts = 3;
+        let updated_count = loop {
+            attempts += 1;
+            match diesel::sql_query(query).execute(&mut conn) {
+                Ok(count) => break count,
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::SerializationFailure,
+                    ref info,
+                )) if attempts < max_attempts => {
+                    warn!(
+                        attempt = attempts,
+                        error = %info.message(),
+                        "Deadlock detected in copy_owners_to_aircraft, retrying"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
 
         info!(
             "Successfully copied owner and year data to {} aircraft records",

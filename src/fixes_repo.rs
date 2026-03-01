@@ -9,6 +9,15 @@ use crate::fixes::Fix;
 use crate::ogn_aprs_aircraft::AddressType as ForeignAddressType;
 use crate::web::PgPool;
 
+/// Sort order for fix queries
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixOrder {
+    /// Oldest first (ascending by received_at)
+    Ascending,
+    /// Newest first (descending by received_at)
+    Descending,
+}
+
 // Import the main AddressType from aircraft module
 use crate::aircraft::AddressType;
 
@@ -417,6 +426,7 @@ impl FixesRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
+        order: FixOrder,
     ) -> Result<Vec<Fix>> {
         let aircraft_id_param = *aircraft_id;
 
@@ -428,8 +438,12 @@ impl FixesRepository {
             let mut query = fixes::table
                 .filter(fixes::aircraft_id.eq(aircraft_id_param))
                 .filter(fixes::received_at.between(start_time, end_time))
-                .order(fixes::received_at.desc())
                 .into_boxed();
+
+            query = match order {
+                FixOrder::Ascending => query.order(fixes::received_at.asc()),
+                FixOrder::Descending => query.order(fixes::received_at.desc()),
+            };
 
             // Only apply limit if specified
             if let Some(limit_value) = limit {

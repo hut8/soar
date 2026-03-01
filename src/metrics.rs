@@ -564,6 +564,7 @@ pub fn initialize_run_metrics() {
     // Flight creation metrics
     metrics::counter!("flight_tracker.flight_created.takeoff_total").absolute(0);
     metrics::counter!("flight_tracker.flight_created.airborne_total").absolute(0);
+    metrics::counter!("flight_tracker.flight_fk_violation_total").absolute(0);
 
     // Flight end metrics
     metrics::counter!("flight_tracker.flight_ended.landed_total").absolute(0);

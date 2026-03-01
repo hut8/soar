@@ -3,6 +3,7 @@ use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::fs;
 use std::time::Instant;
 use tracing::{debug, error, info};
@@ -277,13 +278,60 @@ pub async fn load_adsb_exchange_data(
             match tokio::task::spawn_blocking(move || {
                 let mut conn = pool.get()?;
 
+                // Deconflict registrations before INSERT to avoid violating
+                // idx_aircraft_registration_unique. Two sources of conflict:
+                // 1. A registration in this batch already belongs to another aircraft in the DB
+                // 2. The same registration appears on multiple records in this batch
+
+                // Step 1: Query DB for registrations that already exist
+                let batch_regs: Vec<String> = batch_inserts
+                    .iter()
+                    .filter_map(|r| r.registration.clone())
+                    .collect();
+
+                let existing_regs: HashSet<String> = if !batch_regs.is_empty() {
+                    aircraft::table
+                        .filter(aircraft::registration.eq_any(&batch_regs))
+                        .select(aircraft::registration.assume_not_null())
+                        .load::<String>(&mut conn)?
+                        .into_iter()
+                        .collect()
+                } else {
+                    HashSet::new()
+                };
+
+                // Step 2: Clear registrations that conflict with existing DB records,
+                // and de-duplicate within the batch (first occurrence wins)
+                let mut seen_regs: HashSet<String> = HashSet::new();
+                for record in &mut batch_inserts {
+                    if let Some(ref reg) = record.registration
+                        && (existing_regs.contains(reg) || !seen_regs.insert(reg.clone()))
+                    {
+                        debug!(
+                            "Clearing registration {} from batch record (already exists)",
+                            reg
+                        );
+                        record.registration = None;
+                    }
+                }
+
                 // Common DO UPDATE set for ADS-B Exchange records
                 macro_rules! adsbx_upsert_set {
                     () => {(
                         // Only update registration if current value is NULL or empty string
+                        // and the incoming registration doesn't conflict with another aircraft.
+                        // Pre-INSERT deconfliction above handles new rows; this NOT EXISTS
+                        // guard handles the ON CONFLICT UPDATE path.
                         aircraft::registration.eq(diesel::dsl::sql(
                             "CASE WHEN (aircraft.registration IS NULL OR aircraft.registration = '')
-                             THEN NULLIF(excluded.registration, '')
+                                  AND excluded.registration IS NOT NULL
+                                  AND excluded.registration != ''
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM aircraft a2
+                                      WHERE a2.registration = excluded.registration
+                                        AND a2.id != aircraft.id
+                                  )
+                             THEN excluded.registration
                              ELSE aircraft.registration END"
                         )),
                         // Only update icao_model_code if current value is NULL

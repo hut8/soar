@@ -40,7 +40,7 @@ pub struct GeoBounds {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SubscriptionMessage {
-    #[serde(rename = "device")]
+    #[serde(rename = "aircraft")]
     Aircraft {
         action: String, // "subscribe" or "unsubscribe"
         id: String,     // Aircraft UUID
