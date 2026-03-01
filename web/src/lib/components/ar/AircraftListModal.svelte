@@ -14,10 +14,8 @@
 		watchedIds?: Set<string>;
 	}>();
 
-	// Sort by distance and take nearest 10
-	const nearestAircraft = $derived(
-		[...aircraft].sort((a, b) => a.distance - b.distance).slice(0, 10)
-	);
+	// Sort by distance
+	const nearestAircraft = $derived([...aircraft].sort((a, b) => a.distance - b.distance));
 
 	function formatAltitude(feet: number): string {
 		if (feet >= 1000) {
