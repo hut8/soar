@@ -14,5 +14,7 @@ export type { AirportLayerManagerOptions } from './AirportLayerManager';
 export { ReceiverLayerManager } from './ReceiverLayerManager';
 export type { ReceiverLayerManagerOptions } from './ReceiverLayerManager';
 
+export { RFLinkLayerManager } from './RFLinkLayerManager';
+
 export { RunwayLayerManager } from './RunwayLayerManager';
 export type { RunwayLayerManagerOptions } from './RunwayLayerManager';
