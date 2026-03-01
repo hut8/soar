@@ -6,7 +6,7 @@
 		aircraft,
 		onSelect,
 		onClose,
-		watchedIds = new Set()
+		watchedIds = new Set<string>()
 	} = $props<{
 		aircraft: ARAircraftPosition[];
 		onSelect: (aircraft: ARAircraftPosition) => void;

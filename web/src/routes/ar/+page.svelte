@@ -63,14 +63,20 @@
 
 	// Club name cache
 	let clubNames = new SvelteMap<string, string>();
+	let pendingClubNames = new SvelteSet<string>();
 
 	async function fetchClubName(clubId: string): Promise<void> {
-		if (clubNames.has(clubId)) return;
+		if (clubNames.has(clubId) || pendingClubNames.has(clubId)) return;
+
+		pendingClubNames.add(clubId);
 		try {
 			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
 			clubNames.set(clubId, response.data.name);
-		} catch {
+		} catch (error) {
+			logger.warn('Failed to fetch club name for {clubId}: {error}', { clubId, error });
 			clubNames.set(clubId, 'Unknown Club');
+		} finally {
+			pendingClubNames.delete(clubId);
 		}
 	}
 

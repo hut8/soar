@@ -28,7 +28,7 @@
 		</div>
 	{:else if $websocketStatus.reconnecting}
 		<div class="indicator reconnecting" title="Reconnecting...">
-			<RotateCcw size={14} class="spin" />
+			<span class="spin-icon"><RotateCcw size={14} /></span>
 			<span class="label">Reconnecting</span>
 			<span class="delay"></span>
 		</div>
@@ -81,7 +81,8 @@
 		text-align: right;
 	}
 
-	:global(.spin) {
+	.spin-icon {
+		display: flex;
 		animation: spin 1s linear infinite;
 	}
 
