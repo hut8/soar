@@ -10,6 +10,7 @@
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { calculateBoundingBox, fixToARPosition } from '$lib/ar/calculations';
 	import { throttle } from '$lib/ar/projection';
+	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
 	import type {
 		ARSettings,
@@ -19,9 +20,10 @@
 		ARScreenPosition
 	} from '$lib/ar/types';
 	import type { BulkAreaSubscriptionMessage } from '$lib/services/FixFeed';
-	import type { Fix } from '$lib/types';
+	import type { Fix, Aircraft, DataResponse, Club } from '$lib/types';
 	import { watchlist } from '$lib/stores/watchlist';
 	import AircraftMarker from '$lib/components/ar/AircraftMarker.svelte';
+	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import DebugPanel from '$lib/components/ar/DebugPanel.svelte';
 	import AircraftListModal from '$lib/components/ar/AircraftListModal.svelte';
@@ -65,6 +67,31 @@
 		{ aircraft: ARAircraftPosition; screen: ARScreenPosition }
 	>();
 	let currentSubscription: BulkAreaSubscriptionMessage | null = null;
+
+	// Aircraft status modal
+	let showAircraftStatusModal = $state(false);
+	let selectedAircraft: Aircraft | null = $state(null);
+
+	// Club name cache
+	let clubNames = new SvelteMap<string, string>();
+	let pendingClubNames = new SvelteSet<string>();
+
+	async function fetchClubName(clubId: string): Promise<void> {
+		if (clubNames.has(clubId) || pendingClubNames.has(clubId)) return;
+
+		pendingClubNames.add(clubId);
+		try {
+			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
+			clubNames.set(clubId, response.data.name);
+			// Re-project so the list modal picks up the new club name immediately
+			updateAircraftProjections();
+		} catch (error) {
+			logger.warn('Failed to fetch club name for {clubId}: {error}', { clubId, error });
+			clubNames.set(clubId, 'Unknown Club');
+		} finally {
+			pendingClubNames.delete(clubId);
+		}
+	}
 
 	const targetAircraft = $derived(
 		targetAircraftId ? (aircraftPositions.get(targetAircraftId)?.aircraft ?? null) : null
@@ -133,7 +160,7 @@
 		currentSubscription = subscription;
 	}, 2000);
 
-	// Project aircraft using Cesium's wgs84ToWindowCoordinates for on-screen,
+	// Project aircraft using Cesium's worldToWindowCoordinates for on-screen,
 	// and fall back to bearing math for off-screen direction indicators
 	const updateAircraftProjections = throttle(() => {
 		if (!userPosition || !deviceOrientation || !viewer || viewer.isDestroyed()) return;
@@ -147,7 +174,13 @@
 			const currentFix = aircraft.currentFix as Fix | null;
 			if (!currentFix) continue;
 
-			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration);
+			// Fetch club name if aircraft has a club
+			if (aircraft.clubId) {
+				fetchClubName(aircraft.clubId);
+			}
+			const clubName = aircraft.clubId ? (clubNames.get(aircraft.clubId) ?? null) : null;
+
+			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration, clubName);
 			if (!arPosition) continue;
 
 			if (arPosition.distance > settings.rangeNm) continue;
@@ -161,7 +194,7 @@
 				altMeters
 			);
 
-			const windowPos = Cesium.SceneTransforms.wgs84ToWindowCoordinates(scene, cartesian);
+			const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(scene, cartesian);
 
 			let screenPosition: ARScreenPosition;
 			if (
@@ -207,7 +240,11 @@
 	}, 100);
 
 	function handleAircraftClick(aircraftId: string) {
-		logger.debug('Aircraft clicked: {aircraftId}', { aircraftId });
+		const aircraft = aircraftRegistry.getAircraft(aircraftId);
+		if (aircraft) {
+			selectedAircraft = aircraft;
+			showAircraftStatusModal = true;
+		}
 	}
 
 	function handleListClick() {
@@ -565,9 +602,15 @@
 	{#if showAircraftList}
 		<AircraftListModal
 			aircraft={allAircraftList}
+			{watchedIds}
 			onSelect={handleAircraftSelect}
 			onClose={() => (showAircraftList = false)}
 		/>
+	{/if}
+
+	<!-- Aircraft status modal -->
+	{#if selectedAircraft}
+		<AircraftStatusModal bind:showModal={showAircraftStatusModal} bind:selectedAircraft />
 	{/if}
 </div>
 

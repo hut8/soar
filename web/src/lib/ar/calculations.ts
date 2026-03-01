@@ -37,7 +37,8 @@ export function calculateElevationAngle(
 export function fixToARPosition(
 	fix: Fix,
 	userPosition: ARUserPosition,
-	registration?: string | null
+	registration?: string | null,
+	clubName?: string | null
 ): ARAircraftPosition | null {
 	if (!fix.aircraftId || fix.latitude == null || fix.longitude == null) {
 		return null;
@@ -64,6 +65,7 @@ export function fixToARPosition(
 	return {
 		aircraftId: fix.aircraftId,
 		registration: registration ?? null,
+		clubName: clubName ?? null,
 		latitude: fix.latitude,
 		longitude: fix.longitude,
 		altitudeFeet,

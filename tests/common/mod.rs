@@ -214,22 +214,61 @@ impl TestDatabase {
     }
 
     /// Runs all pending migrations on the test database.
+    ///
+    /// Retries on deadlock errors, which can occur when multiple test databases
+    /// run migrations in parallel and contend for shared TimescaleDB catalog locks.
     async fn run_migrations(db_url: &str) -> Result<()> {
         use diesel::Connection;
 
         let db_url = db_url.to_string();
+        const MAX_RETRIES: u32 = 5;
 
         tokio::task::spawn_blocking(move || {
-            let mut conn = PgConnection::establish(&db_url)
-                .context("Failed to connect to test database for migrations")?;
+            for attempt in 1..=MAX_RETRIES {
+                let mut conn = PgConnection::establish(&db_url)
+                    .context("Failed to connect to test database for migrations")?;
 
-            conn.run_pending_migrations(MIGRATIONS)
-                .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
-
-            Ok::<(), anyhow::Error>(())
+                match conn.run_pending_migrations(MIGRATIONS) {
+                    Ok(_) => return Ok(()),
+                    Err(e) => {
+                        if Self::is_deadlock_error(&*e) && attempt < MAX_RETRIES {
+                            eprintln!(
+                                "Migration deadlock on attempt {}/{}, retrying...",
+                                attempt, MAX_RETRIES
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                100 * u64::from(attempt),
+                            ));
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!("Failed to run migrations: {}", e));
+                    }
+                }
+            }
+            unreachable!()
         })
         .await
         .context("Migration task panicked")?
+    }
+
+    /// Checks whether an error (or any error in its source chain) is a
+    /// PostgreSQL deadlock (SQLSTATE 40P01).
+    ///
+    /// The migration harness returns `Box<dyn Error>`, so we walk the
+    /// source chain and check each level's Display output for PostgreSQL's
+    /// "deadlock detected" message (the stable English text for SQLSTATE
+    /// 40P01). Diesel's `DatabaseErrorKind` has no deadlock variant, and
+    /// `downcast_ref` requires `'static` which the chain doesn't guarantee,
+    /// so string matching is the most reliable approach here.
+    fn is_deadlock_error(err: &(dyn std::error::Error + Send + Sync)) -> bool {
+        let mut current: Option<&dyn std::error::Error> = Some(err);
+        while let Some(e) = current {
+            if e.to_string().contains("deadlock detected") {
+                return true;
+            }
+            current = e.source();
+        }
+        false
     }
 
     /// Drops the test database.

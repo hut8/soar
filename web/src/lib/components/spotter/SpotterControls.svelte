@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Settings, Minus, Plus, List, MapPin } from '@lucide/svelte';
 	import type { ARSettings } from '$lib/ar/types';
+	import ConnectionIndicator from '$lib/components/ar/ConnectionIndicator.svelte';
 
 	const MIN_RANGE = 10;
 	const MAX_RANGE = 250;
@@ -81,6 +82,9 @@
 				</button>
 			</div>
 		</div>
+
+		<!-- Connection indicator -->
+		<ConnectionIndicator />
 
 		<!-- Location button -->
 		<button class="btn-action" onclick={onLocationClick} title="Change location">
