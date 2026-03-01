@@ -12,6 +12,22 @@ use super::geometry::haversine_distance;
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
 
+/// Check if an anyhow error wraps a diesel FK violation on the flights_aircraft_id_fkey
+/// constraint. This happens when an aircraft was deleted (e.g., by a merge operation)
+/// between lookup and flight insertion.
+fn is_flights_aircraft_fk_violation(e: &anyhow::Error) -> bool {
+    if let Some(diesel::result::Error::DatabaseError(
+        diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        info,
+    )) = e.downcast_ref::<diesel::result::Error>()
+    {
+        info.constraint_name()
+            .is_some_and(|name| name.ends_with("flights_aircraft_id_fkey"))
+    } else {
+        false
+    }
+}
+
 /// Pending background work to be executed after fix insertion
 #[derive(Debug, Clone)]
 pub enum PendingBackgroundWork {
@@ -184,7 +200,18 @@ pub(crate) async fn process_state_transition(
                                 }
                             }
                             Err(e) => {
-                                error!(error = %e, "Failed to create new flight after callsign change");
+                                if is_flights_aircraft_fk_violation(&e) {
+                                    warn!(
+                                        aircraft_id = %fix.aircraft_id,
+                                        "Flight creation FK violation after callsign change - aircraft deleted by merge, evicting from cache",
+                                    );
+                                    ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                                    ctx.aircraft_states.remove(&fix.aircraft_id);
+                                    metrics::counter!("flight_tracker.flight_fk_violation_total")
+                                        .increment(1);
+                                } else {
+                                    error!(error = %e, "Failed to create new flight after callsign change");
+                                }
                                 // Old flight already ended in DB — clear stale state
                                 if let Some(mut state) =
                                     ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -309,7 +336,20 @@ pub(crate) async fn process_state_transition(
                                     }
                                 }
                                 Err(e) => {
-                                    error!(error = %e, "Failed to create new flight after gap");
+                                    if is_flights_aircraft_fk_violation(&e) {
+                                        warn!(
+                                            aircraft_id = %fix.aircraft_id,
+                                            "Flight creation FK violation after gap - aircraft deleted by merge, evicting from cache",
+                                        );
+                                        ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                                        ctx.aircraft_states.remove(&fix.aircraft_id);
+                                        metrics::counter!(
+                                            "flight_tracker.flight_fk_violation_total"
+                                        )
+                                        .increment(1);
+                                    } else {
+                                        error!(error = %e, "Failed to create new flight after gap");
+                                    }
                                     // Old flight already ended in DB — clear stale state
                                     if let Some(mut state) =
                                         ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -563,7 +603,17 @@ pub(crate) async fn process_state_transition(
                     }
                 }
                 Err(e) => {
-                    error!(error = %e, "Failed to create flight");
+                    if is_flights_aircraft_fk_violation(&e) {
+                        warn!(
+                            aircraft_id = %fix.aircraft_id,
+                            "Flight creation FK violation - aircraft deleted by merge, evicting from cache",
+                        );
+                        ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                        ctx.aircraft_states.remove(&fix.aircraft_id);
+                        metrics::counter!("flight_tracker.flight_fk_violation_total").increment(1);
+                    } else {
+                        error!(error = %e, "Failed to create flight");
+                    }
                     fix.flight_id = None;
                 }
             }
