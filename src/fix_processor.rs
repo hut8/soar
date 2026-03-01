@@ -463,6 +463,7 @@ impl FixProcessor {
                                 "Flight {} callsign mismatch: has '{}' but fix has '{}' - flight tracker should have created a new flight",
                                 flight_id, existing, flight_number
                             );
+                            metrics::counter!("aprs.aircraft.callsign_mismatch_total").increment(1);
                         }
                         Some(_) => {} // Callsign already matches, nothing to do
                     }
