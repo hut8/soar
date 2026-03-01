@@ -729,6 +729,7 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.aircraft.stage_total", "stage" => "after_flight").absolute(0);
     metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_nats").absolute(0);
     metrics::counter!("aprs.aircraft.stage_total", "stage" => "completed").absolute(0);
+    metrics::counter!("aprs.aircraft.callsign_mismatch_total").absolute(0);
 
     // Queue send blocked counters (tracks when send_async has to wait for space)
     metrics::counter!("queue.send_blocked_total", "queue" => "aprs_intake").absolute(0);
