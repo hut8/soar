@@ -40,6 +40,7 @@
 		AirspaceLayerManager,
 		AirportLayerManager,
 		ReceiverLayerManager,
+		RFLinkLayerManager,
 		RunwayLayerManager
 	} from '$lib/services/maplibre';
 
@@ -144,6 +145,9 @@
 	const runwayLayerManager = new RunwayLayerManager({
 		getRunways: () => airportLayerManager.getRunways()
 	});
+
+	// RF link layer manager (shows lines from aircraft to receivers)
+	const rfLinkLayerManager = new RFLinkLayerManager();
 
 	// Get style specification for the given map style (using free tile sources)
 	function getStyleSpec(style: MapStyle): maplibregl.StyleSpecification {
@@ -755,6 +759,7 @@
 			airportLayerManager.setMap(map!);
 			receiverLayerManager.setMap(map!);
 			runwayLayerManager.setMap(map!);
+			rfLinkLayerManager.setMap(map!);
 
 			const viewportArea = calculateViewportArea();
 			airspaceLayerManager.checkAndUpdate(viewportArea, currentSettings.showAirspaceMarkers);
@@ -826,6 +831,11 @@
 			receiverLayerManager.checkAndUpdate(viewportArea, newSettings.showReceiverMarkers);
 			runwayLayerManager.checkAndUpdate(viewportArea, newSettings.showRunwayOverlays);
 
+			// Clear RF links immediately when receiver markers are toggled off
+			if (!newSettings.showReceiverMarkers) {
+				rfLinkLayerManager.clear();
+			}
+
 			if (clusteringChanged) {
 				fetchAircraftInViewport();
 			}
@@ -856,6 +866,19 @@
 						fix: event.fix
 					});
 					updateAircraftSource();
+				}
+
+				// Draw RF link line if receiver markers are shown and fix has a receiver
+				if (currentSettings.showReceiverMarkers && event.fix.receiverId) {
+					const receiver = receiverLayerManager.getReceiverById(event.fix.receiverId);
+					if (receiver?.latitude != null && receiver?.longitude != null) {
+						rfLinkLayerManager.addLink(
+							event.fix.latitude,
+							event.fix.longitude,
+							receiver.latitude,
+							receiver.longitude
+						);
+					}
 				}
 			}
 		});
@@ -896,6 +919,7 @@
 			airportLayerManager.setMap(map!);
 			receiverLayerManager.setMap(map!);
 			runwayLayerManager.setMap(map!);
+			rfLinkLayerManager.setMap(map!);
 
 			// Fit to bounds if provided in URL
 			if (loadedState.bounds) {
@@ -938,6 +962,7 @@
 			airportLayerManager.dispose();
 			receiverLayerManager.dispose();
 			runwayLayerManager.dispose();
+			rfLinkLayerManager.dispose();
 			map?.remove();
 			map = null;
 		};
