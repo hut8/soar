@@ -72,6 +72,8 @@
 		try {
 			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
 			clubNames.set(clubId, response.data.name);
+			// Re-project so the list modal picks up the new club name immediately
+			updateAircraftProjections();
 		} catch (error) {
 			logger.warn('Failed to fetch club name for {clubId}: {error}', { clubId, error });
 			clubNames.set(clubId, 'Unknown Club');

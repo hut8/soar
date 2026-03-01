@@ -18,7 +18,7 @@
 		{@const delay = $websocketStatus.delayMs}
 		<div
 			class="indicator connected"
-			title="WebSocket connected{delay !== null ? `, delay: ${formatDelay(delay)}` : ''}"
+			title={`WebSocket connected${delay !== null ? `, delay: ${formatDelay(delay)}` : ''}`}
 		>
 			<Wifi size={14} />
 			<span class="label">Live</span>

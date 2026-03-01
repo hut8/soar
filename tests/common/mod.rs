@@ -231,8 +231,7 @@ impl TestDatabase {
                 match conn.run_pending_migrations(MIGRATIONS) {
                     Ok(_) => return Ok(()),
                     Err(e) => {
-                        let err_str = e.to_string();
-                        if err_str.contains("deadlock detected") && attempt < MAX_RETRIES {
+                        if Self::is_deadlock_error(&*e) && attempt < MAX_RETRIES {
                             eprintln!(
                                 "Migration deadlock on attempt {}/{}, retrying...",
                                 attempt, MAX_RETRIES
@@ -250,6 +249,26 @@ impl TestDatabase {
         })
         .await
         .context("Migration task panicked")?
+    }
+
+    /// Checks whether an error (or any error in its source chain) is a
+    /// PostgreSQL deadlock (SQLSTATE 40P01).
+    ///
+    /// The migration harness returns `Box<dyn Error>`, so we walk the
+    /// source chain and check each level's Display output for PostgreSQL's
+    /// "deadlock detected" message (the stable English text for SQLSTATE
+    /// 40P01). Diesel's `DatabaseErrorKind` has no deadlock variant, and
+    /// `downcast_ref` requires `'static` which the chain doesn't guarantee,
+    /// so string matching is the most reliable approach here.
+    fn is_deadlock_error(err: &(dyn std::error::Error + Send + Sync)) -> bool {
+        let mut current: Option<&dyn std::error::Error> = Some(err);
+        while let Some(e) = current {
+            if e.to_string().contains("deadlock detected") {
+                return true;
+            }
+            current = e.source();
+        }
+        false
     }
 
     /// Drops the test database.
