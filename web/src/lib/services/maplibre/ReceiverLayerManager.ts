@@ -45,6 +45,7 @@ export interface ReceiverLayerManagerOptions {
 export class ReceiverLayerManager {
 	private map: maplibregl.Map | null = null;
 	private receivers: Receiver[] = [];
+	private receiverById: Map<string, Receiver> = new Map();
 	private shouldShow: boolean = false;
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private options: ReceiverLayerManagerOptions;
@@ -75,6 +76,13 @@ export class ReceiverLayerManager {
 	 */
 	getReceivers(): Receiver[] {
 		return this.receivers;
+	}
+
+	/**
+	 * Look up a receiver by ID (O(1) via internal Map)
+	 */
+	getReceiverById(id: string): Receiver | undefined {
+		return this.receiverById.get(id);
 	}
 
 	/**
@@ -128,6 +136,7 @@ export class ReceiverLayerManager {
 		}
 		this.removeLayers();
 		this.receivers = [];
+		this.receiverById = new Map();
 		this.map = null;
 	}
 
@@ -179,6 +188,9 @@ export class ReceiverLayerManager {
 
 			const response = await serverCall<DataListResponse<Receiver>>(`/receivers?${params}`);
 			this.receivers = response.data || [];
+
+			// Rebuild id→receiver lookup map
+			this.receiverById = new Map(this.receivers.map((r) => [r.id, r]));
 
 			this.updateLayers();
 		} catch (error) {
