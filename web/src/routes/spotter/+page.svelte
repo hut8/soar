@@ -335,9 +335,10 @@
 			const fov = camera.frustum.fov ? Cesium.Math.toDegrees(camera.frustum.fov) : 60;
 			const aspect = camera.frustum.aspectRatio || screenWidth / screenHeight || 16 / 9;
 
-			// Cesium's fov is vertical
+			// Cesium's fov is vertical; derive horizontal via trigonometry
 			const fovVertical = fov;
-			const fovHorizontal = fov * aspect;
+			const halfVRad = (fovVertical * Math.PI) / 360;
+			const fovHorizontal = (2 * Math.atan(Math.tan(halfVRad) * aspect) * 180) / Math.PI;
 
 			settings.fovHorizontal = fovHorizontal;
 			settings.fovVertical = fovVertical;
@@ -380,8 +381,7 @@
 				navigationHelpButton: false,
 				fullscreenButton: false,
 				infoBox: false,
-				selectionIndicator: false,
-				creditContainer: document.createElement('div') // hide credits
+				selectionIndicator: false
 			});
 
 			// Enable world terrain
@@ -699,8 +699,9 @@
 		text-overflow: ellipsis;
 	}
 
-	/* Hide Cesium default UI elements */
+	/* Style Cesium credits to be unobtrusive */
 	:global(.cesium-viewer-bottom) {
-		display: none !important;
+		opacity: 0.5;
+		font-size: 0.625rem;
 	}
 </style>
