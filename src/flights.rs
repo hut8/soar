@@ -140,16 +140,6 @@ pub struct Flight {
     /// NULL if no runways were determined (both takeoff and landing runways are null)
     pub runways_inferred: Option<bool>,
 
-    /// DEPRECATED: Takeoff location ID (foreign key to locations table)
-    /// No longer populated. Use start_location_id instead.
-    /// Kept for backward compatibility with existing data.
-    pub takeoff_location_id: Option<Uuid>,
-
-    /// DEPRECATED: Landing location ID (foreign key to locations table)
-    /// No longer populated. Use end_location_id instead.
-    /// Kept for backward compatibility with existing data.
-    pub landing_location_id: Option<Uuid>,
-
     /// Start location ID with reverse geocoded address (foreign key to locations table)
     /// Set to airport location if takeoff from airport, or reverse geocoded detection point if airborne
     /// Uses Pelias city-level reverse geocoding for real-time performance
@@ -229,8 +219,6 @@ impl Flight {
             total_distance_meters: None,
             maximum_displacement_meters: None,
             runways_inferred: None,
-            takeoff_location_id: None,
-            landing_location_id: None,
             start_location_id: None,
             end_location_id: None,
             timed_out_at: None,
@@ -274,8 +262,6 @@ impl Flight {
             total_distance_meters: None,
             maximum_displacement_meters: None,
             runways_inferred: None,
-            takeoff_location_id: None,
-            landing_location_id: None,
             start_location_id: None,
             end_location_id: None,
             timed_out_at: None,
@@ -318,8 +304,6 @@ impl Flight {
             total_distance_meters: None,
             maximum_displacement_meters: None,
             runways_inferred: None,
-            takeoff_location_id: None,
-            landing_location_id: None,
             start_location_id: None,
             end_location_id: None,
             timed_out_at: None,
@@ -375,8 +359,6 @@ impl Flight {
             total_distance_meters: None,
             maximum_displacement_meters: None,
             runways_inferred: None,
-            takeoff_location_id: None,
-            landing_location_id: None,
             start_location_id: None,
             end_location_id: None,
             timed_out_at: None,
@@ -1011,8 +993,6 @@ pub struct FlightModel {
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
     pub runways_inferred: Option<bool>,
-    pub takeoff_location_id: Option<Uuid>,
-    pub landing_location_id: Option<Uuid>,
     pub start_location_id: Option<Uuid>,
     pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
@@ -1046,8 +1026,6 @@ pub struct NewFlightModel {
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
     pub runways_inferred: Option<bool>,
-    pub takeoff_location_id: Option<Uuid>,
-    pub landing_location_id: Option<Uuid>,
     pub start_location_id: Option<Uuid>,
     pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
@@ -1083,8 +1061,6 @@ pub struct NewSpuriousFlightModel {
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
     pub runways_inferred: Option<bool>,
-    pub takeoff_location_id: Option<Uuid>,
-    pub landing_location_id: Option<Uuid>,
     pub start_location_id: Option<Uuid>,
     pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
@@ -1126,8 +1102,6 @@ impl NewSpuriousFlightModel {
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
             runways_inferred: flight.runways_inferred,
-            takeoff_location_id: flight.takeoff_location_id,
-            landing_location_id: flight.landing_location_id,
             start_location_id: flight.start_location_id,
             end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
@@ -1167,8 +1141,6 @@ impl From<Flight> for FlightModel {
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
             runways_inferred: flight.runways_inferred,
-            takeoff_location_id: flight.takeoff_location_id,
-            landing_location_id: flight.landing_location_id,
             start_location_id: flight.start_location_id,
             end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
@@ -1204,8 +1176,6 @@ impl From<Flight> for NewFlightModel {
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
             runways_inferred: flight.runways_inferred,
-            takeoff_location_id: flight.takeoff_location_id,
-            landing_location_id: flight.landing_location_id,
             start_location_id: flight.start_location_id,
             end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
@@ -1240,8 +1210,6 @@ impl From<FlightModel> for Flight {
             tow_release_altitude_msl_ft: model.tow_release_altitude_msl_ft,
             tow_release_time: model.tow_release_time,
             runways_inferred: model.runways_inferred,
-            takeoff_location_id: model.takeoff_location_id,
-            landing_location_id: model.landing_location_id,
             start_location_id: model.start_location_id,
             end_location_id: model.end_location_id,
             timed_out_at: model.timed_out_at,

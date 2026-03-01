@@ -5,8 +5,8 @@ set -euo pipefail
 # Locations are referenced by:
 # - aircraft_registrations.location_id
 # - clubs.location_id
-# - flights.landing_location_id
-# - flights.takeoff_location_id
+# - flights.start_location_id
+# - flights.end_location_id
 
 # Configuration
 DATABASE="${DATABASE_URL:-postgresql://localhost/soar_staging}"
@@ -43,7 +43,7 @@ OR EXISTS (
     SELECT 1 FROM clubs WHERE location_id = l.id
 )
 OR EXISTS (
-    SELECT 1 FROM flights WHERE landing_location_id = l.id OR takeoff_location_id = l.id
+    SELECT 1 FROM flights WHERE start_location_id = l.id OR end_location_id = l.id
 );
 ")
 echo -e "Referenced locations: ${GREEN}${REFERENCED_COUNT}${NC}"
@@ -85,7 +85,7 @@ AND NOT EXISTS (
     SELECT 1 FROM clubs WHERE location_id = l.id
 )
 AND NOT EXISTS (
-    SELECT 1 FROM flights WHERE landing_location_id = l.id OR takeoff_location_id = l.id
+    SELECT 1 FROM flights WHERE start_location_id = l.id OR end_location_id = l.id
 )
 LIMIT 10;
 "
@@ -116,7 +116,7 @@ while true; do
             SELECT 1 FROM clubs WHERE location_id = l.id
         )
         AND NOT EXISTS (
-            SELECT 1 FROM flights WHERE landing_location_id = l.id OR takeoff_location_id = l.id
+            SELECT 1 FROM flights WHERE start_location_id = l.id OR end_location_id = l.id
         )
         LIMIT $BATCH_SIZE
     )
@@ -156,7 +156,7 @@ AND NOT EXISTS (
     SELECT 1 FROM clubs WHERE location_id = l.id
 )
 AND NOT EXISTS (
-    SELECT 1 FROM flights WHERE landing_location_id = l.id OR takeoff_location_id = l.id
+    SELECT 1 FROM flights WHERE start_location_id = l.id OR end_location_id = l.id
 );
 ")
 

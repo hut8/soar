@@ -17,10 +17,7 @@ use uuid::Uuid;
 use super::FlightProcessorContext;
 use super::altitude::calculate_altitude_offset_ft;
 use super::geometry::haversine_distance;
-use super::location::{
-    create_or_find_location, create_start_end_location, find_nearby_airport,
-    get_airport_location_id,
-};
+use super::location::{create_start_end_location, find_nearby_airport, get_airport_location_id};
 use super::runway::determine_runway_identifier;
 use crate::elevation::ElevationDB;
 
@@ -66,7 +63,6 @@ pub(crate) async fn create_flight_fast(
         flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
 
         // NOTE: We intentionally skip:
-        // - takeoff_location_id (will be enriched in background)
         // - start_location_id (will be enriched in background)
         // - takeoff_runway_ident (will be enriched in background)
 
@@ -179,22 +175,12 @@ fn spawn_flight_enrichment_on_creation(
                 .await
             };
 
-            let takeoff_location_id = create_or_find_location(
-                &airports_repo,
-                &locations_repo,
-                fix.latitude,
-                fix.longitude,
-                departure_airport_id,
-            )
-            .await;
-
             // Update flight with enriched data
             if let Err(e) = flights_repo
                 .update_flight_takeoff_enrichment(
                     flight_id,
                     takeoff_runway,
                     start_location_id,
-                    takeoff_location_id,
                     fix.received_at,
                 )
                 .await
@@ -664,7 +650,6 @@ async fn complete_flight_in_background(
             flight_id,
             fix.received_at, // landing_time
             arrival_airport_id,
-            None, // landing_location_id - will be enriched in background
             None, // end_location_id - will be enriched in background
             landing_altitude_offset_ft,
             None, // landing_runway_ident - will be enriched in background
@@ -1003,7 +988,6 @@ pub(crate) async fn enrich_flight_on_startup(
             flight_id,
             landing_time_val,
             arrival_airport_id,
-            None, // landing_location_id - will be enriched in background
             None, // end_location_id - will be enriched in background
             landing_altitude_offset_ft,
             None, // landing_runway_ident - will be enriched in background
@@ -1168,7 +1152,6 @@ fn spawn_flight_enrichment_on_completion_direct(
                     landing_runway,
                     landing_runway_inferred,
                     end_location_id,
-                    None, // landing_location_id - not set during enrichment
                     fix.received_at,
                 )
                 .await
