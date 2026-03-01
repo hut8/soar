@@ -42,7 +42,8 @@
 		Sun,
 		Moon,
 		Info,
-		Eye
+		Eye,
+		Binoculars
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -58,6 +59,7 @@
 	const profilePath = resolve('/profile');
 	const watchlistPath = resolve('/watchlist');
 	const arPath = resolve('/ar');
+	const spotterPath = resolve('/spotter');
 
 	let { children } = $props();
 
@@ -198,8 +200,8 @@
 	<!-- Google Analytics is loaded dynamically in onMount for production only -->
 </svelte:head>
 
-<!-- AR page gets full-screen treatment without app bar -->
-{#if page.route.id === '/ar'}
+<!-- AR and Spotter pages get full-screen treatment without app bar -->
+{#if page.route.id === '/ar' || page.route.id === '/spotter'}
 	{@render children?.()}
 {:else}
 	<div class="flex h-full min-h-screen flex-col">
@@ -353,6 +355,13 @@
 												onclick={() => (showDesktopMenu = false)}
 											>
 												<Globe size={16} /> AR
+											</a>
+											<a
+												href={spotterPath}
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+											>
+												<Binoculars size={16} /> Spotter
 											</a>
 											<a
 												href={infoPath}
@@ -530,6 +539,13 @@
 						onclick={() => (showMobileMenu = false)}
 					>
 						<Globe size={16} /> AR
+					</a>
+					<a
+						href={spotterPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Binoculars size={16} /> Spotter
 					</a>
 					<!-- 3D Globe link temporarily disabled
 				<a
