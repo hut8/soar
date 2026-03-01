@@ -321,8 +321,11 @@
 		startCameraTracking();
 	}
 
+	let cameraTrackingStarted = false;
+
 	function startCameraTracking() {
-		if (!viewer || viewer.isDestroyed()) return;
+		if (!viewer || viewer.isDestroyed() || cameraTrackingStarted) return;
+		cameraTrackingStarted = true;
 
 		const Cesium = window.Cesium;
 
