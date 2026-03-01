@@ -50,6 +50,14 @@ pub mod sql_types {
     pub struct MessageSource;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "payment_status"))]
+    pub struct PaymentStatus;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "payment_type"))]
+    pub struct PaymentType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "point", schema = "pg_catalog"))]
     pub struct Point;
 
@@ -651,6 +659,38 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
+    use super::sql_types::PaymentType;
+    use super::sql_types::PaymentStatus;
+
+    payments (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        club_id -> Nullable<Uuid>,
+        #[max_length = 255]
+        stripe_payment_intent_id -> Nullable<Varchar>,
+        #[max_length = 255]
+        stripe_invoice_id -> Nullable<Varchar>,
+        #[max_length = 255]
+        stripe_charge_id -> Nullable<Varchar>,
+        payment_type -> PaymentType,
+        status -> PaymentStatus,
+        amount_cents -> Int4,
+        #[max_length = 3]
+        currency -> Varchar,
+        platform_fee_cents -> Int4,
+        description -> Nullable<Text>,
+        metadata -> Jsonb,
+        #[max_length = 255]
+        idempotency_key -> Nullable<Varchar>,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
     raw_messages (id, received_at) {
@@ -924,6 +964,55 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
 
+    stripe_connected_accounts (id) {
+        id -> Uuid,
+        club_id -> Uuid,
+        #[max_length = 255]
+        stripe_account_id -> Varchar,
+        onboarding_complete -> Bool,
+        charges_enabled -> Bool,
+        payouts_enabled -> Bool,
+        details_submitted -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
+    stripe_customers (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        #[max_length = 255]
+        stripe_customer_id -> Varchar,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
+    stripe_webhook_events (id) {
+        id -> Uuid,
+        #[max_length = 255]
+        stripe_event_id -> Varchar,
+        #[max_length = 255]
+        event_type -> Varchar,
+        processed -> Bool,
+        processing_error -> Nullable<Text>,
+        payload -> Jsonb,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     type_aircraft (code) {
         #[max_length = 1]
         code -> Bpchar,
@@ -1044,12 +1133,15 @@ diesel::joinable!(geofence_subscribers -> geofences (geofence_id));
 diesel::joinable!(geofence_subscribers -> users (user_id));
 diesel::joinable!(geofences -> clubs (club_id));
 diesel::joinable!(geofences -> users (owner_user_id));
+diesel::joinable!(payments -> clubs (club_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(spurious_flights -> aircraft (aircraft_id));
+diesel::joinable!(stripe_connected_accounts -> clubs (club_id));
+diesel::joinable!(stripe_customers -> users (user_id));
 diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
 diesel::joinable!(watchlist -> aircraft (aircraft_id));
@@ -1082,6 +1174,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     geofence_subscribers,
     geofences,
     locations,
+    payments,
     raw_messages,
     receiver_coverage_h3,
     receiver_statuses,
@@ -1095,6 +1188,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     spurious_flights,
     states,
     status_codes,
+    stripe_connected_accounts,
+    stripe_customers,
+    stripe_webhook_events,
     type_aircraft,
     type_engines,
     type_registrations,
