@@ -133,7 +133,7 @@
 		currentSubscription = subscription;
 	}, 2000);
 
-	// Project aircraft using Cesium's wgs84ToWindowCoordinates for on-screen,
+	// Project aircraft using Cesium's worldToWindowCoordinates for on-screen,
 	// and fall back to bearing math for off-screen direction indicators
 	const updateAircraftProjections = throttle(() => {
 		if (!userPosition || !deviceOrientation || !viewer || viewer.isDestroyed()) return;
@@ -161,7 +161,7 @@
 				altMeters
 			);
 
-			const windowPos = Cesium.SceneTransforms.wgs84ToWindowCoordinates(scene, cartesian);
+			const windowPos = Cesium.SceneTransforms.worldToWindowCoordinates(scene, cartesian);
 
 			let screenPosition: ARScreenPosition;
 			if (
