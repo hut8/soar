@@ -905,4 +905,84 @@ mod tests {
         let result = learn_callsign(&None, &Some(" WMT437 ".to_string()));
         assert_eq!(result, Some("WMT437".to_string()));
     }
+
+    // --- FK violation detection tests ---
+
+    struct MockDbErrorInfo {
+        constraint: Option<&'static str>,
+    }
+
+    impl diesel::result::DatabaseErrorInformation for MockDbErrorInfo {
+        fn message(&self) -> &str {
+            "mock database error"
+        }
+        fn details(&self) -> Option<&str> {
+            None
+        }
+        fn hint(&self) -> Option<&str> {
+            None
+        }
+        fn table_name(&self) -> Option<&str> {
+            None
+        }
+        fn column_name(&self) -> Option<&str> {
+            None
+        }
+        fn constraint_name(&self) -> Option<&str> {
+            self.constraint
+        }
+        fn statement_position(&self) -> Option<i32> {
+            None
+        }
+    }
+
+    fn make_db_error(
+        constraint: Option<&'static str>,
+        kind: diesel::result::DatabaseErrorKind,
+    ) -> anyhow::Error {
+        let info = Box::new(MockDbErrorInfo { constraint });
+        anyhow::Error::new(diesel::result::Error::DatabaseError(kind, info))
+    }
+
+    #[test]
+    fn detects_flights_aircraft_fk_violation() {
+        let err = make_db_error(
+            Some("flights_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_other_constraint_name() {
+        let err = make_db_error(
+            Some("other_fk_constraint"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_fixes_aircraft_fk_violation() {
+        let err = make_db_error(
+            Some("fixes_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_non_fk_violation_error_kind() {
+        let err = make_db_error(
+            Some("flights_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::UniqueViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_non_diesel_error() {
+        let err = anyhow::Error::msg("some other error");
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
 }
