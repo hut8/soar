@@ -12,6 +12,22 @@ use super::geometry::haversine_distance;
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
 
+/// Check if an anyhow error wraps a diesel FK violation on the flights_aircraft_id_fkey
+/// constraint. This happens when an aircraft was deleted (e.g., by a merge operation)
+/// between lookup and flight insertion.
+fn is_flights_aircraft_fk_violation(e: &anyhow::Error) -> bool {
+    if let Some(diesel::result::Error::DatabaseError(
+        diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        info,
+    )) = e.downcast_ref::<diesel::result::Error>()
+    {
+        info.constraint_name()
+            .is_some_and(|name| name.ends_with("flights_aircraft_id_fkey"))
+    } else {
+        false
+    }
+}
+
 /// Pending background work to be executed after fix insertion
 #[derive(Debug, Clone)]
 pub enum PendingBackgroundWork {
@@ -184,7 +200,18 @@ pub(crate) async fn process_state_transition(
                                 }
                             }
                             Err(e) => {
-                                error!(error = %e, "Failed to create new flight after callsign change");
+                                if is_flights_aircraft_fk_violation(&e) {
+                                    warn!(
+                                        aircraft_id = %fix.aircraft_id,
+                                        "Flight creation FK violation after callsign change - aircraft deleted by merge, evicting from cache",
+                                    );
+                                    ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                                    ctx.aircraft_states.remove(&fix.aircraft_id);
+                                    metrics::counter!("flight_tracker.flight_fk_violation_total")
+                                        .increment(1);
+                                } else {
+                                    error!(error = %e, "Failed to create new flight after callsign change");
+                                }
                                 // Old flight already ended in DB — clear stale state
                                 if let Some(mut state) =
                                     ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -309,7 +336,20 @@ pub(crate) async fn process_state_transition(
                                     }
                                 }
                                 Err(e) => {
-                                    error!(error = %e, "Failed to create new flight after gap");
+                                    if is_flights_aircraft_fk_violation(&e) {
+                                        warn!(
+                                            aircraft_id = %fix.aircraft_id,
+                                            "Flight creation FK violation after gap - aircraft deleted by merge, evicting from cache",
+                                        );
+                                        ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                                        ctx.aircraft_states.remove(&fix.aircraft_id);
+                                        metrics::counter!(
+                                            "flight_tracker.flight_fk_violation_total"
+                                        )
+                                        .increment(1);
+                                    } else {
+                                        error!(error = %e, "Failed to create new flight after gap");
+                                    }
                                     // Old flight already ended in DB — clear stale state
                                     if let Some(mut state) =
                                         ctx.aircraft_states.get_mut(&fix.aircraft_id)
@@ -563,7 +603,17 @@ pub(crate) async fn process_state_transition(
                     }
                 }
                 Err(e) => {
-                    error!(error = %e, "Failed to create flight");
+                    if is_flights_aircraft_fk_violation(&e) {
+                        warn!(
+                            aircraft_id = %fix.aircraft_id,
+                            "Flight creation FK violation - aircraft deleted by merge, evicting from cache",
+                        );
+                        ctx.aircraft_cache.evict_by_id(fix.aircraft_id);
+                        ctx.aircraft_states.remove(&fix.aircraft_id);
+                        metrics::counter!("flight_tracker.flight_fk_violation_total").increment(1);
+                    } else {
+                        error!(error = %e, "Failed to create flight");
+                    }
                     fix.flight_id = None;
                 }
             }
@@ -854,5 +904,85 @@ mod tests {
     fn callsign_with_whitespace_is_trimmed_when_learned() {
         let result = learn_callsign(&None, &Some(" WMT437 ".to_string()));
         assert_eq!(result, Some("WMT437".to_string()));
+    }
+
+    // --- FK violation detection tests ---
+
+    struct MockDbErrorInfo {
+        constraint: Option<&'static str>,
+    }
+
+    impl diesel::result::DatabaseErrorInformation for MockDbErrorInfo {
+        fn message(&self) -> &str {
+            "mock database error"
+        }
+        fn details(&self) -> Option<&str> {
+            None
+        }
+        fn hint(&self) -> Option<&str> {
+            None
+        }
+        fn table_name(&self) -> Option<&str> {
+            None
+        }
+        fn column_name(&self) -> Option<&str> {
+            None
+        }
+        fn constraint_name(&self) -> Option<&str> {
+            self.constraint
+        }
+        fn statement_position(&self) -> Option<i32> {
+            None
+        }
+    }
+
+    fn make_db_error(
+        constraint: Option<&'static str>,
+        kind: diesel::result::DatabaseErrorKind,
+    ) -> anyhow::Error {
+        let info = Box::new(MockDbErrorInfo { constraint });
+        anyhow::Error::new(diesel::result::Error::DatabaseError(kind, info))
+    }
+
+    #[test]
+    fn detects_flights_aircraft_fk_violation() {
+        let err = make_db_error(
+            Some("flights_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_other_constraint_name() {
+        let err = make_db_error(
+            Some("other_fk_constraint"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_fixes_aircraft_fk_violation() {
+        let err = make_db_error(
+            Some("fixes_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::ForeignKeyViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_non_fk_violation_error_kind() {
+        let err = make_db_error(
+            Some("flights_aircraft_id_fkey"),
+            diesel::result::DatabaseErrorKind::UniqueViolation,
+        );
+        assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    #[test]
+    fn rejects_non_diesel_error() {
+        let err = anyhow::Error::msg("some other error");
+        assert!(!is_flights_aircraft_fk_violation(&err));
     }
 }
