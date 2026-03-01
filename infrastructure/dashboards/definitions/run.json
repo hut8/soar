@@ -72,6 +72,7 @@
     "flight-timeouts-by-phase",
     "flight-phase-definitions",
     "flight-creation-5m",
-    "spurious-flights-archived"
+    "spurious-flights-archived",
+    "callsign-mismatches"
   ]
 }
