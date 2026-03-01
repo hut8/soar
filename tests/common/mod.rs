@@ -214,19 +214,39 @@ impl TestDatabase {
     }
 
     /// Runs all pending migrations on the test database.
+    ///
+    /// Retries on deadlock errors, which can occur when multiple test databases
+    /// run migrations in parallel and contend for shared TimescaleDB catalog locks.
     async fn run_migrations(db_url: &str) -> Result<()> {
         use diesel::Connection;
 
         let db_url = db_url.to_string();
+        const MAX_RETRIES: u32 = 5;
 
         tokio::task::spawn_blocking(move || {
-            let mut conn = PgConnection::establish(&db_url)
-                .context("Failed to connect to test database for migrations")?;
+            for attempt in 1..=MAX_RETRIES {
+                let mut conn = PgConnection::establish(&db_url)
+                    .context("Failed to connect to test database for migrations")?;
 
-            conn.run_pending_migrations(MIGRATIONS)
-                .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
-
-            Ok::<(), anyhow::Error>(())
+                match conn.run_pending_migrations(MIGRATIONS) {
+                    Ok(_) => return Ok(()),
+                    Err(e) => {
+                        let err_str = e.to_string();
+                        if err_str.contains("deadlock detected") && attempt < MAX_RETRIES {
+                            eprintln!(
+                                "Migration deadlock on attempt {}/{}, retrying...",
+                                attempt, MAX_RETRIES
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                100 * u64::from(attempt),
+                            ));
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!("Failed to run migrations: {}", e));
+                    }
+                }
+            }
+            unreachable!()
         })
         .await
         .context("Migration task panicked")?
