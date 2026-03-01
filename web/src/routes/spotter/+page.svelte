@@ -180,7 +180,14 @@
 			}
 			const clubName = aircraft.clubId ? (clubNames.get(aircraft.clubId) ?? null) : null;
 
-			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration, clubName);
+			const arPosition = fixToARPosition(
+				currentFix,
+				userPosition,
+				aircraft.registration,
+				clubName,
+				aircraft.aircraftCategory,
+				aircraft.adsbEmitterCategory
+			);
 			if (!arPosition) continue;
 
 			if (arPosition.distance > settings.rangeNm) continue;
@@ -338,18 +345,22 @@
 			}
 		});
 
-		// Lock the camera: allow rotation/look but disable translation/zoom
+		// Lock the camera: first-person look only, no translation/zoom/orbit
 		const controller = viewer.scene.screenSpaceCameraController;
 		controller.enableTranslate = false;
 		controller.enableZoom = false;
 		controller.enableTilt = false;
+		controller.enableRotate = false;
 		controller.enableLook = true;
 
-		// Enable rotate for mouse-drag panning
-		controller.enableRotate = true;
+		// Remap look to left-drag (and single-finger touch) so dragging
+		// anywhere — sky or ground — rotates the view without moving position
+		controller.lookEventTypes = [
+			Cesium.CameraEventType.LEFT_DRAG,
+			Cesium.CameraEventType.RIGHT_DRAG,
+			{ eventType: Cesium.CameraEventType.LEFT_DRAG, modifier: Cesium.KeyboardEventModifier.SHIFT }
+		];
 
-		// Override rotation behavior to act like "look" (first-person)
-		// Set minimum/maximum distance to 0 to prevent zooming
 		controller.minimumZoomDistance = 0;
 		controller.maximumZoomDistance = 0;
 
@@ -532,6 +543,7 @@
 						screenPosition={screen}
 						watched={watchedIds.has(aircraftId)}
 						rangeNm={settings.rangeNm}
+						viewHeading={deviceOrientation?.heading ?? 0}
 						onclick={() => handleAircraftClick(aircraftId)}
 					/>
 				{/each}

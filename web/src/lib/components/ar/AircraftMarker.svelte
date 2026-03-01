@@ -1,17 +1,24 @@
 <script lang="ts">
 	import type { ARAircraftPosition, ARScreenPosition } from '$lib/ar/types';
+	import {
+		getIconShapeForCategory,
+		getIconDefinition,
+		getAltitudeColor
+	} from '$lib/utils/aircraftIcons';
 
 	let {
 		aircraft,
 		screenPosition,
 		watched = false,
 		rangeNm = 50,
+		viewHeading = 0,
 		onclick
 	} = $props<{
 		aircraft: ARAircraftPosition;
 		screenPosition: ARScreenPosition;
 		watched?: boolean;
 		rangeNm?: number;
+		viewHeading?: number;
 		onclick?: () => void;
 	}>();
 
@@ -30,17 +37,40 @@
 			: '0fpm'
 	);
 
-	const MIN_CROSSHAIR = 24;
-	const MAX_CROSSHAIR = 72;
+	const MIN_ICON = 24;
+	const MAX_ICON = 72;
 
-	// Scale crosshair inversely proportional to distance within the current range
-	const crosshairSize = $derived.by(() => {
+	// Scale icon inversely proportional to distance within the current range
+	const iconSize = $derived.by(() => {
 		const t = Math.min(aircraft.distance / rangeNm, 1);
-		return Math.round(MAX_CROSSHAIR - t * (MAX_CROSSHAIR - MIN_CROSSHAIR));
+		return Math.round(MAX_ICON - t * (MAX_ICON - MIN_ICON));
 	});
 
-	// Accent color: red for watched aircraft, cyan otherwise
-	const accent = $derived(watched ? '#ef4444' : 'cyan');
+	// Get the aircraft icon shape and definition based on category
+	const iconShape = $derived(
+		getIconShapeForCategory(aircraft.aircraftCategory, aircraft.adsbEmitterCategory)
+	);
+	const iconDef = $derived(getIconDefinition(iconShape));
+
+	// Altitude-based color (same gradient as the live map)
+	const altColor = $derived(getAltitudeColor(aircraft.altitudeFeet));
+
+	// Accent color: red for watched aircraft, altitude-based otherwise
+	const fillColor = $derived(watched ? '#ef4444' : altColor);
+
+	// Rotate the icon to show aircraft track relative to the camera's heading.
+	// trackDegrees is absolute (0=north); subtracting viewHeading gives screen-relative rotation.
+	const iconRotation = $derived(
+		aircraft.trackDegrees != null ? aircraft.trackDegrees - viewHeading : 0
+	);
+
+	// Climb/descent indicator
+	const climbIndicator = $derived.by(() => {
+		if (!aircraft.climbFpm) return 'level';
+		if (aircraft.climbFpm > 100) return 'climbing';
+		if (aircraft.climbFpm < -100) return 'descending';
+		return 'level';
+	});
 </script>
 
 {#if screenPosition.visible}
@@ -50,53 +80,28 @@
 		style:top="{screenPosition.y}px"
 		{onclick}
 	>
-		<!-- Crosshair reticle -->
-		<svg
-			class="crosshair"
-			width={crosshairSize}
-			height={crosshairSize}
-			viewBox="0 0 64 64"
-			fill="none"
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			<!-- Outer ring -->
-			<circle cx="32" cy="32" r="28" stroke="white" stroke-width="2" opacity="0.8" />
-			<circle cx="32" cy="32" r="28" stroke={accent} stroke-width="1" opacity="0.6" />
+		<!-- Aircraft icon -->
+		<div class="icon-container" style:width="{iconSize}px" style:height="{iconSize}px">
+			<svg
+				class="aircraft-icon"
+				width={iconSize}
+				height={iconSize}
+				viewBox={iconDef.viewBox}
+				xmlns="http://www.w3.org/2000/svg"
+				style:transform="rotate({iconRotation}deg)"
+			>
+				<path d={iconDef.path} fill={fillColor} stroke="white" stroke-width="1" />
+			</svg>
 
-			<!-- Crosshair lines (with gap in center) -->
-			<!-- Top -->
-			<line x1="32" y1="2" x2="32" y2="20" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="32" y1="2" x2="32" y2="20" stroke={accent} stroke-width="1" opacity="0.5" />
-			<!-- Bottom -->
-			<line x1="32" y1="44" x2="32" y2="62" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="32" y1="44" x2="32" y2="62" stroke={accent} stroke-width="1" opacity="0.5" />
-			<!-- Left -->
-			<line x1="2" y1="32" x2="20" y2="32" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="2" y1="32" x2="20" y2="32" stroke={accent} stroke-width="1" opacity="0.5" />
-			<!-- Right -->
-			<line x1="44" y1="32" x2="62" y2="32" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="44" y1="32" x2="62" y2="32" stroke={accent} stroke-width="1" opacity="0.5" />
+			<!-- Climb/descent arrow -->
+			{#if climbIndicator === 'climbing'}
+				<div class="climb-arrow climbing">&#9650;</div>
+			{:else if climbIndicator === 'descending'}
+				<div class="climb-arrow descending">&#9660;</div>
+			{/if}
+		</div>
 
-			<!-- Center dot -->
-			<circle cx="32" cy="32" r="3" fill={accent} opacity="0.9" />
-			<circle cx="32" cy="32" r="3" stroke="white" stroke-width="1" opacity="0.6" />
-
-			<!-- Corner tick marks for extra visibility -->
-			<!-- Top-left -->
-			<line x1="10" y1="10" x2="16" y2="10" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<line x1="10" y1="10" x2="10" y2="16" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<!-- Top-right -->
-			<line x1="48" y1="10" x2="54" y2="10" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<line x1="54" y1="10" x2="54" y2="16" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<!-- Bottom-left -->
-			<line x1="10" y1="48" x2="10" y2="54" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<line x1="10" y1="54" x2="16" y2="54" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<!-- Bottom-right -->
-			<line x1="54" y1="48" x2="54" y2="54" stroke="white" stroke-width="1.5" opacity="0.6" />
-			<line x1="48" y1="54" x2="54" y2="54" stroke="white" stroke-width="1.5" opacity="0.6" />
-		</svg>
-
-		<!-- Info label below crosshair -->
+		<!-- Info label below icon -->
 		<div class="marker-info">
 			<div class="marker-registration">{registration}</div>
 			<div class="marker-stats">
@@ -133,10 +138,34 @@
 		transform: translate(-50%, -50%) scale(1.1);
 	}
 
-	.crosshair {
-		filter: drop-shadow(0 0 6px rgba(0, 0, 0, 1)) drop-shadow(0 0 2px rgba(0, 0, 0, 1))
-			drop-shadow(0 0 12px rgba(0, 0, 0, 0.6));
-		animation: crosshair-pulse 2s ease-in-out infinite;
+	.icon-container {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.aircraft-icon {
+		filter: drop-shadow(0 0 4px rgba(0, 0, 0, 1)) drop-shadow(0 0 8px rgba(0, 0, 0, 0.6));
+	}
+
+	.climb-arrow {
+		position: absolute;
+		right: -12px;
+		font-size: 0.625rem;
+		text-shadow:
+			0 0 4px rgba(0, 0, 0, 1),
+			0 0 2px rgba(0, 0, 0, 1);
+	}
+
+	.climb-arrow.climbing {
+		top: -2px;
+		color: #4ade80;
+	}
+
+	.climb-arrow.descending {
+		bottom: -2px;
+		color: #f87171;
 	}
 
 	.marker-info {
@@ -171,15 +200,5 @@
 
 	.sep {
 		opacity: 0.5;
-	}
-
-	@keyframes crosshair-pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.7;
-		}
 	}
 </style>
