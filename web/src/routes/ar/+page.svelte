@@ -211,7 +211,14 @@
 			}
 			const clubName = aircraft.clubId ? (clubNames.get(aircraft.clubId) ?? null) : null;
 
-			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration, clubName);
+			const arPosition = fixToARPosition(
+				currentFix,
+				userPosition,
+				aircraft.registration,
+				clubName,
+				aircraft.aircraftCategory,
+				aircraft.adsbEmitterCategory
+			);
 			if (!arPosition) continue;
 
 			// Filter by range
@@ -397,6 +404,7 @@
 					screenPosition={screen}
 					watched={watchedIds.has(aircraftId)}
 					rangeNm={settings.rangeNm}
+					viewHeading={deviceOrientation?.heading ?? 0}
 					onclick={() => handleAircraftClick(aircraftId)}
 				/>
 			{/each}

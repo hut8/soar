@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Users, Radar, Antenna, MapPin, Plane, Camera, Globe } from '@lucide/svelte';
+	import { Users, Radar, Antenna, MapPin, Plane, Camera, Binoculars, Globe } from '@lucide/svelte';
 	import { auth } from '$lib/stores/auth';
+	import { browser } from '$app/environment';
 
 	const clubsPath = resolve('/clubs');
 	const livePath = resolve('/live');
@@ -10,6 +11,14 @@
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
 	const arPath = resolve('/ar');
+	const spotterPath = resolve('/spotter');
+
+	// Detect mobile devices (phones/tablets with rear cameras + gyroscopes) for AR routing.
+	// Touch detection is insufficient — touchscreen laptops lack rear cameras.
+	const isMobileDevice =
+		browser &&
+		(/Android|iPhone|iPod/i.test(navigator.userAgent) ||
+			(/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
 
 	// Reactive club operations path
 	let clubOpsPath = $derived(
@@ -174,9 +183,9 @@
 					</div>
 				</a>
 
-				<!-- AR Tracker Button -->
+				<!-- AR Tracker (mobile) / Spotter (desktop) -->
 				<a
-					href={arPath}
+					href={isMobileDevice ? arPath : spotterPath}
 					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 				>
 					<div class="space-y-6 text-center">
@@ -184,11 +193,17 @@
 							<div
 								class="rounded-full bg-tertiary-500/20 p-4 transition-colors group-hover:bg-tertiary-500/30"
 							>
-								<Camera size={48} class="text-white drop-shadow-lg" />
+								{#if isMobileDevice}
+									<Camera size={48} class="text-white drop-shadow-lg" />
+								{:else}
+									<Binoculars size={48} class="text-white drop-shadow-lg" />
+								{/if}
 							</div>
 						</div>
 						<div class="space-y-2">
-							<h2 class="text-2xl font-bold text-white drop-shadow-lg">AR Tracker</h2>
+							<h2 class="text-2xl font-bold text-white drop-shadow-lg">
+								{isMobileDevice ? 'AR Tracker' : 'Spotter'}
+							</h2>
 						</div>
 					</div>
 				</a>

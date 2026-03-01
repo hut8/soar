@@ -1,5 +1,7 @@
 // AR-specific TypeScript type definitions
 
+import type { AircraftCategory, AdsbEmitterCategory } from '$lib/types';
+
 export interface ARDeviceOrientation {
 	heading: number; // Compass heading (0-360°, 0 = North)
 	pitch: number; // Device pitch (beta: forward/back tilt, -180 to 180)
@@ -27,6 +29,9 @@ export interface ARAircraftPosition {
 	distance: number; // nautical miles from user
 	bearing: number; // 0-360°
 	elevation: number; // degrees above horizon (-90 to 90)
+	trackDegrees: number | null; // aircraft heading (0-360°, 0 = north)
+	aircraftCategory: AircraftCategory | null;
+	adsbEmitterCategory: AdsbEmitterCategory | null;
 }
 
 export interface ARScreenPosition {

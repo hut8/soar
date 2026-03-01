@@ -2,7 +2,7 @@
 
 import { calculateDistance, calculateBearing } from '$lib/geography';
 import type { ARUserPosition, ARAircraftPosition } from './types';
-import type { Fix } from '$lib/types';
+import type { Fix, AircraftCategory, AdsbEmitterCategory } from '$lib/types';
 import type { GeoBounds } from '$lib/services/FixFeed';
 
 const METERS_TO_FEET = 3.28084;
@@ -38,7 +38,9 @@ export function fixToARPosition(
 	fix: Fix,
 	userPosition: ARUserPosition,
 	registration?: string | null,
-	clubName?: string | null
+	clubName?: string | null,
+	aircraftCategory?: AircraftCategory | null,
+	adsbEmitterCategory?: AdsbEmitterCategory | null
 ): ARAircraftPosition | null {
 	if (!fix.aircraftId || fix.latitude == null || fix.longitude == null) {
 		return null;
@@ -74,7 +76,10 @@ export function fixToARPosition(
 		timestamp: fix.receivedAt,
 		distance,
 		bearing,
-		elevation
+		elevation,
+		trackDegrees: fix.trackDegrees ?? null,
+		aircraftCategory: aircraftCategory ?? null,
+		adsbEmitterCategory: adsbEmitterCategory ?? null
 	};
 }
 
