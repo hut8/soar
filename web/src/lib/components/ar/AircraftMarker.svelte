@@ -1,9 +1,17 @@
 <script lang="ts">
 	import type { ARAircraftPosition, ARScreenPosition } from '$lib/ar/types';
 
-	let { aircraft, screenPosition, onclick } = $props<{
+	let {
+		aircraft,
+		screenPosition,
+		watched = false,
+		rangeNm = 50,
+		onclick
+	} = $props<{
 		aircraft: ARAircraftPosition;
 		screenPosition: ARScreenPosition;
+		watched?: boolean;
+		rangeNm?: number;
 		onclick?: () => void;
 	}>();
 
@@ -22,13 +30,17 @@
 			: '0fpm'
 	);
 
-	// Scale crosshair based on distance (closer = larger)
+	const MIN_CROSSHAIR = 24;
+	const MAX_CROSSHAIR = 72;
+
+	// Scale crosshair inversely proportional to distance within the current range
 	const crosshairSize = $derived.by(() => {
-		if (aircraft.distance < 5) return 64;
-		if (aircraft.distance < 15) return 56;
-		if (aircraft.distance < 30) return 48;
-		return 44;
+		const t = Math.min(aircraft.distance / rangeNm, 1);
+		return Math.round(MAX_CROSSHAIR - t * (MAX_CROSSHAIR - MIN_CROSSHAIR));
 	});
+
+	// Accent color: red for watched aircraft, cyan otherwise
+	const accent = $derived(watched ? '#ef4444' : 'cyan');
 </script>
 
 {#if screenPosition.visible}
@@ -49,24 +61,24 @@
 		>
 			<!-- Outer ring -->
 			<circle cx="32" cy="32" r="28" stroke="white" stroke-width="2" opacity="0.8" />
-			<circle cx="32" cy="32" r="28" stroke="cyan" stroke-width="1" opacity="0.6" />
+			<circle cx="32" cy="32" r="28" stroke={accent} stroke-width="1" opacity="0.6" />
 
 			<!-- Crosshair lines (with gap in center) -->
 			<!-- Top -->
 			<line x1="32" y1="2" x2="32" y2="20" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="32" y1="2" x2="32" y2="20" stroke="cyan" stroke-width="1" opacity="0.5" />
+			<line x1="32" y1="2" x2="32" y2="20" stroke={accent} stroke-width="1" opacity="0.5" />
 			<!-- Bottom -->
 			<line x1="32" y1="44" x2="32" y2="62" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="32" y1="44" x2="32" y2="62" stroke="cyan" stroke-width="1" opacity="0.5" />
+			<line x1="32" y1="44" x2="32" y2="62" stroke={accent} stroke-width="1" opacity="0.5" />
 			<!-- Left -->
 			<line x1="2" y1="32" x2="20" y2="32" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="2" y1="32" x2="20" y2="32" stroke="cyan" stroke-width="1" opacity="0.5" />
+			<line x1="2" y1="32" x2="20" y2="32" stroke={accent} stroke-width="1" opacity="0.5" />
 			<!-- Right -->
 			<line x1="44" y1="32" x2="62" y2="32" stroke="white" stroke-width="2" opacity="0.9" />
-			<line x1="44" y1="32" x2="62" y2="32" stroke="cyan" stroke-width="1" opacity="0.5" />
+			<line x1="44" y1="32" x2="62" y2="32" stroke={accent} stroke-width="1" opacity="0.5" />
 
 			<!-- Center dot -->
-			<circle cx="32" cy="32" r="3" fill="cyan" opacity="0.9" />
+			<circle cx="32" cy="32" r="3" fill={accent} opacity="0.9" />
 			<circle cx="32" cy="32" r="3" stroke="white" stroke-width="1" opacity="0.6" />
 
 			<!-- Corner tick marks for extra visibility -->

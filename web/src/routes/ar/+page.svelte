@@ -19,6 +19,7 @@
 	} from '$lib/ar/types';
 	import type { BulkAreaSubscriptionMessage } from '$lib/services/FixFeed';
 	import type { Fix } from '$lib/types';
+	import { watchlist } from '$lib/stores/watchlist';
 	import AircraftMarker from '$lib/components/ar/AircraftMarker.svelte';
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import ARControls from '$lib/components/ar/ARControls.svelte';
@@ -77,6 +78,9 @@
 			settings.fovVertical = isPortrait ? BASE_FOV_WIDE : BASE_FOV_NARROW;
 		}
 	});
+
+	// Watched aircraft IDs for efficient lookup
+	const watchedIds = $derived(new Set($watchlist.entries.map((e) => e.aircraftId)));
 
 	// Services
 	const arTracker = ARTracker.getInstance();
@@ -268,6 +272,9 @@
 		// Start orientation tracking
 		await arTracker.startOrientation();
 
+		// Load watchlist for watched aircraft highlighting
+		watchlist.load();
+
 		// Connect to fix feed
 		fixFeed.connect();
 	});
@@ -356,6 +363,8 @@
 				<AircraftMarker
 					{aircraft}
 					screenPosition={screen}
+					watched={watchedIds.has(aircraftId)}
+					rangeNm={settings.rangeNm}
 					onclick={() => handleAircraftClick(aircraftId)}
 				/>
 			{/each}
