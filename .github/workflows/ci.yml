@@ -414,7 +414,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: soar-linux-x64
           path: ./
@@ -603,7 +603,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: soar-linux-x64
           path: ./
