@@ -122,6 +122,11 @@ world_magnetic_model = "0.4.0"
 toml = "0.8"
 notify = "7"
 tokio-util = { version = "0.7", features = ["rt"] }
+async-stripe = { version = "0.41", default-features = false, features = [
+    "runtime-tokio-hyper-rustls",
+    "connect", "checkout", "billing",
+    "webhook-events", "events",
+] }
 
 [dev-dependencies]
 hex-literal = "1.1"

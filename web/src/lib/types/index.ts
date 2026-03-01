@@ -30,6 +30,16 @@ import type { ReverseGeocodeResponse } from './generated/ReverseGeocodeResponse'
 import type { DataStream } from './generated/DataStream';
 import type { StreamFormat } from './generated/StreamFormat';
 
+// Import auto-generated payment types from Rust
+import type { PaymentView } from './generated/PaymentView';
+import type { PaymentType } from './generated/PaymentType';
+import type { PaymentStatus } from './generated/PaymentStatus';
+import type { CreateChargeRequest } from './generated/CreateChargeRequest';
+import type { CheckoutResponse } from './generated/CheckoutResponse';
+import type { StripeOnboardingResponse } from './generated/StripeOnboardingResponse';
+import type { StripeConnectStatusView } from './generated/StripeConnectStatusView';
+import type { StripeDashboardLinkResponse } from './generated/StripeDashboardLinkResponse';
+
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
 import type { GeofenceLayer } from './generated/GeofenceLayer';
@@ -79,7 +89,16 @@ export type {
 	DataStream,
 	StreamFormat,
 	// Geocoding types
-	ReverseGeocodeResponse
+	ReverseGeocodeResponse,
+	// Payment types
+	PaymentView,
+	PaymentType,
+	PaymentStatus,
+	CreateChargeRequest,
+	CheckoutResponse,
+	StripeOnboardingResponse,
+	StripeConnectStatusView,
+	StripeDashboardLinkResponse
 };
 
 // Type aliases for backward compatibility
