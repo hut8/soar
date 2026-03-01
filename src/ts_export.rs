@@ -6,6 +6,10 @@ mod tests {
 
     use crate::actions::club_tow_fees::TowFeeView;
     use crate::actions::geocoding::ReverseGeocodeResponse;
+    use crate::actions::payments::{CheckoutResponse, CreateChargeRequest, PaymentView};
+    use crate::actions::stripe_connect::{
+        StripeConnectStatusView, StripeDashboardLinkResponse, StripeOnboardingResponse,
+    };
     use crate::actions::views::{
         Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView, ClubView,
         FlightView, ModelDataView, ReceiverView, RunwayEnd, RunwayView, UserView,
@@ -21,6 +25,7 @@ mod tests {
         GeofenceSubscriber, GeofenceWithCounts, UpdateGeofenceRequest,
     };
     use crate::ingest_config::{DataStream, StreamFormat};
+    use crate::payments::{PaymentStatus, PaymentType};
 
     #[test]
     fn export_types() {
@@ -69,5 +74,20 @@ mod tests {
         // Data stream types
         DataStream::export(&cfg).expect("Failed to export DataStream type");
         StreamFormat::export(&cfg).expect("Failed to export StreamFormat type");
+
+        // Payment types
+        PaymentType::export(&cfg).expect("Failed to export PaymentType type");
+        PaymentStatus::export(&cfg).expect("Failed to export PaymentStatus type");
+        PaymentView::export(&cfg).expect("Failed to export PaymentView type");
+        CreateChargeRequest::export(&cfg).expect("Failed to export CreateChargeRequest type");
+        CheckoutResponse::export(&cfg).expect("Failed to export CheckoutResponse type");
+
+        // Stripe Connect types
+        StripeOnboardingResponse::export(&cfg)
+            .expect("Failed to export StripeOnboardingResponse type");
+        StripeConnectStatusView::export(&cfg)
+            .expect("Failed to export StripeConnectStatusView type");
+        StripeDashboardLinkResponse::export(&cfg)
+            .expect("Failed to export StripeDashboardLinkResponse type");
     }
 }

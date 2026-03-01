@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TYPE IF EXISTS payment_status;
+DROP TYPE IF EXISTS payment_type;
