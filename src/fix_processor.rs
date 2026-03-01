@@ -454,9 +454,12 @@ impl FixProcessor {
                             }
                         }
                         Some(existing) if existing != flight_number => {
-                            // Callsign changed from one value to another - this should not happen
-                            // because flight tracker should have created a new flight
-                            error!(
+                            // Callsign changed from one value to another — the flight
+                            // tracker will detect this on the next fix and split the
+                            // flight.  Log at warn because this is a transient state
+                            // (the current fix was assigned to the old flight before
+                            // the split) rather than a persistent data integrity issue.
+                            warn!(
                                 "Flight {} callsign mismatch: has '{}' but fix has '{}' - flight tracker should have created a new flight",
                                 flight_id, existing, flight_number
                             );
