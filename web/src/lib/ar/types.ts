@@ -17,6 +17,7 @@ export interface ARUserPosition {
 export interface ARAircraftPosition {
 	aircraftId: string;
 	registration: string | null;
+	clubName: string | null;
 	latitude: number;
 	longitude: number;
 	altitudeFeet: number;

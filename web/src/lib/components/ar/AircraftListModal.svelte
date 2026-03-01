@@ -2,10 +2,16 @@
 	import { X, Plane, ArrowUp } from '@lucide/svelte';
 	import type { ARAircraftPosition } from '$lib/ar/types';
 
-	let { aircraft, onSelect, onClose } = $props<{
+	let {
+		aircraft,
+		onSelect,
+		onClose,
+		watchedIds = new Set()
+	} = $props<{
 		aircraft: ARAircraftPosition[];
 		onSelect: (aircraft: ARAircraftPosition) => void;
 		onClose: () => void;
+		watchedIds?: Set<string>;
 	}>();
 
 	// Sort by distance and take nearest 10
@@ -57,12 +63,19 @@
 				</div>
 			{:else}
 				{#each nearestAircraft as ac (ac.aircraftId)}
-					<button class="aircraft-item" onclick={() => handleSelect(ac)}>
+					<button
+						class="aircraft-item"
+						class:watched={watchedIds.has(ac.aircraftId)}
+						onclick={() => handleSelect(ac)}
+					>
 						<div class="aircraft-icon">
 							<Plane size={20} />
 						</div>
 						<div class="aircraft-info">
 							<div class="aircraft-reg">{ac.registration || 'Unknown'}</div>
+							{#if ac.clubName}
+								<div class="aircraft-club">{ac.clubName}</div>
+							{/if}
 							<div class="aircraft-details">
 								<span>{formatAltitude(ac.altitudeFeet)}</span>
 								<span class="separator">•</span>
@@ -173,6 +186,11 @@
 		text-align: left;
 	}
 
+	.aircraft-item.watched {
+		background: rgba(239, 68, 68, 0.15);
+		border-left: 3px solid #ef4444;
+	}
+
 	.aircraft-item:active {
 		background: rgba(255, 255, 255, 0.1);
 	}
@@ -193,6 +211,11 @@
 		color: rgb(var(--color-primary-500));
 	}
 
+	.aircraft-item.watched .aircraft-icon {
+		background: rgba(239, 68, 68, 0.2);
+		color: #ef4444;
+	}
+
 	.aircraft-info {
 		flex: 1;
 		min-width: 0;
@@ -201,6 +224,14 @@
 	.aircraft-reg {
 		font-weight: 600;
 		font-size: 0.9375rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.aircraft-club {
+		font-size: 0.6875rem;
+		color: rgba(255, 255, 255, 0.5);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;

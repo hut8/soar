@@ -10,6 +10,7 @@
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { calculateBoundingBox, fixToARPosition } from '$lib/ar/calculations';
 	import { throttle } from '$lib/ar/projection';
+	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
 	import type {
 		ARSettings,
@@ -19,9 +20,10 @@
 		ARScreenPosition
 	} from '$lib/ar/types';
 	import type { BulkAreaSubscriptionMessage } from '$lib/services/FixFeed';
-	import type { Fix } from '$lib/types';
+	import type { Fix, Aircraft, DataResponse, Club } from '$lib/types';
 	import { watchlist } from '$lib/stores/watchlist';
 	import AircraftMarker from '$lib/components/ar/AircraftMarker.svelte';
+	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import CompassOverlay from '$lib/components/ar/CompassOverlay.svelte';
 	import DebugPanel from '$lib/components/ar/DebugPanel.svelte';
 	import AircraftListModal from '$lib/components/ar/AircraftListModal.svelte';
@@ -65,6 +67,23 @@
 		{ aircraft: ARAircraftPosition; screen: ARScreenPosition }
 	>();
 	let currentSubscription: BulkAreaSubscriptionMessage | null = null;
+
+	// Aircraft status modal
+	let showAircraftStatusModal = $state(false);
+	let selectedAircraft: Aircraft | null = $state(null);
+
+	// Club name cache
+	let clubNames = new SvelteMap<string, string>();
+
+	async function fetchClubName(clubId: string): Promise<void> {
+		if (clubNames.has(clubId)) return;
+		try {
+			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
+			clubNames.set(clubId, response.data.name);
+		} catch {
+			clubNames.set(clubId, 'Unknown Club');
+		}
+	}
 
 	const targetAircraft = $derived(
 		targetAircraftId ? (aircraftPositions.get(targetAircraftId)?.aircraft ?? null) : null
@@ -147,7 +166,13 @@
 			const currentFix = aircraft.currentFix as Fix | null;
 			if (!currentFix) continue;
 
-			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration);
+			// Fetch club name if aircraft has a club
+			if (aircraft.clubId) {
+				fetchClubName(aircraft.clubId);
+			}
+			const clubName = aircraft.clubId ? (clubNames.get(aircraft.clubId) ?? null) : null;
+
+			const arPosition = fixToARPosition(currentFix, userPosition, aircraft.registration, clubName);
 			if (!arPosition) continue;
 
 			if (arPosition.distance > settings.rangeNm) continue;
@@ -207,7 +232,11 @@
 	}, 100);
 
 	function handleAircraftClick(aircraftId: string) {
-		logger.debug('Aircraft clicked: {aircraftId}', { aircraftId });
+		const aircraft = aircraftRegistry.getAircraft(aircraftId);
+		if (aircraft) {
+			selectedAircraft = aircraft;
+			showAircraftStatusModal = true;
+		}
 	}
 
 	function handleListClick() {
@@ -565,9 +594,15 @@
 	{#if showAircraftList}
 		<AircraftListModal
 			aircraft={allAircraftList}
+			{watchedIds}
 			onSelect={handleAircraftSelect}
 			onClose={() => (showAircraftList = false)}
 		/>
+	{/if}
+
+	<!-- Aircraft status modal -->
+	{#if selectedAircraft}
+		<AircraftStatusModal bind:showModal={showAircraftStatusModal} bind:selectedAircraft />
 	{/if}
 </div>
 
