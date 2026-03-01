@@ -134,13 +134,13 @@ impl BeastClient {
                     retry_delay = config.retry_delay_seconds;
                 }
                 ConnectionResult::ConnectionFailed(e) => {
-                    error!(error = %e, "Beast connection failed");
+                    warn!(error = %e, "Beast connection failed");
                     retry_delay = std::cmp::min(retry_delay * 2, config.max_retry_delay_seconds);
                     info!("Retrying in {} seconds", retry_delay);
                     sleep(Duration::from_secs(retry_delay)).await;
                 }
                 ConnectionResult::OperationFailed(e) => {
-                    error!(error = %e, "Beast operation failed");
+                    warn!(error = %e, "Beast operation failed");
                     let operation_retry_delay = std::cmp::min(retry_delay, 5);
                     info!("Retrying in {} seconds", operation_retry_delay);
                     sleep(Duration::from_secs(operation_retry_delay)).await;
