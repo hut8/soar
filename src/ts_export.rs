@@ -29,7 +29,8 @@ mod tests {
 
     #[test]
     fn export_types() {
-        let cfg = Config::default();
+        // ts-rs 12 changed Config::default() to Config::from_env()
+        let cfg = Config::from_env();
 
         // Calling export() generates the .ts files
         Fix::export(&cfg).expect("Failed to export Fix type");
