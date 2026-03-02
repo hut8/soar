@@ -45,7 +45,7 @@ impl Default for SbsClientConfig {
 }
 
 /// SBS client that connects to an SBS-1 BaseStation server via TCP
-/// Sends SBS CSV messages to a persistent queue as protobuf envelopes
+/// Wraps raw SBS CSV messages in protobuf Envelopes and sends them via the persistent queue
 pub struct SbsClient {
     config: SbsClientConfig,
 }
@@ -61,7 +61,7 @@ impl SbsClient {
     /// Each envelope contains: source type (SBS), timestamp (captured at receive time), and raw payload
     #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
     pub async fn start(
-        &mut self,
+        &self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
@@ -341,33 +341,6 @@ impl SbsClient {
             }
         }
     }
-
-    /// Publish an SBS CSV line to the queue (used by tests)
-    #[cfg(test)]
-    async fn publish_line(raw_message_tx: &flume::Sender<Vec<u8>>, line: String) {
-        if line.is_empty() {
-            return;
-        }
-
-        // Get current timestamp as microseconds since Unix epoch
-        let timestamp_micros = chrono::Utc::now().timestamp_micros();
-
-        // Build message: 8-byte timestamp + CSV line as UTF-8 bytes
-        let mut message = Vec::with_capacity(8 + line.len());
-        message.extend_from_slice(&timestamp_micros.to_be_bytes());
-        message.extend_from_slice(line.as_bytes());
-
-        match raw_message_tx.send_async(message).await {
-            Ok(_) => {
-                trace!("Published SBS line ({} bytes)", line.len());
-                metrics::counter!("sbs.lines.published_total").increment(1);
-            }
-            Err(e) => {
-                error!(error = %e, "Failed to send SBS line to queue");
-                metrics::counter!("sbs.lines.dropped_total").increment(1);
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -395,73 +368,6 @@ mod tests {
         assert_eq!(config.port, 5002);
         assert_eq!(config.retry_delay_seconds, 5);
         assert_eq!(config.max_retry_delay_seconds, 120);
-    }
-
-    #[tokio::test]
-    async fn test_publish_line_format() {
-        // Create a channel to capture published messages
-        let (tx, rx) = flume::bounded::<Vec<u8>>(10);
-
-        // Test SBS message line
-        let line = "MSG,3,,,AB1234,,,,,,,5000,,,51.5074,-0.1278,,,0,0,0,0".to_string();
-
-        SbsClient::publish_line(&tx, line.clone()).await;
-
-        // Receive the published message
-        let message = rx.recv_async().await.unwrap();
-
-        // Verify format: 8-byte timestamp + CSV line bytes
-        assert!(message.len() > 8);
-        assert_eq!(message.len(), 8 + line.len());
-
-        // Extract timestamp (first 8 bytes)
-        let timestamp_bytes: [u8; 8] = message[0..8].try_into().unwrap();
-        let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
-
-        // Verify timestamp is reasonable (within last minute)
-        let now_micros = chrono::Utc::now().timestamp_micros();
-        let diff = (now_micros - timestamp_micros).abs();
-        assert!(diff < 60_000_000); // Within 60 seconds
-
-        // Extract line bytes
-        let line_bytes = &message[8..];
-        assert_eq!(line_bytes, line.as_bytes());
-    }
-
-    #[tokio::test]
-    async fn test_publish_empty_line() {
-        let (tx, rx) = flume::bounded::<Vec<u8>>(10);
-
-        // Empty line should not be published
-        SbsClient::publish_line(&tx, String::new()).await;
-
-        // Channel should be empty
-        assert!(rx.try_recv().is_err());
-    }
-
-    #[tokio::test]
-    async fn test_publish_multiple_lines() {
-        let (tx, rx) = flume::bounded::<Vec<u8>>(10);
-
-        let lines = vec![
-            "MSG,1,,,AB1234,,,,,,,,,,,,,0,0,0,0".to_string(),
-            "MSG,3,,,CD5678,,,,,,,10000,,,52.5074,-1.1278,,,0,0,0,0".to_string(),
-            "MSG,4,,,EF9012,,,,,,,,,450,180,,,0,0,0,0".to_string(),
-        ];
-
-        for line in &lines {
-            SbsClient::publish_line(&tx, line.clone()).await;
-        }
-
-        // Verify all messages were published
-        for (i, line) in lines.iter().enumerate() {
-            let message = rx
-                .recv_async()
-                .await
-                .unwrap_or_else(|_| panic!("Failed to receive message {}", i));
-            assert_eq!(message.len(), 8 + line.len());
-            assert_eq!(&message[8..], line.as_bytes());
-        }
     }
 
     #[test]
@@ -508,41 +414,6 @@ mod tests {
             let type_val: u8 = type_num.parse().unwrap();
             assert!((1..=8).contains(&type_val));
         }
-    }
-
-    #[tokio::test]
-    async fn test_publish_line_with_special_characters() {
-        let (tx, rx) = flume::bounded::<Vec<u8>>(10);
-
-        // SBS message with special characters in callsign
-        let line = "MSG,1,,,A1B2C3,,,,,,,RYR-123,,,,,,,0,0,0,0".to_string();
-
-        SbsClient::publish_line(&tx, line.clone()).await;
-
-        let message = rx.recv_async().await.unwrap();
-        let line_bytes = &message[8..];
-        assert_eq!(line_bytes, line.as_bytes());
-        assert_eq!(String::from_utf8_lossy(line_bytes), line);
-    }
-
-    #[tokio::test]
-    async fn test_publish_line_queue_capacity() {
-        // Create a queue and verify we can publish messages to it
-        let (tx, rx) = flume::bounded::<Vec<u8>>(10);
-
-        let line = "MSG,3,,,AB1234,,,,,,,5000,,,51.5074,-0.1278,,,0,0,0,0".to_string();
-
-        // Publish a few messages
-        for _ in 0..3 {
-            SbsClient::publish_line(&tx, line.clone()).await;
-        }
-
-        // Verify messages were published
-        let mut count = 0;
-        while rx.try_recv().is_ok() {
-            count += 1;
-        }
-        assert_eq!(count, 3);
     }
 
     #[test]

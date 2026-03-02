@@ -45,7 +45,7 @@ impl Default for BeastClientConfig {
 }
 
 /// Beast client that connects to a Beast-format ADS-B server via TCP
-/// Publishes raw Beast messages for processing
+/// Wraps raw Beast messages in protobuf Envelopes and sends them via the persistent queue
 pub struct BeastClient {
     config: BeastClientConfig,
 }
@@ -61,7 +61,7 @@ impl BeastClient {
     /// Each envelope contains: source type (Beast), timestamp (captured at receive time), and raw payload
     #[tracing::instrument(skip(self, queue, health_state, stats_counter))]
     pub async fn start(
-        &mut self,
+        &self,
         queue: std::sync::Arc<crate::persistent_queue::PersistentQueue<Vec<u8>>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         stats_counter: Option<std::sync::Arc<std::sync::atomic::AtomicU64>>,
