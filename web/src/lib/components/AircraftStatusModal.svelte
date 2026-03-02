@@ -361,12 +361,12 @@
 		>
 			<!-- Sticky Header -->
 			<div
-				class="sticky top-0 z-10 flex items-center justify-between border-b border-surface-300 bg-surface-50 p-6 dark:border-surface-600 dark:bg-surface-900"
+				class="sticky top-0 z-10 border-b border-surface-300 bg-surface-50 p-4 sm:p-6 dark:border-surface-600 dark:bg-surface-900"
 			>
-				<div class="flex items-center gap-3">
+				<div class="flex items-start gap-3">
 					{#if isCompassActive && userLocation}
 						<!-- Direction arrow pointing to aircraft -->
-						<div class="flex flex-col items-center">
+						<div class="flex shrink-0 flex-col items-center">
 							<div
 								class="direction-arrow"
 								style="transform: rotate({directionToAircraft}deg)"
@@ -389,22 +389,31 @@
 					{:else}
 						<!-- Static plane icon when compass not available -->
 						<div
-							class="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500 text-white"
 						>
 							<Plane size={24} />
 						</div>
 					{/if}
-					<div>
-						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
-						<p class="text-sm text-surface-600 dark:text-surface-400">
-							{selectedAircraft.registration || formatPrimaryAddress(selectedAircraft)}
-							{#if selectedAircraft.aircraftModel}
-								• {selectedAircraft.aircraftModel}
-							{/if}
-						</p>
+					<div class="min-w-0 flex-1">
+						<h2 id="aircraft-status-title" class="truncate text-lg font-bold sm:text-xl">
+							Aircraft Status
+							<span class="font-normal text-surface-600 dark:text-surface-400">
+								— {selectedAircraft.registration || formatPrimaryAddress(selectedAircraft)}
+							</span>
+						</h2>
+						{#if selectedAircraft.aircraftModel}
+							<p class="text-sm text-surface-600 dark:text-surface-400">
+								{selectedAircraft.aircraftModel}
+							</p>
+						{/if}
 					</div>
+					<!-- Close button pinned to upper right -->
+					<button class="preset-tonal-surface-500 btn shrink-0 btn-sm" onclick={closeModal}>
+						<X size={20} />
+					</button>
 				</div>
-				<div class="flex items-center gap-2">
+				<!-- Action buttons stacked on mobile, side-by-side on larger screens -->
+				<div class="mt-3 flex flex-col gap-2 sm:flex-row">
 					<button
 						class="btn btn-sm {isInWatchlist
 							? 'preset-filled-warning-500'
@@ -426,9 +435,6 @@
 						<ExternalLink size={16} />
 						Details
 					</a>
-					<button class="preset-tonal-surface-500 btn btn-sm" onclick={closeModal}>
-						<X size={20} />
-					</button>
 				</div>
 			</div>
 

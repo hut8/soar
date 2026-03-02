@@ -9,7 +9,7 @@ test.describe('Watchlist', () => {
 		await authenticatedPage.goto('/watchlist');
 
 		// Wait for the page title to be visible - this confirms page loaded
-		const heading = authenticatedPage.getByRole('heading', { name: 'My Watchlist', exact: true });
+		const heading = authenticatedPage.getByRole('heading', { name: 'Watchlist', exact: true });
 		await expect(heading).toBeVisible({ timeout: 10000 });
 
 		// Wait for loading state to complete

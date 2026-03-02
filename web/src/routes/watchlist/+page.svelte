@@ -47,20 +47,15 @@
 </script>
 
 <svelte:head>
-	<title>Watchlist - SOAR</title>
+	<title>Watchlist — SOAR</title>
 </svelte:head>
 
 {#if $auth.isAuthenticated && $auth.user}
 	<div class="container mx-auto max-w-7xl space-y-6 p-4">
 		<!-- Header -->
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="h1">My Watchlist</h1>
-				<p class="text-surface-600-300-token mt-2">
-					Track aircraft and receive email notifications when flights complete.
-				</p>
-			</div>
-			<div class="flex gap-2">
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+			<h1 class="h1">Watchlist</h1>
+			<div class="flex flex-col gap-2 sm:flex-row">
 				<button onclick={() => (showAddModal = true)} class="btn preset-filled-primary-500">
 					<Plus class="h-4 w-4" />
 					Add Aircraft
@@ -98,7 +93,9 @@
 			<!-- Watchlist Grid -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 				{#each $watchlist.entries as entry (entry.aircraftId)}
-					<div class="card p-4">
+					<div
+						class="card rounded-lg border border-surface-300 bg-surface-50 p-4 dark:border-surface-600 dark:bg-surface-800"
+					>
 						<!-- Aircraft Info -->
 						<div class="mb-3">
 							{#if entry.aircraft}

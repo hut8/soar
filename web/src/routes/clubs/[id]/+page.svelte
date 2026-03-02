@@ -19,6 +19,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
+	import { toaster } from '$lib/toaster';
 	import type {
 		ClubWithSoaring,
 		User,
@@ -151,12 +152,14 @@
 
 			// Update the auth store with the new user data
 			auth.updateUser(updatedUser);
+			toaster.success({ title: `Set ${club.name} as your club` });
 
 			// Load aircraft now that user is part of the club
 			await loadAircraft();
 		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			logger.error('Error setting club: {error}', { error: err });
-			// You could add a toast notification here
+			toaster.error({ title: 'Failed to set club', description: errorMessage });
 		} finally {
 			settingClub = false;
 		}
@@ -416,10 +419,10 @@
 											target="_blank"
 											rel="noopener noreferrer"
 											class="preset-tonal-primary-500 btn btn-sm"
-											title="View device details"
+											title="View aircraft details"
 										>
 											<Plane class="h-4 w-4" />
-											Device
+											Details
 										</a>
 									{/if}
 									<a
