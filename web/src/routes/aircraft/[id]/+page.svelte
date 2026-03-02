@@ -104,6 +104,7 @@
 	let loadingImages = true;
 	let isFixesCollapsed = true;
 	let watchlistLoading = false;
+	let watchlistAction: 'adding' | 'removing' | null = null;
 
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.isAdmin === true;
@@ -328,6 +329,7 @@
 		}
 
 		watchlistLoading = true;
+		watchlistAction = isInWatchlist ? 'removing' : 'adding';
 		try {
 			if (isInWatchlist) {
 				await watchlist.remove(aircraftId);
@@ -341,6 +343,7 @@
 			toaster.error({ title: 'Failed to update watchlist', description: errorMessage });
 		} finally {
 			watchlistLoading = false;
+			watchlistAction = null;
 		}
 	}
 </script>
@@ -380,7 +383,7 @@
 					<span
 						class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
 					></span>
-					{isInWatchlist ? 'Removing...' : 'Adding...'}
+					{watchlistAction === 'removing' ? 'Removing...' : 'Adding...'}
 				{:else if isInWatchlist}
 					<Eye class="h-4 w-4" />
 					Watching
