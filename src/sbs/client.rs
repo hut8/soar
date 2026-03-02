@@ -45,7 +45,7 @@ impl Default for SbsClientConfig {
 }
 
 /// SBS client that connects to an SBS-1 BaseStation server via TCP
-/// Sends raw SBS CSV messages via envelope queue for processing
+/// Wraps raw SBS CSV messages in protobuf Envelopes and sends them via the persistent queue
 pub struct SbsClient {
     config: SbsClientConfig,
 }

@@ -45,7 +45,7 @@ impl Default for BeastClientConfig {
 }
 
 /// Beast client that connects to a Beast-format ADS-B server via TCP
-/// Sends raw Beast messages via envelope queue for processing
+/// Wraps raw Beast messages in protobuf Envelopes and sends them via the persistent queue
 pub struct BeastClient {
     config: BeastClientConfig,
 }
