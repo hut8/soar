@@ -57,6 +57,7 @@ pub mod live_fixes;
 pub mod locations;
 pub mod locations_repo;
 pub mod magnetic;
+pub mod manufacturer_names;
 pub mod message_sources;
 pub mod metrics;
 pub mod nats_publisher;

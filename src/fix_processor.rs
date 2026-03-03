@@ -8,6 +8,7 @@ use crate::aircraft_repo::{AircraftCache, AircraftPacketFields};
 use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
+use crate::manufacturer_names::normalize_aircraft_model;
 use crate::nats_publisher::NatsFixPublisher;
 use crate::ogn::PacketContext;
 use crate::receiver_repo::ReceiverRepository;
@@ -251,8 +252,8 @@ impl FixProcessor {
                 // The model field can be either a 3-4 character ICAO code or a full model name
                 let model_string = pos_packet.comment.model.as_ref().map(|m| m.to_string());
 
-                // Use as aircraft_model unconditionally
-                let aircraft_model = model_string.clone();
+                // Use as aircraft_model unconditionally, with manufacturer normalization
+                let aircraft_model = model_string.clone().map(|m| normalize_aircraft_model(&m));
 
                 // Only use as icao_model_code if it's exactly 3 or 4 characters (per ICAO Doc 8643)
                 let icao_model_code = model_string.filter(|model| {

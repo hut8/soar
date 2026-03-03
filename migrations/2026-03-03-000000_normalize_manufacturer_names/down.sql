@@ -1,0 +1,3 @@
+-- This migration is not reversible.
+-- The original data contained inconsistent manufacturer names from multiple sources
+-- and cannot be reconstructed.
