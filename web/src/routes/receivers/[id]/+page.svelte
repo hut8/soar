@@ -184,19 +184,19 @@
 	const DEFAULT_COLUMNS = new Set(STATUS_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
 	const STORAGE_KEY = 'receiver-status-columns';
 
-	function loadVisibleColumns(): SvelteSet<string> {
+	function loadVisibleColumns(): Set<string> {
 		try {
 			const stored = localStorage.getItem(STORAGE_KEY);
 			if (stored) {
 				const parsed = JSON.parse(stored) as string[];
 				if (Array.isArray(parsed) && parsed.length > 0) {
-					return new SvelteSet(parsed);
+					return new Set(parsed);
 				}
 			}
 		} catch {
 			// Ignore parse errors
 		}
-		return new SvelteSet(DEFAULT_COLUMNS);
+		return new Set(DEFAULT_COLUMNS);
 	}
 
 	let visibleColumns = new SvelteSet(DEFAULT_COLUMNS);
@@ -213,7 +213,10 @@
 	}
 
 	function resetColumns() {
-		visibleColumns = new SvelteSet(DEFAULT_COLUMNS);
+		visibleColumns.clear();
+		for (const key of DEFAULT_COLUMNS) {
+			visibleColumns.add(key);
+		}
 		saveVisibleColumns(visibleColumns);
 	}
 
@@ -322,7 +325,11 @@
 	}
 
 	onMount(async () => {
-		visibleColumns = loadVisibleColumns();
+		const loadedColumns = loadVisibleColumns();
+		visibleColumns.clear();
+		for (const column of loadedColumns) {
+			visibleColumns.add(column);
+		}
 		document.addEventListener('click', handleColumnPickerClickOutside);
 
 		if (receiverId) {
@@ -1140,7 +1147,10 @@
 																? 'bg-gray-100 dark:bg-gray-800'
 																: ''}"
 														>
-															<td colspan={visibleColumnCount} class="px-3 py-2 font-mono text-sm">
+															<td
+																colspan={Math.max(visibleColumnCount, 1)}
+																class="px-3 py-2 font-mono text-sm"
+															>
 																{status.rawData}
 															</td>
 														</tr>
