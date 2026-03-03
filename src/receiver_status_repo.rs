@@ -71,7 +71,13 @@ impl ReceiverStatusRepository {
         .await?
     }
 
-    /// Get statuses for a receiver with pagination, including raw APRS message data
+    /// Get statuses for a receiver with pagination, including raw APRS message data.
+    ///
+    /// Uses a two-query approach: first paginates receiver_statuses (fast, uses
+    /// composite index), then fetches raw_messages only for the returned rows.
+    /// This avoids joining the entire statuses table with raw_messages before
+    /// paginating, which is catastrophically slow on hypertable-partitioned
+    /// raw_messages.
     pub async fn get_statuses_with_raw_by_receiver_paginated(
         &self,
         receiver_id: Uuid,
@@ -91,27 +97,39 @@ impl ReceiverStatusRepository {
                 .count()
                 .get_result(&mut conn)?;
 
-            // Get paginated results with raw message data
+            // Step 1: Get paginated statuses (fast — uses idx_receiver_statuses_receiver_received_at)
             let offset = (page - 1) * per_page;
-            let results = receiver_statuses::table
-                .inner_join(
-                    raw_messages::table.on(receiver_statuses::raw_message_id
-                        .eq(raw_messages::id.nullable())
-                        .and(receiver_statuses::received_at.eq(raw_messages::received_at))),
-                )
+            let statuses = receiver_statuses::table
                 .filter(receiver_statuses::receiver_id.eq(receiver_id))
                 .order(receiver_statuses::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select((ReceiverStatus::as_select(), raw_messages::raw_message))
-                .load::<(ReceiverStatus, Vec<u8>)>(&mut conn)?;
+                .load::<ReceiverStatus>(&mut conn)?;
 
-            // Convert to ReceiverStatusWithRaw
-            let statuses_with_raw = results
+            // Step 2: Fetch raw messages only for these statuses (at most per_page rows)
+            let rm_ids: Vec<Uuid> = statuses.iter().filter_map(|s| s.raw_message_id).collect();
+
+            let raw_messages_map: std::collections::HashMap<Uuid, Vec<u8>> = if rm_ids.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                raw_messages::table
+                    .filter(raw_messages::id.eq_any(&rm_ids))
+                    .select((raw_messages::id, raw_messages::raw_message))
+                    .load::<(Uuid, Vec<u8>)>(&mut conn)?
+                    .into_iter()
+                    .collect()
+            };
+
+            // Combine statuses with their raw data
+            let statuses_with_raw = statuses
                 .into_iter()
-                .map(|(status, raw_data_bytes)| ReceiverStatusWithRaw {
-                    status,
-                    raw_data: String::from_utf8_lossy(&raw_data_bytes).to_string(),
+                .map(|status| {
+                    let raw_data = status
+                        .raw_message_id
+                        .and_then(|rm_id| raw_messages_map.get(&rm_id))
+                        .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                        .unwrap_or_default();
+                    ReceiverStatusWithRaw { status, raw_data }
                 })
                 .collect();
 
