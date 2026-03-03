@@ -101,7 +101,11 @@ pub async fn copy_owners_to_aircraft(
                         THEN ar.registrant_name
                         ELSE aircraft.owner_operator
                     END,
-                    year = ar.year_mfr,
+                    year = CASE
+                        WHEN ar.year_mfr IS NOT NULL
+                        THEN ar.year_mfr
+                        ELSE aircraft.year
+                    END,
                     updated_at = CURRENT_TIMESTAMP
                 FROM (
                     SELECT ar_inner.aircraft_id, ar_inner.registrant_name, ar_inner.year_mfr
