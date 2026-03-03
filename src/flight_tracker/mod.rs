@@ -618,11 +618,26 @@ impl FlightTracker {
 
         // Process state transition
         let state_transition_start = std::time::Instant::now();
+        let aircraft_id = fix.aircraft_id; // save before fix is moved
         let transition_result =
             match state_transitions::process_state_transition(&self.context(), fix).await {
                 Ok(result) => result,
                 Err(e) => {
-                    error!(error = %e, "Failed to process state transition");
+                    // "Aircraft <uuid> not found" means the aircraft was deleted
+                    // (e.g., by the nightly merge) but the run process still had
+                    // its stale UUID. Evict from cache so subsequent fixes for
+                    // this address get a fresh aircraft record.
+                    if e.to_string().contains("not found") {
+                        warn!(
+                            aircraft_id = %aircraft_id,
+                            "State transition: aircraft deleted by merge, evicting cache"
+                        );
+                        self.aircraft_cache.evict_by_id(aircraft_id);
+                        self.aircraft_states.remove(&aircraft_id);
+                        metrics::counter!("flight_tracker.aircraft_not_found_total").increment(1);
+                    } else {
+                        error!(error = %e, "Failed to process state transition");
+                    }
                     return None;
                 }
             };

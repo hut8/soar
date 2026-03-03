@@ -367,28 +367,57 @@ pub async fn load_adsb_exchange_data(
                 }
 
                 // Split into ICAO and Other address types (need different ON CONFLICT targets)
-                let (icao_batch, other_batch): (Vec<_>, Vec<_>) = batch_inserts
+                let (mut icao_batch, mut other_batch): (Vec<_>, Vec<_>) = batch_inserts
                     .into_iter()
                     .partition(|r| r.icao_address.is_some());
 
                 let mut total = 0usize;
 
+                // Helper: attempt an upsert batch, retrying with registrations
+                // cleared if we hit idx_aircraft_registration_unique. This can
+                // happen when a registration is added concurrently or when the
+                // deconfliction query races with an earlier batch's commit.
+                macro_rules! upsert_batch {
+                    ($batch:expr, $conflict_col:expr) => {{
+                        match diesel::insert_into(aircraft::table)
+                            .values(&$batch)
+                            .on_conflict($conflict_col)
+                            .do_update()
+                            .set(adsbx_upsert_set!())
+                            .execute(&mut conn)
+                        {
+                            Ok(n) => n,
+                            Err(diesel::result::Error::DatabaseError(
+                                diesel::result::DatabaseErrorKind::UniqueViolation,
+                                ref info,
+                            )) if info
+                                .constraint_name()
+                                .is_some_and(|c| c.contains("registration")) =>
+                            {
+                                tracing::warn!(
+                                    "Registration constraint violation in batch, retrying without registrations"
+                                );
+                                for record in &mut $batch {
+                                    record.registration = None;
+                                }
+                                diesel::insert_into(aircraft::table)
+                                    .values(&$batch)
+                                    .on_conflict($conflict_col)
+                                    .do_update()
+                                    .set(adsbx_upsert_set!())
+                                    .execute(&mut conn)?
+                            }
+                            Err(e) => return Err(e.into()),
+                        }
+                    }};
+                }
+
                 if !icao_batch.is_empty() {
-                    total += diesel::insert_into(aircraft::table)
-                        .values(&icao_batch)
-                        .on_conflict(aircraft::icao_address)
-                        .do_update()
-                        .set(adsbx_upsert_set!())
-                        .execute(&mut conn)?;
+                    total += upsert_batch!(icao_batch, aircraft::icao_address);
                 }
 
                 if !other_batch.is_empty() {
-                    total += diesel::insert_into(aircraft::table)
-                        .values(&other_batch)
-                        .on_conflict(aircraft::other_address)
-                        .do_update()
-                        .set(adsbx_upsert_set!())
-                        .execute(&mut conn)?;
+                    total += upsert_batch!(other_batch, aircraft::other_address);
                 }
 
                 Ok::<usize, anyhow::Error>(total)
