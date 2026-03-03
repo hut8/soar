@@ -79,6 +79,9 @@ pub async fn load_aircraft_registrations_with_metrics(
 ///
 /// Processes in batches to avoid holding large row locks that deadlock with the
 /// concurrent run/ingest processes writing to the aircraft table.
+const COPY_OWNERS_BATCH_SIZE: usize = 5000;
+const COPY_OWNERS_INTER_BATCH_DELAY_MS: u64 = 50;
+
 pub async fn copy_owners_to_aircraft(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<usize> {
@@ -117,16 +120,18 @@ pub async fn copy_owners_to_aircraft(
                         OR (ar_inner.year_mfr IS NOT NULL
                             AND a.year IS DISTINCT FROM ar_inner.year_mfr)
                     )
-                    LIMIT 5000
+                    LIMIT {}
                 ) ar
                 WHERE aircraft.id = ar.aircraft_id
             "#;
+
+            let batch_sql = batch_query.replace("{}", &COPY_OWNERS_BATCH_SIZE.to_string());
 
             let mut attempts = 0;
             let max_attempts = 3;
             let updated = loop {
                 attempts += 1;
-                match diesel::sql_query(batch_query).execute(&mut conn) {
+                match diesel::sql_query(&batch_sql).execute(&mut conn) {
                     Ok(count) => break count,
                     Err(diesel::result::Error::DatabaseError(
                         diesel::result::DatabaseErrorKind::SerializationFailure,
@@ -156,7 +161,9 @@ pub async fn copy_owners_to_aircraft(
 
             // Brief pause between batches to reduce lock contention
             // with concurrent run/ingest processes
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            std::thread::sleep(std::time::Duration::from_millis(
+                COPY_OWNERS_INTER_BATCH_DELAY_MS,
+            ));
         }
 
         info!(

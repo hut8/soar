@@ -627,7 +627,8 @@ impl FlightTracker {
                     // (e.g., by the nightly merge) but the run process still had
                     // its stale UUID. Evict from cache so subsequent fixes for
                     // this address get a fresh aircraft record.
-                    if e.to_string().contains("not found") {
+                    let msg = e.to_string();
+                    if msg.starts_with("Aircraft ") && msg.ends_with(" not found") {
                         warn!(
                             aircraft_id = %aircraft_id,
                             "State transition: aircraft deleted by merge, evicting cache"

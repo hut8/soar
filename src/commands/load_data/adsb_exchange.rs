@@ -392,7 +392,7 @@ pub async fn load_adsb_exchange_data(
                                 ref info,
                             )) if info
                                 .constraint_name()
-                                .is_some_and(|c| c.contains("registration")) =>
+                                .is_some_and(|c| c == "idx_aircraft_registration_unique") =>
                             {
                                 tracing::warn!(
                                     "Registration constraint violation in batch, retrying without registrations"
