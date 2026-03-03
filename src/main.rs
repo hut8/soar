@@ -1140,7 +1140,8 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Handle commands that don't need database access early
+    // Handle commands that don't need database access early.
+    // Results are returned via log_command_result to ensure Sentry captures any errors.
     match &cli.command {
         Commands::VerifyRuntime {
             enable_tokio_console,
@@ -1155,24 +1156,24 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         Commands::Ingest { config } => {
-            // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
-            return handle_ingest(commands::ingest::IngestConfig {
+            let result = handle_ingest(commands::ingest::IngestConfig {
                 config_path: config.as_ref().map(std::path::PathBuf::from),
             })
             .await;
+            return log_command_result(result, component_name);
         }
         Commands::DumpAircraftDbs {
             output,
             flarmnet_source,
             adsb_source,
         } => {
-            // DumpAircraftDbs only downloads and exports data, doesn't need database
-            return handle_dump_aircraft_dbs(
+            let result = handle_dump_aircraft_dbs(
                 output.clone(),
                 flarmnet_source.clone(),
                 adsb_source.clone(),
             )
             .await;
+            return log_command_result(result, component_name);
         }
         _ => {
             // All other commands need database access
@@ -1481,12 +1482,15 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Log command errors via tracing so Sentry captures them.
-    // Without this, errors returned from main() are only printed to stderr
-    // by anyhow and never reach the sentry-tracing layer.
-    if let Err(ref e) = result {
-        error!(error = %e, command = component_name, "Command failed: {:#}", e);
-    }
+    log_command_result(result, component_name)
+}
 
+/// Log command errors via tracing so Sentry captures them.
+/// Without this, errors returned from main() are only printed to stderr
+/// by anyhow and never reach the sentry-tracing layer.
+fn log_command_result(result: Result<()>, command: &str) -> Result<()> {
+    if let Err(ref e) = result {
+        error!(error = %e, command = command, "Command failed: {:#}", e);
+    }
     result
 }
