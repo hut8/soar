@@ -3,11 +3,12 @@
 	import { serverCall } from '$lib/api/server';
 	import type {
 		CoverageHexProperties,
-		Fix,
+		FixWithAircraft,
 		FixesInHexResponse,
 		HexReceiversResponse,
 		Receiver
 	} from '$lib/types';
+	import { getAircraftTitle } from '$lib/formatters';
 	import dayjs from 'dayjs';
 	import { resolve } from '$app/paths';
 
@@ -25,7 +26,7 @@
 		altitudeFilter?: { min: number; max: number };
 	}>();
 
-	let fixes = $state<Fix[]>([]);
+	let fixes = $state<FixWithAircraft[]>([]);
 	let total = $state(0);
 	let currentPage = $state(1);
 	let isLoading = $state(false);
@@ -379,14 +380,13 @@
 											<td class="whitespace-nowrap">{formatTimestamp(fix.receivedAt)}</td>
 											<td>
 												{#if fix.aircraftId}
-													<a
-														href={resolve(`/aircraft/${fix.aircraftId}`)}
-														class="anchor font-mono text-sm"
-													>
-														{fix.source || 'Unknown'}
+													<a href={resolve(`/aircraft/${fix.aircraftId}`)} class="anchor text-sm">
+														{fix.aircraft
+															? getAircraftTitle(fix.aircraft)
+															: fix.source || 'Unknown'}
 													</a>
 												{:else}
-													<span class="font-mono text-sm">{fix.source || 'Unknown'}</span>
+													<span class="text-sm text-surface-500">{fix.source || 'Unknown'}</span>
 												{/if}
 											</td>
 											<td>

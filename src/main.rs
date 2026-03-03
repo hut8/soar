@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 mod commands;
 mod log_format;
@@ -1140,7 +1140,8 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Handle commands that don't need database access early
+    // Handle commands that don't need database access early.
+    // Results are returned via log_command_result to ensure Sentry captures any errors.
     match &cli.command {
         Commands::VerifyRuntime {
             enable_tokio_console,
@@ -1155,24 +1156,24 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         Commands::Ingest { config } => {
-            // Unified ingest service uses persistent queues + Unix sockets, doesn't need database
-            return handle_ingest(commands::ingest::IngestConfig {
+            let result = handle_ingest(commands::ingest::IngestConfig {
                 config_path: config.as_ref().map(std::path::PathBuf::from),
             })
             .await;
+            return log_command_result(result, component_name);
         }
         Commands::DumpAircraftDbs {
             output,
             flarmnet_source,
             adsb_source,
         } => {
-            // DumpAircraftDbs only downloads and exports data, doesn't need database
-            return handle_dump_aircraft_dbs(
+            let result = handle_dump_aircraft_dbs(
                 output.clone(),
                 flarmnet_source.clone(),
                 adsb_source.clone(),
             )
             .await;
+            return log_command_result(result, component_name);
         }
         _ => {
             // All other commands need database access
@@ -1286,7 +1287,7 @@ async fn main() -> Result<()> {
         (result.pool, None)
     };
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Sitemap { static_root } => {
             let sitemap_path = static_root.unwrap_or_else(|| {
                 env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/lib/soar/sitemap".to_string())
@@ -1479,5 +1480,17 @@ async fn main() -> Result<()> {
             // This should never be reached due to early return above
             unreachable!("DumpAircraftDbs should be handled before database setup")
         }
+    };
+
+    log_command_result(result, component_name)
+}
+
+/// Log command errors via tracing so Sentry captures them.
+/// Without this, errors returned from main() are only printed to stderr
+/// by anyhow and never reach the sentry-tracing layer.
+fn log_command_result(result: Result<()>, command: &str) -> Result<()> {
+    if let Err(ref e) = result {
+        error!(error = %e, command = command, "Command failed: {:#}", e);
     }
+    result
 }

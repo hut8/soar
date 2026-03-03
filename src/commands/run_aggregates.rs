@@ -226,8 +226,8 @@ async fn fetch_and_aggregate_fixes(
                 receiver_id,
                 DATE(received_at) AS date,
                 COUNT(*)::bigint AS fix_count,
-                MIN(timestamp) AS first_seen_at,
-                MAX(timestamp) AS last_seen_at,
+                MIN(received_at) AS first_seen_at,
+                MAX(received_at) AS last_seen_at,
                 MIN(altitude_msl_feet) AS min_altitude_msl_feet,
                 MAX(altitude_msl_feet) AS max_altitude_msl_feet,
                 AVG(altitude_msl_feet)::integer AS avg_altitude_msl_feet

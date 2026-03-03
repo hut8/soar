@@ -21,9 +21,9 @@
 	let mapContainer: HTMLDivElement;
 	let map: maplibregl.Map | null = null;
 	let deckOverlay: MapboxOverlay | null = null;
-	let loading = false;
-	let error = '';
-	let resolution = 7;
+	let loading = $state(false);
+	let error = $state('');
+	let resolution = $state(7);
 	let hexCount = $state(0);
 	let receivers: Receiver[] = [];
 	let receiverMarkers: maplibregl.Marker[] = [];
@@ -671,9 +671,9 @@
 
 					<!-- Altitude Filter -->
 					<div class="space-y-2">
-						<label class="text-sm font-medium text-gray-300">
+						<span class="text-sm font-medium text-gray-300">
 							Altitude: {minAltitude.toLocaleString()} - {maxAltitude.toLocaleString()} ft
-						</label>
+						</span>
 						<div class="flex gap-2">
 							<div class="flex-1 space-y-1">
 								<label for="min-altitude" class="text-xs text-gray-400">Min:</label>
