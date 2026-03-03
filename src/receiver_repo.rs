@@ -106,6 +106,7 @@ impl ReceiverRepository {
                             receivers::contact.eq(&new_receiver.contact),
                             receivers::email.eq(&new_receiver.email),
                             receivers::ogn_db_country.eq(&new_receiver.ogn_db_country),
+                            receivers::from_ogn_db.eq(true),
                             receivers::updated_at.eq(Utc::now()),
                         ))
                         .returning(receivers::id)

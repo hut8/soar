@@ -1255,13 +1255,14 @@ async fn main() -> Result<()> {
 
     // For Migrate command, handle errors specially to send notifications
     let (diesel_pool, migration_info) = if matches!(cli.command, Commands::Migrate {}) {
+        let migrate_start = std::time::Instant::now();
         match setup_diesel_database(app_name_prefix, true).await {
             Ok(result) => (
                 result.pool,
                 Some((result.applied_migrations, result.duration_secs)),
             ),
             Err(e) => {
-                let duration_secs = std::time::Instant::now().elapsed().as_secs_f64();
+                let duration_secs = migrate_start.elapsed().as_secs_f64();
                 let error_message = format!("{:#}", e);
 
                 // Send failure email
