@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 mod commands;
 mod log_format;
@@ -1286,7 +1286,7 @@ async fn main() -> Result<()> {
         (result.pool, None)
     };
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Sitemap { static_root } => {
             let sitemap_path = static_root.unwrap_or_else(|| {
                 env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/lib/soar/sitemap".to_string())
@@ -1479,5 +1479,14 @@ async fn main() -> Result<()> {
             // This should never be reached due to early return above
             unreachable!("DumpAircraftDbs should be handled before database setup")
         }
+    };
+
+    // Log command errors via tracing so Sentry captures them.
+    // Without this, errors returned from main() are only printed to stderr
+    // by anyhow and never reach the sentry-tracing layer.
+    if let Err(ref e) = result {
+        error!(error = %e, command = component_name, "Command failed: {:#}", e);
     }
+
+    result
 }
