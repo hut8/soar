@@ -16,14 +16,27 @@
 
 	let { geofence, onSave, onCancel, isNew = false }: Props = $props();
 
-	// Form state
-	let name = $state(geofence?.name || '');
-	let description = $state(geofence?.description || '');
-	let centerLatitude = $state(geofence?.centerLatitude || 39.8283);
-	let centerLongitude = $state(geofence?.centerLongitude || -98.5795);
-	let layers: GeofenceLayer[] = $state(
-		geofence?.layers?.length ? [...geofence.layers] : [{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }]
-	);
+	// Form state - initialized via $effect.pre to avoid state_referenced_locally warnings
+	let name = $state('');
+	let description = $state('');
+	let centerLatitude = $state(39.8283);
+	let centerLongitude = $state(-98.5795);
+	let layers: GeofenceLayer[] = $state([{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }]);
+	let formInitialized = false;
+
+	// Sync form state with geofence prop
+	$effect.pre(() => {
+		if (geofence && !formInitialized) {
+			name = geofence.name || '';
+			description = geofence.description || '';
+			centerLatitude = geofence.centerLatitude || 39.8283;
+			centerLongitude = geofence.centerLongitude || -98.5795;
+			layers = geofence.layers?.length
+				? [...geofence.layers]
+				: [{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }];
+			formInitialized = true;
+		}
+	});
 
 	let submitting = $state(false);
 	let error = $state('');

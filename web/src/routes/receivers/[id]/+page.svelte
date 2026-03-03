@@ -939,7 +939,7 @@
 									</button>
 
 									{#if showColumnPicker}
-										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+										<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 										<div
 											class="absolute right-0 z-50 mt-1 w-64 rounded-lg bg-white shadow-lg ring-1 ring-surface-300 dark:bg-surface-800 dark:ring-surface-600"
 											onclick={(e: MouseEvent) => e.stopPropagation()}

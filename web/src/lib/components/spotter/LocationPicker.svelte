@@ -28,8 +28,14 @@
 	let searchError = $state<string | null>(null);
 	let locating = $state(false);
 
-	let selectedLat = $state<number | null>(initialLat);
-	let selectedLon = $state<number | null>(initialLon);
+	let selectedLat = $state<number | null>(null);
+	let selectedLon = $state<number | null>(null);
+
+	// Sync initial values from props
+	$effect.pre(() => {
+		if (initialLat !== null) selectedLat = initialLat;
+		if (initialLon !== null) selectedLon = initialLon;
+	});
 	let selectedLabel = $state<string | undefined>(undefined);
 
 	const hasSelection = $derived(selectedLat !== null && selectedLon !== null);
@@ -157,11 +163,13 @@
 </script>
 
 <div class="modal-backdrop" role="presentation">
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="modal-content"
 		onclick={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-labelledby="location-picker-title"
+		tabindex="-1"
 	>
 		<div class="modal-header">
 			<h2 id="location-picker-title">Choose Location</h2>

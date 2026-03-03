@@ -21,7 +21,7 @@
 	const logger = getLogger(['soar', 'Geofences', 'Edit']);
 
 	let { data } = $props();
-	const geofenceId = data.geofenceId;
+	const geofenceId = $derived(data.geofenceId);
 
 	let geofence: Geofence | null = $state(null);
 	let aircraftIds: string[] = $state([]);
