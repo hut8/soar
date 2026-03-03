@@ -36,6 +36,9 @@
 			? `${aircraft.climbFpm > 0 ? '+' : ''}${Math.round(aircraft.climbFpm)}fpm`
 			: '0fpm'
 	);
+	const heading = $derived(
+		aircraft.trackDegrees != null ? `${Math.round(aircraft.trackDegrees)}°` : null
+	);
 
 	const MIN_ICON = 24;
 	const MAX_ICON = 72;
@@ -64,6 +67,13 @@
 		aircraft.trackDegrees != null ? aircraft.trackDegrees - viewHeading : 0
 	);
 
+	// 3D perspective tilt: foreshorten aircraft near the horizon, keep top-down overhead
+	const MAX_TILT = 55;
+	const tiltAngle = $derived.by(() => {
+		const elevFactor = Math.min(Math.abs(aircraft.elevation) / 90, 1);
+		return MAX_TILT * (1 - elevFactor);
+	});
+
 	// Climb/descent indicator
 	const climbIndicator = $derived.by(() => {
 		if (!aircraft.climbFpm) return 'level';
@@ -88,7 +98,7 @@
 				height={iconSize}
 				viewBox={iconDef.viewBox}
 				xmlns="http://www.w3.org/2000/svg"
-				style:transform="rotate({iconRotation}deg)"
+				style:transform="perspective(300px) rotateX({tiltAngle}deg) rotateZ({iconRotation}deg)"
 			>
 				<path d={iconDef.path} fill={fillColor} stroke="white" stroke-width="1" />
 			</svg>
@@ -113,6 +123,10 @@
 				<span>{speed}</span>
 				<span class="sep">&bull;</span>
 				<span>{climb}</span>
+				{#if heading}
+					<span class="sep">&bull;</span>
+					<span>{heading}</span>
+				{/if}
 			</div>
 		</div>
 	</button>
