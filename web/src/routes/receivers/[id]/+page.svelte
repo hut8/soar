@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getLogger } from '$lib/logging';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 	const logger = getLogger(['soar', 'ReceiverDetails']);
 	import {
@@ -22,7 +22,9 @@
 		ChevronLeft,
 		ChevronRight,
 		FileText,
-		Loader2
+		Loader2,
+		Columns3,
+		RotateCcw
 	} from '@lucide/svelte';
 	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -46,14 +48,30 @@
 		receivedAt: string;
 		version: string | null;
 		platform: string | null;
-		cpuLoad: number | string | null; // BigDecimal from backend
-		cpuTemperature: number | string | null; // BigDecimal from backend
-		ramFree: number | string | null; // BigDecimal from backend
-		ramTotal: number | string | null; // BigDecimal from backend
+		cpuLoad: number | string | null;
+		cpuTemperature: number | string | null;
+		ramFree: number | string | null;
+		ramTotal: number | string | null;
+		ntpOffset: number | string | null;
+		ntpCorrection: number | string | null;
+		voltage: number | string | null;
+		amperage: number | string | null;
 		visibleSenders: number | null;
+		latency: number | string | null;
 		senders: number | null;
-		voltage: number | string | null; // BigDecimal from backend
-		amperage: number | string | null; // BigDecimal from backend
+		rfCorrectionManual: number | null;
+		rfCorrectionAutomatic: number | string | null;
+		noise: number | string | null;
+		sendersSignalQuality: number | string | null;
+		sendersMessages: number | null;
+		goodSendersSignalQuality: number | string | null;
+		goodSenders: number | null;
+		goodAndBadSenders: number | null;
+		geoidOffset: number | null;
+		name: string | null;
+		demodulationSnrDb: number | string | null;
+		ognrPilotawareVersion: string | null;
+		unparsedData: string | null;
 		lag: number | null;
 		rawData: string;
 	}
@@ -128,6 +146,103 @@
 	let showRawData = $state(false); // For status reports
 	let showRawFixes = $state(false); // For received fixes
 	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', 'received-fixes', or 'aggregate-stats'
+
+	// Column configuration for status reports
+	interface StatusColumn {
+		key: string;
+		label: string;
+		defaultOn: boolean;
+	}
+
+	const STATUS_COLUMNS: StatusColumn[] = [
+		{ key: 'timestamp', label: 'Timestamp', defaultOn: true },
+		{ key: 'version', label: 'Version', defaultOn: true },
+		{ key: 'platform', label: 'Platform', defaultOn: true },
+		{ key: 'cpu', label: 'CPU', defaultOn: true },
+		{ key: 'ram', label: 'RAM', defaultOn: true },
+		{ key: 'senders', label: 'Senders', defaultOn: true },
+		{ key: 'voltage', label: 'Voltage', defaultOn: true },
+		{ key: 'lag', label: 'Lag', defaultOn: true },
+		{ key: 'ntpOffset', label: 'NTP Offset', defaultOn: false },
+		{ key: 'ntpCorrection', label: 'NTP Correction', defaultOn: false },
+		{ key: 'latency', label: 'Latency', defaultOn: false },
+		{ key: 'rfCorrectionManual', label: 'RF Correction (Manual)', defaultOn: false },
+		{ key: 'rfCorrectionAutomatic', label: 'RF Correction (Auto)', defaultOn: false },
+		{ key: 'noise', label: 'Noise', defaultOn: false },
+		{ key: 'sendersSignalQuality', label: 'Senders Signal Quality', defaultOn: false },
+		{ key: 'sendersMessages', label: 'Senders Messages', defaultOn: false },
+		{ key: 'goodSendersSignalQuality', label: 'Good Senders Signal Quality', defaultOn: false },
+		{ key: 'goodSenders', label: 'Good Senders', defaultOn: false },
+		{ key: 'goodAndBadSenders', label: 'Good & Bad Senders', defaultOn: false },
+		{ key: 'geoidOffset', label: 'Geoid Offset', defaultOn: false },
+		{ key: 'name', label: 'Name', defaultOn: false },
+		{ key: 'demodulationSnrDb', label: 'Demod. SNR (dB)', defaultOn: false },
+		{ key: 'ognrPilotawareVersion', label: 'PilotAware Version', defaultOn: false },
+		{ key: 'unparsedData', label: 'Unparsed Data', defaultOn: false }
+	];
+
+	const DEFAULT_COLUMNS = new Set(STATUS_COLUMNS.filter((c) => c.defaultOn).map((c) => c.key));
+	const STORAGE_KEY = 'receiver-status-columns';
+
+	function loadVisibleColumns(): SvelteSet<string> {
+		try {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (stored) {
+				const parsed = JSON.parse(stored) as string[];
+				if (Array.isArray(parsed) && parsed.length > 0) {
+					return new SvelteSet(parsed);
+				}
+			}
+		} catch {
+			// Ignore parse errors
+		}
+		return new SvelteSet(DEFAULT_COLUMNS);
+	}
+
+	let visibleColumns = new SvelteSet(DEFAULT_COLUMNS);
+	let showColumnPicker = $state(false);
+	let columnPickerRef = $state<HTMLDivElement | null>(null);
+
+	function toggleColumn(key: string) {
+		if (visibleColumns.has(key)) {
+			visibleColumns.delete(key);
+		} else {
+			visibleColumns.add(key);
+		}
+		saveVisibleColumns(visibleColumns);
+	}
+
+	function resetColumns() {
+		visibleColumns = new SvelteSet(DEFAULT_COLUMNS);
+		saveVisibleColumns(visibleColumns);
+	}
+
+	function saveVisibleColumns(cols: SvelteSet<string>) {
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify([...cols]));
+		} catch {
+			// Ignore storage errors
+		}
+	}
+
+	function isColumnVisible(key: string): boolean {
+		return visibleColumns.has(key);
+	}
+
+	let visibleColumnCount = $derived(visibleColumns.size);
+
+	function handleColumnPickerClickOutside(event: MouseEvent) {
+		if (columnPickerRef && !columnPickerRef.contains(event.target as Node)) {
+			showColumnPicker = false;
+		}
+	}
+
+	function formatNumericValue(value: number | string | null, suffix?: string): string {
+		if (value === null) return '—';
+		const num = typeof value === 'string' ? parseFloat(value) : value;
+		if (isNaN(num)) return '—';
+		return suffix ? `${num}${suffix}` : `${num}`;
+	}
 
 	let receiverId = $derived($page.params.id || '');
 
@@ -207,12 +322,19 @@
 	}
 
 	onMount(async () => {
+		visibleColumns = loadVisibleColumns();
+		document.addEventListener('click', handleColumnPickerClickOutside);
+
 		if (receiverId) {
 			await loadReceiver();
 			await loadStatuses(); // Load status reports by default (first tab)
 			await loadStatistics(); // Load statistics (cheap and important)
 			// Aggregate stats, fixes, and raw messages are loaded lazily when their tabs are clicked
 		}
+	});
+
+	onDestroy(() => {
+		document.removeEventListener('click', handleColumnPickerClickOutside);
 	});
 
 	// Load raw messages when switching to that tab
@@ -792,7 +914,57 @@
 					<!-- Status Reports Tab Content -->
 					<Tabs.Content value="status-reports">
 						<div class="mt-4">
-							<div class="mb-4 flex items-center justify-end">
+							<div class="mb-4 flex items-center justify-end gap-4">
+								<!-- Column Picker -->
+								<div class="relative" bind:this={columnPickerRef}>
+									<button
+										class="btn flex items-center gap-1.5 preset-tonal btn-sm"
+										onclick={(e: MouseEvent) => {
+											e.stopPropagation();
+											showColumnPicker = !showColumnPicker;
+										}}
+									>
+										<Columns3 class="h-4 w-4" />
+										Columns
+										<span class="text-surface-500-400-token text-xs">
+											({visibleColumnCount}/{STATUS_COLUMNS.length})
+										</span>
+									</button>
+
+									{#if showColumnPicker}
+										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+										<div
+											class="absolute right-0 z-50 mt-1 w-64 rounded-lg bg-white shadow-lg ring-1 ring-surface-300 dark:bg-surface-800 dark:ring-surface-600"
+											onclick={(e: MouseEvent) => e.stopPropagation()}
+										>
+											<div class="max-h-72 overflow-y-auto p-2">
+												{#each STATUS_COLUMNS as col (col.key)}
+													<label
+														class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-surface-100 dark:hover:bg-surface-700"
+													>
+														<input
+															type="checkbox"
+															class="checkbox"
+															checked={isColumnVisible(col.key)}
+															onchange={() => toggleColumn(col.key)}
+														/>
+														<span>{col.label}</span>
+													</label>
+												{/each}
+											</div>
+											<div class="border-t border-surface-200 px-2 py-1.5 dark:border-surface-600">
+												<button
+													class="btn w-full btn-sm text-xs text-primary-500 hover:text-primary-600"
+													onclick={resetColumns}
+												>
+													<RotateCcw class="mr-1 h-3 w-3" />
+													Reset to defaults
+												</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+
 								<label class="flex cursor-pointer items-center gap-2">
 									<input type="checkbox" class="checkbox" bind:checked={showRawData} />
 									<span class="text-sm">Show raw</span>
@@ -819,14 +991,11 @@
 										<table class="table-hover table">
 											<thead>
 												<tr>
-													<th>Timestamp</th>
-													<th>Version</th>
-													<th>Platform</th>
-													<th>CPU</th>
-													<th>RAM</th>
-													<th>Senders</th>
-													<th>Voltage</th>
-													<th>Lag</th>
+													{#each STATUS_COLUMNS as col (col.key)}
+														{#if isColumnVisible(col.key)}
+															<th>{col.label}</th>
+														{/if}
+													{/each}
 												</tr>
 											</thead>
 											<tbody>
@@ -838,52 +1007,132 @@
 															? 'bg-gray-50 dark:bg-gray-900'
 															: ''}"
 													>
-														<td class="text-xs">
-															<div>{formatDateTime(status.receivedAt)}</div>
-															<div class="text-surface-500-400-token">
-																{formatRelativeTime(status.receivedAt)}
-															</div>
-														</td>
-														<td class="font-mono text-xs">{status.version || '—'}</td>
-														<td class="text-xs">{status.platform || '—'}</td>
-														<td class="text-sm">
-															{#if status.cpuLoad !== null}
-																{(Number(status.cpuLoad) * 100).toFixed(0)}%
-																{#if status.cpuTemperature !== null}
-																	<span class="text-surface-500-400-token text-xs">
-																		({Number(status.cpuTemperature).toFixed(1)}°C)
-																	</span>
+														{#if isColumnVisible('timestamp')}
+															<td class="text-xs">
+																<div>{formatDateTime(status.receivedAt)}</div>
+																<div class="text-surface-500-400-token">
+																	{formatRelativeTime(status.receivedAt)}
+																</div>
+															</td>
+														{/if}
+														{#if isColumnVisible('version')}
+															<td class="font-mono text-xs">{status.version || '—'}</td>
+														{/if}
+														{#if isColumnVisible('platform')}
+															<td class="text-xs">{status.platform || '—'}</td>
+														{/if}
+														{#if isColumnVisible('cpu')}
+															<td class="text-sm">
+																{#if status.cpuLoad !== null}
+																	{(Number(status.cpuLoad) * 100).toFixed(0)}%
+																	{#if status.cpuTemperature !== null}
+																		<span class="text-surface-500-400-token text-xs">
+																			({Number(status.cpuTemperature).toFixed(1)}°C)
+																		</span>
+																	{/if}
+																{:else}
+																	—
 																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td class="text-xs">
-															{formatRamUsage(status.ramFree, status.ramTotal)}
-														</td>
-														<td>
-															{#if status.visibleSenders !== null}
-																{status.visibleSenders}
-																{#if status.senders !== null}
-																	<span class="text-surface-500-400-token">/ {status.senders}</span>
+															</td>
+														{/if}
+														{#if isColumnVisible('ram')}
+															<td class="text-xs">
+																{formatRamUsage(status.ramFree, status.ramTotal)}
+															</td>
+														{/if}
+														{#if isColumnVisible('senders')}
+															<td>
+																{#if status.visibleSenders !== null}
+																	{status.visibleSenders}
+																	{#if status.senders !== null}
+																		<span class="text-surface-500-400-token"
+																			>/ {status.senders}</span
+																		>
+																	{/if}
+																{:else}
+																	—
 																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td>
-															{#if status.voltage !== null}
-																{Number(status.voltage).toFixed(2)}V
-																{#if status.amperage !== null}
-																	<span class="text-surface-500-400-token text-xs">
-																		({Number(status.amperage).toFixed(2)}A)
-																	</span>
+															</td>
+														{/if}
+														{#if isColumnVisible('voltage')}
+															<td>
+																{#if status.voltage !== null}
+																	{Number(status.voltage).toFixed(2)}V
+																	{#if status.amperage !== null}
+																		<span class="text-surface-500-400-token text-xs">
+																			({Number(status.amperage).toFixed(2)}A)
+																		</span>
+																	{/if}
+																{:else}
+																	—
 																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
+															</td>
+														{/if}
+														{#if isColumnVisible('lag')}
+															<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
+														{/if}
+														{#if isColumnVisible('ntpOffset')}
+															<td class="text-xs">{formatNumericValue(status.ntpOffset, 'ms')}</td>
+														{/if}
+														{#if isColumnVisible('ntpCorrection')}
+															<td class="text-xs"
+																>{formatNumericValue(status.ntpCorrection, ' ppm')}</td
+															>
+														{/if}
+														{#if isColumnVisible('latency')}
+															<td class="text-xs">{formatNumericValue(status.latency, 's')}</td>
+														{/if}
+														{#if isColumnVisible('rfCorrectionManual')}
+															<td class="text-xs">{status.rfCorrectionManual ?? '—'}</td>
+														{/if}
+														{#if isColumnVisible('rfCorrectionAutomatic')}
+															<td class="text-xs"
+																>{formatNumericValue(status.rfCorrectionAutomatic)}</td
+															>
+														{/if}
+														{#if isColumnVisible('noise')}
+															<td class="text-xs">{formatNumericValue(status.noise, ' dB')}</td>
+														{/if}
+														{#if isColumnVisible('sendersSignalQuality')}
+															<td class="text-xs"
+																>{formatNumericValue(status.sendersSignalQuality)}</td
+															>
+														{/if}
+														{#if isColumnVisible('sendersMessages')}
+															<td class="text-xs">{status.sendersMessages ?? '—'}</td>
+														{/if}
+														{#if isColumnVisible('goodSendersSignalQuality')}
+															<td class="text-xs"
+																>{formatNumericValue(status.goodSendersSignalQuality)}</td
+															>
+														{/if}
+														{#if isColumnVisible('goodSenders')}
+															<td class="text-xs">{status.goodSenders ?? '—'}</td>
+														{/if}
+														{#if isColumnVisible('goodAndBadSenders')}
+															<td class="text-xs">{status.goodAndBadSenders ?? '—'}</td>
+														{/if}
+														{#if isColumnVisible('geoidOffset')}
+															<td class="text-xs">{status.geoidOffset ?? '—'}</td>
+														{/if}
+														{#if isColumnVisible('name')}
+															<td class="text-xs">{status.name || '—'}</td>
+														{/if}
+														{#if isColumnVisible('demodulationSnrDb')}
+															<td class="text-xs"
+																>{formatNumericValue(status.demodulationSnrDb, ' dB')}</td
+															>
+														{/if}
+														{#if isColumnVisible('ognrPilotawareVersion')}
+															<td class="font-mono text-xs"
+																>{status.ognrPilotawareVersion || '—'}</td
+															>
+														{/if}
+														{#if isColumnVisible('unparsedData')}
+															<td class="max-w-xs truncate font-mono text-xs"
+																>{status.unparsedData || '—'}</td
+															>
+														{/if}
 													</tr>
 													{#if showRawData}
 														<tr
@@ -891,7 +1140,7 @@
 																? 'bg-gray-100 dark:bg-gray-800'
 																: ''}"
 														>
-															<td colspan="8" class="px-3 py-2 font-mono text-sm">
+															<td colspan={visibleColumnCount} class="px-3 py-2 font-mono text-sm">
 																{status.rawData}
 															</td>
 														</tr>
@@ -906,76 +1155,204 @@
 								<div class="space-y-4 md:hidden">
 									{#each statuses as status (status.id)}
 										<div class="card p-4">
-											<div class="mb-3 flex items-start justify-between gap-2">
-												<div class="text-xs">
-													<div class="font-semibold">{formatDateTime(status.receivedAt)}</div>
-													<div class="text-surface-500-400-token">
-														{formatRelativeTime(status.receivedAt)}
-													</div>
+											{#if isColumnVisible('timestamp') || isColumnVisible('version')}
+												<div class="mb-3 flex items-start justify-between gap-2">
+													{#if isColumnVisible('timestamp')}
+														<div class="text-xs">
+															<div class="font-semibold">{formatDateTime(status.receivedAt)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(status.receivedAt)}
+															</div>
+														</div>
+													{/if}
+													{#if isColumnVisible('version')}
+														<span class="chip preset-tonal text-xs">{status.version || '—'}</span>
+													{/if}
 												</div>
-												<span class="chip preset-tonal text-xs">{status.version || '—'}</span>
-											</div>
+											{/if}
 
 											<dl class="space-y-2 text-sm">
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Platform</dt>
-													<dd class="font-medium">{status.platform || '—'}</dd>
-												</div>
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">CPU</dt>
-													<dd class="font-medium">
-														{#if status.cpuLoad !== null}
-															{(Number(status.cpuLoad) * 100).toFixed(0)}%
-															{#if status.cpuTemperature !== null}
-																<span class="text-surface-500-400-token text-xs">
-																	({Number(status.cpuTemperature).toFixed(1)}°C)
-																</span>
+												{#if isColumnVisible('platform')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Platform</dt>
+														<dd class="font-medium">{status.platform || '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('cpu')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">CPU</dt>
+														<dd class="font-medium">
+															{#if status.cpuLoad !== null}
+																{(Number(status.cpuLoad) * 100).toFixed(0)}%
+																{#if status.cpuTemperature !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.cpuTemperature).toFixed(1)}°C)
+																	</span>
+																{/if}
+															{:else}
+																—
 															{/if}
-														{:else}
-															—
-														{/if}
-													</dd>
-												</div>
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">RAM</dt>
-													<dd class="text-xs font-medium">
-														{formatRamUsage(status.ramFree, status.ramTotal)}
-													</dd>
-												</div>
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Senders</dt>
-													<dd class="font-medium">
-														{#if status.visibleSenders !== null}
-															{status.visibleSenders}
-															{#if status.senders !== null}
-																<span class="text-surface-500-400-token">/ {status.senders}</span>
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('ram')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">RAM</dt>
+														<dd class="text-xs font-medium">
+															{formatRamUsage(status.ramFree, status.ramTotal)}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('senders')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Senders</dt>
+														<dd class="font-medium">
+															{#if status.visibleSenders !== null}
+																{status.visibleSenders}
+																{#if status.senders !== null}
+																	<span class="text-surface-500-400-token">/ {status.senders}</span>
+																{/if}
+															{:else}
+																—
 															{/if}
-														{:else}
-															—
-														{/if}
-													</dd>
-												</div>
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Voltage</dt>
-													<dd class="font-medium">
-														{#if status.voltage !== null}
-															{Number(status.voltage).toFixed(2)}V
-															{#if status.amperage !== null}
-																<span class="text-surface-500-400-token text-xs">
-																	({Number(status.amperage).toFixed(2)}A)
-																</span>
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('voltage')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Voltage</dt>
+														<dd class="font-medium">
+															{#if status.voltage !== null}
+																{Number(status.voltage).toFixed(2)}V
+																{#if status.amperage !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.amperage).toFixed(2)}A)
+																	</span>
+																{/if}
+															{:else}
+																—
 															{/if}
-														{:else}
-															—
-														{/if}
-													</dd>
-												</div>
-												<div class="flex justify-between gap-4">
-													<dt class="text-surface-600-300-token">Lag</dt>
-													<dd class="font-medium">
-														{status.lag !== null ? `${status.lag}ms` : '—'}
-													</dd>
-												</div>
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('lag')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Lag</dt>
+														<dd class="font-medium">
+															{status.lag !== null ? `${status.lag}ms` : '—'}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('ntpOffset')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">NTP Offset</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.ntpOffset, 'ms')}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('ntpCorrection')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">NTP Correction</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.ntpCorrection, ' ppm')}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('latency')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Latency</dt>
+														<dd class="font-medium">{formatNumericValue(status.latency, 's')}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('rfCorrectionManual')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">RF Correction (Manual)</dt>
+														<dd class="font-medium">{status.rfCorrectionManual ?? '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('rfCorrectionAutomatic')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">RF Correction (Auto)</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.rfCorrectionAutomatic)}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('noise')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Noise</dt>
+														<dd class="font-medium">{formatNumericValue(status.noise, ' dB')}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('sendersSignalQuality')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Senders Signal Quality</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.sendersSignalQuality)}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('sendersMessages')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Senders Messages</dt>
+														<dd class="font-medium">{status.sendersMessages ?? '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('goodSendersSignalQuality')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Good Senders Signal Quality</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.goodSendersSignalQuality)}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('goodSenders')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Good Senders</dt>
+														<dd class="font-medium">{status.goodSenders ?? '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('goodAndBadSenders')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Good & Bad Senders</dt>
+														<dd class="font-medium">{status.goodAndBadSenders ?? '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('geoidOffset')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Geoid Offset</dt>
+														<dd class="font-medium">{status.geoidOffset ?? '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('name')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Name</dt>
+														<dd class="font-medium">{status.name || '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('demodulationSnrDb')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Demod. SNR</dt>
+														<dd class="font-medium">
+															{formatNumericValue(status.demodulationSnrDb, ' dB')}
+														</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('ognrPilotawareVersion')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">PilotAware Version</dt>
+														<dd class="font-medium">{status.ognrPilotawareVersion || '—'}</dd>
+													</div>
+												{/if}
+												{#if isColumnVisible('unparsedData')}
+													<div class="flex justify-between gap-4">
+														<dt class="text-surface-600-300-token">Unparsed Data</dt>
+														<dd class="max-w-[200px] truncate font-medium">
+															{status.unparsedData || '—'}
+														</dd>
+													</div>
+												{/if}
 											</dl>
 
 											{#if showRawData}
