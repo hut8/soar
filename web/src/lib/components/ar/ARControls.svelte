@@ -106,19 +106,18 @@
 <style>
 	.ar-controls {
 		position: fixed;
-		bottom: 1rem;
-		left: 50%;
-		transform: translateX(-50%);
+		bottom: 0;
+		left: 0;
+		right: 0;
 		z-index: 100;
-		width: calc(100% - 2rem);
-		max-width: 500px;
 	}
 
 	.controls-panel {
 		background: rgba(0, 0, 0, 0.85);
 		backdrop-filter: blur(12px);
-		border-radius: 1rem;
-		padding: 1rem;
+		border-radius: 1rem 1rem 0 0;
+		padding: 1rem 1.5rem;
+		padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
 		display: flex;
 		gap: 1rem;
 		align-items: center;
