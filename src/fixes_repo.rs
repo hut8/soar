@@ -1487,21 +1487,29 @@ impl FixesRepository {
             // Execute select query
             let fixes_result: Vec<Fix> = diesel::sql_query(select_sql).load(&mut conn)?;
 
-            // Fetch aircraft info for the fixes (same pattern as get_fixes_by_receiver_id_paginated)
+            // Fetch aircraft info for the fixes
             use crate::actions::views::AircraftView;
             use crate::aircraft::AircraftModel;
             use crate::schema::aircraft;
 
-            let aircraft_ids: Vec<Uuid> = fixes_result.iter().map(|fix| fix.aircraft_id).collect();
-            let aircraft_models: Vec<AircraftModel> = aircraft::table
-                .filter(aircraft::id.eq_any(&aircraft_ids))
-                .select(AircraftModel::as_select())
-                .load::<AircraftModel>(&mut conn)?;
-
-            let aircraft_map: std::collections::HashMap<Uuid, AircraftView> = aircraft_models
-                .into_iter()
-                .map(|model| (model.id, AircraftView::from_device_model(model)))
-                .collect();
+            let aircraft_map: std::collections::HashMap<Uuid, AircraftView> =
+                if fixes_result.is_empty() {
+                    std::collections::HashMap::new()
+                } else {
+                    let unique_ids: Vec<Uuid> = fixes_result
+                        .iter()
+                        .map(|fix| fix.aircraft_id)
+                        .collect::<std::collections::HashSet<_>>()
+                        .into_iter()
+                        .collect();
+                    aircraft::table
+                        .filter(aircraft::id.eq_any(&unique_ids))
+                        .select(AircraftModel::as_select())
+                        .load::<AircraftModel>(&mut conn)?
+                        .into_iter()
+                        .map(|model| (model.id, AircraftView::from_device_model(model)))
+                        .collect()
+                };
 
             let results: Vec<crate::fixes::FixWithAircraftInfo> = fixes_result
                 .into_iter()
