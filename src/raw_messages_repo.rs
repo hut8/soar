@@ -257,11 +257,11 @@ impl Serialize for AprsMessage {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AprsMessage", 6)?;
         state.serialize_field("id", &self.id)?;
-        state.serialize_field("raw_message", &self.raw_message_text())?; // Decode to string
-        state.serialize_field("received_at", &self.received_at)?;
-        state.serialize_field("receiver_id", &self.receiver_id)?;
+        state.serialize_field("rawMessage", &self.raw_message_text())?; // Decode to string
+        state.serialize_field("receivedAt", &self.received_at)?;
+        state.serialize_field("receiverId", &self.receiver_id)?;
         state.serialize_field("unparsed", &self.unparsed)?;
-        state.serialize_field("raw_message_hash", &hex::encode(&self.raw_message_hash))?; // Hex encode hash
+        state.serialize_field("rawMessageHash", &hex::encode(&self.raw_message_hash))?; // Hex encode hash
         state.end()
     }
 }
@@ -273,6 +273,7 @@ impl<'de> Deserialize<'de> for AprsMessage {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct AprsMessageHelper {
             id: Uuid,
             raw_message: String, // Expect string in JSON
