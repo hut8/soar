@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::aircraft::{AddressType, Aircraft, AircraftModel, NewAircraft};
 use crate::aircraft_types::AircraftCategory;
+use crate::manufacturer_names::normalize_aircraft_model;
 use crate::ogn_aprs_aircraft::AdsbEmitterCategory;
 use crate::schema::aircraft;
 use chrono::{DateTime, Utc};
@@ -1473,7 +1474,9 @@ impl AircraftCache {
                 .is_some_and(|m| !m.trim().is_empty())
                 && aircraft.aircraft_model.trim().is_empty()
             {
-                aircraft.aircraft_model = packet_fields.aircraft_model.clone().unwrap_or_default();
+                aircraft.aircraft_model = normalize_aircraft_model(
+                    &packet_fields.aircraft_model.clone().unwrap_or_default(),
+                );
                 changed = true;
             }
             // Registration: only update if we have one and aircraft doesn't

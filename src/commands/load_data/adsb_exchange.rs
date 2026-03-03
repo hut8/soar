@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 use soar::aircraft::AddressType;
 use soar::aircraft_types::{AircraftCategory, EngineType};
 use soar::email_reporter::EntityMetrics;
+use soar::manufacturer_names::normalize_manufacturer;
 use soar::schema::aircraft;
 
 #[derive(Debug, Deserialize)]
@@ -85,9 +86,9 @@ fn validate_registration(registration: &str) -> Option<String> {
 fn build_aircraft_model(manufacturer: Option<&String>, model: Option<&String>) -> String {
     match (manufacturer, model) {
         (Some(mfr), Some(mdl)) if !mfr.is_empty() && !mdl.is_empty() => {
-            format!("{} {}", mfr, mdl)
+            format!("{} {}", normalize_manufacturer(mfr), mdl)
         }
-        (Some(mfr), None) if !mfr.is_empty() => mfr.clone(),
+        (Some(mfr), None) if !mfr.is_empty() => normalize_manufacturer(mfr),
         (None, Some(mdl)) if !mdl.is_empty() => mdl.clone(),
         _ => String::new(),
     }

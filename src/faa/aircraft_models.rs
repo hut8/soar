@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::str::FromStr;
 
+use crate::manufacturer_names::normalize_manufacturer;
+
 /// Convenience: inclusive 1-based positions from the spec → 0-based Rust slice range
 fn fw(s: &str, start_1: usize, end_1: usize) -> &str {
     let start = start_1.saturating_sub(1);
@@ -335,7 +337,7 @@ impl AircraftModel {
 
         let model_code = to_string_trim(fw(line, 4, 5));
         let series_code = to_string_trim(fw(line, 6, 7));
-        let manufacturer_name = to_string_trim(fw(line, 9, 38));
+        let manufacturer_name = normalize_manufacturer(fw(line, 9, 38).trim());
         let model_name = to_string_trim(fw(line, 40, 59));
 
         let aircraft_type = to_opt_string(fw(line, 61, 61))

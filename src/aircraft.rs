@@ -13,6 +13,7 @@ use diesel_derive_enum::DbEnum;
 
 // Import AdsbEmitterCategory and AircraftCategory for the cached fields
 use crate::aircraft_types::{AircraftCategory, EngineType};
+use crate::manufacturer_names::normalize_aircraft_model;
 use crate::ogn_aprs_aircraft::AdsbEmitterCategory;
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
@@ -757,7 +758,7 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
                                 flarm_address: None,
                                 ogn_address: None,
                                 other_address: None,
-                                aircraft_model: record.plane_type,
+                                aircraft_model: normalize_aircraft_model(&record.plane_type),
                                 registration,
                                 competition_number: record.call_sign,
                                 tracked: true,
@@ -974,7 +975,7 @@ impl AircraftFetcher {
                                     flarm_address: None,
                                     ogn_address: None,
                                     other_address: None,
-                                    aircraft_model: record.plane_type,
+                                    aircraft_model: normalize_aircraft_model(&record.plane_type),
                                     registration,
                                     competition_number: record.call_sign,
                                     tracked: true,
