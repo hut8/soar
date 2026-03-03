@@ -708,7 +708,7 @@ mod tests {
         assert_eq!(model.manufacturer_code, "ABC");
         assert_eq!(model.model_code, "12");
         assert_eq!(model.series_code, "34");
-        assert_eq!(model.manufacturer_name, "TEST MANUFACTURER");
+        assert_eq!(model.manufacturer_name, "Test Manufacturer");
         assert_eq!(model.model_name, "TEST MODEL");
         assert_eq!(
             model.aircraft_type,

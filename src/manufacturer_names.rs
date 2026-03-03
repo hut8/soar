@@ -305,10 +305,19 @@ pub fn normalize_aircraft_model(model: &str) -> String {
 
     let upper = trimmed.to_uppercase();
 
-    // Check for prefix match against known manufacturers (longest first)
+    // Check for prefix match against known manufacturers (longest first).
+    // Require a word boundary after the pattern (space, '-', or end-of-string)
+    // to avoid false matches like "BEECHWOOD" matching "BEECH".
     for mapping in MANUFACTURER_MAPPINGS.iter() {
-        if upper.starts_with(mapping.pattern) {
+        if let Some(after) = upper.strip_prefix(mapping.pattern) {
+            if !after.is_empty() && !after.starts_with(' ') && !after.starts_with('-') {
+                continue;
+            }
             let rest = &trimmed[mapping.pattern.len()..];
+            // If delimiter is a hyphen, join directly; if space, trim and join with space
+            if rest.starts_with('-') {
+                return format!("{}{}", mapping.canonical, rest);
+            }
             let rest = rest.trim_start();
             if rest.is_empty() {
                 return mapping.canonical.to_string();
@@ -454,6 +463,18 @@ mod tests {
             normalize_aircraft_model("CESSNA AIRCRAFT CO 172S Skyhawk"),
             "Cessna 172S Skyhawk"
         );
+    }
+
+    #[test]
+    fn test_word_boundary_enforcement() {
+        // "BEECHWOOD" should NOT match "BEECH" — no word boundary after pattern
+        assert_eq!(normalize_aircraft_model("BEECHWOOD 100"), "BEECHWOOD 100");
+        // "DIAMONDS" should NOT match "DIAMOND"
+        assert_eq!(normalize_aircraft_model("DIAMONDS 500"), "DIAMONDS 500");
+        // But "BEECH 100" should still match (space boundary)
+        assert_eq!(normalize_aircraft_model("BEECH 100"), "Beechcraft 100");
+        // And hyphen boundary should work too
+        assert_eq!(normalize_aircraft_model("BELL-47"), "Bell-47");
     }
 
     #[test]

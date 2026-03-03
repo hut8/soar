@@ -1474,9 +1474,8 @@ impl AircraftCache {
                 .is_some_and(|m| !m.trim().is_empty())
                 && aircraft.aircraft_model.trim().is_empty()
             {
-                aircraft.aircraft_model = normalize_aircraft_model(
-                    &packet_fields.aircraft_model.clone().unwrap_or_default(),
-                );
+                aircraft.aircraft_model =
+                    normalize_aircraft_model(packet_fields.aircraft_model.as_deref().unwrap_or(""));
                 changed = true;
             }
             // Registration: only update if we have one and aircraft doesn't
