@@ -898,7 +898,9 @@
 				</h2>
 
 				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
-					<Tabs.List class="border-b border-surface-300 dark:border-surface-600">
+					<Tabs.List
+						class="flex-col border-b border-surface-300 sm:flex-row dark:border-surface-600"
+					>
 						<Tabs.Trigger value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
 							Status Reports
