@@ -110,7 +110,12 @@
 			const response = await serverCall<DataListResponse<ClubAircraftData>>(
 				`/clubs/${clubId}/aircraft`
 			);
-			aircraft = response.data || [];
+			// Deduplicate by id to prevent Svelte each_key_duplicate errors
+			const byId: Record<string, ClubAircraftData> = {};
+			for (const a of response.data || []) {
+				if (a.id && !(a.id in byId)) byId[a.id] = a;
+			}
+			aircraft = Object.values(byId);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aircraftError = `Failed to load aircraft: ${errorMessage}`;
