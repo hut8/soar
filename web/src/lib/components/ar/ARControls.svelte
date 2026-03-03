@@ -116,8 +116,10 @@
 		background: rgba(0, 0, 0, 0.85);
 		backdrop-filter: blur(12px);
 		border-radius: 1rem 1rem 0 0;
-		padding: 1rem 1.5rem;
+		padding-top: 1rem;
 		padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+		padding-left: calc(1.5rem + env(safe-area-inset-left, 0px));
+		padding-right: calc(1.5rem + env(safe-area-inset-right, 0px));
 		display: flex;
 		gap: 1rem;
 		align-items: center;
