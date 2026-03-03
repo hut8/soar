@@ -1176,4 +1176,76 @@ mod tests {
 
         assert_eq!(messages.len(), 0);
     }
+
+    #[test]
+    fn test_aprs_message_serializes_camel_case_keys() {
+        let msg = AprsMessage {
+            id: Uuid::nil(),
+            raw_message: b"TEST>APRS:>hello".to_vec(),
+            received_at: Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap(),
+            receiver_id: Some(Uuid::nil()),
+            unparsed: None,
+            raw_message_hash: vec![0xab, 0xcd],
+        };
+
+        let json = serde_json::to_value(&msg).expect("Failed to serialize AprsMessage");
+        let obj = json.as_object().expect("Expected JSON object");
+
+        // Verify camelCase keys are present (not snake_case)
+        assert!(
+            obj.contains_key("rawMessage"),
+            "missing camelCase key 'rawMessage'"
+        );
+        assert!(
+            obj.contains_key("receivedAt"),
+            "missing camelCase key 'receivedAt'"
+        );
+        assert!(
+            obj.contains_key("receiverId"),
+            "missing camelCase key 'receiverId'"
+        );
+        assert!(
+            obj.contains_key("rawMessageHash"),
+            "missing camelCase key 'rawMessageHash'"
+        );
+
+        // Verify snake_case keys are NOT present
+        assert!(
+            !obj.contains_key("raw_message"),
+            "unexpected snake_case key 'raw_message'"
+        );
+        assert!(
+            !obj.contains_key("received_at"),
+            "unexpected snake_case key 'received_at'"
+        );
+        assert!(
+            !obj.contains_key("receiver_id"),
+            "unexpected snake_case key 'receiver_id'"
+        );
+        assert!(
+            !obj.contains_key("raw_message_hash"),
+            "unexpected snake_case key 'raw_message_hash'"
+        );
+
+        // Verify values are correctly encoded
+        assert_eq!(obj["rawMessage"], "TEST>APRS:>hello");
+        assert_eq!(obj["rawMessageHash"], "abcd");
+    }
+
+    #[test]
+    fn test_aprs_message_deserializes_camel_case_keys() {
+        let json = serde_json::json!({
+            "id": Uuid::nil(),
+            "rawMessage": "TEST>APRS:>hello",
+            "receivedAt": "2025-01-01T00:00:00Z",
+            "receiverId": null,
+            "unparsed": null,
+            "rawMessageHash": "abcd"
+        });
+
+        let msg: AprsMessage =
+            serde_json::from_value(json).expect("Failed to deserialize camelCase AprsMessage");
+        assert_eq!(msg.raw_message_text(), "TEST>APRS:>hello");
+        assert_eq!(msg.raw_message_hash, vec![0xab, 0xcd]);
+    }
 }
