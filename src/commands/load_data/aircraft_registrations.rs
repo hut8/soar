@@ -75,7 +75,13 @@ pub async fn load_aircraft_registrations_with_metrics(
 
 /// Copy owner data and year from aircraft_registrations to aircraft
 /// Owner data: Only updates aircraft records where owner_operator is NULL or empty
-/// Year data: Always updates (FAA data is canonical)
+/// Year data: Always updates when different (FAA data is canonical)
+///
+/// Processes in batches to avoid holding large row locks that deadlock with the
+/// concurrent run/ingest processes writing to the aircraft table.
+const COPY_OWNERS_BATCH_SIZE: usize = 5000;
+const COPY_OWNERS_INTER_BATCH_DELAY_MS: u64 = 50;
+
 pub async fn copy_owners_to_aircraft(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<usize> {
@@ -83,57 +89,89 @@ pub async fn copy_owners_to_aircraft(
 
     tokio::task::spawn_blocking(move || {
         let mut conn = diesel_pool.get()?;
+        let mut total_updated: usize = 0;
 
-        // Update aircraft.owner_operator and aircraft.year from aircraft_registrations
-        // owner_operator: Only update if current value is NULL or empty string
-        // year: Always update from FAA data (canonical source)
-        let query = r#"
-            UPDATE aircraft
-            SET owner_operator = CASE
-                    WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
-                         AND ar.registrant_name IS NOT NULL
-                         AND ar.registrant_name != ''
-                    THEN ar.registrant_name
-                    ELSE aircraft.owner_operator
-                END,
-                year = ar.year_mfr,
-                updated_at = CURRENT_TIMESTAMP
-            FROM aircraft_registrations ar
-            WHERE aircraft.id = ar.aircraft_id
-              AND (
-                  (ar.registrant_name IS NOT NULL AND ar.registrant_name != ''
-                   AND (aircraft.owner_operator IS NULL OR aircraft.owner_operator = ''))
-                  OR ar.year_mfr IS NOT NULL
-              )
-        "#;
+        loop {
+            // Each batch selects up to BATCH_SIZE rows that still need updating,
+            // then applies the update. Rows that were updated won't match the
+            // condition on the next iteration.
+            let batch_query = r#"
+                UPDATE aircraft
+                SET owner_operator = CASE
+                        WHEN (aircraft.owner_operator IS NULL OR aircraft.owner_operator = '')
+                             AND ar.registrant_name IS NOT NULL
+                             AND ar.registrant_name != ''
+                        THEN ar.registrant_name
+                        ELSE aircraft.owner_operator
+                    END,
+                    year = CASE
+                        WHEN ar.year_mfr IS NOT NULL
+                        THEN ar.year_mfr
+                        ELSE aircraft.year
+                    END,
+                    updated_at = CURRENT_TIMESTAMP
+                FROM (
+                    SELECT ar_inner.aircraft_id, ar_inner.registrant_name, ar_inner.year_mfr
+                    FROM aircraft_registrations ar_inner
+                    JOIN aircraft a ON a.id = ar_inner.aircraft_id
+                    WHERE (
+                        (ar_inner.registrant_name IS NOT NULL AND ar_inner.registrant_name != ''
+                         AND (a.owner_operator IS NULL OR a.owner_operator = ''))
+                        OR (ar_inner.year_mfr IS NOT NULL
+                            AND a.year IS DISTINCT FROM ar_inner.year_mfr)
+                    )
+                    LIMIT {}
+                ) ar
+                WHERE aircraft.id = ar.aircraft_id
+            "#;
 
-        let mut attempts = 0;
-        let max_attempts = 3;
-        let updated_count = loop {
-            attempts += 1;
-            match diesel::sql_query(query).execute(&mut conn) {
-                Ok(count) => break count,
-                Err(diesel::result::Error::DatabaseError(
-                    diesel::result::DatabaseErrorKind::SerializationFailure,
-                    ref info,
-                )) if attempts < max_attempts => {
-                    warn!(
-                        attempt = attempts,
-                        error = %info.message(),
-                        "Deadlock detected in copy_owners_to_aircraft, retrying"
-                    );
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+            let batch_sql = batch_query.replace("{}", &COPY_OWNERS_BATCH_SIZE.to_string());
+
+            let mut attempts = 0;
+            let max_attempts = 3;
+            let updated = loop {
+                attempts += 1;
+                match diesel::sql_query(&batch_sql).execute(&mut conn) {
+                    Ok(count) => break count,
+                    Err(diesel::result::Error::DatabaseError(
+                        diesel::result::DatabaseErrorKind::SerializationFailure,
+                        ref info,
+                    )) if attempts < max_attempts => {
+                        warn!(
+                            attempt = attempts,
+                            error = %info.message(),
+                            "Deadlock in copy_owners batch, retrying"
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(200 * attempts as u64));
+                    }
+                    Err(e) => return Err(e.into()),
                 }
-                Err(e) => return Err(e.into()),
+            };
+
+            total_updated += updated;
+
+            if updated == 0 {
+                break;
             }
-        };
+
+            info!(
+                batch_updated = updated,
+                total_updated, "Processed batch of owner/year copies"
+            );
+
+            // Brief pause between batches to reduce lock contention
+            // with concurrent run/ingest processes
+            std::thread::sleep(std::time::Duration::from_millis(
+                COPY_OWNERS_INTER_BATCH_DELAY_MS,
+            ));
+        }
 
         info!(
             "Successfully copied owner and year data to {} aircraft records",
-            updated_count
+            total_updated
         );
 
-        Ok::<usize, anyhow::Error>(updated_count)
+        Ok::<usize, anyhow::Error>(total_updated)
     })
     .await?
 }

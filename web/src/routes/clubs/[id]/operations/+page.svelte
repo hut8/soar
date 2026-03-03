@@ -25,7 +25,7 @@
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
-	import type { Flight, FlightDetails, Aircraft, DataResponse } from '$lib/types';
+	import type { Flight, FlightDetails, Aircraft, DataResponse, DataListResponse } from '$lib/types';
 
 	dayjs.extend(relativeTime);
 
@@ -160,17 +160,17 @@
 			const dateParam = dayjs(selectedDate).format('YYYYMMDD');
 
 			// Fetch completed flights for this club and date
-			const completedResponse = await serverCall<Flight[]>(
+			const completedResponse = await serverCall<DataListResponse<Flight>>(
 				`/clubs/${clubId}/flights?date=${dateParam}&completed=true`
 			);
-			completedFlights = completedResponse || [];
+			completedFlights = completedResponse.data || [];
 
 			// Only fetch flights in progress if viewing today's date
 			if (selectedDate === dayjs().format('YYYY-MM-DD')) {
-				const inProgressResponse = await serverCall<Flight[]>(
+				const inProgressResponse = await serverCall<DataListResponse<Flight>>(
 					`/clubs/${clubId}/flights?completed=false`
 				);
-				flightsInProgress = inProgressResponse || [];
+				flightsInProgress = inProgressResponse.data || [];
 			} else {
 				// Clear in-progress flights when viewing historical dates
 				flightsInProgress = [];
