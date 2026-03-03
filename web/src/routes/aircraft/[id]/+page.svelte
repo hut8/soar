@@ -103,11 +103,13 @@
 	let aircraftImages: AircraftImage[] = [];
 	let loadingImages = true;
 	let isFixesCollapsed = true;
+	let watchlistLoading = false;
+	let watchlistAction: 'adding' | 'removing' | null = null;
 
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.isAdmin === true;
 	$: userClubId = $auth.user?.clubId;
-	$: isInWatchlist = watchlist.has(aircraftId);
+	$: isInWatchlist = $watchlist.entries.some((e) => e.aircraftId === aircraftId);
 
 	// Generate JSON-LD structured data for SEO (reactive to aircraft and aircraftId changes)
 	$: jsonLdScript = (() => {
@@ -326,6 +328,8 @@
 			return;
 		}
 
+		watchlistLoading = true;
+		watchlistAction = isInWatchlist ? 'removing' : 'adding';
 		try {
 			if (isInWatchlist) {
 				await watchlist.remove(aircraftId);
@@ -337,6 +341,9 @@
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			toaster.error({ title: 'Failed to update watchlist', description: errorMessage });
+		} finally {
+			watchlistLoading = false;
+			watchlistAction = null;
 		}
 	}
 </script>
@@ -370,8 +377,14 @@
 					? 'preset-filled-warning-500'
 					: 'preset-tonal-primary-500'} btn-sm"
 				onclick={toggleWatchlist}
+				disabled={watchlistLoading}
 			>
-				{#if isInWatchlist}
+				{#if watchlistLoading}
+					<span
+						class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+					></span>
+					{watchlistAction === 'removing' ? 'Removing...' : 'Adding...'}
+				{:else if isInWatchlist}
 					<Eye class="h-4 w-4" />
 					Watching
 				{:else}
