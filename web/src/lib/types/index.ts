@@ -314,7 +314,7 @@ export interface CoverageGeoJsonResponse {
 
 // Hex fixes modal - individual position fixes within a coverage hex
 export interface FixesInHexResponse {
-	data: Fix[];
+	data: FixWithAircraft[];
 	total: number;
 	h3Index: string;
 	resolution: number;

@@ -1382,7 +1382,7 @@ impl FixesRepository {
         offset: i64,
         first_seen: chrono::DateTime<chrono::Utc>,
         last_seen: chrono::DateTime<chrono::Utc>,
-    ) -> Result<(Vec<Fix>, i64)> {
+    ) -> Result<(Vec<crate::fixes::FixWithAircraftInfo>, i64)> {
         use diesel::sql_types;
 
         let pool = self.pool.clone();
@@ -1487,7 +1487,31 @@ impl FixesRepository {
             // Execute select query
             let fixes_result: Vec<Fix> = diesel::sql_query(select_sql).load(&mut conn)?;
 
-            Ok::<(Vec<Fix>, i64), anyhow::Error>((fixes_result, total))
+            // Fetch aircraft info for the fixes (same pattern as get_fixes_by_receiver_id_paginated)
+            use crate::actions::views::AircraftView;
+            use crate::aircraft::AircraftModel;
+            use crate::schema::aircraft;
+
+            let aircraft_ids: Vec<Uuid> = fixes_result.iter().map(|fix| fix.aircraft_id).collect();
+            let aircraft_models: Vec<AircraftModel> = aircraft::table
+                .filter(aircraft::id.eq_any(&aircraft_ids))
+                .select(AircraftModel::as_select())
+                .load::<AircraftModel>(&mut conn)?;
+
+            let aircraft_map: std::collections::HashMap<Uuid, AircraftView> = aircraft_models
+                .into_iter()
+                .map(|model| (model.id, AircraftView::from_device_model(model)))
+                .collect();
+
+            let results: Vec<crate::fixes::FixWithAircraftInfo> = fixes_result
+                .into_iter()
+                .map(|fix| {
+                    let aircraft = aircraft_map.get(&fix.aircraft_id).cloned();
+                    crate::fixes::FixWithAircraftInfo::new(fix, aircraft)
+                })
+                .collect();
+
+            Ok::<(Vec<crate::fixes::FixWithAircraftInfo>, i64), anyhow::Error>((results, total))
         })
         .await?
     }

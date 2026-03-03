@@ -12,7 +12,7 @@ use crate::actions::views::receiver::ReceiverView;
 use crate::coverage::CoverageHexFeature;
 use crate::coverage_cache::CoverageCache;
 use crate::coverage_repo::CoverageRepository;
-use crate::fixes::Fix;
+use crate::fixes::FixWithAircraftInfo;
 use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
 
@@ -175,7 +175,7 @@ pub struct HexFixesQueryParams {
 /// Response for fixes within an H3 hexagon
 #[derive(Debug, Serialize)]
 pub struct FixesInHexResponse {
-    pub data: Vec<Fix>,
+    pub data: Vec<FixWithAircraftInfo>,
     pub total: i64,
     #[serde(rename = "h3Index")]
     pub h3_index: String,
