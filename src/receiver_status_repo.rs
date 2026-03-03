@@ -106,14 +106,28 @@ impl ReceiverStatusRepository {
                 .offset(offset)
                 .load::<ReceiverStatus>(&mut conn)?;
 
-            // Step 2: Fetch raw messages only for these statuses (at most per_page rows)
+            // Step 2: Fetch raw messages only for these statuses (at most per_page rows).
+            // Include a received_at range filter so TimescaleDB can prune hypertable chunks.
             let rm_ids: Vec<Uuid> = statuses.iter().filter_map(|s| s.raw_message_id).collect();
 
             let raw_messages_map: std::collections::HashMap<Uuid, Vec<u8>> = if rm_ids.is_empty() {
                 std::collections::HashMap::new()
             } else {
+                let min_time = statuses
+                    .iter()
+                    .map(|s| s.received_at)
+                    .min()
+                    .expect("statuses is non-empty");
+                let max_time = statuses
+                    .iter()
+                    .map(|s| s.received_at)
+                    .max()
+                    .expect("statuses is non-empty");
+
                 raw_messages::table
                     .filter(raw_messages::id.eq_any(&rm_ids))
+                    .filter(raw_messages::received_at.ge(min_time))
+                    .filter(raw_messages::received_at.le(max_time))
                     .select((raw_messages::id, raw_messages::raw_message))
                     .load::<(Uuid, Vec<u8>)>(&mut conn)?
                     .into_iter()
