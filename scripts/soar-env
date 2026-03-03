@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Load SOAR environment variables into the current shell.
+# Usage: source scripts/soar-env [production|staging]
+#   or:  . scripts/soar-env [production|staging]
+#
+# This must be sourced (not executed) so variables persist in your shell.
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: This script must be sourced, not executed." >&2
+    echo "Usage: source $0 [production|staging]" >&2
+    exit 1
+fi
+
+SOAR_ENVIRONMENT="${1:-production}"
+
+case "$SOAR_ENVIRONMENT" in
+    production|staging)
+        ENV_FILE="/etc/soar/env-${SOAR_ENVIRONMENT}"
+        ;;
+    *)
+        echo "Error: Unknown environment '$SOAR_ENVIRONMENT'. Use 'production' or 'staging'." >&2
+        return 1
+        ;;
+esac
+
+if [[ ! -r "$ENV_FILE" ]]; then
+    # Try with sudo
+    if sudo test -r "$ENV_FILE" 2>/dev/null; then
+        eval "$(sudo cat "$ENV_FILE" | grep -v '^#' | grep -v '^[[:space:]]*$')"
+        echo "Loaded $SOAR_ENVIRONMENT environment from $ENV_FILE (via sudo)"
+    else
+        echo "Error: Cannot read $ENV_FILE" >&2
+        return 1
+    fi
+else
+    set -a
+    source "$ENV_FILE"
+    set +a
+    echo "Loaded $SOAR_ENVIRONMENT environment from $ENV_FILE"
+fi
