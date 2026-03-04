@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { watchlist } from '$lib/stores/watchlist';
-	import { Bell, BellOff, Trash2, Plus } from '@lucide/svelte';
+	import { Bell, BellOff, Trash2, Plus, Shield } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import { formatPrimaryAddress } from '$lib/formatters';
 	import { getLogger } from '$lib/logging';
@@ -60,6 +60,10 @@
 					<Plus class="h-4 w-4" />
 					Add Aircraft
 				</button>
+				<a href="/geofences" class="btn preset-filled-secondary-500">
+					<Shield class="h-4 w-4" />
+					Geofences
+				</a>
 				{#if $watchlist.entries.length > 0}
 					<button onclick={clearWatchlist} class="preset-ghost-error-500 btn">
 						<Trash2 class="h-4 w-4" />
