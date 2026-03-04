@@ -37,6 +37,12 @@ export class ARTracker {
 	private currentOrientation: ARDeviceOrientation | null = null;
 	private currentPosition: ARUserPosition | null = null;
 
+	// Smoothing state: exponential moving average on heading/pitch
+	// Alpha controls responsiveness: 0 = no update, 1 = no smoothing
+	private smoothingAlpha = 0.3;
+	private smoothedHeading: number | null = null;
+	private smoothedPitch: number | null = null;
+
 	private constructor() {}
 
 	public static getInstance(): ARTracker {
@@ -166,19 +172,33 @@ export class ARTracker {
 		}
 	}
 
+	/**
+	 * Smooth a circular value (like heading in degrees) using exponential
+	 * moving average. Takes the shortest angular path to avoid jumps at
+	 * the 0°/360° boundary.
+	 */
+	private smoothAngle(current: number, target: number, wrap: number): number {
+		let delta = target - current;
+		// Take the shortest path around the circle
+		if (delta > wrap / 2) delta -= wrap;
+		if (delta < -wrap / 2) delta += wrap;
+		const result = current + this.smoothingAlpha * delta;
+		return ((result % wrap) + wrap) % wrap;
+	}
+
 	private handleOrientationEvent = (event: DeviceOrientationEventWithCompass): void => {
-		let heading: number;
+		let rawHeading: number;
 
 		// iOS provides webkitCompassHeading (true compass heading)
 		if (event.webkitCompassHeading !== undefined && event.webkitCompassHeading !== null) {
-			heading = event.webkitCompassHeading;
+			rawHeading = event.webkitCompassHeading;
 		} else if (event.absolute || this.hasAbsoluteOrientation) {
 			// Android with absolute orientation: convert alpha to compass heading
 			// alpha is measured counter-clockwise from north, compass heading is clockwise
-			heading = (360 - (event.alpha ?? 0)) % 360;
+			rawHeading = (360 - (event.alpha ?? 0)) % 360;
 		} else {
 			// Fallback: use raw alpha (may be inaccurate)
-			heading = (360 - (event.alpha ?? 0)) % 360;
+			rawHeading = (360 - (event.alpha ?? 0)) % 360;
 		}
 
 		// Convert device beta to AR pitch
@@ -190,11 +210,21 @@ export class ARTracker {
 		// Tilting the phone up (looking at sky) = positive pitch
 		// Tilting the phone down (looking at ground) = negative pitch
 		const beta = event.beta ?? 0;
-		const arPitch = beta - 90;
+		const rawPitch = beta - 90;
+
+		// Apply low-pass filter to reduce jitter from noisy sensors
+		if (this.smoothedHeading === null || this.smoothedPitch === null) {
+			this.smoothedHeading = rawHeading;
+			this.smoothedPitch = rawPitch;
+		} else {
+			this.smoothedHeading = this.smoothAngle(this.smoothedHeading, rawHeading, 360);
+			this.smoothedPitch =
+				this.smoothedPitch + this.smoothingAlpha * (rawPitch - this.smoothedPitch);
+		}
 
 		this.currentOrientation = {
-			heading,
-			pitch: arPitch,
+			heading: this.smoothedHeading,
+			pitch: this.smoothedPitch,
 			roll: event.gamma ?? 0,
 			absolute: event.absolute || this.hasAbsoluteOrientation
 		};
@@ -231,6 +261,8 @@ export class ARTracker {
 		this.currentOrientation = null;
 		this.currentPosition = null;
 		this.hasAbsoluteOrientation = false;
+		this.smoothedHeading = null;
+		this.smoothedPitch = null;
 	}
 
 	public getCurrentPosition(): ARUserPosition | null {
