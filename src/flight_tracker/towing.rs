@@ -62,7 +62,7 @@ pub fn spawn_towing_detection_task(
                     glider_flight = %towing_info.glider_flight_id,
                     "Towing detected"
                 );
-                metrics::counter!("flight_tracker.towing.detected").increment(1);
+                metrics::counter!("flight_tracker.towing.detected_total").increment(1);
 
                 // Set towing_info on the towplane's state
                 if let Some(mut state) = aircraft_states.get_mut(&towplane_aircraft_id) {
@@ -134,7 +134,7 @@ async fn find_towed_glider(
                     towplane = %towplane_aircraft_id,
                     "No candidates found near towplane"
                 );
-                metrics::counter!("flight_tracker.towing.no_candidates").increment(1);
+                metrics::counter!("flight_tracker.towing.no_candidates_total").increment(1);
                 return Ok(None);
             }
             1 => {
@@ -143,7 +143,7 @@ async fn find_towed_glider(
                 debug!(
                     towplane = %towplane_aircraft_id,
                     glider = %glider_aircraft_id,
-                    distance_m = format!("{:.0}", distance),
+                    distance_m = distance,
                     "Single candidate found - linking tow"
                 );
 
@@ -185,7 +185,7 @@ async fn find_towed_glider(
         towplane = %towplane_aircraft_id,
         "Could not disambiguate tow candidates after 3 attempts"
     );
-    metrics::counter!("flight_tracker.towing.ambiguous").increment(1);
+    metrics::counter!("flight_tracker.towing.ambiguous_total").increment(1);
     Ok(None)
 }
 
@@ -207,6 +207,8 @@ fn get_towplane_position(
 ///
 /// Phase 1 (sync): scan in-memory aircraft states for nearby active aircraft.
 /// Phase 2 (async): look up aircraft category from cache, exclude non-towable types.
+/// Note: `get_by_id` can fall back to DB on cache miss, but in practice all aircraft
+/// in `aircraft_states` were cached on their first fix, so this is almost always a hit.
 async fn find_nearby_candidates(
     towplane_aircraft_id: Uuid,
     towplane_lat: f64,
@@ -252,7 +254,7 @@ async fn find_nearby_candidates(
     // Phase 2: filter by aircraft category (async cache lookups)
     let mut candidates = Vec::new();
     for (aircraft_id, flight_id, distance) in nearby {
-        let dominated = match aircraft_cache.get_by_id(aircraft_id).await {
+        let excluded = match aircraft_cache.get_by_id(aircraft_id).await {
             Ok(Some(aircraft)) => {
                 if let Some(category) = aircraft.aircraft_category {
                     EXCLUDED_TOW_CATEGORIES.contains(&category)
@@ -276,10 +278,10 @@ async fn find_nearby_candidates(
             }
         };
 
-        if !dominated {
+        if !excluded {
             debug!(
                 aircraft = %aircraft_id,
-                distance_m = format!("{:.0}", distance),
+                distance_m = distance,
                 "Tow candidate found"
             );
             candidates.push((aircraft_id, flight_id, distance));
