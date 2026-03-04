@@ -661,7 +661,7 @@
 	{@html jsonLdScript}
 </svelte:head>
 
-<div class="max-w-8xl container mx-auto space-y-6 p-4">
+<div class="receiver-detail-page max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
 		<button class="btn preset-tonal btn-sm" onclick={goBack}>
@@ -2037,7 +2037,7 @@
 
 <style>
 	/* Improve tab selection visibility, especially on mobile where tabs stack vertically */
-	:global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
 		background-color: rgb(var(--color-primary-500) / 0.15);
 		color: rgb(var(--color-primary-500));
 		font-weight: 600;
