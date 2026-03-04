@@ -354,7 +354,9 @@
 
 <!-- Add Stream Modal -->
 {#if showAddModal}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeAddModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Add Data Stream</h3>
@@ -429,7 +431,9 @@
 
 <!-- Edit Stream Modal -->
 {#if showEditModal && editingStream}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeEditModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Edit Data Stream</h3>
@@ -501,7 +505,9 @@
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal && deletingStream}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeDeleteModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Delete Data Stream</h3>

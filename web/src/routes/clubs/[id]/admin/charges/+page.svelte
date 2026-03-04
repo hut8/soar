@@ -256,7 +256,9 @@
 </div>
 
 {#if showAddModal}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeAddModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Create Charge</h3>

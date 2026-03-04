@@ -38,7 +38,7 @@
 		fixesInChronologicalOrder = true
 	}: Props = $props();
 
-	let showRawData = $state(showRawValue);
+	let showRawData = $derived(showRawValue);
 	let useRelativeTime = $derived(useRelativeTimes);
 	let showTimeIntervals = $state(false);
 
