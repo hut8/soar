@@ -3,12 +3,24 @@
 # Usage: source scripts/soar-env [production|staging]
 #   or:  . scripts/soar-env [production|staging]
 #
-# This must be sourced (not executed) so variables persist in your shell.
+# Compatible with both Bash and Zsh. Must be sourced, not executed.
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "Error: This script must be sourced, not executed." >&2
-    echo "Usage: source $0 [production|staging]" >&2
-    exit 1
+# Detect if script is being executed rather than sourced
+if [[ -n "$BASH_VERSION" ]]; then
+    if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+        echo "Error: This script must be sourced, not executed." >&2
+        echo "Usage: source $0 [production|staging]" >&2
+        exit 1
+    fi
+elif [[ -n "$ZSH_VERSION" ]]; then
+    if [[ "$ZSH_EVAL_CONTEXT" != *:file* ]]; then
+        echo "Error: This script must be sourced, not executed." >&2
+        echo "Usage: source $0 [production|staging]" >&2
+        exit 1
+    fi
+else
+    echo "Error: This script requires Bash or Zsh." >&2
+    return 1 2>/dev/null || exit 1
 fi
 
 SOAR_ENVIRONMENT="${1:-production}"
@@ -26,7 +38,9 @@ esac
 if [[ ! -r "$ENV_FILE" ]]; then
     # Try with sudo
     if sudo test -r "$ENV_FILE" 2>/dev/null; then
-        eval "$(sudo cat "$ENV_FILE" | grep -v '^#' | grep -v '^[[:space:]]*$')"
+        set -a
+        source <(sudo cat "$ENV_FILE" | grep -v '^#' | grep -v '^[[:space:]]*$')
+        set +a
         echo "Loaded $SOAR_ENVIRONMENT environment from $ENV_FILE (via sudo)"
     else
         echo "Error: Cannot read $ENV_FILE" >&2
