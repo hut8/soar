@@ -39,27 +39,36 @@
 		}
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
+	function handleBackdropKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
 			onClose();
 		}
 	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="backdrop" onclick={handleBackdropClick}>
+<div
+	class="backdrop"
+	role="dialog"
+	aria-modal="true"
+	aria-labelledby="range-modal-title"
+	onclick={handleBackdropClick}
+	onkeydown={handleBackdropKeydown}
+>
 	<div class="modal-panel">
 		<div class="modal-header">
-			<span class="modal-title">Range</span>
-			<button class="btn-close" onclick={onClose}>
+			<span id="range-modal-title" class="modal-title">Range</span>
+			<button class="btn-close" onclick={onClose} aria-label="Close">
 				<X size={18} />
 			</button>
 		</div>
 
 		<div class="range-control">
-			<button class="btn-icon" onclick={decreaseRange} disabled={rangeNm <= MIN_RANGE}>
+			<button
+				class="btn-icon"
+				onclick={decreaseRange}
+				disabled={rangeNm <= MIN_RANGE}
+				aria-label="Decrease range"
+			>
 				<Minus size={20} />
 			</button>
 			<div class="slider-container">
@@ -70,6 +79,7 @@
 					step={STEP}
 					bind:value={rangeNm}
 					class="range-slider"
+					aria-label="Range in nautical miles"
 				/>
 				<div class="current-indicator" style:left={indicatorLeftOffset}>
 					<div class="indicator-line"></div>
@@ -83,7 +93,12 @@
 					{/each}
 				</div>
 			</div>
-			<button class="btn-icon" onclick={increaseRange} disabled={rangeNm >= MAX_RANGE}>
+			<button
+				class="btn-icon"
+				onclick={increaseRange}
+				disabled={rangeNm >= MAX_RANGE}
+				aria-label="Increase range"
+			>
 				<Plus size={20} />
 			</button>
 		</div>
