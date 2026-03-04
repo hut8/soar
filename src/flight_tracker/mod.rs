@@ -859,7 +859,7 @@ impl FlightTracker {
     /// Set the in-memory callsign for an aircraft, but only if the given flight is still
     /// the aircraft's current flight. Used by fix_processor to correct callsign mismatches
     /// detected in Step 3 so the next fix triggers a proper flight split.
-    pub fn set_aircraft_callsign(
+    pub(crate) fn set_aircraft_callsign(
         &self,
         aircraft_id: Uuid,
         flight_id: Uuid,
@@ -1049,6 +1049,83 @@ mod tests {
             state.current_callsign,
             Some("VOI5584".to_string()),
             "Callsign update for current flight should apply"
+        );
+    }
+
+    /// Test the callsign mismatch self-correction scenario:
+    ///
+    /// When current_callsign is None in memory but the DB flight has a callsign,
+    /// learn_callsign "learns" the wrong callsign. The fix_processor detects the
+    /// mismatch in Step 3 and calls set_aircraft_callsign to reset current_callsign
+    /// to the DB value, so the next fix triggers a proper split.
+    #[test]
+    fn test_callsign_mismatch_self_correction() {
+        use crate::flight_tracker::state_transitions::{is_callsign_change, learn_callsign};
+
+        let aircraft_id = Uuid::new_v4();
+        let flight_1 = Uuid::new_v4();
+
+        let aircraft_states: AircraftStatesMap = Arc::new(DashMap::new());
+
+        // Setup: flight F1 exists with current_callsign = None in memory
+        // (simulates state desync where DB has callsign "DLH16E" but memory lost it)
+        let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+        let fix = create_test_fix(base_time, Some(5000));
+        let mut state = aircraft_state::AircraftState::new(&fix, true);
+        state.current_flight_id = Some(flight_1);
+        state.current_callsign = None; // DB has "DLH16E" but memory lost it
+        aircraft_states.insert(aircraft_id, state);
+
+        // Step 1: Fix arrives with callsign "DLH89T"
+        let new_callsign = Some("DLH89T".to_string());
+
+        // is_callsign_change returns false because current is None
+        let current = aircraft_states.get(&aircraft_id).unwrap();
+        assert!(
+            !is_callsign_change(&current.current_callsign, &new_callsign),
+            "is_callsign_change should return false when current is None"
+        );
+        drop(current);
+
+        // learn_callsign "learns" the wrong callsign
+        if let Some(mut state) = aircraft_states.get_mut(&aircraft_id) {
+            state.current_callsign = learn_callsign(&state.current_callsign, &new_callsign);
+        }
+        let current = aircraft_states.get(&aircraft_id).unwrap();
+        assert_eq!(
+            current.current_callsign,
+            Some("DLH89T".to_string()),
+            "learn_callsign should have set the new callsign"
+        );
+        drop(current);
+
+        // BUG: next fix with "DLH89T" would NOT trigger a split
+        assert!(
+            !is_callsign_change(&Some("DLH89T".to_string()), &new_callsign),
+            "Without correction, next fix would match and never split"
+        );
+
+        // Step 2: fix_processor Step 3 detects mismatch (DB has "DLH16E", fix has "DLH89T")
+        // and calls set_aircraft_callsign to reset to the DB value
+        sync_callsign_if_current_flight(
+            &aircraft_states,
+            aircraft_id,
+            flight_1,
+            Some("DLH16E".to_string()), // DB's callsign
+        );
+
+        // Verify: current_callsign is now the DB value
+        let current = aircraft_states.get(&aircraft_id).unwrap();
+        assert_eq!(
+            current.current_callsign,
+            Some("DLH16E".to_string()),
+            "set_aircraft_callsign should have reset to DB value"
+        );
+
+        // Step 3: Next fix with "DLH89T" now triggers a split
+        assert!(
+            is_callsign_change(&current.current_callsign, &new_callsign),
+            "After correction, next fix should trigger a callsign change split"
         );
     }
 }
