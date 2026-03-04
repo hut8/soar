@@ -63,6 +63,7 @@ pub mod manufacturer_names;
 pub mod message_sources;
 pub mod metrics;
 pub mod nats_publisher;
+pub mod notifications;
 pub mod ogn;
 pub mod ogn_aprs_aircraft;
 pub mod openaip_client;

@@ -6,6 +6,7 @@ export type UserView = {
   lastName: string;
   email: string | null;
   isAdmin: boolean;
+  isClubAdmin: boolean;
   clubId: string | null;
   emailVerified: boolean;
   createdAt: string;

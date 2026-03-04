@@ -15,6 +15,7 @@ pub struct UserView {
     pub last_name: String,
     pub email: Option<String>, // Nullable
     pub is_admin: bool,
+    pub is_club_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
     pub created_at: DateTime<Utc>,
@@ -42,6 +43,7 @@ impl From<User> for UserView {
             last_name: user.last_name,
             email: user.email,
             is_admin: user.is_admin,
+            is_club_admin: user.is_club_admin,
             club_id: user.club_id,
             email_verified: user.email_verified,
             created_at: user.created_at,

@@ -1105,6 +1105,7 @@ diesel::table! {
         is_tow_pilot -> Bool,
         is_examiner -> Bool,
         deleted_at -> Nullable<Timestamptz>,
+        is_club_admin -> Bool,
     }
 }
 

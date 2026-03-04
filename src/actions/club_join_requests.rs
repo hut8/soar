@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::club_join_requests::{NewClubJoinRequest, STATUS_PENDING};
 use crate::club_join_requests_repo::ClubJoinRequestsRepository;
+use crate::notifications;
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
@@ -70,11 +71,25 @@ pub async fn create_join_request(
     };
 
     match repo.create(new_request).await {
-        Ok(request) => (
-            StatusCode::CREATED,
-            Json(ClubJoinRequestView::from(request)),
-        )
-            .into_response(),
+        Ok(request) => {
+            // Send notification to club admins in the background
+            let pool = state.pool.clone();
+            let requester_name = user.full_name();
+            tokio::spawn(async move {
+                if let Err(e) =
+                    notifications::send_join_request_notification(&pool, club_id, &requester_name)
+                        .await
+                {
+                    error!(error = %e, "Failed to send join request notification");
+                }
+            });
+
+            (
+                StatusCode::CREATED,
+                Json(ClubJoinRequestView::from(request)),
+            )
+                .into_response()
+        }
         Err(e) => {
             error!(error = %e, "Failed to create join request");
             json_error(
