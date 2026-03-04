@@ -10,4 +10,9 @@ export type ClubJoinRequestView = {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Name of the user who made the request (populated on list endpoints)
+   */
+  userFirstName: string | null;
+  userLastName: string | null;
 };

@@ -18,6 +18,9 @@ pub struct ClubJoinRequestView {
     pub reviewed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Name of the user who made the request (populated on list endpoints)
+    pub user_first_name: Option<String>,
+    pub user_last_name: Option<String>,
 }
 
 impl From<ClubJoinRequest> for ClubJoinRequestView {
@@ -32,6 +35,8 @@ impl From<ClubJoinRequest> for ClubJoinRequestView {
             reviewed_at: req.reviewed_at,
             created_at: req.created_at,
             updated_at: req.updated_at,
+            user_first_name: req.user_first_name,
+            user_last_name: req.user_last_name,
         }
     }
 }

@@ -20,6 +20,9 @@ pub struct ClubJoinRequest {
     pub reviewed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Populated from joined user data when listing requests
+    pub user_first_name: Option<String>,
+    pub user_last_name: Option<String>,
 }
 
 /// Diesel model for the club_join_requests table
@@ -61,6 +64,8 @@ impl From<ClubJoinRequestModel> for ClubJoinRequest {
             reviewed_at: model.reviewed_at,
             created_at: model.created_at,
             updated_at: model.updated_at,
+            user_first_name: None,
+            user_last_name: None,
         }
     }
 }

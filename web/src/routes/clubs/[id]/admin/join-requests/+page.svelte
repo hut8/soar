@@ -8,18 +8,18 @@
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
-	import type { ClubJoinRequestView, DataResponse, DataListResponse, User } from '$lib/types';
+	import type { ClubJoinRequestView, DataResponse, DataListResponse } from '$lib/types';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 
 	const logger = getLogger(['soar', 'ClubJoinRequestsPage']);
 
 	let club = $state<ClubView | null>(null);
 	let requests = $state<ClubJoinRequestView[]>([]);
-	let userMap = $state<Record<string, User>>({});
 	let loadingClub = $state(true);
 	let loadingRequests = $state(true);
 	let error = $state('');
-	let processingId = $state<string | null>(null);
+	let approvingId = $state<string | null>(null);
+	let rejectingId = $state<string | null>(null);
 
 	let clubId = $derived($page.params.id || '');
 	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
@@ -52,9 +52,6 @@
 				`/clubs/${clubId}/join-requests`
 			);
 			requests = response.data || [];
-
-			// Load user details for each request
-			await loadUserDetails();
 		} catch (err) {
 			logger.error('Error loading join requests: {error}', { error: err });
 			error = err instanceof Error ? err.message : 'Failed to load join requests';
@@ -63,26 +60,8 @@
 		}
 	}
 
-	async function loadUserDetails() {
-		const uniqueUserIds = [...new Set(requests.map((r) => r.userId))];
-		const newUserMap: Record<string, User> = {};
-
-		await Promise.all(
-			uniqueUserIds.map(async (userId) => {
-				try {
-					const user = await serverCall<User>(`/users/${userId}`);
-					newUserMap[userId] = user;
-				} catch (err) {
-					logger.error('Error loading user {userId}: {error}', { userId, error: err });
-				}
-			})
-		);
-
-		userMap = newUserMap;
-	}
-
 	async function approveRequest(requestId: string) {
-		processingId = requestId;
+		approvingId = requestId;
 		try {
 			await serverCall(`/clubs/${clubId}/join-requests/${requestId}/approve`, {
 				method: 'PUT'
@@ -94,12 +73,12 @@
 			logger.error('Error approving request: {error}', { error: err });
 			toaster.error({ title: 'Failed to approve request', description: errorMessage });
 		} finally {
-			processingId = null;
+			approvingId = null;
 		}
 	}
 
 	async function rejectRequest(requestId: string) {
-		processingId = requestId;
+		rejectingId = requestId;
 		try {
 			await serverCall(`/clubs/${clubId}/join-requests/${requestId}/reject`, {
 				method: 'PUT'
@@ -111,7 +90,7 @@
 			logger.error('Error rejecting request: {error}', { error: err });
 			toaster.error({ title: 'Failed to reject request', description: errorMessage });
 		} finally {
-			processingId = null;
+			rejectingId = null;
 		}
 	}
 
@@ -125,10 +104,12 @@
 		});
 	}
 
-	function getUserName(userId: string): string {
-		const user = userMap[userId];
-		if (!user) return userId.slice(0, 8) + '...';
-		return `${user.firstName} ${user.lastName}`;
+	function getUserName(request: ClubJoinRequestView): string {
+		if (request.userFirstName && request.userLastName) {
+			return `${request.userFirstName} ${request.userLastName}`;
+		}
+		if (request.userFirstName) return request.userFirstName;
+		return request.userId.slice(0, 8) + '...';
 	}
 
 	function goBack() {
@@ -181,7 +162,7 @@
 				<div class="card p-4">
 					<div class="flex flex-wrap items-center justify-between gap-4">
 						<div class="flex-1 space-y-1">
-							<p class="text-lg font-semibold">{getUserName(request.userId)}</p>
+							<p class="text-lg font-semibold">{getUserName(request)}</p>
 							{#if request.message}
 								<p class="text-surface-600-300-token text-sm italic">"{request.message}"</p>
 							{/if}
@@ -194,10 +175,10 @@
 							<button
 								class="btn preset-filled-success-500 btn-sm"
 								onclick={() => approveRequest(request.id)}
-								disabled={processingId === request.id}
+								disabled={approvingId === request.id || rejectingId === request.id}
 								title="Approve"
 							>
-								{#if processingId === request.id}
+								{#if approvingId === request.id}
 									<div class="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
 								{:else}
 									<Check class="h-4 w-4" />
@@ -207,10 +188,10 @@
 							<button
 								class="btn preset-filled-error-500 btn-sm"
 								onclick={() => rejectRequest(request.id)}
-								disabled={processingId === request.id}
+								disabled={approvingId === request.id || rejectingId === request.id}
 								title="Reject"
 							>
-								{#if processingId === request.id}
+								{#if rejectingId === request.id}
 									<div class="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
 								{:else}
 									<X class="h-4 w-4" />

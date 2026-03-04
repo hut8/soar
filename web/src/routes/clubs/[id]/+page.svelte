@@ -16,7 +16,7 @@
 		Users
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
-	import { serverCall } from '$lib/api/server';
+	import { serverCall, ServerError } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
@@ -50,7 +50,7 @@
 	let aircraftError = '';
 	let airportError = '';
 	let clubId = '';
-	let settingClub = false;
+	let cancellingRequest = false;
 	let pendingJoinRequest: ClubJoinRequestView | null = null;
 	let requestingToJoin = false;
 
@@ -155,8 +155,14 @@
 		try {
 			const request = await serverCall<ClubJoinRequestView>(`/clubs/${clubId}/join-requests/my`);
 			pendingJoinRequest = request;
-		} catch {
-			// 404 means no pending request - that's fine
+		} catch (err) {
+			// 404 means no pending request - that's expected
+			if (err instanceof ServerError && err.status === 404) {
+				pendingJoinRequest = null;
+				return;
+			}
+			// Log real errors but don't block the page
+			logger.error('Error loading join request status: {error}', { error: err });
 			pendingJoinRequest = null;
 		}
 	}
@@ -184,7 +190,7 @@
 	async function cancelJoinRequest() {
 		if (!pendingJoinRequest || !club) return;
 
-		settingClub = true;
+		cancellingRequest = true;
 		try {
 			await serverCall(`/clubs/${club.id}/join-requests/${pendingJoinRequest.id}`, {
 				method: 'DELETE'
@@ -196,7 +202,7 @@
 			logger.error('Error cancelling join request: {error}', { error: err });
 			toaster.error({ title: 'Failed to cancel request', description: errorMessage });
 		} finally {
-			settingClub = false;
+			cancellingRequest = false;
 		}
 	}
 </script>
@@ -297,9 +303,9 @@
 									<button
 										class="btn preset-tonal btn-sm"
 										onclick={cancelJoinRequest}
-										disabled={settingClub}
+										disabled={cancellingRequest}
 									>
-										{settingClub ? 'Cancelling...' : 'Cancel Request'}
+										{cancellingRequest ? 'Cancelling...' : 'Cancel Request'}
 									</button>
 								</div>
 							{:else}

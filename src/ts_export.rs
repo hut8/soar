@@ -12,8 +12,8 @@ mod tests {
     };
     use crate::actions::views::{
         Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView,
-        ClubJoinRequestView, ClubView,
-        FlightView, ModelDataView, ReceiverView, RunwayEnd, RunwayView, UserView,
+        ClubJoinRequestView, ClubView, FlightView, ModelDataView, ReceiverView, RunwayEnd,
+        RunwayView, UserView,
     };
     use crate::aircraft::AddressType;
     use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};

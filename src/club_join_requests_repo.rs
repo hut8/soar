@@ -18,25 +18,40 @@ impl ClubJoinRequestsRepository {
         Self { pool }
     }
 
-    /// Get all pending join requests for a club
+    /// Get all pending join requests for a club, including requester names
     pub async fn get_pending_by_club(&self, club_id: Uuid) -> Result<Vec<ClubJoinRequest>> {
         use crate::schema::club_join_requests::dsl;
+        use crate::schema::users;
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let requests: Vec<ClubJoinRequestModel> = dsl::club_join_requests
+            let requests: Vec<(ClubJoinRequestModel, String, String)> = dsl::club_join_requests
+                .inner_join(users::table.on(users::id.eq(dsl::user_id)))
                 .filter(dsl::club_id.eq(club_id))
                 .filter(dsl::status.eq(STATUS_PENDING))
                 .order_by(dsl::created_at.asc())
-                .load::<ClubJoinRequestModel>(&mut conn)?;
+                .select((
+                    ClubJoinRequestModel::as_select(),
+                    users::first_name,
+                    users::last_name,
+                ))
+                .load(&mut conn)?;
 
-            Ok::<Vec<ClubJoinRequestModel>, anyhow::Error>(requests)
+            Ok::<Vec<(ClubJoinRequestModel, String, String)>, anyhow::Error>(requests)
         })
         .await??;
 
-        Ok(result.into_iter().map(|m| m.into()).collect())
+        Ok(result
+            .into_iter()
+            .map(|(m, first_name, last_name)| {
+                let mut req: ClubJoinRequest = m.into();
+                req.user_first_name = Some(first_name);
+                req.user_last_name = Some(last_name);
+                req
+            })
+            .collect())
     }
 
     /// Get a user's pending request for a specific club
@@ -116,18 +131,17 @@ impl ClubJoinRequestsRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let updated: Option<ClubJoinRequestModel> =
-                diesel::update(club_join_requests::table)
-                    .filter(club_join_requests::id.eq(request_id))
-                    .filter(club_join_requests::status.eq(STATUS_PENDING))
-                    .set((
-                        club_join_requests::status.eq(STATUS_APPROVED),
-                        club_join_requests::reviewed_by.eq(reviewed_by),
-                        club_join_requests::reviewed_at.eq(diesel::dsl::now),
-                        club_join_requests::updated_at.eq(diesel::dsl::now),
-                    ))
-                    .get_result(&mut conn)
-                    .optional()?;
+            let updated: Option<ClubJoinRequestModel> = diesel::update(club_join_requests::table)
+                .filter(club_join_requests::id.eq(request_id))
+                .filter(club_join_requests::status.eq(STATUS_PENDING))
+                .set((
+                    club_join_requests::status.eq(STATUS_APPROVED),
+                    club_join_requests::reviewed_by.eq(reviewed_by),
+                    club_join_requests::reviewed_at.eq(diesel::dsl::now),
+                    club_join_requests::updated_at.eq(diesel::dsl::now),
+                ))
+                .get_result(&mut conn)
+                .optional()?;
 
             Ok::<Option<ClubJoinRequestModel>, anyhow::Error>(updated)
         })
@@ -148,18 +162,62 @@ impl ClubJoinRequestsRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let updated: Option<ClubJoinRequestModel> =
-                diesel::update(club_join_requests::table)
-                    .filter(club_join_requests::id.eq(request_id))
-                    .filter(club_join_requests::status.eq(STATUS_PENDING))
-                    .set((
-                        club_join_requests::status.eq(STATUS_REJECTED),
-                        club_join_requests::reviewed_by.eq(reviewed_by),
-                        club_join_requests::reviewed_at.eq(diesel::dsl::now),
-                        club_join_requests::updated_at.eq(diesel::dsl::now),
-                    ))
-                    .get_result(&mut conn)
-                    .optional()?;
+            let updated: Option<ClubJoinRequestModel> = diesel::update(club_join_requests::table)
+                .filter(club_join_requests::id.eq(request_id))
+                .filter(club_join_requests::status.eq(STATUS_PENDING))
+                .set((
+                    club_join_requests::status.eq(STATUS_REJECTED),
+                    club_join_requests::reviewed_by.eq(reviewed_by),
+                    club_join_requests::reviewed_at.eq(diesel::dsl::now),
+                    club_join_requests::updated_at.eq(diesel::dsl::now),
+                ))
+                .get_result(&mut conn)
+                .optional()?;
+
+            Ok::<Option<ClubJoinRequestModel>, anyhow::Error>(updated)
+        })
+        .await??;
+
+        Ok(result.map(|m| m.into()))
+    }
+
+    /// Approve a join request and update the user's club_id atomically
+    pub async fn approve_and_set_club(
+        &self,
+        request_id: Uuid,
+        reviewed_by: Uuid,
+    ) -> Result<Option<ClubJoinRequest>> {
+        use crate::schema::{club_join_requests, users};
+
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get().map_err(anyhow::Error::from)?;
+
+            let updated = conn.transaction(|conn| {
+                // Approve the request
+                let updated: Option<ClubJoinRequestModel> =
+                    diesel::update(club_join_requests::table)
+                        .filter(club_join_requests::id.eq(request_id))
+                        .filter(club_join_requests::status.eq(STATUS_PENDING))
+                        .set((
+                            club_join_requests::status.eq(STATUS_APPROVED),
+                            club_join_requests::reviewed_by.eq(reviewed_by),
+                            club_join_requests::reviewed_at.eq(diesel::dsl::now),
+                            club_join_requests::updated_at.eq(diesel::dsl::now),
+                        ))
+                        .get_result(conn)
+                        .optional()?;
+
+                if let Some(ref approved) = updated {
+                    // Update the user's club_id in the same transaction
+                    diesel::update(users::table)
+                        .filter(users::id.eq(approved.user_id))
+                        .set(users::club_id.eq(approved.club_id))
+                        .execute(conn)?;
+                }
+
+                Ok::<Option<ClubJoinRequestModel>, diesel::result::Error>(updated)
+            })?;
 
             Ok::<Option<ClubJoinRequestModel>, anyhow::Error>(updated)
         })

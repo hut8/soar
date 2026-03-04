@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::club_join_requests::{NewClubJoinRequest, STATUS_PENDING};
 use crate::club_join_requests_repo::ClubJoinRequestsRepository;
-use crate::users::UpdateUserRequest;
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
@@ -34,17 +33,17 @@ pub async fn create_join_request(
 
     // User can't request to join a club they're already in
     if user.club_id == Some(club_id) {
-        return json_error(StatusCode::BAD_REQUEST, "You are already a member of this club")
-            .into_response();
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "You are already a member of this club",
+        )
+        .into_response();
     }
 
     let repo = ClubJoinRequestsRepository::new(state.pool.clone());
 
     // Check for an existing pending request
-    match repo
-        .get_pending_by_user_and_club(user.id, club_id)
-        .await
-    {
+    match repo.get_pending_by_user_and_club(user.id, club_id).await {
         Ok(Some(_)) => {
             return json_error(
                 StatusCode::CONFLICT,
@@ -78,8 +77,11 @@ pub async fn create_join_request(
             .into_response(),
         Err(e) => {
             error!(error = %e, "Failed to create join request");
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create join request")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create join request",
+            )
+            .into_response()
         }
     }
 }
@@ -104,8 +106,10 @@ pub async fn get_join_requests(
 
     match repo.get_pending_by_club(club_id).await {
         Ok(requests) => {
-            let views: Vec<ClubJoinRequestView> =
-                requests.into_iter().map(ClubJoinRequestView::from).collect();
+            let views: Vec<ClubJoinRequestView> = requests
+                .into_iter()
+                .map(ClubJoinRequestView::from)
+                .collect();
             Json(DataListResponse { data: views }).into_response()
         }
         Err(e) => {
@@ -179,15 +183,40 @@ pub async fn approve_join_request(
         }
     };
 
-    // Approve the request
-    let approved = match repo.approve(request_id, user.id).await {
-        Ok(Some(r)) => r,
+    // Check if user is already in a different club
+    let users_repo = UsersRepository::new(state.pool.clone());
+    match users_repo.get_by_id(request.user_id).await {
+        Ok(Some(requesting_user)) => {
+            if requesting_user
+                .club_id
+                .is_some_and(|existing_club_id| existing_club_id != club_id)
+            {
+                return json_error(
+                    StatusCode::CONFLICT,
+                    "User is already a member of another club",
+                )
+                .into_response();
+            }
+        }
         Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Requesting user not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to check user club membership");
             return json_error(
-                StatusCode::CONFLICT,
-                "Request is no longer pending",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to check user membership",
             )
             .into_response();
+        }
+    }
+
+    // Approve the request and update user's club_id atomically
+    let approved = match repo.approve_and_set_club(request_id, user.id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return json_error(StatusCode::CONFLICT, "Request is no longer pending")
+                .into_response();
         }
         Err(e) => {
             error!(error = %e, "Failed to approve join request");
@@ -198,23 +227,6 @@ pub async fn approve_join_request(
             .into_response();
         }
     };
-
-    // Update the user's club_id
-    let users_repo = UsersRepository::new(state.pool.clone());
-    let update_request = UpdateUserRequest {
-        first_name: None,
-        last_name: None,
-        email: None,
-        is_admin: None,
-        club_id: Some(request.club_id),
-        email_verified: None,
-    };
-
-    if let Err(e) = users_repo.update_user(request.user_id, &update_request).await {
-        error!(error = %e, "Failed to update user club after approval");
-        // Still return the approved request even if club update failed
-        // (admin can manually fix this)
-    }
 
     Json(ClubJoinRequestView::from(approved)).into_response()
 }
