@@ -201,11 +201,12 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Load all US ICAO aircraft without registration
+        // Load all US ICAO aircraft without registration (NULL or empty string)
         let devices_to_update: Vec<AircraftModel> = aircraft
             .filter(icao_address.is_not_null())
             .filter(country_code.eq("US"))
-            .filter(registration.eq(""))
+            .filter(registration.is_null().or(registration.eq("")))
+            .filter(pending_registration.is_null())
             .select(AircraftModel::as_select())
             .load(&mut conn)?;
 
@@ -215,6 +216,7 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
         );
 
         let mut updated_count = 0;
+        let mut pending_count = 0;
 
         // Iterate over each device and extract tail number
         for device_model in devices_to_update {
@@ -222,23 +224,49 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
             if let Some(tail_number) =
                 Aircraft::extract_tail_number_from_icao(icao_addr as u32, AddressType::Icao)
             {
-                // Update the device with the extracted tail number
-                match diesel::update(aircraft.filter(id.eq(device_model.id)))
-                    .set(registration.eq(&tail_number))
-                    .execute(&mut conn)
-                {
-                    Ok(_) => {
-                        updated_count += 1;
-                        info!(
-                            "Updated device {} with tail number: {}",
-                            device_model.id, tail_number
-                        );
+                // Check if another aircraft already owns this registration
+                let duplicate_exists = diesel::dsl::select(diesel::dsl::exists(
+                    aircraft
+                        .filter(registration.eq(&tail_number))
+                        .filter(id.ne(device_model.id)),
+                ))
+                .get_result::<bool>(&mut conn)?;
+
+                if duplicate_exists {
+                    // Store as pending_registration for async merge
+                    match diesel::update(aircraft.filter(id.eq(device_model.id)))
+                        .set(pending_registration.eq(&tail_number))
+                        .execute(&mut conn)
+                    {
+                        Ok(_) => {
+                            pending_count += 1;
+                            info!(
+                                "Set pending_registration={} for device {} (duplicate exists)",
+                                tail_number, device_model.id
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to set pending_registration for device {}: {}",
+                                device_model.id, e
+                            );
+                        }
                     }
-                    Err(e) => {
-                        warn!(
-                            "Failed to update device {} with tail number: {}",
-                            device_model.id, e
-                        );
+                } else {
+                    // No conflict, set registration directly
+                    match diesel::update(aircraft.filter(id.eq(device_model.id)))
+                        .set(registration.eq(&tail_number))
+                        .execute(&mut conn)
+                    {
+                        Ok(_) => {
+                            updated_count += 1;
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to update device {} with tail number: {}",
+                                device_model.id, e
+                            );
+                        }
                     }
                 }
             } else {
@@ -249,7 +277,12 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
             }
         }
 
-        Ok(updated_count)
+        info!(
+            "Backfilled {} tail numbers directly, {} set as pending (duplicate conflict)",
+            updated_count, pending_count
+        );
+
+        Ok(updated_count + pending_count)
     })
     .await?
 }
@@ -287,7 +320,7 @@ async fn get_us_icao_devices_with_registration_count(pool: &PgPool) -> Result<i6
         let count = aircraft
             .filter(icao_address.is_not_null())
             .filter(country_code.eq("US"))
-            .filter(registration.ne(""))
+            .filter(registration.is_not_null().and(registration.ne("")))
             .select(count_star())
             .first::<i64>(&mut conn)?;
 
