@@ -71,8 +71,11 @@
 	}
 
 	// Dynamically load Cesium script (must be loaded before using window.Cesium)
+	// Cached at module level so concurrent callers share a single in-flight load
+	let cesiumPromise: Promise<void> | null = null;
 	function loadCesiumScript(): Promise<void> {
-		return new Promise((resolve, reject) => {
+		if (cesiumPromise) return cesiumPromise;
+		cesiumPromise = new Promise((resolve, reject) => {
 			if (window.Cesium) {
 				resolve();
 				return;
@@ -85,6 +88,7 @@
 			script.onerror = () => reject(new Error('Failed to load Cesium.js'));
 			document.head.appendChild(script);
 		});
+		return cesiumPromise;
 	}
 
 	// Initialize Cesium viewer
@@ -102,7 +106,7 @@
 
 			Ion.defaultAccessToken = CESIUM_ION_TOKEN;
 
-			const v = new CesiumViewer(cesiumContainer, {
+			viewer = new CesiumViewer(cesiumContainer, {
 				baseLayerPicker: false,
 				geocoder: false,
 				homeButton: false,
@@ -120,8 +124,7 @@
 
 			// Add imagery
 			const imageryProvider = await createWorldImageryAsync();
-			v.imageryLayers.addImageryProvider(imageryProvider);
-			viewer = v;
+			viewer!.imageryLayers.addImageryProvider(imageryProvider);
 
 			// Initial preview
 			updatePreview();
