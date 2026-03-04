@@ -855,6 +855,18 @@ impl FlightTracker {
 
         result
     }
+
+    /// Set the in-memory callsign for an aircraft, but only if the given flight is still
+    /// the aircraft's current flight. Used by fix_processor to correct callsign mismatches
+    /// detected in Step 3 so the next fix triggers a proper flight split.
+    pub fn set_aircraft_callsign(
+        &self,
+        aircraft_id: Uuid,
+        flight_id: Uuid,
+        callsign: Option<String>,
+    ) {
+        sync_callsign_if_current_flight(&self.aircraft_states, aircraft_id, flight_id, callsign);
+    }
 }
 
 /// Sync the in-memory callsign for an aircraft, but ONLY if the given flight is still

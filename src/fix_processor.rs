@@ -455,14 +455,23 @@ impl FixProcessor {
                             }
                         }
                         Some(existing) if existing != flight_number => {
-                            // Callsign changed from one value to another — the flight
-                            // tracker will detect this on the next fix and split the
-                            // flight.  Log at warn because this is a transient state
-                            // (the current fix was assigned to the old flight before
-                            // the split) rather than a persistent data integrity issue.
+                            // Callsign changed from one value to another but the state
+                            // transition didn't split the flight.  This happens when
+                            // current_callsign was None in memory (e.g., after a state
+                            // reset) so is_callsign_change returned false, and
+                            // learn_callsign "learned" the new callsign — which means
+                            // the next fix would match and never trigger a split.
+                            //
+                            // Fix: set current_callsign back to the DB's value so the
+                            // next fix with the different callsign will trigger a split.
                             warn!(
-                                "Flight {} callsign mismatch: has '{}' but fix has '{}' - flight tracker should have created a new flight",
+                                "Flight {} callsign mismatch: has '{}' but fix has '{}' - resetting in-memory callsign to force split on next fix",
                                 flight_id, existing, flight_number
+                            );
+                            self.flight_detection_processor.set_aircraft_callsign(
+                                updated_fix.aircraft_id,
+                                flight_id,
+                                Some(existing.clone()),
                             );
                             metrics::counter!("aprs.aircraft.callsign_mismatch_total").increment(1);
                         }
