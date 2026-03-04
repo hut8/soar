@@ -254,11 +254,8 @@ impl AdsbAccumulator {
 
         // If the message only carries on_ground status (e.g., DF11 All Call Reply),
         // suppress it unless it represents a state change. This avoids creating
-        // redundant fixes from repeated All Call Reply messages.
-        if message_data.is_on_ground_only()
-            && !self.is_on_ground_state_change(icao_address, message_data.on_ground)
-        {
-            metrics::counter!("adsb_accumulator.all_call_reply_suppressed_total").increment(1);
+        // redundant fixes from repeated on_ground-only messages.
+        if self.should_suppress_on_ground_only(icao_address, &message_data) {
             return Ok(None);
         }
 
@@ -306,11 +303,8 @@ impl AdsbAccumulator {
 
         // If the message only carries on_ground status (e.g., MSG,8 All Call Reply),
         // suppress it unless it represents a state change. This avoids creating
-        // redundant fixes from repeated All Call Reply messages.
-        if message_data.is_on_ground_only()
-            && !self.is_on_ground_state_change(icao_address, message_data.on_ground)
-        {
-            metrics::counter!("adsb_accumulator.all_call_reply_suppressed_total").increment(1);
+        // redundant fixes from repeated on_ground-only messages.
+        if self.should_suppress_on_ground_only(icao_address, &message_data) {
             return Ok(None);
         }
 
@@ -469,7 +463,7 @@ impl AdsbAccumulator {
         None
     }
 
-    /// Extract on_ground status from ADS-B capability field
+    /// Extract on_ground status from Mode S capability field
     ///
     /// The capability field indicates ground/airborne status and appears in:
     /// - DF17 (Extended Squitter ADS-B): capability field in ADSB struct
@@ -736,6 +730,24 @@ impl AdsbAccumulator {
         }
     }
 
+    /// Check if a message that only carries on_ground status should be suppressed.
+    ///
+    /// Returns true (suppress) if the message only has on_ground data and
+    /// that value matches the currently cached state (no state change).
+    fn should_suppress_on_ground_only(
+        &self,
+        icao_address: u32,
+        message_data: &MessageData,
+    ) -> bool {
+        if message_data.is_on_ground_only()
+            && !self.is_on_ground_state_change(icao_address, message_data.on_ground)
+        {
+            metrics::counter!("adsb_accumulator.on_ground_only_suppressed_total").increment(1);
+            return true;
+        }
+        false
+    }
+
     /// Check if an on_ground value represents a state change from the cached value.
     ///
     /// Returns true if:
@@ -780,7 +792,7 @@ impl AdsbAccumulator {
 }
 
 /// Temporary struct to hold extracted message data
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct MessageData {
     position: Option<PositionData>,
     velocity: Option<VelocityData>,
@@ -802,13 +814,19 @@ impl MessageData {
 
     /// Check if this message only carries on_ground status (no other data).
     /// Used to detect All Call Reply and similar messages that only convey air/ground state.
+    ///
+    /// Implemented by checking on_ground is present and everything else is empty
+    /// (via a copy with on_ground cleared). This ensures new fields added to
+    /// MessageData are automatically accounted for.
     fn is_on_ground_only(&self) -> bool {
-        self.on_ground.is_some()
-            && self.position.is_none()
-            && self.velocity.is_none()
-            && self.callsign.is_none()
-            && self.squawk.is_none()
-            && self.altitude_only.is_none()
+        if self.on_ground.is_none() {
+            return false;
+        }
+        let without_on_ground = Self {
+            on_ground: None,
+            ..self.clone()
+        };
+        without_on_ground.is_empty()
     }
 }
 
