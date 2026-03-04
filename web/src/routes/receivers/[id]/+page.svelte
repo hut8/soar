@@ -497,8 +497,10 @@
 				await Promise.all(
 					aggregateStats.fixCountsByAircraft.map(async (aircraftCount) => {
 						try {
-							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraftId}`);
-							aircraftCount.aircraft = aircraft;
+							const response = await serverCall<DataResponse<Aircraft>>(
+								`/aircraft/${aircraftCount.aircraftId}`
+							);
+							aircraftCount.aircraft = response.data;
 						} catch (err) {
 							logger.warn('Failed to load aircraft details for {aircraftId}: {error}', {
 								aircraftId: aircraftCount.aircraftId,
@@ -2032,3 +2034,12 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Improve tab selection visibility, especially on mobile where tabs stack vertically */
+	:global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+		background-color: rgb(var(--color-primary-500) / 0.15);
+		color: rgb(var(--color-primary-500));
+		font-weight: 600;
+	}
+</style>
