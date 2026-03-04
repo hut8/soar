@@ -1,3 +1,4 @@
+-- safety-assured:start
 CREATE TABLE club_join_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -16,3 +17,4 @@ CREATE INDEX idx_club_join_requests_status ON club_join_requests (status);
 
 -- Only one pending request per user per club
 CREATE UNIQUE INDEX idx_club_join_requests_pending ON club_join_requests (user_id, club_id) WHERE status = 'pending';
+-- safety-assured:end
