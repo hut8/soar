@@ -215,8 +215,9 @@
 		return parts.length > 0 ? parts.join(', ') : '—';
 	}
 
-	function getLastHeard(updatedAt: string): string {
-		return dayjs(updatedAt).fromNow();
+	function getLastHeard(receiver: Receiver): string {
+		const timestamp = receiver.latestPacketAt ?? receiver.updatedAt;
+		return dayjs(timestamp).fromNow();
 	}
 
 	async function loadGoogleMapsScript(): Promise<void> {
@@ -519,7 +520,7 @@
 								{/if}
 
 								<div class="text-xs text-surface-500 dark:text-surface-400">
-									Last heard: <span class="font-medium">{getLastHeard(receiver.updatedAt)}</span>
+									Last heard: <span class="font-medium">{getLastHeard(receiver)}</span>
 								</div>
 							</div>
 						</div>
@@ -570,7 +571,7 @@
 										{/if}
 									</td>
 									<td class="text-surface-500-400-token text-sm">
-										{getLastHeard(receiver.updatedAt)}
+										{getLastHeard(receiver)}
 									</td>
 								</tr>
 							{/each}

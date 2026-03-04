@@ -279,13 +279,13 @@ export class ReceiverLayerManager {
 			source: SOURCE_ID,
 			layout: {
 				'icon-image': ICON_IMAGE_ID,
-				'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 0.7, 14, 0.9],
+				'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.6, 10, 0.8, 14, 1.0],
 				'icon-allow-overlap': true
 			},
 			paint: {
-				'icon-color': '#6b7280',
-				'icon-halo-color': 'rgba(255, 255, 255, 0.9)',
-				'icon-halo-width': 1
+				'icon-color': '#f97316',
+				'icon-halo-color': 'rgba(255, 255, 255, 0.95)',
+				'icon-halo-width': 2
 			}
 		});
 
@@ -304,9 +304,9 @@ export class ReceiverLayerManager {
 				'text-allow-overlap': false
 			},
 			paint: {
-				'text-color': '#4b5563',
+				'text-color': '#1f2937',
 				'text-halo-color': '#ffffff',
-				'text-halo-width': 1
+				'text-halo-width': 2
 			}
 		});
 
