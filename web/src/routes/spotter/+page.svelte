@@ -381,6 +381,19 @@
 			if (viewer.isDestroyed()) return;
 
 			const camera = viewer.camera;
+
+			// Prevent horizon tilt: Cesium's "look" mode allows camera roll
+			// to accumulate when dragging. Reset it to keep the horizon level.
+			if (Math.abs(camera.roll) > 0.001) {
+				camera.setView({
+					orientation: {
+						heading: camera.heading,
+						pitch: camera.pitch,
+						roll: 0.0
+					}
+				});
+			}
+
 			const heading = Cesium.Math.toDegrees(camera.heading);
 			const pitch = Cesium.Math.toDegrees(camera.pitch);
 			const fov = camera.frustum.fov ? Cesium.Math.toDegrees(camera.frustum.fov) : 60;

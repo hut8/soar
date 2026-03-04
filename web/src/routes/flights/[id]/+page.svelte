@@ -826,11 +826,15 @@
 		}
 	}
 
-	// Initialize map when fixes are loaded
+	// Initialize map when fixes are loaded (once only)
 	$effect(() => {
 		if (fixes.length === 0 || !mapContainer || isLoadingFixes) return;
 
 		untrack(() => {
+			// Guard: only create the map once. Subsequent updates
+			// are handled by updateMap() called from pollForUpdates().
+			if (map) return;
+
 			try {
 				const fixesInOrder = [...fixes].reverse();
 

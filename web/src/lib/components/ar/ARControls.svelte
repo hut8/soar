@@ -1,14 +1,8 @@
 <script lang="ts">
-	import { Settings, Minus, Plus, List } from '@lucide/svelte';
+	import { Settings, List } from '@lucide/svelte';
 	import type { ARSettings } from '$lib/ar/types';
 	import ConnectionIndicator from './ConnectionIndicator.svelte';
-
-	const MIN_RANGE = 10;
-	const MAX_RANGE = 250;
-	const STEP = 10;
-
-	// Fixed tick marks for the slider
-	const TICK_MARKS = [10, 50, 100, 150, 200, 250];
+	import RangeModal from './RangeModal.svelte';
 
 	let {
 		settings = $bindable(),
@@ -20,73 +14,15 @@
 		onListClick?: () => void;
 	}>();
 
-	function increaseRange() {
-		settings.rangeNm = Math.min(MAX_RANGE, settings.rangeNm + STEP);
-	}
-
-	function decreaseRange() {
-		settings.rangeNm = Math.max(MIN_RANGE, settings.rangeNm - STEP);
-	}
-
-	// Slider thumb and container padding - used to align indicator with thumb position
-	const SLIDER_PADDING_PX = 10; // Padding on each side of the slider track
-	const THUMB_WIDTH_PX = 20; // Width of the slider thumb
-	// Thumb width as fraction of percentage range (20px over 100% = 0.2)
-	const THUMB_FRACTION = THUMB_WIDTH_PX / 100;
-
-	// Calculate percentage position for a value
-	function valuePosition(value: number): number {
-		return ((value - MIN_RANGE) / (MAX_RANGE - MIN_RANGE)) * 100;
-	}
-
-	// Current value position as a derived value
-	const currentPosition = $derived(valuePosition(settings.rangeNm));
-
-	// Calculate the left offset for the indicator to align with slider thumb center
-	const indicatorLeftOffset = $derived(
-		`calc(${currentPosition}% + ${SLIDER_PADDING_PX}px - ${currentPosition * THUMB_FRACTION}px)`
-	);
+	let showRangeModal = $state(false);
 </script>
 
 <div class="ar-controls">
 	<div class="controls-panel">
-		<!-- Range control -->
-		<div class="control-group">
-			<div class="range-buttons">
-				<button class="btn-icon" onclick={decreaseRange} disabled={settings.rangeNm <= MIN_RANGE}>
-					<Minus size={20} />
-				</button>
-				<div class="slider-container">
-					<input
-						type="range"
-						min={MIN_RANGE}
-						max={MAX_RANGE}
-						step={STEP}
-						bind:value={settings.rangeNm}
-						class="range-slider"
-					/>
-					<!-- Current value indicator line -->
-					<div class="current-indicator" style:left={indicatorLeftOffset}>
-						<div class="indicator-line"></div>
-						<div class="indicator-label">{settings.rangeNm} nm</div>
-					</div>
-					<div class="tick-marks">
-						{#each TICK_MARKS as tick (tick)}
-							<div
-								class="tick"
-								class:active={tick === settings.rangeNm}
-								style:left="{valuePosition(tick)}%"
-							>
-								<span class="tick-label">{tick}</span>
-							</div>
-						{/each}
-					</div>
-				</div>
-				<button class="btn-icon" onclick={increaseRange} disabled={settings.rangeNm >= MAX_RANGE}>
-					<Plus size={20} />
-				</button>
-			</div>
-		</div>
+		<!-- Range badge -->
+		<button class="range-badge" onclick={() => (showRangeModal = true)}>
+			{settings.rangeNm} nm
+		</button>
 
 		<!-- Connection indicator -->
 		<ConnectionIndicator />
@@ -103,6 +39,10 @@
 	</div>
 </div>
 
+{#if showRangeModal}
+	<RangeModal bind:rangeNm={settings.rangeNm} onClose={() => (showRangeModal = false)} />
+{/if}
+
 <style>
 	.ar-controls {
 		position: fixed;
@@ -116,139 +56,30 @@
 		background: rgba(0, 0, 0, 0.85);
 		backdrop-filter: blur(12px);
 		border-radius: 1rem 1rem 0 0;
-		padding-top: 1rem;
-		padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+		padding-top: 0.75rem;
+		padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 		padding-left: calc(1.5rem + env(safe-area-inset-left, 0px));
 		padding-right: calc(1.5rem + env(safe-area-inset-right, 0px));
 		display: flex;
-		gap: 1rem;
+		gap: 0.75rem;
 		align-items: center;
 	}
 
-	.control-group {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.range-buttons {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.slider-container {
-		flex: 1;
-		position: relative;
-		padding-bottom: 1.5rem;
-		padding-top: 1.75rem;
-	}
-
-	.range-slider {
-		width: 100%;
-		height: 4px;
-		background: rgba(255, 255, 255, 0.2);
-		border-radius: 2px;
-		outline: none;
-		-webkit-appearance: none;
-		appearance: none;
-	}
-
-	.range-slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 20px;
-		height: 20px;
-		background: rgb(var(--color-primary-500));
-		border-radius: 50%;
-		cursor: pointer;
-	}
-
-	/* Current value indicator */
-	.current-indicator {
-		position: absolute;
-		top: 0;
-		transform: translateX(-50%);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		pointer-events: none;
-	}
-
-	.indicator-line {
-		width: 2px;
-		height: 50px;
-		background: linear-gradient(to bottom, #22c55e, #22c55e 80%, transparent);
-		border-radius: 1px;
-	}
-
-	.indicator-label {
-		position: absolute;
-		top: -2px;
+	.range-badge {
 		background: #22c55e;
 		color: black;
-		font-size: 0.75rem;
-		font-weight: 700;
-		padding: 2px 6px;
-		border-radius: 4px;
-		white-space: nowrap;
-	}
-
-	.tick-marks {
-		position: absolute;
-		top: calc(1.75rem + 8px);
-		left: 10px;
-		right: 10px;
-		height: 20px;
-	}
-
-	.tick {
-		position: absolute;
-		transform: translateX(-50%);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-	}
-
-	.tick::before {
-		content: '';
-		width: 1px;
-		height: 6px;
-		background: rgba(255, 255, 255, 0.4);
-	}
-
-	.tick.active::before {
-		background: #22c55e;
-		width: 2px;
-	}
-
-	.tick-label {
-		color: rgba(255, 255, 255, 0.6);
-		font-size: 0.625rem;
-		margin-top: 2px;
-	}
-
-	.tick.active .tick-label {
-		color: #22c55e;
-		font-weight: 600;
-	}
-
-	.btn-icon {
-		background: rgba(255, 255, 255, 0.2);
 		border: none;
-		border-radius: 0.5rem;
-		padding: 0.5rem;
-		color: white;
+		border-radius: 9999px;
+		padding: 0.375rem 0.75rem;
+		font-size: 0.8125rem;
+		font-weight: 700;
 		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
-	.btn-icon:disabled {
-		opacity: 0.3;
-		cursor: not-allowed;
+	.range-badge:active {
+		background: #16a34a;
 	}
 
 	.btn-action {
