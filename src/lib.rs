@@ -26,6 +26,8 @@ pub mod archive_service;
 pub mod auth;
 pub mod beast;
 pub mod beast_consumer_task;
+pub mod club_join_requests;
+pub mod club_join_requests_repo;
 pub mod club_tow_fees;
 pub mod club_tow_fees_repo;
 pub mod clubs;

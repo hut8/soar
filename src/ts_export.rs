@@ -11,7 +11,8 @@ mod tests {
         StripeConnectStatusView, StripeDashboardLinkResponse, StripeOnboardingResponse,
     };
     use crate::actions::views::{
-        Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView, ClubView,
+        Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView,
+        ClubJoinRequestView, ClubView,
         FlightView, ModelDataView, ReceiverView, RunwayEnd, RunwayView, UserView,
     };
     use crate::aircraft::AddressType;
@@ -44,6 +45,7 @@ mod tests {
         AirworthinessClass::export(&cfg).expect("Failed to export AirworthinessClass type");
         LightSportType::export(&cfg).expect("Failed to export LightSportType type");
         RegistrantType::export(&cfg).expect("Failed to export RegistrantType type");
+        ClubJoinRequestView::export(&cfg).expect("Failed to export ClubJoinRequestView type");
         ClubView::export(&cfg).expect("Failed to export ClubView type");
         TowFeeView::export(&cfg).expect("Failed to export TowFeeView type");
         FlightView::export(&cfg).expect("Failed to export FlightView type");
