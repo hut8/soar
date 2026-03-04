@@ -129,9 +129,9 @@
 									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">Source</dt>
 									<dd class="mt-1 text-sm">
 										<span
-											class="badge preset-filled-{selectedReceiver.fromOgnDb
-												? 'success'
-												: 'secondary'}"
+											class="badge {selectedReceiver.fromOgnDb
+												? 'preset-filled-success-500'
+												: 'preset-filled-secondary-500'}"
 										>
 											{selectedReceiver.fromOgnDb ? 'OGN Database' : 'Auto-discovered'}
 										</span>
