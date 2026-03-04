@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { serverCall } from '$lib/api/server';
-	import type { Club } from '$lib/types';
+	import type { Club, DataResponse } from '$lib/types';
 	import { X, Mail, Trash2 } from '@lucide/svelte';
 
 	let clubName: string | null = null;
@@ -39,8 +39,8 @@
 		loadingClub = true;
 		clubError = null;
 		try {
-			const club = await serverCall<Club>(`/clubs/${clubId}`);
-			clubName = club.name;
+			const response = await serverCall<DataResponse<Club>>(`/clubs/${clubId}`);
+			clubName = response.data.name;
 		} catch (err) {
 			clubError = err instanceof Error ? err.message : 'Failed to load club';
 		} finally {
