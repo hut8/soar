@@ -48,13 +48,11 @@
 
 <div
 	class="backdrop"
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="range-modal-title"
+	role="presentation"
 	onclick={handleBackdropClick}
 	onkeydown={handleBackdropKeydown}
 >
-	<div class="modal-panel">
+	<div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="range-modal-title">
 		<div class="modal-header">
 			<span id="range-modal-title" class="modal-title">Range</span>
 			<button class="btn-close" onclick={onClose} aria-label="Close">
