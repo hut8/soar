@@ -591,9 +591,8 @@ pub(crate) async fn process_state_transition(
                             towing::spawn_towing_detection_task(
                                 fix.aircraft_id,
                                 flight_id,
-                                ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
-                                ctx.aircraft_repo.clone(),
+                                ctx.aircraft_cache.clone(),
                                 Arc::clone(ctx.aircraft_states),
                             );
                         }
