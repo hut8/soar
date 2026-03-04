@@ -354,6 +354,7 @@
 													href={geofencesPath}
 													class="btn w-full justify-start preset-filled-primary-500 btn-sm"
 													onclick={() => (showDesktopMenu = false)}
+													data-testid="desktop-menu-geofences"
 												>
 													<Shield size={16} /> Geofences
 												</a>
@@ -613,6 +614,7 @@
 							href={geofencesPath}
 							class="btn w-full justify-start preset-filled-primary-500"
 							onclick={() => (showMobileMenu = false)}
+							data-testid="mobile-menu-geofences"
 						>
 							<Shield size={16} /> Geofences
 						</a>
