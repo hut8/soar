@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { watchlist } from '$lib/stores/watchlist';
 	import { Bell, BellOff, Trash2, Plus, Shield } from '@lucide/svelte';
@@ -60,7 +61,11 @@
 					<Plus class="h-4 w-4" />
 					Add Aircraft
 				</button>
-				<a href="/geofences" class="btn preset-filled-secondary-500">
+				<a
+					href={resolve('/geofences')}
+					data-testid="watchlist-geofences-link"
+					class="btn preset-filled-secondary-500"
+				>
 					<Shield class="h-4 w-4" />
 					Geofences
 				</a>

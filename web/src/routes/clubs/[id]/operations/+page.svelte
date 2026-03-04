@@ -268,7 +268,7 @@
 				<Users class="mr-2 h-4 w-4" />
 				Pilots
 			</a>
-			<a href="/geofences" class="btn preset-filled-secondary-500 btn-sm">
+			<a href={resolve('/geofences')} class="btn preset-filled-secondary-500 btn-sm">
 				<Shield class="mr-2 h-4 w-4" />
 				Geofences
 			</a>
