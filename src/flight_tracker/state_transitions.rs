@@ -61,7 +61,10 @@ fn normalize_callsign(callsign: &Option<String>) -> Option<&str> {
 ///
 /// Returns `true` if the fix has a callsign that differs from the current in-memory callsign.
 /// Returns `false` if either callsign is absent (None, empty, or whitespace-only).
-fn is_callsign_change(current_callsign: &Option<String>, fix_callsign: &Option<String>) -> bool {
+pub(crate) fn is_callsign_change(
+    current_callsign: &Option<String>,
+    fix_callsign: &Option<String>,
+) -> bool {
     match (
         normalize_callsign(current_callsign),
         normalize_callsign(fix_callsign),
@@ -76,7 +79,7 @@ fn is_callsign_change(current_callsign: &Option<String>, fix_callsign: &Option<S
 /// When a flight is created without a callsign (e.g. APRS source), the first fix
 /// that carries a non-empty callsign should record it so subsequent changes are detected.
 /// Returns the new callsign value for the state.
-fn learn_callsign(
+pub(crate) fn learn_callsign(
     current_callsign: &Option<String>,
     fix_callsign: &Option<String>,
 ) -> Option<String> {
