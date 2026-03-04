@@ -215,25 +215,29 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
             devices_to_update.len()
         );
 
+        // Load all existing registrations into memory to avoid O(N) duplicate checks
+        let existing_registrations: std::collections::HashSet<String> = aircraft
+            .filter(registration.is_not_null().and(registration.ne("")))
+            .select(registration.assume_not_null())
+            .load::<String>(&mut conn)?
+            .into_iter()
+            .collect();
+
+        info!(
+            "Loaded {} existing registrations for duplicate checking",
+            existing_registrations.len()
+        );
+
         let mut updated_count = 0;
         let mut pending_count = 0;
 
-        // Iterate over each device and extract tail number
         for device_model in devices_to_update {
             let icao_addr = device_model.icao_address.expect("filtered for is_not_null");
             if let Some(tail_number) =
                 Aircraft::extract_tail_number_from_icao(icao_addr as u32, AddressType::Icao)
             {
-                // Check if another aircraft already owns this registration
-                let duplicate_exists = diesel::dsl::select(diesel::dsl::exists(
-                    aircraft
-                        .filter(registration.eq(&tail_number))
-                        .filter(id.ne(device_model.id)),
-                ))
-                .get_result::<bool>(&mut conn)?;
-
-                if duplicate_exists {
-                    // Store as pending_registration for async merge
+                if existing_registrations.contains(&tail_number) {
+                    // Another aircraft already owns this registration
                     match diesel::update(aircraft.filter(id.eq(device_model.id)))
                         .set(pending_registration.eq(&tail_number))
                         .execute(&mut conn)
@@ -253,7 +257,9 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
                         }
                     }
                 } else {
-                    // No conflict, set registration directly
+                    // No conflict, set registration directly. If a concurrent process
+                    // claimed this registration between our check and this update,
+                    // fall back to pending_registration.
                     match diesel::update(aircraft.filter(id.eq(device_model.id)))
                         .set(registration.eq(&tail_number))
                         .execute(&mut conn)
@@ -263,9 +269,24 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
                         }
                         Err(e) => {
                             warn!(
-                                "Failed to update device {} with tail number: {}",
-                                device_model.id, e
+                                "Unique constraint conflict for device {} with tail number {}, \
+                                 falling back to pending_registration: {}",
+                                device_model.id, tail_number, e
                             );
+                            match diesel::update(aircraft.filter(id.eq(device_model.id)))
+                                .set(pending_registration.eq(&tail_number))
+                                .execute(&mut conn)
+                            {
+                                Ok(_) => {
+                                    pending_count += 1;
+                                }
+                                Err(e2) => {
+                                    warn!(
+                                        "Failed to set pending_registration for device {}: {}",
+                                        device_model.id, e2
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -282,7 +303,7 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
             updated_count, pending_count
         );
 
-        Ok(updated_count + pending_count)
+        Ok(updated_count)
     })
     .await?
 }
