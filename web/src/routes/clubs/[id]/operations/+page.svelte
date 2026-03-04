@@ -14,7 +14,8 @@
 		UserPlus,
 		ChevronLeft,
 		ChevronRight,
-		Users
+		Users,
+		Shield
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
@@ -266,6 +267,10 @@
 			<a href={resolve(`/clubs/${clubId}/pilots`)} class="btn preset-filled-secondary-500 btn-sm">
 				<Users class="mr-2 h-4 w-4" />
 				Pilots
+			</a>
+			<a href={resolve('/geofences')} class="btn preset-filled-secondary-500 btn-sm">
+				<Shield class="mr-2 h-4 w-4" />
+				Geofences
 			</a>
 		{/if}
 	</div>

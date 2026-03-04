@@ -43,7 +43,8 @@
 		Moon,
 		Info,
 		Eye,
-		Binoculars
+		Binoculars,
+		Shield
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -60,6 +61,7 @@
 	const watchlistPath = resolve('/watchlist');
 	const arPath = resolve('/ar');
 	const spotterPath = resolve('/spotter');
+	const geofencesPath = resolve('/geofences');
 
 	let { children } = $props();
 
@@ -348,6 +350,14 @@
 												>
 													<Eye size={16} /> Watchlist
 												</a>
+												<a
+													href={geofencesPath}
+													class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+													onclick={() => (showDesktopMenu = false)}
+													data-testid="desktop-menu-geofences"
+												>
+													<Shield size={16} /> Geofences
+												</a>
 											{/if}
 											<a
 												href={arPath}
@@ -599,6 +609,14 @@
 							onclick={() => (showMobileMenu = false)}
 						>
 							<Eye size={16} /> Watchlist
+						</a>
+						<a
+							href={geofencesPath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+							data-testid="mobile-menu-geofences"
+						>
+							<Shield size={16} /> Geofences
 						</a>
 					{/if}
 
