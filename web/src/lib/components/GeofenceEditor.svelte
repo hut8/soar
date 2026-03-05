@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { Plus, Trash2, MapPin } from '@lucide/svelte';
-	import { Viewer, Ion, createWorldImageryAsync, Terrain, SceneMode } from 'cesium';
+	import type { Viewer } from 'cesium';
 	import type { Geofence, GeofenceLayer, CreateGeofenceRequest } from '$lib/types';
 	import { createGeofenceEntities, flyToGeofence } from '$lib/cesium/geofenceEntities';
+	import { CESIUM_ION_TOKEN } from '$lib/config';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 	// Props
@@ -82,14 +83,47 @@
 		flyToGeofence(viewer, previewGeofence);
 	}
 
+	// Dynamically load Cesium script (must be loaded before using window.Cesium)
+	// Cached per instance so concurrent callers share a single in-flight load
+	let cesiumPromise: Promise<void> | null = null;
+	function loadCesiumScript(): Promise<void> {
+		if (cesiumPromise) return cesiumPromise;
+		cesiumPromise = new Promise((resolve, reject) => {
+			if (window.Cesium) {
+				resolve();
+				return;
+			}
+
+			const script = document.createElement('script');
+			script.src = '/cesium/Cesium.js';
+			script.async = true;
+			script.onload = () => resolve();
+			script.onerror = () => {
+				cesiumPromise = null;
+				script.remove();
+				reject(new Error('Failed to load Cesium.js'));
+			};
+			document.head.appendChild(script);
+		});
+		return cesiumPromise;
+	}
+
 	// Initialize Cesium viewer
 	onMount(async () => {
-		// Use Cesium Ion token from environment or a default
-		Ion.defaultAccessToken =
-			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YjMyYjVhNi02ZjNiLTQyNjgtOGVkYi0xM2RmMjE1NmUwZWMiLCJpZCI6MTI3OTM3LCJpYXQiOjE2ODA0NTUyNTN9.ZV1FP3RrP9TwG7qGGRUK_D5v9PZuPd6-yLqQVbQSKGQ';
-
 		try {
-			viewer = new Viewer(cesiumContainer, {
+			await loadCesiumScript();
+
+			const {
+				Ion,
+				Viewer: CesiumViewer,
+				Terrain,
+				SceneMode,
+				createWorldImageryAsync
+			} = window.Cesium;
+
+			Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+
+			viewer = new CesiumViewer(cesiumContainer, {
 				baseLayerPicker: false,
 				geocoder: false,
 				homeButton: false,
@@ -107,6 +141,7 @@
 
 			// Add imagery
 			const imageryProvider = await createWorldImageryAsync();
+			if (!viewer || viewer.isDestroyed()) return;
 			viewer.imageryLayers.addImageryProvider(imageryProvider);
 
 			// Initial preview
