@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use super::UserView;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct LoginResponse {
     pub token: String,
     pub user: UserView,

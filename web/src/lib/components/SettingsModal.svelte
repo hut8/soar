@@ -14,16 +14,6 @@
 	// Props
 	let { showModal = $bindable(), onSettingsChange } = $props();
 
-	// Settings interface
-	interface SettingsData {
-		showCompassRose?: boolean;
-		showAirportMarkers?: boolean;
-		showReceiverMarkers?: boolean;
-		showAirspaceMarkers?: boolean;
-		showRunwayOverlays?: boolean;
-		disableClustering?: boolean;
-	}
-
 	// Settings state
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
@@ -39,7 +29,7 @@
 		// If user is authenticated, load from backend
 		if ($auth.isAuthenticated && $auth.token) {
 			try {
-				const backendSettings = await serverCall<SettingsData>('/user/settings', {
+				const backendSettings = await serverCall<Record<string, unknown>>('/user/settings', {
 					headers: {
 						Authorization: `Bearer ${$auth.token}`
 					}
@@ -47,12 +37,13 @@
 
 				// Apply backend settings if they exist
 				if (backendSettings && Object.keys(backendSettings).length > 0) {
-					showCompassRose = backendSettings.showCompassRose ?? true;
-					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
-					showReceiverMarkers = backendSettings.showReceiverMarkers ?? true;
-					showAirspaceMarkers = backendSettings.showAirspaceMarkers ?? true;
-					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
-					disableClustering = backendSettings.disableClustering ?? false;
+					const b = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+					showCompassRose = b(backendSettings.showCompassRose, true);
+					showAirportMarkers = b(backendSettings.showAirportMarkers, true);
+					showReceiverMarkers = b(backendSettings.showReceiverMarkers, true);
+					showAirspaceMarkers = b(backendSettings.showAirspaceMarkers, true);
+					showRunwayOverlays = b(backendSettings.showRunwayOverlays, false);
+					disableClustering = b(backendSettings.disableClustering, false);
 					return;
 				}
 			} catch (e) {

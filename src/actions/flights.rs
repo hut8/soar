@@ -55,7 +55,8 @@ pub struct FlightPathParams {
     pub epsilon: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct FlightGap {
     /// Start time of the gap (timestamp of last fix before gap)
@@ -63,6 +64,7 @@ pub struct FlightGap {
     /// End time of the gap (timestamp of first fix after gap)
     pub gap_end: String,
     /// Duration of the gap in seconds
+    #[ts(type = "number")]
     pub duration_seconds: i64,
     /// Straight-line distance covered during the gap in meters
     pub distance_meters: f64,

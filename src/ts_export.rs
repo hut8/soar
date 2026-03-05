@@ -5,17 +5,22 @@ mod tests {
     use ts_rs::{Config, TS};
 
     use crate::actions::club_tow_fees::TowFeeView;
+    use crate::actions::flights::FlightGap;
     use crate::actions::geocoding::ReverseGeocodeResponse;
     use crate::actions::payments::{CheckoutResponse, CreateChargeRequest, PaymentView};
+    use crate::actions::receivers::{
+        AircraftFixCount, AprsTypeCount, ReceiverAggregateStatsResponse, ReceiverStatisticsResponse,
+    };
     use crate::actions::stripe_connect::{
         StripeConnectStatusView, StripeDashboardLinkResponse, StripeOnboardingResponse,
     };
     use crate::actions::views::{
         Aircraft, AircraftModelView, AircraftRegistrationView, AircraftView, AirportView,
-        ClubJoinRequestView, ClubView, FlightView, ModelDataView, ReceiverView, RunwayEnd,
-        RunwayView, UserView,
+        ClubJoinRequestView, ClubView, FlightView, LoginResponse, ModelDataView, RawMessageView,
+        ReceiverStatusView, ReceiverView, RunwayEnd, RunwayView, UserView,
     };
     use crate::aircraft::AddressType;
+    use crate::aircraft_images::{AircraftImage, AircraftImageCollection, AircraftImageSource};
     use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};
     use crate::aircraft_types::AircraftCategory;
     use crate::fixes::Fix;
@@ -92,5 +97,29 @@ mod tests {
             .expect("Failed to export StripeConnectStatusView type");
         StripeDashboardLinkResponse::export(&cfg)
             .expect("Failed to export StripeDashboardLinkResponse type");
+
+        // Auth types
+        LoginResponse::export(&cfg).expect("Failed to export LoginResponse type");
+
+        // Flight gap type
+        FlightGap::export(&cfg).expect("Failed to export FlightGap type");
+
+        // Aircraft image types
+        AircraftImageSource::export(&cfg).expect("Failed to export AircraftImageSource type");
+        AircraftImage::export(&cfg).expect("Failed to export AircraftImage type");
+        AircraftImageCollection::export(&cfg)
+            .expect("Failed to export AircraftImageCollection type");
+
+        // Receiver status and raw message view types
+        ReceiverStatusView::export(&cfg).expect("Failed to export ReceiverStatusView type");
+        RawMessageView::export(&cfg).expect("Failed to export RawMessageView type");
+
+        // Receiver aggregate stats types
+        AprsTypeCount::export(&cfg).expect("Failed to export AprsTypeCount type");
+        AircraftFixCount::export(&cfg).expect("Failed to export AircraftFixCount type");
+        ReceiverAggregateStatsResponse::export(&cfg)
+            .expect("Failed to export ReceiverAggregateStatsResponse type");
+        ReceiverStatisticsResponse::export(&cfg)
+            .expect("Failed to export ReceiverStatisticsResponse type");
     }
 }

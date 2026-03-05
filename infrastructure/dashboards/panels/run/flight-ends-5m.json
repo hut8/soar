@@ -96,6 +96,39 @@
       "legendFormat": "Timed Out",
       "range": true,
       "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "increase(flight_tracker_flight_ended_gap_absolute_limit_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Gap > 2h (Absolute Limit)",
+      "range": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "increase(flight_tracker_flight_ended_gap_suggests_landing_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Gap Suggests Landing",
+      "range": true,
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "editorMode": "code",
+      "expr": "increase(flight_tracker_flight_ended_gap_slow_aircraft_total{component=\"run\",environment=\"$environment\"}[5m])",
+      "legendFormat": "Gap + Slow Aircraft",
+      "range": true,
+      "refId": "E"
     }
   ],
   "title": "Flight Ends (5m)",

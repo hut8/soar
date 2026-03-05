@@ -28,6 +28,8 @@
 		Aircraft,
 		AircraftRegistration,
 		AircraftModel,
+		AircraftImage,
+		AircraftImageCollection,
 		Fix,
 		Flight,
 		Club,
@@ -67,20 +69,6 @@
 	// Backend returns: { data: Fix[], metadata: { page, totalPages, totalCount } }
 	type FixesResponse = PaginatedDataResponse<Fix>;
 	type FlightsResponse = PaginatedDataResponse<Flight>;
-
-	// Aircraft images interfaces
-	interface AircraftImage {
-		source: 'airport_data' | 'planespotters';
-		pageUrl: string;
-		thumbnailUrl: string;
-		imageUrl?: string;
-		photographer?: string;
-	}
-
-	interface AircraftImageCollection {
-		images: AircraftImage[];
-		lastFetched: Record<string, string>;
-	}
 
 	let aircraft: Aircraft | null = null;
 	let aircraftRegistration: AircraftRegistration | null = null;

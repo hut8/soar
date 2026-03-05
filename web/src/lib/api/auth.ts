@@ -1,14 +1,11 @@
-import type { User, DataResponse } from '$lib/types';
+import type { User, DataResponse, LoginResponse } from '$lib/types';
 import { serverCall, ServerError } from './server';
+
+export type { LoginResponse };
 
 export interface LoginRequest {
 	email: string;
 	password: string;
-}
-
-export interface LoginResponse {
-	token: string;
-	user: User;
 }
 
 export interface RegisterRequest {

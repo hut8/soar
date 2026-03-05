@@ -4,7 +4,9 @@ pub mod auth;
 pub mod club;
 pub mod club_join_request;
 pub mod flight;
+pub mod raw_message;
 pub mod receiver;
+pub mod receiver_status;
 pub mod user;
 
 pub use aircraft::*;
@@ -13,5 +15,7 @@ pub use auth::*;
 pub use club::*;
 pub use club_join_request::*;
 pub use flight::*;
+pub use raw_message::*;
 pub use receiver::*;
+pub use receiver_status::*;
 pub use user::*;
