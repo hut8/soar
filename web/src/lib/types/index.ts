@@ -269,7 +269,7 @@ export interface Airspace {
 	};
 	properties: {
 		id: string;
-		openaipId: string;
+		source: 'openaip' | 'faa_nasr';
 		name: string;
 		airspaceClass: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
 		airspaceType: string;

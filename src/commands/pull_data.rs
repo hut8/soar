@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Local;
 use diesel::PgConnection;
 use diesel::r2d2::ConnectionManager;
@@ -275,11 +275,26 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     )
     .await?;
 
+    // Pull FAA NASR airspace data (authoritative US airspace boundaries)
+    info!("Pulling FAA NASR airspace data...");
+    let faa_import_ok = match pull_faa_nasr_airspaces(&client, &temp_dir, diesel_pool.clone()).await
+    {
+        Ok(_) => {
+            info!("FAA NASR airspace import completed successfully");
+            true
+        }
+        Err(e) => {
+            warn!("FAA NASR airspace import failed (non-fatal): {}", e);
+            false
+        }
+    };
+
     // Pull airspaces from OpenAIP (if API key is available)
     if env::var("OPENAIP_API_KEY").is_ok() {
         info!("Pulling airspaces from OpenAIP...");
+
         match super::pull_airspaces::handle_pull_airspaces(
-            diesel_pool,
+            diesel_pool.clone(),
             false, // full sync, not incremental
             None,  // global, not country-specific
         )
@@ -291,8 +306,136 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
             }
         }
     } else {
-        info!("Skipping airspaces sync - OPENAIP_API_KEY not set");
+        info!("Skipping OpenAIP airspaces sync - OPENAIP_API_KEY not set");
     }
+
+    // Delete US OpenAIP airspaces after all syncs complete,
+    // since FAA NASR data is authoritative for US airspace
+    if faa_import_ok {
+        delete_us_openaip_airspaces(&diesel_pool).await;
+    }
+
+    Ok(())
+}
+
+/// Get the path to the NASR edition marker file.
+/// This file stores the edition date of the last successfully imported NASR data.
+fn get_nasr_edition_marker_path() -> Result<String> {
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let base = if soar_env == "production" {
+        "/tmp/soar".to_string()
+    } else if soar_env == "staging" {
+        "/tmp/soar/staging".to_string()
+    } else {
+        let home = env::var("HOME").context("HOME not set")?;
+        format!("{}/.cache/soar", home)
+    };
+    Ok(format!("{}/nasr_edition.txt", base))
+}
+
+/// Delete US OpenAIP airspaces since FAA NASR data is authoritative.
+async fn delete_us_openaip_airspaces(diesel_pool: &Pool<ConnectionManager<PgConnection>>) {
+    let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
+    match repo
+        .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
+        .await
+    {
+        Ok(count) => {
+            if count > 0 {
+                info!(
+                    "Deleted {} US OpenAIP airspaces (replaced by FAA NASR)",
+                    count
+                );
+            }
+        }
+        Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
+    }
+}
+
+/// Download, extract, and import FAA NASR airspace shapefile data.
+/// Skips import if the current NASR edition has already been imported.
+async fn pull_faa_nasr_airspaces(
+    client: &reqwest::Client,
+    temp_dir: &str,
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<()> {
+    use soar::airspace::AirspaceSource;
+    use soar::airspaces_repo::AirspacesRepository;
+    use soar::faa_nasr;
+
+    // Auto-discover current NASR subscription URL
+    let subscription = faa_nasr::discover_nasr_url(client).await?;
+
+    // Check if we already imported this edition
+    let marker_path = get_nasr_edition_marker_path()?;
+    if let Ok(imported_edition) = fs::read_to_string(&marker_path) {
+        if imported_edition.trim() == subscription.edition_date {
+            info!(
+                edition = %subscription.edition_date,
+                "FAA NASR edition already imported, skipping"
+            );
+            return Ok(());
+        }
+        info!(
+            current = %subscription.edition_date,
+            imported = %imported_edition.trim(),
+            "New FAA NASR edition available, updating"
+        );
+    }
+
+    // Download the zip file
+    let nasr_zip_path = format!("{}/class_airspace_shape_files.zip", temp_dir);
+    download_file_atomically(client, &subscription.url, &nasr_zip_path, 3).await?;
+
+    // Extract the shapefile (directory is edition-specific to avoid stale data)
+    let nasr_extract_dir = format!("{}/nasr_airspace_{}", temp_dir, subscription.edition_date);
+    if !std::path::Path::new(&nasr_extract_dir).exists() {
+        info!("Extracting NASR airspace shapefile...");
+        fs::create_dir_all(&nasr_extract_dir)?;
+        let mut archive = zip::ZipArchive::new(fs::File::open(&nasr_zip_path)?)?;
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let filename = file.name().to_string();
+            // Only extract the Class_Airspace files we need
+            if filename.starts_with("Class_Airspace.") {
+                let output_path = format!("{}/{}", nasr_extract_dir, filename);
+                let mut output_file = fs::File::create(&output_path)?;
+                io::copy(&mut file, &mut output_file)?;
+            }
+        }
+        info!("NASR airspace shapefile extracted to: {}", nasr_extract_dir);
+    } else {
+        info!(
+            "NASR airspace directory already exists, skipping extraction: {}",
+            nasr_extract_dir
+        );
+    }
+
+    // Parse the shapefile
+    let extract_path = std::path::Path::new(&nasr_extract_dir);
+    let airspaces = faa_nasr::parse_shapefile_from_dir(extract_path)?;
+    let count = airspaces.len();
+    info!("Parsed {} FAA NASR airspace records", count);
+
+    // Delete existing FAA NASR airspaces and insert new ones
+    let repo = AirspacesRepository::new(diesel_pool);
+    repo.delete_by_source(AirspaceSource::FaaNasr).await?;
+
+    let inserted = repo.upsert_airspaces(airspaces).await?;
+    info!(
+        "Imported {} FAA NASR airspaces ({} parsed from shapefile)",
+        inserted, count
+    );
+
+    // Record the imported edition so we don't re-import the same data
+    if let Some(parent) = std::path::Path::new(&marker_path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&marker_path, &subscription.edition_date)?;
+    info!(
+        edition = %subscription.edition_date,
+        "Recorded NASR edition marker"
+    );
 
     Ok(())
 }
