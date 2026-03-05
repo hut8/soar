@@ -28,35 +28,38 @@ const NM_TO_METERS = 1852;
 /**
  * Default colors for geofence layers (with transparency)
  * Each layer gets a slightly different shade
+ * Lazily initialized because Cesium global isn't available at module load time
  */
-const LAYER_COLORS = [
-	Color.fromCssColorString('rgba(59, 130, 246, 0.25)'), // Blue
-	Color.fromCssColorString('rgba(34, 197, 94, 0.25)'), // Green
-	Color.fromCssColorString('rgba(249, 115, 22, 0.25)'), // Orange
-	Color.fromCssColorString('rgba(168, 85, 247, 0.25)'), // Purple
-	Color.fromCssColorString('rgba(236, 72, 153, 0.25)') // Pink
+const LAYER_COLOR_STRINGS = [
+	'rgba(59, 130, 246, 0.25)', // Blue
+	'rgba(34, 197, 94, 0.25)', // Green
+	'rgba(249, 115, 22, 0.25)', // Orange
+	'rgba(168, 85, 247, 0.25)', // Purple
+	'rgba(236, 72, 153, 0.25)' // Pink
 ];
 
-const LAYER_OUTLINE_COLORS = [
-	Color.fromCssColorString('rgba(37, 99, 235, 0.8)'), // Blue
-	Color.fromCssColorString('rgba(22, 163, 74, 0.8)'), // Green
-	Color.fromCssColorString('rgba(234, 88, 12, 0.8)'), // Orange
-	Color.fromCssColorString('rgba(147, 51, 234, 0.8)'), // Purple
-	Color.fromCssColorString('rgba(219, 39, 119, 0.8)') // Pink
+const LAYER_OUTLINE_COLOR_STRINGS = [
+	'rgba(37, 99, 235, 0.8)', // Blue
+	'rgba(22, 163, 74, 0.8)', // Green
+	'rgba(234, 88, 12, 0.8)', // Orange
+	'rgba(147, 51, 234, 0.8)', // Purple
+	'rgba(219, 39, 119, 0.8)' // Pink
 ];
 
 /**
  * Get color for a layer by index
  */
 function getLayerColor(index: number): Color {
-	return LAYER_COLORS[index % LAYER_COLORS.length];
+	return Color.fromCssColorString(LAYER_COLOR_STRINGS[index % LAYER_COLOR_STRINGS.length]);
 }
 
 /**
  * Get outline color for a layer by index
  */
 function getLayerOutlineColor(index: number): Color {
-	return LAYER_OUTLINE_COLORS[index % LAYER_OUTLINE_COLORS.length];
+	return Color.fromCssColorString(
+		LAYER_OUTLINE_COLOR_STRINGS[index % LAYER_OUTLINE_COLOR_STRINGS.length]
+	);
 }
 
 /**
