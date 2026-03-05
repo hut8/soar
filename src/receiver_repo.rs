@@ -522,7 +522,8 @@ impl ReceiverRepository {
             let receiver_models = receivers::table
                 .filter(receivers::latitude.is_not_null())
                 .filter(receivers::longitude.is_not_null())
-                .order(receivers::callsign.asc())
+                .order(receivers::latest_packet_at.desc().nulls_last())
+                .then_order_by(receivers::callsign.asc())
                 .limit(per_page)
                 .offset(offset)
                 .select(ReceiverModel::as_select())
@@ -647,25 +648,7 @@ impl ReceiverRepository {
                     .first::<ReceiverModel>(&mut conn)
                     .optional()?;
 
-                Ok(receiver_model.map(|r| crate::actions::views::ReceiverView {
-                    id: r.id,
-                    callsign: r.callsign,
-                    description: r.description,
-                    contact: r.contact,
-                    email: r.email,
-                    ogn_db_country: r.ogn_db_country,
-                    latitude: r.latitude,
-                    longitude: r.longitude,
-                    street_address: r.street_address,
-                    city: r.city,
-                    region: r.region,
-                    country: r.country,
-                    postal_code: r.postal_code,
-                    created_at: r.created_at,
-                    updated_at: r.updated_at,
-                    latest_packet_at: r.latest_packet_at,
-                    from_ogn_db: r.from_ogn_db,
-                }))
+                Ok(receiver_model.map(Into::into))
             },
         )
         .await?

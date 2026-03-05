@@ -2,9 +2,10 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { Plus, Trash2, MapPin } from '@lucide/svelte';
 	import type { Viewer } from 'cesium';
-	import type { Geofence, GeofenceLayer, CreateGeofenceRequest } from '$lib/types';
+	import type { Geofence, GeofenceLayer, CreateGeofenceRequest, Airport } from '$lib/types';
 	import { createGeofenceEntities, flyToGeofence } from '$lib/cesium/geofenceEntities';
 	import { CESIUM_ION_TOKEN } from '$lib/config';
+	import AirportSelector from '$lib/components/AirportSelector.svelte';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 	// Props
@@ -13,9 +14,10 @@
 		onSave: (request: CreateGeofenceRequest) => Promise<void>;
 		onCancel: () => void;
 		isNew?: boolean;
+		initialAirportId?: number;
 	}
 
-	let { geofence, onSave, onCancel, isNew = false }: Props = $props();
+	let { geofence, onSave, onCancel, isNew = false, initialAirportId }: Props = $props();
 
 	// Form state - initialized via $effect.pre to avoid state_referenced_locally warnings
 	let name = $state('');
@@ -38,6 +40,55 @@
 			formInitialized = true;
 		}
 	});
+
+	// Ground elevation state
+	let groundElevationFt: number | null = $state(null);
+	let elevationLookupTimeout: ReturnType<typeof setTimeout>;
+
+	async function lookupGroundElevation(lat: number, lng: number) {
+		// Use the Cesium terrain provider to sample elevation once the viewer is ready
+		if (!viewer) return;
+		try {
+			const { Cartographic, sampleTerrainMostDetailed } = window.Cesium;
+			const positions = [Cartographic.fromDegrees(lng, lat)];
+			const terrainProvider = viewer.terrainProvider;
+			const updatedPositions = await sampleTerrainMostDetailed(terrainProvider, positions);
+			if (updatedPositions && updatedPositions.length > 0) {
+				const heightMeters = updatedPositions[0].height;
+				if (heightMeters !== undefined && !isNaN(heightMeters)) {
+					groundElevationFt = heightMeters / 0.3048;
+					// Auto-set first layer floor to ground elevation (rounded to nearest 100)
+					// Only for new geofences and only when the floor hasn't been manually changed
+					if (isNew && layers.length > 0 && layers[0].floorFt === 0) {
+						const roundedElevation = Math.round(groundElevationFt / 100) * 100;
+						layers = layers.map((layer, i) =>
+							i === 0 ? { ...layer, floorFt: roundedElevation } : layer
+						);
+					}
+				}
+			}
+		} catch (err) {
+			console.warn('Failed to sample terrain elevation:', err);
+		}
+	}
+
+	// Airport selector state
+	let airportSelectorValue: string[] = $state([]);
+	let selectedAirportName = $state('');
+
+	function handleAirportSelect(airport: Airport | null) {
+		if (airport && airport.latitudeDeg != null && airport.longitudeDeg != null) {
+			centerLatitude = airport.latitudeDeg;
+			centerLongitude = airport.longitudeDeg;
+			selectedAirportName = airport.icaoCode || airport.ident;
+			// If name is empty and this is new, suggest the airport name
+			if (isNew && !name.trim()) {
+				name = `${selectedAirportName} Geofence`;
+			}
+			// Fly to the new center
+			setTimeout(() => flyToCenter(), 100);
+		}
+	}
 
 	let submitting = $state(false);
 	let error = $state('');
@@ -159,6 +210,7 @@
 	});
 
 	onDestroy(() => {
+		clearTimeout(elevationLookupTimeout);
 		if (viewer) {
 			viewer.destroy();
 			viewer = null;
@@ -170,6 +222,15 @@
 		// Track dependencies: name, centerLatitude, centerLongitude, layers
 		void [name, centerLatitude, centerLongitude, JSON.stringify(layers)];
 		updatePreview();
+	});
+
+	// Lookup ground elevation when center coordinates change
+	$effect(() => {
+		void [centerLatitude, centerLongitude];
+		clearTimeout(elevationLookupTimeout);
+		elevationLookupTimeout = setTimeout(() => {
+			lookupGroundElevation(centerLatitude, centerLongitude);
+		}, 500);
 	});
 
 	// Layer management
@@ -293,7 +354,15 @@
 			<div class="card p-4">
 				<h3 class="mb-3 h4">Center Point</h3>
 
-				<div class="grid grid-cols-2 gap-3">
+				<AirportSelector
+					bind:value={airportSelectorValue}
+					onSelect={handleAirportSelect}
+					label="Set from Airport"
+					placeholder="Search airports by name or identifier..."
+					{initialAirportId}
+				/>
+
+				<div class="mt-3 grid grid-cols-2 gap-3">
 					<label class="label">
 						<span>Latitude</span>
 						<input
@@ -320,6 +389,14 @@
 						/>
 					</label>
 				</div>
+
+				{#if groundElevationFt !== null}
+					<div class="mt-2 rounded bg-surface-200 px-3 py-1.5 text-sm dark:bg-surface-700">
+						Ground elevation: <strong
+							>{Math.round(groundElevationFt).toLocaleString()} ft MSL</strong
+						>
+					</div>
+				{/if}
 
 				<button type="button" onclick={flyToCenter} class="preset-ghost-surface mt-2 btn btn-sm">
 					<MapPin class="h-4 w-4" />

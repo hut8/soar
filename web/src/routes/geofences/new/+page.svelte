@@ -10,7 +10,13 @@
 
 	const logger = getLogger(['soar', 'Geofences', 'New']);
 
+	const { data } = $props();
+
 	async function handleSave(request: CreateGeofenceRequest) {
+		// If clubId was provided via query param, include it
+		if (data.clubId) {
+			request = { ...request, clubId: data.clubId };
+		}
 		const response = await createGeofence(request);
 		logger.info('Created geofence: {id}', { id: response.geofence.id });
 		toaster.success({
@@ -42,7 +48,12 @@
 
 		<!-- Editor -->
 		<div class="h-[calc(100vh-12rem)]">
-			<GeofenceEditor onSave={handleSave} onCancel={handleCancel} isNew={true} />
+			<GeofenceEditor
+				onSave={handleSave}
+				onCancel={handleCancel}
+				isNew={true}
+				initialAirportId={data.airportId}
+			/>
 		</div>
 	</div>
 {:else}

@@ -11,13 +11,14 @@
 		Navigation,
 		UserCheck,
 		ExternalLink,
-		Image,
 		ClipboardList,
-		Users
+		Users,
+		Shield
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall, ServerError } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import AircraftTile from '$lib/components/AircraftTile.svelte';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
 	import type {
@@ -28,7 +29,6 @@
 		DataResponse,
 		DataListResponse
 	} from '$lib/types';
-	import { getAircraftCategoryDescription } from '$lib/formatters';
 
 	const logger = getLogger(['soar', 'ClubDetailsPage']);
 
@@ -342,6 +342,15 @@
 								<UserCheck class="mr-2 h-4 w-4" />
 								Join Requests
 							</a>
+							<a
+								href={resolve(
+									`/geofences/new?clubId=${clubId}${club.homeBaseAirportId ? `&airportId=${club.homeBaseAirportId}` : ''}`
+								)}
+								class="btn preset-filled-secondary-500 btn-sm"
+							>
+								<Shield class="mr-2 h-4 w-4" />
+								Create Geofence
+							</a>
 						</div>
 					{/if}
 				</div>
@@ -452,85 +461,9 @@
 						<p>No aircraft registered to this club</p>
 					</div>
 				{:else}
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 						{#each aircraft as plane (plane.id)}
-							<div class="card p-4">
-								<div class="mb-3 flex flex-wrap items-center gap-2">
-									<h3 class="h3 font-semibold">{plane.registration ?? '—'}</h3>
-									{#if plane.aircraftCategory === 'TowTug'}
-										<span
-											class="btn preset-filled-warning-500 btn-sm"
-											title="This aircraft is a tow plane"
-										>
-											<Plane class="h-4 w-4" />
-											Tow/Tug
-										</span>
-									{/if}
-								</div>
-
-								<div class="mb-3 flex flex-wrap gap-2">
-									{#if plane.id}
-										<a
-											href={`/aircraft/${plane.id}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="preset-tonal-primary-500 btn btn-sm"
-											title="View aircraft details"
-										>
-											<Plane class="h-4 w-4" />
-											Details
-										</a>
-									{/if}
-									<a
-										href={`https://www.flightaware.com/photos/aircraft/${plane.registration}`}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="preset-tonal-primary-500 btn btn-sm"
-										title="View photos on FlightAware"
-									>
-										<Image class="h-4 w-4" />
-										Photos
-									</a>
-								</div>
-
-								<div class="space-y-2 text-sm">
-									{#if plane.icaoAddress}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">ICAO Code:</span>
-											<span class="ml-2">{plane.icaoAddress.toUpperCase()}</span>
-										</div>
-									{/if}
-									{#if plane.aircraftModel}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Model:</span>
-											<span class="ml-2">{plane.aircraftModel}</span>
-										</div>
-									{/if}
-									{#if plane.ownerOperator}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Owner:</span>
-											<span class="ml-2">{plane.ownerOperator}</span>
-										</div>
-									{/if}
-									{#if plane.modelData?.manufacturer}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Make and Model:</span>
-											<span class="ml-2"
-												>{plane.modelData.manufacturer}
-												{plane.modelData.description}</span
-											>
-										</div>
-									{/if}
-									{#if plane.aircraftCategory}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Aircraft Category:</span>
-											<span class="ml-2"
-												>{getAircraftCategoryDescription(plane.aircraftCategory)}</span
-											>
-										</div>
-									{/if}
-								</div>
-							</div>
+							<AircraftTile aircraft={plane} />
 						{/each}
 					</div>
 				{/if}
