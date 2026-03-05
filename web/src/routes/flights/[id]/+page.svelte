@@ -1720,7 +1720,7 @@
 				{#if hasUserInteracted}
 					<button
 						onclick={resetMapView}
-						class="absolute top-3 right-3 z-10 rounded-md bg-white p-2 shadow-lg transition-all hover:scale-105 hover:shadow-xl"
+						class="absolute top-3 left-3 z-10 rounded-md bg-white p-2 shadow-lg transition-all hover:scale-105 hover:shadow-xl"
 						title="Reset map view to show entire flight"
 						style="color: #374151;"
 					>
