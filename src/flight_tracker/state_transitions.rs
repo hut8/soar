@@ -12,6 +12,63 @@ use super::geometry::haversine_distance;
 use super::towing;
 use super::{AircraftState, FlightProcessorContext};
 
+/// Result of gap analysis between two fixes.
+#[derive(Debug, PartialEq)]
+enum GapVerdict {
+    /// Gap is short enough — continue the flight.
+    Continue,
+    /// Gap exceeds the absolute 2-hour limit.
+    AbsoluteLimitExceeded,
+    /// Aircraft was fast but didn't move far enough — probably landed and took off again.
+    SuggestsLanding,
+    /// Aircraft was slow (<25 knots) with a 30+ minute gap — likely on the ground.
+    SlowAircraftGap,
+}
+
+/// Pure logic for deciding whether a time gap between two fixes should end a flight.
+///
+/// `gap_seconds`: elapsed seconds between the previous fix and the current one.
+/// `prev_lat`, `prev_lng`, `cur_lat`, `cur_lng`: positions of previous/current fixes.
+/// `prev_speed_knots`: ground speed at the previous fix (None → 0).
+fn evaluate_gap(
+    gap_seconds: i64,
+    prev_lat: f64,
+    prev_lng: f64,
+    cur_lat: f64,
+    cur_lng: f64,
+    prev_speed_knots: Option<f32>,
+) -> GapVerdict {
+    let max_gap_seconds = chrono::Duration::hours(2).num_seconds();
+    let min_gap_seconds = chrono::Duration::minutes(30).num_seconds();
+
+    if gap_seconds > max_gap_seconds {
+        return GapVerdict::AbsoluteLimitExceeded;
+    }
+
+    if gap_seconds <= min_gap_seconds {
+        return GapVerdict::Continue;
+    }
+
+    // Gap is between 30 min and 2 hours — check distance vs expected
+    let actual_distance_m = haversine_distance(prev_lat, prev_lng, cur_lat, cur_lng);
+    let last_speed_knots = prev_speed_knots.unwrap_or(0.0) as f64;
+
+    if last_speed_knots > 25.0 {
+        let last_speed_ms = last_speed_knots * 0.514444;
+        let expected_distance_m = gap_seconds as f64 * last_speed_ms;
+        let min_expected_distance_m = expected_distance_m * 0.3;
+
+        if actual_distance_m < min_expected_distance_m {
+            GapVerdict::SuggestsLanding
+        } else {
+            GapVerdict::Continue
+        }
+    } else {
+        // Aircraft was slow (<25 knots) before gap — likely on the ground.
+        GapVerdict::SlowAircraftGap
+    }
+}
+
 /// Check if an anyhow error wraps a diesel FK violation on the flights_aircraft_id_fkey
 /// constraint. This happens when an aircraft was deleted (e.g., by a merge operation)
 /// between lookup and flight insertion.
@@ -257,67 +314,53 @@ pub(crate) async fn process_state_transition(
                     if let Some(prev_fix_time) = state.previous_fix_timestamp() {
                         let gap_seconds = (fix.received_at - prev_fix_time).num_seconds();
 
-                        // Absolute maximum gap: no single flight can have a 2-hour gap
-                        // regardless of speed or distance. This catches edge cases where
-                        // the distance check alone might pass (e.g., aircraft flew far
-                        // enough between two separate operations) and cases where speed
-                        // was < 25 knots (previously had no gap check at all).
-                        const MAX_GAP_SECONDS: i64 = 7200; // 2 hours
-
-                        if gap_seconds > MAX_GAP_SECONDS {
-                            info!(
-                                "Ending flight {}: absolute gap limit exceeded ({:.1}h > 2h)",
-                                flight_id,
-                                gap_seconds as f64 / 3600.0
+                        if let Some(prev_fix) = state.previous_fix() {
+                            let verdict = evaluate_gap(
+                                gap_seconds,
+                                prev_fix.lat,
+                                prev_fix.lng,
+                                fix.latitude,
+                                fix.longitude,
+                                prev_fix.ground_speed_knots,
                             );
-                            metrics::counter!(
-                                "flight_tracker.flight_ended.gap_absolute_limit_total"
-                            )
-                            .increment(1);
-                            true
-                        } else if gap_seconds > 1800 {
-                            // For gaps between 30 min and 2 hours, check distance vs expected
-                            if let Some(prev_fix) = state.previous_fix() {
-                                let actual_distance_m = haversine_distance(
-                                    prev_fix.lat,
-                                    prev_fix.lng,
-                                    fix.latitude,
-                                    fix.longitude,
-                                );
-                                let last_speed_knots =
-                                    prev_fix.ground_speed_knots.unwrap_or(0.0) as f64;
-
-                                // If aircraft was flying (>25 knots), use distance heuristic
-                                if last_speed_knots > 25.0 {
-                                    let last_speed_ms = last_speed_knots * 0.514444;
-                                    let expected_distance_m = gap_seconds as f64 * last_speed_ms;
-                                    let min_expected_distance_m = expected_distance_m * 0.3;
-
-                                    // Aircraft moved way too little for the time/speed - must have landed
-                                    if actual_distance_m < min_expected_distance_m {
-                                        info!(
-                                            "Ending flight {}: moved too little ({:.1}km in {:.1}h at {:.0} knots, expected min {:.1}km)",
-                                            flight_id,
-                                            actual_distance_m / 1000.0,
-                                            gap_seconds as f64 / 3600.0,
-                                            last_speed_knots,
-                                            min_expected_distance_m / 1000.0
-                                        );
-                                        metrics::counter!(
-                                            "flight_tracker.flight_ended.gap_suggests_landing_total"
-                                        )
-                                        .increment(1);
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    // Aircraft was slow (<25 knots) before gap — likely on
-                                    // the ground. A 30+ minute gap at low speed is suspicious.
+                            match verdict {
+                                GapVerdict::AbsoluteLimitExceeded => {
+                                    info!(
+                                        "Ending flight {}: absolute gap limit exceeded ({:.1}h > 2h)",
+                                        flight_id,
+                                        gap_seconds as f64 / 3600.0
+                                    );
+                                    metrics::counter!(
+                                        "flight_tracker.flight_ended.gap_absolute_limit_total"
+                                    )
+                                    .increment(1);
+                                    true
+                                }
+                                GapVerdict::SuggestsLanding => {
+                                    let actual_distance_m = haversine_distance(
+                                        prev_fix.lat,
+                                        prev_fix.lng,
+                                        fix.latitude,
+                                        fix.longitude,
+                                    );
+                                    info!(
+                                        "Ending flight {}: moved too little ({:.1}km in {:.1}h at {:.0} knots)",
+                                        flight_id,
+                                        actual_distance_m / 1000.0,
+                                        gap_seconds as f64 / 3600.0,
+                                        prev_fix.ground_speed_knots.unwrap_or(0.0),
+                                    );
+                                    metrics::counter!(
+                                        "flight_tracker.flight_ended.gap_suggests_landing_total"
+                                    )
+                                    .increment(1);
+                                    true
+                                }
+                                GapVerdict::SlowAircraftGap => {
                                     info!(
                                         "Ending flight {}: slow aircraft ({:.0} knots) with {:.0}min gap",
                                         flight_id,
-                                        last_speed_knots,
+                                        prev_fix.ground_speed_knots.unwrap_or(0.0),
                                         gap_seconds as f64 / 60.0
                                     );
                                     metrics::counter!(
@@ -326,8 +369,7 @@ pub(crate) async fn process_state_transition(
                                     .increment(1);
                                     true
                                 }
-                            } else {
-                                false
+                                GapVerdict::Continue => false,
                             }
                         } else {
                             false
@@ -1021,5 +1063,66 @@ mod tests {
     fn rejects_non_diesel_error() {
         let err = anyhow::Error::msg("some other error");
         assert!(!is_flights_aircraft_fk_violation(&err));
+    }
+
+    // --- Gap detection tests ---
+
+    // Helper: same position for all gap tests (JFK airport)
+    const LAT: f64 = 40.6413;
+    const LNG: f64 = -73.7781;
+
+    #[test]
+    fn gap_under_30_min_continues_flight() {
+        let verdict = evaluate_gap(1799, LAT, LNG, LAT, LNG, Some(50.0));
+        assert_eq!(verdict, GapVerdict::Continue);
+    }
+
+    #[test]
+    fn gap_exactly_30_min_continues_flight() {
+        let verdict = evaluate_gap(1800, LAT, LNG, LAT, LNG, Some(50.0));
+        assert_eq!(verdict, GapVerdict::Continue);
+    }
+
+    #[test]
+    fn gap_over_2_hours_hits_absolute_limit() {
+        let verdict = evaluate_gap(7201, LAT, LNG, LAT, LNG, Some(100.0));
+        assert_eq!(verdict, GapVerdict::AbsoluteLimitExceeded);
+    }
+
+    #[test]
+    fn gap_exactly_2_hours_does_not_hit_absolute_limit() {
+        // 7200 seconds = exactly 2 hours, should NOT trigger absolute limit
+        // (the check is > not >=), but should trigger distance-based check
+        // Same position with 50 knots → moved 0 distance → suggests landing
+        let verdict = evaluate_gap(7200, LAT, LNG, LAT, LNG, Some(50.0));
+        assert_eq!(verdict, GapVerdict::SuggestsLanding);
+    }
+
+    #[test]
+    fn slow_aircraft_with_31_min_gap_ends_flight() {
+        let verdict = evaluate_gap(1860, LAT, LNG, LAT, LNG, Some(5.0));
+        assert_eq!(verdict, GapVerdict::SlowAircraftGap);
+    }
+
+    #[test]
+    fn slow_aircraft_with_no_speed_ends_flight() {
+        let verdict = evaluate_gap(1860, LAT, LNG, LAT, LNG, None);
+        assert_eq!(verdict, GapVerdict::SlowAircraftGap);
+    }
+
+    #[test]
+    fn fast_aircraft_same_position_suggests_landing() {
+        // 60 knots, 45 min gap, same position → moved 0 km, expected ~51 km min
+        let verdict = evaluate_gap(2700, LAT, LNG, LAT, LNG, Some(60.0));
+        assert_eq!(verdict, GapVerdict::SuggestsLanding);
+    }
+
+    #[test]
+    fn fast_aircraft_moved_enough_continues() {
+        // 60 knots, 45 min gap, moved far enough
+        // 60 knots = 30.87 m/s, 2700s → expected 83.3 km, min 25 km
+        // Move ~0.5 degrees longitude at 40°N ≈ ~42 km → should continue
+        let verdict = evaluate_gap(2700, LAT, LNG, LAT, LNG + 0.5, Some(60.0));
+        assert_eq!(verdict, GapVerdict::Continue);
     }
 }

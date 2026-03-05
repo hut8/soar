@@ -37,12 +37,13 @@
 
 				// Apply backend settings if they exist
 				if (backendSettings && Object.keys(backendSettings).length > 0) {
-					showCompassRose = (backendSettings.showCompassRose as boolean) ?? true;
-					showAirportMarkers = (backendSettings.showAirportMarkers as boolean) ?? true;
-					showReceiverMarkers = (backendSettings.showReceiverMarkers as boolean) ?? true;
-					showAirspaceMarkers = (backendSettings.showAirspaceMarkers as boolean) ?? true;
-					showRunwayOverlays = (backendSettings.showRunwayOverlays as boolean) ?? false;
-					disableClustering = (backendSettings.disableClustering as boolean) ?? false;
+					const b = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+					showCompassRose = b(backendSettings.showCompassRose, true);
+					showAirportMarkers = b(backendSettings.showAirportMarkers, true);
+					showReceiverMarkers = b(backendSettings.showReceiverMarkers, true);
+					showAirspaceMarkers = b(backendSettings.showAirspaceMarkers, true);
+					showRunwayOverlays = b(backendSettings.showRunwayOverlays, false);
+					disableClustering = b(backendSettings.disableClustering, false);
 					return;
 				}
 			} catch (e) {
