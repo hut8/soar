@@ -469,8 +469,8 @@
 		</div>
 	</section>
 
-	<!-- Loading State -->
-	{#if loading}
+	<!-- Loading State (only show when no results yet) -->
+	{#if loading && clubs.length === 0}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
@@ -490,7 +490,7 @@
 	{/if}
 
 	<!-- Results - Desktop Table -->
-	{#if !loading && !error && clubs.length > 0}
+	{#if !error && clubs.length > 0}
 		<section class="hidden card md:block">
 			<header class="card-header">
 				<h2 class="h2">Search Results</h2>
@@ -635,7 +635,7 @@
 				</article>
 			{/each}
 		</div>
-	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (selectedLatitude !== null && selectedLongitude !== null))}
+	{:else if !loading && !error && (searchQuery || (selectedLatitude !== null && selectedLongitude !== null))}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">

@@ -11,37 +11,28 @@
 		Navigation,
 		UserCheck,
 		ExternalLink,
-		Image,
 		ClipboardList,
 		Users
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall, ServerError } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import AircraftTile from '$lib/components/AircraftTile.svelte';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
 	import type {
 		ClubWithSoaring,
 		Aircraft,
 		Airport,
-		AircraftModel,
-		AircraftRegistration,
 		ClubJoinRequestView,
 		DataResponse,
 		DataListResponse
 	} from '$lib/types';
-	import { getStatusCodeDescription, getAircraftCategoryDescription } from '$lib/formatters';
 
 	const logger = getLogger(['soar', 'ClubDetailsPage']);
 
-	// Local interface for club aircraft data which may include model and registration info
-	interface ClubAircraftData extends Aircraft {
-		model?: AircraftModel;
-		aircraftRegistration?: AircraftRegistration;
-	}
-
 	let club: ClubWithSoaring | null = null;
-	let aircraft: ClubAircraftData[] = [];
+	let aircraft: Aircraft[] = [];
 	let airport: Airport | null = null;
 	let loading = true;
 	let loadingAircraft = false;
@@ -112,11 +103,9 @@
 		aircraftError = '';
 
 		try {
-			const response = await serverCall<DataListResponse<ClubAircraftData>>(
-				`/clubs/${clubId}/aircraft`
-			);
+			const response = await serverCall<DataListResponse<Aircraft>>(`/clubs/${clubId}/aircraft`);
 			// Deduplicate by id to prevent Svelte each_key_duplicate errors
-			const byId: Record<string, ClubAircraftData> = {};
+			const byId: Record<string, Aircraft> = {};
 			for (const a of response.data || []) {
 				if (a.id && !(a.id in byId)) byId[a.id] = a;
 			}
@@ -462,143 +451,9 @@
 						<p>No aircraft registered to this club</p>
 					</div>
 				{:else}
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 						{#each aircraft as plane (plane.id)}
-							<div class="card p-4">
-								<div class="mb-3 flex flex-wrap items-center gap-2">
-									<h3 class="h3 font-semibold">{plane.registration ?? '—'}</h3>
-									{#if plane.aircraftCategory === 'TowTug'}
-										<span
-											class="btn preset-filled-warning-500 btn-sm"
-											title="This aircraft is a tow plane"
-										>
-											<Plane class="h-4 w-4" />
-											Tow/Tug
-										</span>
-									{/if}
-								</div>
-
-								<div class="mb-3 flex flex-wrap gap-2">
-									{#if plane.id}
-										<a
-											href={`/aircraft/${plane.id}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="preset-tonal-primary-500 btn btn-sm"
-											title="View aircraft details"
-										>
-											<Plane class="h-4 w-4" />
-											Details
-										</a>
-									{/if}
-									<a
-										href={`https://www.flightaware.com/photos/aircraft/${plane.registration}`}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="preset-tonal-primary-500 btn btn-sm"
-										title="View photos on FlightAware"
-									>
-										<Image class="h-4 w-4" />
-										Photos
-									</a>
-								</div>
-
-								<div class="space-y-2 text-sm">
-									{#if plane.aircraftRegistration?.transponderCode}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">ICAO Code:</span>
-											<span class="ml-2"
-												>{plane.aircraftRegistration?.transponderCode
-													.toString(16)
-													.toUpperCase()
-													.padStart(4, '0')}</span
-											>
-										</div>
-									{/if}
-									{#if plane.aircraftModel}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Model:</span>
-											<span class="ml-2">{plane.aircraftModel}</span>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.yearManufactured}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Year:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.yearManufactured}</span>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.serialNumber}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Serial:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.serialNumber}</span>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.registrantName}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Owner:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.registrantName}</span>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.aircraftType}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Type:</span>
-											<span class="ml-2">{plane.aircraftRegistration?.aircraftType}</span>
-										</div>
-									{/if}
-									{#if plane.model?.manufacturerName && plane.model?.modelName}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Make and Model:</span>
-											<span class="ml-2"
-												>{plane.model.manufacturerName}
-												{plane.model.modelName}</span
-											>
-										</div>
-									{/if}
-									{#if plane.aircraftCategory}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Aircraft Category:</span>
-											<span class="ml-2"
-												>{getAircraftCategoryDescription(plane.aircraftCategory)}</span
-											>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.engineManufacturerCode || plane.aircraftRegistration?.engineModelCode}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Engine:</span>
-											<span class="ml-2"
-												>{[
-													plane.aircraftRegistration?.engineManufacturerCode,
-													plane.aircraftRegistration?.engineModelCode
-												]
-													.filter(Boolean)
-													.join('-')}</span
-											>
-										</div>
-									{/if}
-									{#if plane.aircraftRegistration?.statusCode}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Status:</span>
-											<span class="ml-2"
-												>{getStatusCodeDescription(plane.aircraftRegistration?.statusCode)}</span
-											>
-										</div>
-									{/if}
-									{#if plane.model?.builderCertification}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium"
-												>Airworthiness Class:</span
-											>
-											<span class="ml-2">{plane.model?.builderCertification}</span>
-										</div>
-									{/if}
-									{#if plane.model?.numberOfEngines}
-										<div class="border-surface-200-700-token border-b pb-2">
-											<span class="text-surface-600-300-token font-medium">Number of Engines:</span>
-											<span class="ml-2">{plane.model.numberOfEngines}</span>
-										</div>
-									{/if}
-								</div>
-							</div>
+							<AircraftTile aircraft={plane} />
 						{/each}
 					</div>
 				{/if}
