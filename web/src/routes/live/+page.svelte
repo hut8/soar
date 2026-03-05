@@ -287,7 +287,8 @@
 				timestamp: fix.receivedAt,
 				aircraftModel: aircraft.aircraftModel || '',
 				aircraftCategory: aircraft.aircraftCategory || null,
-				iconName: getAircraftIconName(shape)
+				iconName: getAircraftIconName(shape),
+				climbFpm: fix.climbFpm
 			}
 		};
 	}
@@ -463,6 +464,41 @@
 			},
 			paint: {
 				'text-color': '#ffffff',
+				'text-halo-color': 'rgba(0, 0, 0, 0.8)',
+				'text-halo-width': 1.5
+			}
+		});
+
+		// Add climb/descent indicators (arrows next to aircraft)
+		map.addLayer({
+			id: 'aircraft-climb-indicators',
+			type: 'symbol',
+			source: 'aircraft',
+			minzoom: 8,
+			layout: {
+				'text-field': [
+					'case',
+					['>', ['get', 'climbFpm'], 200],
+					'▲',
+					['<', ['get', 'climbFpm'], -200],
+					'▼',
+					''
+				],
+				'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+				'text-size': 14,
+				'text-offset': [1.2, 0],
+				'text-anchor': 'left',
+				'text-allow-overlap': true
+			},
+			paint: {
+				'text-color': [
+					'case',
+					['>', ['get', 'climbFpm'], 200],
+					'#22c55e',
+					['<', ['get', 'climbFpm'], -200],
+					'#ef4444',
+					'#ffffff'
+				],
 				'text-halo-color': 'rgba(0, 0, 0, 0.8)',
 				'text-halo-width': 1.5
 			}
