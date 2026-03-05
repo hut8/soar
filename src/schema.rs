@@ -390,6 +390,23 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
 
+    club_join_requests (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        club_id -> Uuid,
+        status -> Text,
+        message -> Nullable<Text>,
+        reviewed_by -> Nullable<Uuid>,
+        reviewed_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     club_analytics_daily (club_id, date) {
         club_id -> Uuid,
         date -> Date,
@@ -1088,6 +1105,7 @@ diesel::table! {
         is_tow_pilot -> Bool,
         is_examiner -> Bool,
         deleted_at -> Nullable<Timestamptz>,
+        is_club_admin -> Bool,
     }
 }
 
@@ -1116,6 +1134,8 @@ diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(airports -> locations (location_id));
+diesel::joinable!(club_join_requests -> clubs (club_id));
+diesel::joinable!(club_join_requests -> users (user_id));
 diesel::joinable!(club_tow_fees -> clubs (club_id));
 diesel::joinable!(club_tow_fees -> users (modified_by));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
@@ -1161,6 +1181,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     airspace_sync_log,
     airspaces,
     club_analytics_daily,
+    club_join_requests,
     club_tow_fees,
     clubs,
     countries,

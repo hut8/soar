@@ -1,6 +1,7 @@
 // Core data types for the application
 
 // Import auto-generated types from Rust
+import type { ClubJoinRequestView } from './generated/ClubJoinRequestView';
 import type { Aircraft } from './generated/Aircraft';
 import type { AircraftView } from './generated/AircraftView';
 import type { AircraftCluster } from './generated/AircraftCluster';
@@ -98,7 +99,8 @@ export type {
 	CheckoutResponse,
 	StripeOnboardingResponse,
 	StripeConnectStatusView,
-	StripeDashboardLinkResponse
+	StripeDashboardLinkResponse,
+	ClubJoinRequestView
 };
 
 // Type aliases for backward compatibility
