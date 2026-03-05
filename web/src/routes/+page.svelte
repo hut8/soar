@@ -63,7 +63,7 @@
 								</div>
 							</div>
 							<div class="space-y-2">
-								<h2 class="text-2xl font-bold text-white drop-shadow-lg">My Club Operations</h2>
+								<h2 class="text-2xl font-bold text-white drop-shadow-lg">My Club</h2>
 							</div>
 						</div>
 					</a>

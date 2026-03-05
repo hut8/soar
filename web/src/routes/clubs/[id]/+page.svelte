@@ -17,6 +17,7 @@
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall, ServerError } from '$lib/api/server';
+	import { authApi } from '$lib/api/auth';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
@@ -176,14 +177,31 @@
 				method: 'POST',
 				body: JSON.stringify({ message: null })
 			});
-			pendingJoinRequest = request;
-			toaster.success({ title: `Join request sent to ${club.name}` });
+
+			if (request.status === 'approved') {
+				// Auto-approved (first member of empty club) — refresh user data
+				await refreshCurrentUser();
+				toaster.success({ title: `Welcome to ${club.name}! You are now a club admin.` });
+			} else {
+				pendingJoinRequest = request;
+				toaster.success({ title: `Join request sent to ${club.name}` });
+			}
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			logger.error('Error requesting to join club: {error}', { error: err });
 			toaster.error({ title: 'Failed to send join request', description: errorMessage });
 		} finally {
 			requestingToJoin = false;
+		}
+	}
+
+	async function refreshCurrentUser() {
+		if (!$auth.token) return;
+		try {
+			const user = await authApi.getCurrentUser($auth.token);
+			auth.updateUser(user);
+		} catch (err) {
+			logger.error('Error refreshing user data: {error}', { error: err });
 		}
 	}
 
