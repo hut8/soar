@@ -183,7 +183,8 @@ export class ReceiverLayerManager {
 				north: north.toString(),
 				south: south.toString(),
 				east: east.toString(),
-				west: west.toString()
+				west: west.toString(),
+				per_page: '500'
 			});
 
 			const response = await serverCall<DataListResponse<Receiver>>(`/receivers?${params}`);
