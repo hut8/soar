@@ -69,7 +69,24 @@ function createAuthStore() {
 			if (browser) {
 				localStorage.setItem('auth_user', JSON.stringify(user));
 			}
-			update((state) => ({ ...state, user }));
+			update((state) => {
+				const prev = state.user;
+				// Skip re-render if the fields that affect the UI haven't changed
+				if (
+					prev &&
+					prev.id === user.id &&
+					prev.clubId === user.clubId &&
+					prev.isAdmin === user.isAdmin &&
+					prev.isClubAdmin === user.isClubAdmin &&
+					prev.firstName === user.firstName &&
+					prev.lastName === user.lastName &&
+					prev.email === user.email &&
+					prev.emailVerified === user.emailVerified
+				) {
+					return state;
+				}
+				return { ...state, user };
+			});
 		}
 	};
 }

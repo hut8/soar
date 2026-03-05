@@ -19,6 +19,7 @@
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev, browser } from '$app/environment';
 	import { isStaging } from '$lib/config';
+	import { authApi } from '$lib/api/auth';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
@@ -106,6 +107,23 @@
 	// Initialize auth, theme, and backend mode from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
+
+		// Refresh user data from backend to pick up changes (e.g. club membership).
+		// Wrapped in IIFE to await without making onMount async (it returns a cleanup fn).
+		const token = localStorage.getItem('auth_token');
+		if (token) {
+			void (async () => {
+				try {
+					const user = await authApi.getCurrentUser(token);
+					if (localStorage.getItem('auth_token') === token) {
+						auth.updateUser(user);
+					}
+				} catch {
+					// Silently ignore — stale localStorage is fine as fallback
+				}
+			})();
+		}
+
 		theme.init();
 		backendMode.init();
 

@@ -212,6 +212,68 @@ impl ClubJoinRequestsRepository {
         Ok(result.map(|m| m.into()))
     }
 
+    /// Auto-approve a join request if the club has no members, making the user a club admin.
+    /// All checks and updates happen in a single transaction to prevent races.
+    /// Returns Ok(Some(request)) if auto-approved, Ok(None) if club already has members.
+    pub async fn auto_approve_first_member(
+        &self,
+        request_id: Uuid,
+        user_id: Uuid,
+        club_id: Uuid,
+    ) -> Result<Option<ClubJoinRequest>> {
+        use crate::schema::{club_join_requests, users};
+
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get().map_err(anyhow::Error::from)?;
+
+            let updated = conn.transaction(|conn| {
+                // Check if the club has any members inside the transaction
+                let member_count: i64 = users::table
+                    .filter(users::club_id.eq(club_id))
+                    .count()
+                    .get_result(conn)?;
+
+                if member_count > 0 {
+                    // Club already has members — don't auto-approve
+                    return Ok(None);
+                }
+
+                // Approve the request
+                let updated: Option<ClubJoinRequestModel> =
+                    diesel::update(club_join_requests::table)
+                        .filter(club_join_requests::id.eq(request_id))
+                        .filter(club_join_requests::status.eq(STATUS_PENDING))
+                        .set((
+                            club_join_requests::status.eq(STATUS_APPROVED),
+                            club_join_requests::reviewed_by.eq(user_id),
+                            club_join_requests::reviewed_at.eq(diesel::dsl::now),
+                            club_join_requests::updated_at.eq(diesel::dsl::now),
+                        ))
+                        .get_result(conn)
+                        .optional()?;
+
+                if updated.is_some() {
+                    // Set the user's club_id and make them club admin
+                    diesel::update(users::table)
+                        .filter(users::id.eq(user_id))
+                        .set((users::club_id.eq(club_id), users::is_club_admin.eq(true)))
+                        .execute(conn)?;
+                }
+
+                Ok::<Option<ClubJoinRequestModel>, diesel::result::Error>(updated)
+            });
+
+            match updated {
+                Ok(result) => Ok(result),
+                Err(e) => Err(anyhow::Error::from(e)),
+            }
+        })
+        .await??;
+
+        Ok(result.map(|m| m.into()))
+    }
+
     /// Cancel (delete) a pending join request
     pub async fn cancel(&self, request_id: Uuid) -> Result<bool> {
         use crate::schema::club_join_requests::dsl;

@@ -78,6 +78,29 @@ pub async fn create_join_request(
 
     match repo.create(new_request).await {
         Ok(request) => {
+            // Try to auto-approve if the club has no members (first member becomes admin).
+            // This is fully transactional — the emptiness check, approval, club_id update,
+            // and is_club_admin promotion all happen in a single DB transaction.
+            match repo
+                .auto_approve_first_member(request.id, user.id, club_id)
+                .await
+            {
+                Ok(Some(approved)) => {
+                    return (
+                        StatusCode::CREATED,
+                        Json(ClubJoinRequestView::from(approved)),
+                    )
+                        .into_response();
+                }
+                Ok(None) => {
+                    // Club already has members — continue with normal pending flow
+                }
+                Err(e) => {
+                    error!(error = %e, "Failed to auto-approve first club member");
+                    // Fall through to return the pending request
+                }
+            }
+
             // Send notification to club admins in the background
             let pool = state.pool.clone();
             let requester_name = user.full_name();
