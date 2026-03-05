@@ -12,6 +12,7 @@ pub struct User {
     #[serde(skip_serializing)]
     pub password_hash: Option<String>, // Nullable - None indicates user cannot log in
     pub is_admin: bool,
+    pub is_club_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
     #[serde(skip_serializing)]
@@ -48,6 +49,7 @@ pub struct UpdateUserRequest {
     pub last_name: Option<String>,
     pub email: Option<String>,
     pub is_admin: Option<bool>,
+    pub is_club_admin: Option<bool>,
     pub club_id: Option<Uuid>,
     pub email_verified: Option<bool>,
 }
@@ -71,6 +73,7 @@ pub struct UserInfo {
     pub last_name: String,
     pub email: Option<String>, // Nullable
     pub is_admin: bool,
+    pub is_club_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
     pub settings: JsonValue,
@@ -164,6 +167,7 @@ impl User {
             password_hash: None, // No password = cannot login
             email_verified: false,
             is_admin: false,
+            is_club_admin: false,
             club_id,
             is_licensed,
             is_instructor,
@@ -187,6 +191,7 @@ impl User {
             last_name: self.last_name.clone(),
             email: self.email.clone(),
             is_admin: self.is_admin,
+            is_club_admin: self.is_club_admin,
             club_id: self.club_id,
             email_verified: self.email_verified,
             settings: self.settings.clone(),

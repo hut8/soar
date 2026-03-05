@@ -318,11 +318,13 @@
 			}
 		}}
 	>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			role="dialog"
 			aria-labelledby="change-email-heading"
 			class="m-4 w-full max-w-md space-y-4 card p-6"
 			onclick={(e) => e.stopPropagation()}
+			tabindex="-1"
 		>
 			<div class="flex items-center justify-between">
 				<h2 id="change-email-heading" class="text-xl font-bold">Change Email</h2>
@@ -401,11 +403,13 @@
 			}
 		}}
 	>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			role="dialog"
 			aria-labelledby="delete-account-heading"
 			class="m-4 w-full max-w-md space-y-4 card p-6"
 			onclick={(e) => e.stopPropagation()}
+			tabindex="-1"
 		>
 			<div class="flex items-center justify-between">
 				<h2 id="delete-account-heading" class="text-xl font-bold text-error-500">Delete Account</h2>

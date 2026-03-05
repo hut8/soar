@@ -673,6 +673,35 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/clubs/{id}/tow-fees/{fee_id}",
             delete(actions::club_tow_fees::delete_club_tow_fee),
         )
+        // Club join request routes
+        .route(
+            "/clubs/{id}/join-requests",
+            post(actions::club_join_requests::create_join_request),
+        )
+        .route(
+            "/clubs/{id}/join-requests",
+            get(actions::club_join_requests::get_join_requests),
+        )
+        .route(
+            "/clubs/{id}/join-requests/my",
+            get(actions::club_join_requests::get_my_join_request),
+        )
+        .route(
+            "/clubs/{id}/join-requests/{request_id}/approve",
+            put(actions::club_join_requests::approve_join_request),
+        )
+        .route(
+            "/clubs/{id}/join-requests/{request_id}/reject",
+            put(actions::club_join_requests::reject_join_request),
+        )
+        .route(
+            "/clubs/{id}/join-requests/{request_id}",
+            delete(actions::club_join_requests::cancel_join_request),
+        )
+        .route(
+            "/clubs/{id}/members/{user_id}/admin",
+            put(actions::club_join_requests::set_club_admin),
+        )
         .route(
             "/coverage/hexes",
             get(actions::coverage::get_coverage_hexes),

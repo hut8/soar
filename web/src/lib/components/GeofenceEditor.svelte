@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { Plus, Trash2, MapPin } from '@lucide/svelte';
-	import { Viewer, Ion, createWorldImageryAsync, Terrain, SceneMode } from 'cesium';
+	import type { Viewer } from 'cesium';
 	import type { Geofence, GeofenceLayer, CreateGeofenceRequest } from '$lib/types';
 	import { createGeofenceEntities, flyToGeofence } from '$lib/cesium/geofenceEntities';
+	import { CESIUM_ION_TOKEN } from '$lib/config';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 	// Props
@@ -16,14 +17,27 @@
 
 	let { geofence, onSave, onCancel, isNew = false }: Props = $props();
 
-	// Form state
-	let name = $state(geofence?.name || '');
-	let description = $state(geofence?.description || '');
-	let centerLatitude = $state(geofence?.centerLatitude || 39.8283);
-	let centerLongitude = $state(geofence?.centerLongitude || -98.5795);
-	let layers: GeofenceLayer[] = $state(
-		geofence?.layers?.length ? [...geofence.layers] : [{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }]
-	);
+	// Form state - initialized via $effect.pre to avoid state_referenced_locally warnings
+	let name = $state('');
+	let description = $state('');
+	let centerLatitude = $state(39.8283);
+	let centerLongitude = $state(-98.5795);
+	let layers: GeofenceLayer[] = $state([{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }]);
+	let formInitialized = false;
+
+	// Sync form state with geofence prop
+	$effect.pre(() => {
+		if (geofence && !formInitialized) {
+			name = geofence.name || '';
+			description = geofence.description || '';
+			centerLatitude = geofence.centerLatitude || 39.8283;
+			centerLongitude = geofence.centerLongitude || -98.5795;
+			layers = geofence.layers?.length
+				? [...geofence.layers]
+				: [{ floorFt: 0, ceilingFt: 5000, radiusNm: 5 }];
+			formInitialized = true;
+		}
+	});
 
 	let submitting = $state(false);
 	let error = $state('');
@@ -69,14 +83,47 @@
 		flyToGeofence(viewer, previewGeofence);
 	}
 
+	// Dynamically load Cesium script (must be loaded before using window.Cesium)
+	// Cached per instance so concurrent callers share a single in-flight load
+	let cesiumPromise: Promise<void> | null = null;
+	function loadCesiumScript(): Promise<void> {
+		if (cesiumPromise) return cesiumPromise;
+		cesiumPromise = new Promise((resolve, reject) => {
+			if (window.Cesium) {
+				resolve();
+				return;
+			}
+
+			const script = document.createElement('script');
+			script.src = '/cesium/Cesium.js';
+			script.async = true;
+			script.onload = () => resolve();
+			script.onerror = () => {
+				cesiumPromise = null;
+				script.remove();
+				reject(new Error('Failed to load Cesium.js'));
+			};
+			document.head.appendChild(script);
+		});
+		return cesiumPromise;
+	}
+
 	// Initialize Cesium viewer
 	onMount(async () => {
-		// Use Cesium Ion token from environment or a default
-		Ion.defaultAccessToken =
-			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5YjMyYjVhNi02ZjNiLTQyNjgtOGVkYi0xM2RmMjE1NmUwZWMiLCJpZCI6MTI3OTM3LCJpYXQiOjE2ODA0NTUyNTN9.ZV1FP3RrP9TwG7qGGRUK_D5v9PZuPd6-yLqQVbQSKGQ';
-
 		try {
-			viewer = new Viewer(cesiumContainer, {
+			await loadCesiumScript();
+
+			const {
+				Ion,
+				Viewer: CesiumViewer,
+				Terrain,
+				SceneMode,
+				createWorldImageryAsync
+			} = window.Cesium;
+
+			Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+
+			viewer = new CesiumViewer(cesiumContainer, {
 				baseLayerPicker: false,
 				geocoder: false,
 				homeButton: false,
@@ -94,6 +141,7 @@
 
 			// Add imagery
 			const imageryProvider = await createWorldImageryAsync();
+			if (!viewer || viewer.isDestroyed()) return;
 			viewer.imageryLayers.addImageryProvider(imageryProvider);
 
 			// Initial preview

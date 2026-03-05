@@ -347,7 +347,9 @@
 
 <!-- Add Tow Fee Modal -->
 {#if showAddModal}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeAddModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Add Tow Fee Tier</h3>
@@ -400,7 +402,9 @@
 
 <!-- Edit Tow Fee Modal -->
 {#if showEditModal && editingFee}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeEditModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Edit Tow Fee Tier</h3>
@@ -453,7 +457,9 @@
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal && deletingFee}
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal-backdrop" onclick={closeDeleteModal}></div>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div class="modal">
 		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
 			<h3 class="mb-4 h3">Delete Tow Fee Tier</h3>

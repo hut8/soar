@@ -40,11 +40,13 @@
 </script>
 
 <div class="modal-backdrop" onclick={onClose} role="presentation">
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="modal-content"
 		onclick={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-labelledby="aircraft-list-title"
+		tabindex="-1"
 	>
 		<div class="modal-header">
 			<h2 id="aircraft-list-title">Nearby Aircraft</h2>

@@ -39,6 +39,7 @@ pub struct UserRecord {
     pub is_tow_pilot: bool,
     pub is_examiner: bool,
     pub deleted_at: Option<DateTime<Utc>>,
+    pub is_club_admin: bool,
 }
 
 #[derive(Insertable)]
@@ -51,6 +52,7 @@ pub struct NewUser {
     pub email: Option<String>,
     pub password_hash: Option<String>,
     pub is_admin: bool,
+    pub is_club_admin: bool,
     pub club_id: Option<Uuid>,
     pub is_licensed: bool,
     pub is_instructor: bool,
@@ -67,6 +69,7 @@ impl From<UserRecord> for User {
             email: record.email,
             password_hash: record.password_hash,
             is_admin: record.is_admin,
+            is_club_admin: record.is_club_admin,
             club_id: record.club_id,
             email_verified: record.email_verified,
             password_reset_token: record.password_reset_token,
@@ -184,6 +187,7 @@ impl UsersRepository {
             email: Some(request.email.clone()),
             password_hash: Some(password_hash),
             is_admin: false,
+            is_club_admin: false,
             club_id: request.club_id,
             is_licensed: false,
             is_instructor: false,
@@ -219,6 +223,7 @@ impl UsersRepository {
                 || request_clone.last_name.is_some()
                 || request_clone.email.is_some()
                 || request_clone.is_admin.is_some()
+                || request_clone.is_club_admin.is_some()
                 || request_clone.club_id.is_some()
                 || request_clone.email_verified.is_some();
 
@@ -245,6 +250,8 @@ impl UsersRepository {
                         users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
                         users::email.eq(request_clone.email.or(current.email)),
                         users::is_admin.eq(request_clone.is_admin.unwrap_or(current.is_admin)),
+                        users::is_club_admin
+                            .eq(request_clone.is_club_admin.unwrap_or(current.is_club_admin)),
                         users::club_id.eq(request_clone.club_id.or(current.club_id)),
                         users::email_verified.eq(request_clone
                             .email_verified
@@ -491,6 +498,7 @@ impl UsersRepository {
             email: None,
             password_hash: None,
             is_admin: false,
+            is_club_admin: false,
             club_id: pilot.club_id,
             is_licensed: pilot.is_licensed,
             is_instructor: pilot.is_instructor,

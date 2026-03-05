@@ -5,6 +5,7 @@ pub mod airports;
 pub mod airspaces;
 pub mod analytics;
 pub mod auth;
+pub mod club_join_requests;
 pub mod club_tow_fees;
 pub mod clubs;
 pub mod coverage;

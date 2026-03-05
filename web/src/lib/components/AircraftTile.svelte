@@ -55,10 +55,10 @@
 	});
 </script>
 
-<div class="card preset-tonal-primary p-4">
+<div class="flex h-full flex-col card preset-tonal-primary p-4">
 	<a
 		href={resolve(`/aircraft/${aircraft.id}`)}
-		class="group block transition-all hover:scale-[1.02]"
+		class="group flex flex-1 flex-col transition-all hover:scale-[1.02]"
 	>
 		<!-- Header Section -->
 		<div class="mb-4 flex items-start justify-between">
@@ -104,7 +104,7 @@
 		</div>
 
 		<!-- Status Badges -->
-		<div class="flex flex-wrap gap-2">
+		<div class="mt-auto flex flex-wrap gap-2">
 			{#if aircraft.fromOgnDdb}
 				<span class="badge preset-filled-success-500 text-xs">
 					<Check class="mr-1 h-3 w-3" />

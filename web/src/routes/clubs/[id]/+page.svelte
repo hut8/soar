@@ -16,17 +16,17 @@
 		Users
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
-	import { serverCall } from '$lib/api/server';
+	import { serverCall, ServerError } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
 	import type {
 		ClubWithSoaring,
-		User,
 		Aircraft,
 		Airport,
 		AircraftModel,
 		AircraftRegistration,
+		ClubJoinRequestView,
 		DataResponse,
 		DataListResponse
 	} from '$lib/types';
@@ -50,7 +50,9 @@
 	let aircraftError = '';
 	let airportError = '';
 	let clubId = '';
-	let settingClub = false;
+	let cancellingRequest = false;
+	let pendingJoinRequest: ClubJoinRequestView | null = null;
+	let requestingToJoin = false;
 
 	$: clubId = $page.params.id || '';
 	$: isCurrentClub = $auth.user?.clubId === clubId;
@@ -77,6 +79,9 @@
 		if (clubId) {
 			await loadClub();
 			await loadAircraft();
+			if ($auth.isAuthenticated && !isCurrentClub) {
+				await loadMyJoinRequest();
+			}
 		}
 	});
 
@@ -145,28 +150,59 @@
 		}
 	}
 
-	async function setAsMyClub() {
+	async function loadMyJoinRequest() {
+		if (!$auth.isAuthenticated || !clubId) return;
+		try {
+			const request = await serverCall<ClubJoinRequestView>(`/clubs/${clubId}/join-requests/my`);
+			pendingJoinRequest = request;
+		} catch (err) {
+			// 404 means no pending request - that's expected
+			if (err instanceof ServerError && err.status === 404) {
+				pendingJoinRequest = null;
+				return;
+			}
+			// Log real errors but don't block the page
+			logger.error('Error loading join request status: {error}', { error: err });
+			pendingJoinRequest = null;
+		}
+	}
+
+	async function requestToJoin() {
 		if (!$auth.isAuthenticated || !club) return;
 
-		settingClub = true;
+		requestingToJoin = true;
 		try {
-			const updatedUser = await serverCall<User>(`/users/set-club`, {
-				method: 'PUT',
-				body: JSON.stringify({ clubId: club.id })
+			const request = await serverCall<ClubJoinRequestView>(`/clubs/${club.id}/join-requests`, {
+				method: 'POST',
+				body: JSON.stringify({ message: null })
 			});
-
-			// Update the auth store with the new user data
-			auth.updateUser(updatedUser);
-			toaster.success({ title: `Set ${club.name} as your club` });
-
-			// Load aircraft now that user is part of the club
-			await loadAircraft();
+			pendingJoinRequest = request;
+			toaster.success({ title: `Join request sent to ${club.name}` });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			logger.error('Error setting club: {error}', { error: err });
-			toaster.error({ title: 'Failed to set club', description: errorMessage });
+			logger.error('Error requesting to join club: {error}', { error: err });
+			toaster.error({ title: 'Failed to send join request', description: errorMessage });
 		} finally {
-			settingClub = false;
+			requestingToJoin = false;
+		}
+	}
+
+	async function cancelJoinRequest() {
+		if (!pendingJoinRequest || !club) return;
+
+		cancellingRequest = true;
+		try {
+			await serverCall(`/clubs/${club.id}/join-requests/${pendingJoinRequest.id}`, {
+				method: 'DELETE'
+			});
+			pendingJoinRequest = null;
+			toaster.success({ title: 'Join request cancelled' });
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			logger.error('Error cancelling join request: {error}', { error: err });
+			toaster.error({ title: 'Failed to cancel request', description: errorMessage });
+		} finally {
+			cancellingRequest = false;
 		}
 	}
 </script>
@@ -253,21 +289,39 @@
 						{/if}
 					</div>
 
-					<!-- Set as My Club Button -->
+					<!-- Join / Pending / My Club actions -->
 					{#if $auth.isAuthenticated && !isCurrentClub}
 						<div class="flex-shrink-0">
-							<button
-								class="btn preset-filled-primary-500"
-								onclick={setAsMyClub}
-								disabled={settingClub}
-							>
-								{#if settingClub}
-									<Progress class="h-4 w-4" />
-								{:else}
-									<UserCheck class="mr-2 h-4 w-4" />
-								{/if}
-								{settingClub ? 'Setting...' : 'Set as My Club'}
-							</button>
+							{#if pendingJoinRequest}
+								<div class="flex flex-col gap-2">
+									<div
+										class="inline-flex items-center gap-2 rounded-full bg-warning-500 px-4 py-2 text-sm text-white"
+									>
+										<UserCheck class="h-4 w-4" />
+										Request Pending
+									</div>
+									<button
+										class="btn preset-tonal btn-sm"
+										onclick={cancelJoinRequest}
+										disabled={cancellingRequest}
+									>
+										{cancellingRequest ? 'Cancelling...' : 'Cancel Request'}
+									</button>
+								</div>
+							{:else}
+								<button
+									class="btn preset-filled-primary-500"
+									onclick={requestToJoin}
+									disabled={requestingToJoin}
+								>
+									{#if requestingToJoin}
+										<Progress class="h-4 w-4" />
+									{:else}
+										<UserCheck class="mr-2 h-4 w-4" />
+									{/if}
+									{requestingToJoin ? 'Sending...' : 'Request to Join'}
+								</button>
+							{/if}
 						</div>
 					{:else if $auth.isAuthenticated && isCurrentClub}
 						<div class="flex flex-shrink-0 flex-col gap-2">
@@ -290,6 +344,13 @@
 							>
 								<Users class="mr-2 h-4 w-4" />
 								Pilots
+							</a>
+							<a
+								href={resolve(`/clubs/${clubId}/admin/join-requests`)}
+								class="btn preset-filled-secondary-500 btn-sm"
+							>
+								<UserCheck class="mr-2 h-4 w-4" />
+								Join Requests
 							</a>
 						</div>
 					{/if}

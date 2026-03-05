@@ -50,6 +50,7 @@
 		<h2 class="text-2xl font-semibold">Metrics</h2>
 		<div class="grid gap-4 md:grid-cols-2">
 			{#each metrics as metric (metric.url)}
+				{@const Icon = metric.icon}
 				<a
 					href={metric.url}
 					target="_blank"
@@ -57,11 +58,7 @@
 					class="preset-tonal-primary-500 group flex items-start gap-4 card p-6 transition-all duration-200 hover:scale-[1.02] hover:preset-filled-primary-500"
 				>
 					<div class="flex-shrink-0 pt-1">
-						<svelte:component
-							this={metric.icon}
-							size={24}
-							class="text-primary-500 group-hover:text-white"
-						/>
+						<Icon size={24} class="text-primary-500 group-hover:text-white" />
 					</div>
 					<div class="flex-1 space-y-1">
 						<h3 class="text-lg font-semibold">{metric.title}</h3>

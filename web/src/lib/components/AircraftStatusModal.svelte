@@ -345,7 +345,7 @@
 <!-- Aircraft Status Modal -->
 {#if showModal && selectedAircraft}
 	<div
-		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
+		class="fixed inset-0 z-[300] flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
 		role="presentation"

@@ -146,6 +146,7 @@ pub async fn set_user_club(
         last_name: None,
         email: None,
         is_admin: None,
+        is_club_admin: None,
         club_id: Some(payload.club_id),
         email_verified: None,
     };
