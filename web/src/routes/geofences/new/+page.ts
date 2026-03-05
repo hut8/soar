@@ -16,8 +16,16 @@ export const load: PageLoad = async ({ url }) => {
 	const airportIdParam = url.searchParams.get('airportId');
 	const clubId = url.searchParams.get('clubId');
 
+	let airportId: number | undefined = undefined;
+	if (airportIdParam !== null) {
+		const parsed = parseInt(airportIdParam, 10);
+		if (Number.isFinite(parsed) && parsed > 0) {
+			airportId = parsed;
+		}
+	}
+
 	return {
-		airportId: airportIdParam ? parseInt(airportIdParam, 10) : undefined,
+		airportId,
 		clubId: clubId || undefined
 	};
 };

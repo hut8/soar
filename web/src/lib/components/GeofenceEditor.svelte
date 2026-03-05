@@ -57,8 +57,9 @@
 				const heightMeters = updatedPositions[0].height;
 				if (heightMeters !== undefined && !isNaN(heightMeters)) {
 					groundElevationFt = heightMeters / 0.3048;
-					// Update first layer floor to ground elevation (rounded to nearest 100)
-					if (layers.length > 0) {
+					// Auto-set first layer floor to ground elevation (rounded to nearest 100)
+					// Only for new geofences and only when the floor hasn't been manually changed
+					if (isNew && layers.length > 0 && layers[0].floorFt === 0) {
 						const roundedElevation = Math.round(groundElevationFt / 100) * 100;
 						layers = layers.map((layer, i) =>
 							i === 0 ? { ...layer, floorFt: roundedElevation } : layer
