@@ -47,20 +47,27 @@ const LAYER_OUTLINE_COLOR_STRINGS = [
 	'rgba(219, 39, 119, 0.8)' // Pink
 ];
 
+let layerColorsCache: Color[] | null = null;
+let layerOutlineColorsCache: Color[] | null = null;
+
 /**
- * Get color for a layer by index
+ * Get color for a layer by index (memoized on first use)
  */
 function getLayerColor(index: number): Color {
-	return Color.fromCssColorString(LAYER_COLOR_STRINGS[index % LAYER_COLOR_STRINGS.length]);
+	if (!layerColorsCache) {
+		layerColorsCache = LAYER_COLOR_STRINGS.map((s) => Color.fromCssColorString(s));
+	}
+	return layerColorsCache[index % layerColorsCache.length];
 }
 
 /**
- * Get outline color for a layer by index
+ * Get outline color for a layer by index (memoized on first use)
  */
 function getLayerOutlineColor(index: number): Color {
-	return Color.fromCssColorString(
-		LAYER_OUTLINE_COLOR_STRINGS[index % LAYER_OUTLINE_COLOR_STRINGS.length]
-	);
+	if (!layerOutlineColorsCache) {
+		layerOutlineColorsCache = LAYER_OUTLINE_COLOR_STRINGS.map((s) => Color.fromCssColorString(s));
+	}
+	return layerOutlineColorsCache[index % layerOutlineColorsCache.length];
 }
 
 /**
