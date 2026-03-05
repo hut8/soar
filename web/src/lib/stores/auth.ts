@@ -66,8 +66,11 @@ function createAuthStore() {
 			}
 		},
 		updateUser: (user: User) => {
+			const serialized = JSON.stringify(user);
 			if (browser) {
-				localStorage.setItem('auth_user', JSON.stringify(user));
+				// Skip update if user data hasn't changed to avoid unnecessary re-renders
+				if (localStorage.getItem('auth_user') === serialized) return;
+				localStorage.setItem('auth_user', serialized);
 			}
 			update((state) => ({ ...state, user }));
 		}
