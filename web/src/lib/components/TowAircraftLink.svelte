@@ -40,7 +40,8 @@
 
 		// If not in cache, fetch from server
 		try {
-			aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
+			const response = await serverCall<{ data: Aircraft }>(`/aircraft/${aircraftId}`);
+			aircraft = response.data;
 			loading = false;
 		} catch (error) {
 			logger.error('Failed to load aircraft {aircraftId}: {error}', { aircraftId, error });

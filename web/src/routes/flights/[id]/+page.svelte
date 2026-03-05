@@ -7,7 +7,6 @@
 		Plane,
 		PlaneTakeoff,
 		PlaneLanding,
-		Gauge,
 		TrendingUp,
 		Route,
 		MoveUpRight,
@@ -1418,13 +1417,19 @@
 				</div>
 			{/if}
 
-			<!-- Duration -->
-			{#if duration}
+			<!-- Distance & Duration -->
+			{#if data.flight.totalDistanceMeters || duration}
 				<div class="flex items-start gap-3">
-					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
+					<Route class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
-						<div class="text-surface-600-300-token text-sm">Duration</div>
-						<div class="font-semibold">{duration}</div>
+						{#if data.flight.totalDistanceMeters}
+							<div class="text-surface-600-300-token text-sm">Total Distance</div>
+							<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
+						{/if}
+						{#if duration}
+							<div class="text-surface-600-300-token text-sm">Duration</div>
+							<div class="font-semibold">{duration}</div>
+						{/if}
 					</div>
 				</div>
 			{/if}
@@ -1443,17 +1448,6 @@
 								{formatAltitude(maxAglAltitude ?? undefined)} AGL
 							</div>
 						{/if}
-					</div>
-				</div>
-			{/if}
-
-			<!-- Total Distance -->
-			{#if data.flight.totalDistanceMeters}
-				<div class="flex items-start gap-3">
-					<Route class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Total Distance</div>
-						<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
 					</div>
 				</div>
 			{/if}

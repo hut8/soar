@@ -113,7 +113,7 @@
 				? 'bg-success-500 text-white'
 				: 'bg-surface-300 text-surface-700 dark:bg-surface-600 dark:text-surface-200'}"
 		>
-			{isAirborne ? 'Airborne' : 'On Ground'}
+			{isAirborne ? 'Airborne' : 'Ground'}
 		</span>
 	</div>
 
