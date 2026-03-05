@@ -95,6 +95,8 @@
 		}
 	}
 
+	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
 	async function searchReceivers(resetPage = true) {
 		loading = true;
 		error = '';
@@ -109,8 +111,9 @@
 
 			if (searchMode === 'query') {
 				if (!searchQuery.trim()) {
-					error = 'Please enter a search query';
+					// No query — load default receivers list
 					loading = false;
+					await loadRecentReceivers();
 					return;
 				}
 				queryParams.push(`query=${encodeURIComponent(searchQuery.trim())}`);
@@ -150,10 +153,11 @@
 		}
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
+	function handleSearchInput() {
+		if (searchTimeout) clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
 			searchReceivers();
-		}
+		}, 300);
 	}
 
 	async function useMyLocation() {
@@ -344,26 +348,14 @@
 
 		{#if searchMode === 'query'}
 			<!-- Query Search -->
-			<div class="space-y-3 rounded-lg border p-3">
+			<div class="rounded-lg border p-3">
 				<input
 					class="input"
-					placeholder="Search by callsign, description, country, contact, or email"
+					placeholder="Type to search by callsign, description, country, contact, or email"
 					bind:value={searchQuery}
-					onkeydown={handleKeydown}
-					oninput={() => (error = '')}
+					oninput={handleSearchInput}
+					autocomplete="off"
 				/>
-
-				<button
-					class="btn w-full preset-filled-primary-500"
-					onclick={() => searchReceivers()}
-					disabled={loading}
-				>
-					{#if loading}
-						Searching...
-					{:else}
-						Search
-					{/if}
-				</button>
 			</div>
 		{:else if searchMode === 'location'}
 			<!-- Location Search -->
