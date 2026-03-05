@@ -119,37 +119,6 @@ impl ClubJoinRequestsRepository {
         Ok(result.into())
     }
 
-    /// Approve a join request (sets status and reviewer)
-    pub async fn approve(
-        &self,
-        request_id: Uuid,
-        reviewed_by: Uuid,
-    ) -> Result<Option<ClubJoinRequest>> {
-        use crate::schema::club_join_requests;
-
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let updated: Option<ClubJoinRequestModel> = diesel::update(club_join_requests::table)
-                .filter(club_join_requests::id.eq(request_id))
-                .filter(club_join_requests::status.eq(STATUS_PENDING))
-                .set((
-                    club_join_requests::status.eq(STATUS_APPROVED),
-                    club_join_requests::reviewed_by.eq(reviewed_by),
-                    club_join_requests::reviewed_at.eq(diesel::dsl::now),
-                    club_join_requests::updated_at.eq(diesel::dsl::now),
-                ))
-                .get_result(&mut conn)
-                .optional()?;
-
-            Ok::<Option<ClubJoinRequestModel>, anyhow::Error>(updated)
-        })
-        .await??;
-
-        Ok(result.map(|m| m.into()))
-    }
-
     /// Reject a join request
     pub async fn reject(
         &self,
@@ -181,7 +150,8 @@ impl ClubJoinRequestsRepository {
         Ok(result.map(|m| m.into()))
     }
 
-    /// Approve a join request and update the user's club_id atomically
+    /// Approve a join request and update the user's club_id atomically.
+    /// Also checks that the user is not already in a different club (TOCTOU-safe).
     pub async fn approve_and_set_club(
         &self,
         request_id: Uuid,
@@ -209,6 +179,16 @@ impl ClubJoinRequestsRepository {
                         .optional()?;
 
                 if let Some(ref approved) = updated {
+                    // Check user's current club_id inside the transaction to prevent TOCTOU races
+                    let current_club_id: Option<uuid::Uuid> = users::table
+                        .filter(users::id.eq(approved.user_id))
+                        .select(users::club_id)
+                        .first(conn)?;
+
+                    if current_club_id.is_some_and(|cid| cid != approved.club_id) {
+                        return Err(diesel::result::Error::RollbackTransaction);
+                    }
+
                     // Update the user's club_id in the same transaction
                     diesel::update(users::table)
                         .filter(users::id.eq(approved.user_id))
@@ -217,9 +197,15 @@ impl ClubJoinRequestsRepository {
                 }
 
                 Ok::<Option<ClubJoinRequestModel>, diesel::result::Error>(updated)
-            })?;
+            });
 
-            Ok::<Option<ClubJoinRequestModel>, anyhow::Error>(updated)
+            match updated {
+                Ok(result) => Ok(result),
+                Err(diesel::result::Error::RollbackTransaction) => {
+                    Err(anyhow::anyhow!("User is already a member of another club"))
+                }
+                Err(e) => Err(anyhow::Error::from(e)),
+            }
         })
         .await??;
 

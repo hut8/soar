@@ -11,7 +11,6 @@ use crate::auth::AuthUser;
 use crate::club_join_requests::{NewClubJoinRequest, STATUS_PENDING};
 use crate::club_join_requests_repo::ClubJoinRequestsRepository;
 use crate::notifications;
-use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 use super::views::ClubJoinRequestView;
@@ -101,7 +100,7 @@ pub async fn create_join_request(
     }
 }
 
-/// Get all pending join requests for a club (club members and admins only)
+/// Get all pending join requests for a club (club admins and system admins only)
 pub async fn get_join_requests(
     auth_user: AuthUser,
     State(state): State<AppState>,
@@ -109,10 +108,11 @@ pub async fn get_join_requests(
 ) -> impl IntoResponse {
     let user = &auth_user.0;
 
-    if !user.is_admin && user.club_id != Some(club_id) {
+    let is_club_admin = user.is_club_admin && user.club_id == Some(club_id);
+    if !user.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to view join requests",
+            "You must be a club admin to view join requests",
         )
         .into_response();
     }
@@ -161,7 +161,7 @@ pub async fn get_my_join_request(
     }
 }
 
-/// Approve a join request (club members and admins only)
+/// Approve a join request (club admins and system admins only)
 pub async fn approve_join_request(
     auth_user: AuthUser,
     State(state): State<AppState>,
@@ -169,10 +169,12 @@ pub async fn approve_join_request(
 ) -> impl IntoResponse {
     let user = &auth_user.0;
 
-    if !user.is_admin && user.club_id != Some(club_id) {
+    // Only system admins or club admins of this club can approve
+    let is_club_admin = user.is_club_admin && user.club_id == Some(club_id);
+    if !user.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to approve join requests",
+            "You must be a club admin to approve join requests",
         )
         .into_response();
     }
@@ -180,12 +182,9 @@ pub async fn approve_join_request(
     let repo = ClubJoinRequestsRepository::new(state.pool.clone());
 
     // Verify the request belongs to this club
-    let request = match repo.get_by_id(request_id).await {
-        Ok(Some(r)) if r.club_id == club_id => r,
-        Ok(Some(_)) => {
-            return json_error(StatusCode::NOT_FOUND, "Join request not found").into_response();
-        }
-        Ok(None) => {
+    match repo.get_by_id(request_id).await {
+        Ok(Some(r)) if r.club_id == club_id => {}
+        Ok(Some(_) | None) => {
             return json_error(StatusCode::NOT_FOUND, "Join request not found").into_response();
         }
         Err(e) => {
@@ -198,55 +197,33 @@ pub async fn approve_join_request(
         }
     };
 
-    // Check if user is already in a different club
-    let users_repo = UsersRepository::new(state.pool.clone());
-    match users_repo.get_by_id(request.user_id).await {
-        Ok(Some(requesting_user)) => {
-            if requesting_user
-                .club_id
-                .is_some_and(|existing_club_id| existing_club_id != club_id)
-            {
+    // Approve the request and update user's club_id atomically
+    // The transaction also checks for conflicting club membership (TOCTOU-safe)
+    match repo.approve_and_set_club(request_id, user.id).await {
+        Ok(Some(r)) => Json(ClubJoinRequestView::from(r)).into_response(),
+        Ok(None) => {
+            json_error(StatusCode::CONFLICT, "Request is no longer pending").into_response()
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already a member of another club") {
                 return json_error(
                     StatusCode::CONFLICT,
                     "User is already a member of another club",
                 )
                 .into_response();
             }
-        }
-        Ok(None) => {
-            return json_error(StatusCode::NOT_FOUND, "Requesting user not found").into_response();
-        }
-        Err(e) => {
-            error!(error = %e, "Failed to check user club membership");
-            return json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to check user membership",
-            )
-            .into_response();
-        }
-    }
-
-    // Approve the request and update user's club_id atomically
-    let approved = match repo.approve_and_set_club(request_id, user.id).await {
-        Ok(Some(r)) => r,
-        Ok(None) => {
-            return json_error(StatusCode::CONFLICT, "Request is no longer pending")
-                .into_response();
-        }
-        Err(e) => {
             error!(error = %e, "Failed to approve join request");
-            return json_error(
+            json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to approve join request",
             )
-            .into_response();
+            .into_response()
         }
-    };
-
-    Json(ClubJoinRequestView::from(approved)).into_response()
+    }
 }
 
-/// Reject a join request (club members and admins only)
+/// Reject a join request (club admins and system admins only)
 pub async fn reject_join_request(
     auth_user: AuthUser,
     State(state): State<AppState>,
@@ -254,10 +231,12 @@ pub async fn reject_join_request(
 ) -> impl IntoResponse {
     let user = &auth_user.0;
 
-    if !user.is_admin && user.club_id != Some(club_id) {
+    // Only system admins or club admins of this club can reject
+    let is_club_admin = user.is_club_admin && user.club_id == Some(club_id);
+    if !user.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to reject join requests",
+            "You must be a club admin to reject join requests",
         )
         .into_response();
     }

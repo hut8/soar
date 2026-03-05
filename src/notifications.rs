@@ -10,6 +10,14 @@ use crate::schema::{clubs, users};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 #[derive(Debug, Clone)]
 pub struct SmtpConfig {
     pub smtp_server: String,
@@ -190,8 +198,8 @@ pub async fn send_join_request_notification(
     </div>
 </body>
 </html>"#,
-            requester = requester_name,
-            club = club_name,
+            requester = html_escape(&requester_name),
+            club = html_escape(&club_name),
         );
 
         for email_addr in &admin_emails {
