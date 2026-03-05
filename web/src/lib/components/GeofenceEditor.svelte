@@ -71,7 +71,7 @@
 	}
 
 	// Dynamically load Cesium script (must be loaded before using window.Cesium)
-	// Cached at module level so concurrent callers share a single in-flight load
+	// Cached per instance so concurrent callers share a single in-flight load
 	let cesiumPromise: Promise<void> | null = null;
 	function loadCesiumScript(): Promise<void> {
 		if (cesiumPromise) return cesiumPromise;
@@ -85,7 +85,11 @@
 			script.src = '/cesium/Cesium.js';
 			script.async = true;
 			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Failed to load Cesium.js'));
+			script.onerror = () => {
+				cesiumPromise = null;
+				script.remove();
+				reject(new Error('Failed to load Cesium.js'));
+			};
 			document.head.appendChild(script);
 		});
 		return cesiumPromise;
@@ -124,7 +128,8 @@
 
 			// Add imagery
 			const imageryProvider = await createWorldImageryAsync();
-			viewer!.imageryLayers.addImageryProvider(imageryProvider);
+			if (!viewer || viewer.isDestroyed()) return;
+			viewer.imageryLayers.addImageryProvider(imageryProvider);
 
 			// Initial preview
 			updatePreview();
