@@ -108,18 +108,20 @@
 	onMount(() => {
 		auth.initFromStorage();
 
-		// Refresh user data from backend to pick up changes (e.g. club membership)
+		// Refresh user data from backend to pick up changes (e.g. club membership).
+		// Wrapped in IIFE to await without making onMount async (it returns a cleanup fn).
 		const token = localStorage.getItem('auth_token');
 		if (token) {
-			authApi.getCurrentUser(token).then(
-				(user) => {
-					// Only update if the token hasn't changed (e.g. user hasn't logged out)
+			void (async () => {
+				try {
+					const user = await authApi.getCurrentUser(token);
 					if (localStorage.getItem('auth_token') === token) {
 						auth.updateUser(user);
 					}
-				},
-				() => {} // Silently ignore — stale localStorage is fine as fallback
-			);
+				} catch {
+					// Silently ignore — stale localStorage is fine as fallback
+				}
+			})();
 		}
 
 		theme.init();
