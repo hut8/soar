@@ -16,6 +16,7 @@ export type IconShape =
 	| 'helicopter'
 	| 'glider'
 	| 'balloon'
+	| 'paraglider'
 	| 'cessna'
 	| 'jet'
 	| 'airliner'
@@ -37,6 +38,10 @@ const ICON_SHAPES: Record<IconShape, { viewBox: string; path: string }> = {
 	balloon: {
 		viewBox: '-2 -2 13 17',
 		path: 'M3.56,12.75a.49.49,0,0,1-.46-.34L2.63,11a.51.51,0,0,1,.07-.44l.1-.1-2-3.68a.48.48,0,0,1-.05-.17,4.39,4.39,0,0,1-.48-2A4.29,4.29,0,0,1,4.5.25,4.29,4.29,0,0,1,8.75,4.58a4.39,4.39,0,0,1-.48,2,.45.45,0,0,1-.05.17l-2,3.68a.44.44,0,0,1,.1.1.51.51,0,0,1,.07.45L5.9,12.41a.49.49,0,0,1-.46.34Zm1.6-2.43L6.1,8.59A4.22,4.22,0,0,1,5,8.88v1.44ZM4,10.32V8.88A4.22,4.22,0,0,1,2.9,8.59l.94,1.73Z'
+	},
+	paraglider: {
+		viewBox: '0 0 32 32',
+		path: 'M4 8c0-4 6-6 12-6s12 2 12 6c0 2-1.5 3.5-3 4.5L21 14l-1.5 1-2 8.5h-3L12.5 15 11 14 7 12.5C5.5 11.5 4 10 4 8ZM14.5 24.5h3v3.5l-1.5 2-1.5-2Z'
 	},
 	cessna: {
 		viewBox: '0 -1 32 31',
@@ -63,6 +68,7 @@ const ALL_SHAPES: IconShape[] = [
 	'helicopter',
 	'glider',
 	'balloon',
+	'paraglider',
 	'cessna',
 	'jet',
 	'airliner',
@@ -94,11 +100,11 @@ export function getIconShapeForCategory(
 		case 'HangGlider':
 			return 'glider';
 
-		// Paragliders/parachutes use balloon (similar round canopy shape)
+		// Paragliders/parachutes
 		case 'Paraglider':
 		case 'PoweredParachute':
 		case 'SkydiverParachute':
-			return 'balloon';
+			return 'paraglider';
 
 		// Rotorcraft
 		case 'Helicopter':

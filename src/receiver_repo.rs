@@ -522,7 +522,8 @@ impl ReceiverRepository {
             let receiver_models = receivers::table
                 .filter(receivers::latitude.is_not_null())
                 .filter(receivers::longitude.is_not_null())
-                .order(receivers::callsign.asc())
+                .order(receivers::latest_packet_at.desc().nulls_last())
+                .then_order_by(receivers::callsign.asc())
                 .limit(per_page)
                 .offset(offset)
                 .select(ReceiverModel::as_select())
