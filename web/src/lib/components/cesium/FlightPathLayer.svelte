@@ -7,7 +7,7 @@
 		createTakeoffMarker,
 		createLandingMarker
 	} from '$lib/cesium/entities';
-	import type { Flight, Fix, DataListResponse } from '$lib/types';
+	import type { Flight, Fix, DataResponse, DataListResponse } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'cesium', 'FlightPathLayer']);
@@ -33,16 +33,12 @@
 	async function loadFlightPath(flightId: string): Promise<void> {
 		try {
 			// Fetch flight info and fixes in parallel
-			interface FlightResponse {
-				flight: Flight;
-			}
-
 			const [flightResponse, fixesResponse] = await Promise.all([
-				serverCall<FlightResponse>(`/flights/${flightId}`),
+				serverCall<DataResponse<Flight>>(`/flights/${flightId}`),
 				serverCall<DataListResponse<Fix>>(`/flights/${flightId}/fixes`)
 			]);
 
-			const flight = flightResponse.flight;
+			const flight = flightResponse.data;
 			const fixes = fixesResponse.data || [];
 
 			// Store flight data

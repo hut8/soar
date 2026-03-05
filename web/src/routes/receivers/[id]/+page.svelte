@@ -36,74 +36,21 @@
 		Fix,
 		PaginatedDataResponse,
 		DataResponse,
-		RawMessageResponse
+		RawMessageResponse,
+		ReceiverStatusView,
+		RawMessageView,
+		AircraftFixCount,
+		ReceiverAggregateStatsResponse,
+		ReceiverStatisticsResponse
 	} from '$lib/types';
 	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	dayjs.extend(relativeTime);
 
-	interface ReceiverStatus {
-		id: string;
-		receivedAt: string;
-		version: string | null;
-		platform: string | null;
-		cpuLoad: number | string | null;
-		cpuTemperature: number | string | null;
-		ramFree: number | string | null;
-		ramTotal: number | string | null;
-		ntpOffset: number | string | null;
-		ntpCorrection: number | string | null;
-		voltage: number | string | null;
-		amperage: number | string | null;
-		visibleSenders: number | null;
-		latency: number | string | null;
-		senders: number | null;
-		rfCorrectionManual: number | null;
-		rfCorrectionAutomatic: number | string | null;
-		noise: number | string | null;
-		sendersSignalQuality: number | string | null;
-		sendersMessages: number | null;
-		goodSendersSignalQuality: number | string | null;
-		goodSenders: number | null;
-		goodAndBadSenders: number | null;
-		geoidOffset: number | null;
-		name: string | null;
-		demodulationSnrDb: number | string | null;
-		ognrPilotawareVersion: string | null;
-		unparsedData: string | null;
-		lag: number | null;
-		rawData: string;
-	}
-
-	interface RawMessage {
-		id: string;
-		rawMessage: string;
-		receivedAt: string;
-		receiverId: string;
-		unparsed: string | null;
-	}
-
-	interface AprsTypeCount {
-		aprsType: string;
-		count: number;
-	}
-
-	interface AircraftFixCount {
-		aircraftId: string;
-		count: number;
-		aircraft?: Aircraft | null; // Aircraft details fetched separately
-	}
-
-	interface ReceiverStatistics {
-		averageUpdateIntervalSeconds: number | null;
-		totalStatusCount: number;
-		daysIncluded: number | null;
-	}
-
-	interface AggregateStatsResponse {
-		fixCountsByAprsType: AprsTypeCount[];
-		fixCountsByAircraft: AircraftFixCount[];
+	// Extends AircraftFixCount with fetched aircraft details
+	interface AircraftFixCountWithDetails extends AircraftFixCount {
+		aircraft?: Aircraft | null;
 	}
 
 	// Extends Fix with aircraft data
@@ -117,10 +64,10 @@
 
 	let receiver = $state<Receiver | null>(null);
 	let fixes = $state<FixWithAircraft[] | null>(null);
-	let statuses = $state<ReceiverStatus[]>([]);
-	let rawMessages = $state<RawMessage[] | null>(null);
-	let statistics = $state<ReceiverStatistics | null>(null);
-	let aggregateStats = $state<AggregateStatsResponse | null>(null);
+	let statuses = $state<ReceiverStatusView[]>([]);
+	let rawMessages = $state<RawMessageView[] | null>(null);
+	let statistics = $state<ReceiverStatisticsResponse | null>(null);
+	let aggregateStats = $state<ReceiverAggregateStatsResponse | null>(null);
 	let aircraftMap = $state<Record<string, Aircraft>>({});
 	let loading = $state(true);
 	let loadingFixes = $state(false);
@@ -452,7 +399,7 @@
 		statusesError = '';
 
 		try {
-			const response = await serverCall<PaginatedDataResponse<ReceiverStatus>>(
+			const response = await serverCall<PaginatedDataResponse<ReceiverStatusView>>(
 				`/receivers/${receiverId}/statuses?page=${statusesPage}&per_page=100`
 			);
 			statuses = response.data || [];
@@ -471,7 +418,9 @@
 		statisticsError = '';
 
 		try {
-			const response = await serverCall<ReceiverStatistics>(`/receivers/${receiverId}/statistics`);
+			const response = await serverCall<ReceiverStatisticsResponse>(
+				`/receivers/${receiverId}/statistics`
+			);
 			statistics = response;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -487,15 +436,16 @@
 		aggregateStatsError = '';
 
 		try {
-			const response = await serverCall<AggregateStatsResponse>(
+			const response = await serverCall<ReceiverAggregateStatsResponse>(
 				`/receivers/${receiverId}/aggregate-stats`
 			);
 			aggregateStats = response;
 
 			// Fetch aircraft details for each aircraft
 			if (aggregateStats && aggregateStats.fixCountsByAircraft.length > 0) {
+				const counts = aggregateStats.fixCountsByAircraft as AircraftFixCountWithDetails[];
 				await Promise.all(
-					aggregateStats.fixCountsByAircraft.map(async (aircraftCount) => {
+					counts.map(async (aircraftCount) => {
 						try {
 							const response = await serverCall<DataResponse<Aircraft>>(
 								`/aircraft/${aircraftCount.aircraftId}`
@@ -529,7 +479,7 @@
 		rawMessagesError = '';
 
 		try {
-			const response = await serverCall<PaginatedDataResponse<RawMessage>>(
+			const response = await serverCall<PaginatedDataResponse<RawMessageView>>(
 				`/receivers/${receiverId}/raw-messages?page=${rawMessagesPage}&per_page=100`
 			);
 			rawMessages = response.data || [];
@@ -1420,7 +1370,9 @@
 														</tr>
 													</thead>
 													<tbody>
-														{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
+														{#each aggregateStats.fixCountsByAircraft as aircraftCount_raw (aircraftCount_raw.aircraftId)}
+															{@const aircraftCount =
+																aircraftCount_raw as AircraftFixCountWithDetails}
 															<tr>
 																<td>
 																	<div class="flex items-center gap-2">
@@ -1454,7 +1406,8 @@
 
 										<!-- Mobile: Cards -->
 										<div class="space-y-3 md:hidden">
-											{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
+											{#each aggregateStats.fixCountsByAircraft as aircraftCount_raw (aircraftCount_raw.aircraftId)}
+												{@const aircraftCount = aircraftCount_raw as AircraftFixCountWithDetails}
 												<div class="card p-4">
 													<div class="flex items-start justify-between gap-3">
 														<div class="min-w-0 flex-1">
@@ -1924,7 +1877,9 @@
 																	</tr>
 																</thead>
 																<tbody>
-																	{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
+																	{#each aggregateStats.fixCountsByAircraft as aircraftCount_raw (aircraftCount_raw.aircraftId)}
+																		{@const aircraftCount =
+																			aircraftCount_raw as AircraftFixCountWithDetails}
 																		<tr>
 																			<td>
 																				{#if aircraftCount.aircraft}
@@ -1953,7 +1908,9 @@
 
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
-														{#each aggregateStats.fixCountsByAircraft as aircraftCount (aircraftCount.aircraftId)}
+														{#each aggregateStats.fixCountsByAircraft as aircraftCount_raw (aircraftCount_raw.aircraftId)}
+															{@const aircraftCount =
+																aircraftCount_raw as AircraftFixCountWithDetails}
 															<div class="card p-4">
 																<div class="flex items-center justify-between gap-4">
 																	<div class="font-medium">

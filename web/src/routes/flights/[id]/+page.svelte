@@ -28,7 +28,15 @@
 		Globe
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight, Receiver, DataResponse, DataListResponse } from '$lib/types';
+	import type {
+		Flight,
+		Receiver,
+		DataResponse,
+		DataListResponse,
+		FlightGap,
+		AircraftImage,
+		AircraftImageCollection
+	} from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import durationPlugin from 'dayjs/plugin/duration';
@@ -63,17 +71,6 @@
 	let isLoadingFixes = $state(true);
 
 	// Aircraft images state
-	interface AircraftImage {
-		source: 'airport_data' | 'planespotters';
-		pageUrl: string;
-		thumbnailUrl: string;
-		imageUrl?: string;
-		photographer?: string;
-	}
-	interface AircraftImageCollection {
-		images: AircraftImage[];
-		lastFetched: Record<string, string>;
-	}
 	let aircraftImages = $state<AircraftImage[]>([]);
 	let isLoadingImages = $state(false);
 
@@ -95,21 +92,6 @@
 			isLoadingFixes = false;
 		});
 	});
-
-	interface FlightGap {
-		gapStart: string;
-		gapEnd: string;
-		durationSeconds: number;
-		distanceMeters: number;
-		callsignBefore: string | null;
-		callsignAfter: string | null;
-		squawkBefore: string | null;
-		squawkAfter: string | null;
-		climbRateBefore: number | null;
-		climbRateAfter: number | null;
-		avgClimbRate10Before: number | null;
-		avgClimbRate10After: number | null;
-	}
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<maplibregl.Map>();

@@ -56,15 +56,18 @@ impl FlightsRepository {
     }
 
     /// Look up an existing active flight for the given aircraft.
-    /// An "active" flight has no landing_time and no timed_out_at.
+    /// An "active" flight has no landing_time and no timed_out_at, and its last fix
+    /// was received within `max_age` of the current time.
     /// Uses the partial unique index idx_flights_one_active_per_aircraft for fast lookup.
     pub async fn get_active_flight_for_aircraft(
         &self,
         aircraft_id_param: Uuid,
+        max_age: chrono::Duration,
     ) -> Result<Option<(Uuid, Option<String>)>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
+        let cutoff = chrono::Utc::now() - max_age;
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -74,7 +77,8 @@ impl FlightsRepository {
                     aircraft_id
                         .eq(aircraft_id_param)
                         .and(landing_time.is_null())
-                        .and(timed_out_at.is_null()),
+                        .and(timed_out_at.is_null())
+                        .and(last_fix_at.ge(cutoff)),
                 )
                 .select((id, callsign))
                 .first::<(Uuid, Option<String>)>(&mut conn)

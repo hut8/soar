@@ -41,6 +41,27 @@ import type { StripeOnboardingResponse } from './generated/StripeOnboardingRespo
 import type { StripeConnectStatusView } from './generated/StripeConnectStatusView';
 import type { StripeDashboardLinkResponse } from './generated/StripeDashboardLinkResponse';
 
+// Import auto-generated auth types from Rust
+import type { LoginResponse } from './generated/LoginResponse';
+
+// Import auto-generated flight gap type from Rust
+import type { FlightGap } from './generated/FlightGap';
+
+// Import auto-generated aircraft image types from Rust
+import type { AircraftImage } from './generated/AircraftImage';
+import type { AircraftImageCollection } from './generated/AircraftImageCollection';
+import type { AircraftImageSource } from './generated/AircraftImageSource';
+
+// Import auto-generated receiver status and raw message view types from Rust
+import type { ReceiverStatusView } from './generated/ReceiverStatusView';
+import type { RawMessageView } from './generated/RawMessageView';
+
+// Import auto-generated receiver aggregate stats types from Rust
+import type { AprsTypeCount } from './generated/AprsTypeCount';
+import type { AircraftFixCount } from './generated/AircraftFixCount';
+import type { ReceiverAggregateStatsResponse } from './generated/ReceiverAggregateStatsResponse';
+import type { ReceiverStatisticsResponse } from './generated/ReceiverStatisticsResponse';
+
 // Import auto-generated geofence types from Rust
 import type { Geofence } from './generated/Geofence';
 import type { GeofenceLayer } from './generated/GeofenceLayer';
@@ -100,7 +121,22 @@ export type {
 	StripeOnboardingResponse,
 	StripeConnectStatusView,
 	StripeDashboardLinkResponse,
-	ClubJoinRequestView
+	ClubJoinRequestView,
+	// Auth types
+	LoginResponse,
+	// Flight gap type
+	FlightGap,
+	// Aircraft image types
+	AircraftImage,
+	AircraftImageCollection,
+	AircraftImageSource,
+	// Receiver types
+	ReceiverStatusView,
+	RawMessageView,
+	AprsTypeCount,
+	AircraftFixCount,
+	ReceiverAggregateStatsResponse,
+	ReceiverStatisticsResponse
 };
 
 // Type aliases for backward compatibility

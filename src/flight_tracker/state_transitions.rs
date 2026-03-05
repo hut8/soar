@@ -257,8 +257,26 @@ pub(crate) async fn process_state_transition(
                     if let Some(prev_fix_time) = state.previous_fix_timestamp() {
                         let gap_seconds = (fix.received_at - prev_fix_time).num_seconds();
 
-                        // Only check if gap is significant (>30 minutes)
-                        if gap_seconds > 1800 {
+                        // Absolute maximum gap: no single flight can have a 2-hour gap
+                        // regardless of speed or distance. This catches edge cases where
+                        // the distance check alone might pass (e.g., aircraft flew far
+                        // enough between two separate operations) and cases where speed
+                        // was < 25 knots (previously had no gap check at all).
+                        const MAX_GAP_SECONDS: i64 = 7200; // 2 hours
+
+                        if gap_seconds > MAX_GAP_SECONDS {
+                            info!(
+                                "Ending flight {}: absolute gap limit exceeded ({:.1}h > 2h)",
+                                flight_id,
+                                gap_seconds as f64 / 3600.0
+                            );
+                            metrics::counter!(
+                                "flight_tracker.flight_ended.gap_absolute_limit_total"
+                            )
+                            .increment(1);
+                            true
+                        } else if gap_seconds > 1800 {
+                            // For gaps between 30 min and 2 hours, check distance vs expected
                             if let Some(prev_fix) = state.previous_fix() {
                                 let actual_distance_m = haversine_distance(
                                     prev_fix.lat,
@@ -269,7 +287,7 @@ pub(crate) async fn process_state_transition(
                                 let last_speed_knots =
                                     prev_fix.ground_speed_knots.unwrap_or(0.0) as f64;
 
-                                // If aircraft was flying (>25 knots)
+                                // If aircraft was flying (>25 knots), use distance heuristic
                                 if last_speed_knots > 25.0 {
                                     let last_speed_ms = last_speed_knots * 0.514444;
                                     let expected_distance_m = gap_seconds as f64 * last_speed_ms;
@@ -294,7 +312,19 @@ pub(crate) async fn process_state_transition(
                                         false
                                     }
                                 } else {
-                                    false
+                                    // Aircraft was slow (<25 knots) before gap — likely on
+                                    // the ground. A 30+ minute gap at low speed is suspicious.
+                                    info!(
+                                        "Ending flight {}: slow aircraft ({:.0} knots) with {:.0}min gap",
+                                        flight_id,
+                                        last_speed_knots,
+                                        gap_seconds as f64 / 60.0
+                                    );
+                                    metrics::counter!(
+                                        "flight_tracker.flight_ended.gap_slow_aircraft_total"
+                                    )
+                                    .increment(1);
+                                    true
                                 }
                             } else {
                                 false
@@ -448,9 +478,14 @@ pub(crate) async fn process_state_transition(
             // This handles cases where in-memory state got out of sync with the database
             // (e.g., set_preliminary_landing_time failed but current_flight_id was cleared,
             // or state was lost after a restart).
+            // Use a 30-minute max age for orphan adoption. This is generous enough to
+            // handle brief state desync (e.g., failed set_preliminary_landing_time) but
+            // prevents adopting stale flights after long outages or service restarts
+            // where the startup orphan cleanup missed them.
+            let orphan_max_age = chrono::Duration::minutes(30);
             match ctx
                 .flights_repo
-                .get_active_flight_for_aircraft(fix.aircraft_id)
+                .get_active_flight_for_aircraft(fix.aircraft_id, orphan_max_age)
                 .await
             {
                 Ok(Some((existing_flight_id, existing_callsign))) => {

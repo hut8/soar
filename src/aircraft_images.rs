@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
 /// Source of aircraft images
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "snake_case")]
 pub enum AircraftImageSource {
     /// Airport-Data.com API
@@ -40,7 +42,8 @@ impl AircraftImageSource {
 }
 
 /// A single aircraft image from an external source
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftImage {
     /// Source of the image
@@ -62,7 +65,8 @@ pub struct AircraftImage {
 }
 
 /// Collection of aircraft images with metadata about when they were fetched
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftImageCollection {
     /// List of images (may be empty if none found)
@@ -70,6 +74,7 @@ pub struct AircraftImageCollection {
 
     /// Timestamp of last fetch attempt per source
     /// Key is the source name as string
+    #[ts(type = "Record<string, string>")]
     pub last_fetched: HashMap<String, DateTime<Utc>>,
 }
 

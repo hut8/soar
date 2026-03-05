@@ -394,9 +394,12 @@ pub async fn get_receiver_statuses(
         .await
     {
         Ok((statuses, total_count)) => {
+            use crate::actions::views::ReceiverStatusView;
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+            let views: Vec<ReceiverStatusView> =
+                statuses.into_iter().map(ReceiverStatusView::from).collect();
             Json(PaginatedDataResponse {
-                data: statuses,
+                data: views,
                 metadata: PaginationMetadata {
                     page,
                     total_pages,
@@ -459,9 +462,12 @@ pub async fn get_receiver_raw_messages(
         .await
     {
         Ok((messages, total_count)) => {
+            use crate::actions::views::RawMessageView;
             let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+            let views: Vec<RawMessageView> =
+                messages.into_iter().map(RawMessageView::from).collect();
             Json(PaginatedDataResponse {
-                data: messages,
+                data: views,
                 metadata: PaginationMetadata {
                     page,
                     total_pages,
@@ -487,11 +493,14 @@ pub struct ReceiverStatisticsQuery {
     pub days: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiverStatisticsResponse {
     pub average_update_interval_seconds: Option<f64>,
+    #[ts(type = "number")]
     pub total_status_count: i64,
+    #[ts(type = "number | null")]
     pub days_included: Option<i64>,
 }
 
@@ -501,19 +510,23 @@ pub struct ReceiverRawMessagesQuery {
     pub per_page: Option<i64>,
 }
 
-#[derive(Debug, Serialize, QueryableByName)]
+#[derive(Debug, Serialize, QueryableByName, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AprsTypeCount {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     pub aprs_type: Option<String>,
     #[diesel(sql_type = diesel::sql_types::BigInt)]
+    #[ts(type = "number")]
     pub count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftFixCount {
     pub aircraft_id: uuid::Uuid,
+    #[ts(type = "number")]
     pub count: i64,
 }
 
@@ -642,7 +655,8 @@ pub async fn get_receiver_aggregate_stats(
     .into_response()
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiverAggregateStatsResponse {
     pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
