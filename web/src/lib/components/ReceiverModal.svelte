@@ -1,6 +1,18 @@
 <script lang="ts">
-	import { X, Radio, MapPin, Info, Clock, ExternalLink } from '@lucide/svelte';
+	import { X, Radio, MapPin, Info, Clock, ExternalLink, Loader2 } from '@lucide/svelte';
 	import type { Receiver } from '$lib/types';
+	import { serverCall } from '$lib/api/server';
+
+	interface ReceiverStatistics {
+		averageUpdateIntervalSeconds: number | null;
+		totalStatusCount: number;
+		daysIncluded: number | null;
+	}
+
+	interface AggregateStatsResponse {
+		fixCountsByAprsType: { aprsType: string; fixCount: number }[];
+		fixCountsByAircraft: { aircraftId: string; fixCount: number }[];
+	}
 
 	// Props
 	let { showModal = $bindable(), selectedReceiver = $bindable() } = $props<{
@@ -8,9 +20,55 @@
 		selectedReceiver: Receiver | null;
 	}>();
 
+	let statistics = $state<ReceiverStatistics | null>(null);
+	let aggregateStats = $state<AggregateStatsResponse | null>(null);
+	let loadingStats = $state(false);
+
+	let lastFetchedReceiverId = $state<string | null>(null);
+
+	$effect(() => {
+		if (showModal && selectedReceiver && selectedReceiver.id !== lastFetchedReceiverId) {
+			lastFetchedReceiverId = selectedReceiver.id;
+			fetchStats(selectedReceiver.id);
+		}
+		if (!showModal) {
+			lastFetchedReceiverId = null;
+			statistics = null;
+			aggregateStats = null;
+		}
+	});
+
+	async function fetchStats(receiverId: string) {
+		loadingStats = true;
+		try {
+			const [statsRes, aggRes] = await Promise.all([
+				serverCall<ReceiverStatistics>(`/receivers/${receiverId}/statistics`),
+				serverCall<AggregateStatsResponse>(`/receivers/${receiverId}/aggregate-stats`)
+			]);
+			statistics = statsRes;
+			aggregateStats = aggRes;
+		} catch {
+			// Silently fail - the section just won't show
+			statistics = null;
+			aggregateStats = null;
+		} finally {
+			loadingStats = false;
+		}
+	}
+
 	function closeModal() {
 		showModal = false;
 		selectedReceiver = null;
+	}
+
+	function formatDuration(seconds: number | null): string {
+		if (seconds === null || seconds === undefined) return '—';
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const secs = Math.floor(seconds % 60);
+		if (hours > 0) return `${hours}h ${minutes}m`;
+		if (minutes > 0) return `${minutes}m ${secs}s`;
+		return `${secs}s`;
 	}
 
 	function formatCoordinates(lat: number | null, lng: number | null): string {
@@ -198,6 +256,54 @@
 									<dd class="mt-1 text-sm">{formatDate(selectedReceiver.createdAt)}</dd>
 								</div>
 							</div>
+
+							{#if loadingStats}
+								<div class="flex items-center gap-2 text-sm text-surface-500">
+									<Loader2 size={14} class="animate-spin" />
+									Loading stats...
+								</div>
+							{:else if statistics || aggregateStats}
+								<div class="grid grid-cols-2 gap-4">
+									{#if statistics}
+										<div>
+											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+												Total Status Updates
+											</dt>
+											<dd class="mt-1 text-sm font-semibold">
+												{statistics.totalStatusCount.toLocaleString()}
+											</dd>
+										</div>
+										<div>
+											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+												Avg Update Interval
+											</dt>
+											<dd class="mt-1 text-sm font-semibold">
+												{formatDuration(statistics.averageUpdateIntervalSeconds)}
+											</dd>
+										</div>
+									{/if}
+									{#if aggregateStats}
+										<div>
+											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+												Aircraft Tracked (24h)
+											</dt>
+											<dd class="mt-1 text-sm font-semibold">
+												{aggregateStats.fixCountsByAircraft.length.toLocaleString()}
+											</dd>
+										</div>
+										<div>
+											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+												Total Fixes (24h)
+											</dt>
+											<dd class="mt-1 text-sm font-semibold">
+												{aggregateStats.fixCountsByAircraft
+													.reduce((sum, a) => sum + a.fixCount, 0)
+													.toLocaleString()}
+											</dd>
+										</div>
+									{/if}
+								</div>
+							{/if}
 						</div>
 					</div>
 

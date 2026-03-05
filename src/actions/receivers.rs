@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
+use crate::actions::views::ReceiverView;
 use crate::actions::{DataResponse, PaginatedDataResponse, PaginationMetadata, json_error};
 use crate::receiver_repo::ReceiverRepository;
 use crate::web::AppState;
@@ -82,8 +83,9 @@ pub async fn search_receivers(
                     ((total_count as f64) / (per_page as f64)).ceil() as i64
                 );
                 let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                let views: Vec<ReceiverView> = receivers.into_iter().map(Into::into).collect();
                 return Json(PaginatedDataResponse {
-                    data: receivers,
+                    data: views,
                     metadata: PaginationMetadata {
                         page,
                         total_pages,
@@ -141,8 +143,9 @@ pub async fn search_receivers(
                     ((total_count as f64) / (per_page as f64)).ceil() as i64
                 );
                 let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                let views: Vec<ReceiverView> = receivers.into_iter().map(Into::into).collect();
                 return Json(PaginatedDataResponse {
-                    data: receivers,
+                    data: views,
                     metadata: PaginationMetadata {
                         page,
                         total_pages,
@@ -217,8 +220,9 @@ pub async fn search_receivers(
                     Ok((receivers, total_count)) => {
                         info!("Found {} receivers in bounding box (page {} of {})", receivers.len(), page, ((total_count as f64) / (per_page as f64)).ceil() as i64);
                         let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                        let views: Vec<ReceiverView> = receivers.into_iter().map(Into::into).collect();
                         Json(PaginatedDataResponse {
-                            data: receivers,
+                            data: views,
                             metadata: PaginationMetadata {
                                 page,
                                 total_pages,
@@ -256,8 +260,9 @@ pub async fn search_receivers(
                     ((total_count as f64) / (per_page as f64)).ceil() as i64
                 );
                 let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                let views: Vec<ReceiverView> = receivers.into_iter().map(Into::into).collect();
                 Json(PaginatedDataResponse {
-                    data: receivers,
+                    data: views,
                     metadata: PaginationMetadata {
                         page,
                         total_pages,
@@ -291,8 +296,9 @@ pub async fn search_receivers(
                     ((total_count as f64) / (per_page as f64)).ceil() as i64
                 );
                 let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                let views: Vec<ReceiverView> = receivers.into_iter().map(Into::into).collect();
                 Json(PaginatedDataResponse {
-                    data: receivers,
+                    data: views,
                     metadata: PaginationMetadata {
                         page,
                         total_pages,
