@@ -147,10 +147,8 @@
 		return [...aircraft].sort((a, b) => {
 			const aFlight = flightsInProgress.find((f) => f.aircraftId === a.id);
 			const bFlight = flightsInProgress.find((f) => f.aircraftId === b.id);
-			const aAirborne =
-				(a.currentFix != null && (a.currentFix.groundSpeedKnots ?? 0) >= 25) || aFlight != null;
-			const bAirborne =
-				(b.currentFix != null && (b.currentFix.groundSpeedKnots ?? 0) >= 25) || bFlight != null;
+			const aAirborne = aFlight != null && aFlight.state === 'active';
+			const bAirborne = bFlight != null && bFlight.state === 'active';
 
 			if (aAirborne !== bAirborne) return aAirborne ? -1 : 1;
 
