@@ -65,7 +65,7 @@ pub async fn search_receivers(
 
     // Extract pagination parameters
     let page = query.page.unwrap_or(1).max(1);
-    let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
+    let per_page = query.per_page.unwrap_or(100).clamp(1, 500);
 
     // Priority 1: General text query search
     if let Some(search_query) = query.query {
