@@ -33,7 +33,10 @@
 	let formError = $state('');
 
 	let clubId = $derived($page.params.id || '');
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isClubAdmin = $derived(
+		$auth.isAuthenticated &&
+			(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin)
+	);
 
 	onMount(async () => {
 		if (clubId) {
@@ -184,7 +187,7 @@
 					<h2 class="h3">{club.name}</h2>
 					<p class="text-sm opacity-75">Create and manage charges for club members</p>
 				</div>
-				{#if userBelongsToClub}
+				{#if isClubAdmin}
 					<button onclick={openAddModal} class="variant-filled-primary btn">
 						<Plus class="h-4 w-4" />
 						<span>Create Charge</span>

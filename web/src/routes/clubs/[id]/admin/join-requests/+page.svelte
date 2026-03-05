@@ -22,7 +22,10 @@
 	let rejectingId = $state<string | null>(null);
 
 	let clubId = $derived($page.params.id || '');
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isClubAdmin = $derived(
+		$auth.isAuthenticated &&
+			(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin)
+	);
 
 	onMount(async () => {
 		if (clubId) {
@@ -146,10 +149,10 @@
 		<div class="alert preset-filled-error-500">
 			<p>{error}</p>
 		</div>
-	{:else if !userBelongsToClub && !$auth.user?.isAdmin}
+	{:else if !isClubAdmin}
 		<div class="alert preset-filled-warning-500">
 			<p class="font-semibold">Access Restricted</p>
-			<p>You must be a member of this club to manage join requests.</p>
+			<p>You must be a club admin to manage join requests.</p>
 		</div>
 	{:else if requests.length === 0}
 		<div class="card p-8 text-center">
