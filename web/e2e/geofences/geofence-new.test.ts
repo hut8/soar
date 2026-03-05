@@ -39,7 +39,9 @@ test.describe('Geofence Pages', () => {
 		await authenticatedPage.waitForLoadState('networkidle');
 
 		// Should display the geofences heading
-		await expect(authenticatedPage.getByRole('heading', { name: /geofences/i })).toBeVisible();
+		await expect(
+			authenticatedPage.getByRole('heading', { level: 1, name: /geofences/i })
+		).toBeVisible();
 
 		// Page should not show an error
 		const bodyText = await authenticatedPage.textContent('body');
