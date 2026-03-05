@@ -277,19 +277,20 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
 
     // Pull FAA NASR airspace data (authoritative US airspace boundaries)
     info!("Pulling FAA NASR airspace data...");
-    match pull_faa_nasr_airspaces(&client, &temp_dir, diesel_pool.clone()).await {
-        Ok(_) => info!("FAA NASR airspace import completed successfully"),
+    let faa_import_ok = match pull_faa_nasr_airspaces(&client, &temp_dir, diesel_pool.clone()).await
+    {
+        Ok(_) => {
+            info!("FAA NASR airspace import completed successfully");
+            true
+        }
         Err(e) => {
             warn!("FAA NASR airspace import failed (non-fatal): {}", e);
+            false
         }
-    }
+    };
 
-    // Pull airspaces from OpenAIP (if API key is available)
-    // Skip US since FAA NASR data is authoritative
-    if env::var("OPENAIP_API_KEY").is_ok() {
-        info!("Pulling airspaces from OpenAIP (excluding US)...");
-
-        // Delete US OpenAIP airspaces since FAA NASR is authoritative
+    // Delete US OpenAIP airspaces after successful FAA NASR import
+    if faa_import_ok {
         let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
         match repo
             .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
@@ -305,15 +306,41 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
             }
             Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
         }
+    }
+
+    // Pull airspaces from OpenAIP (if API key is available)
+    if env::var("OPENAIP_API_KEY").is_ok() {
+        info!("Pulling airspaces from OpenAIP...");
 
         match super::pull_airspaces::handle_pull_airspaces(
-            diesel_pool,
+            diesel_pool.clone(),
             false, // full sync, not incremental
             None,  // global, not country-specific
         )
         .await
         {
-            Ok(_) => info!("Airspaces sync completed successfully"),
+            Ok(_) => {
+                info!("Airspaces sync completed successfully");
+                // Delete US OpenAIP airspaces that were re-imported during global sync,
+                // since FAA NASR data is authoritative for US airspace
+                if faa_import_ok {
+                    let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
+                    match repo
+                        .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
+                        .await
+                    {
+                        Ok(count) => {
+                            if count > 0 {
+                                info!(
+                                    "Deleted {} US OpenAIP airspaces (replaced by FAA NASR)",
+                                    count
+                                );
+                            }
+                        }
+                        Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
+                    }
+                }
+            }
             Err(e) => {
                 warn!("Airspaces sync failed (non-fatal): {}", e);
             }
@@ -416,6 +443,9 @@ async fn pull_faa_nasr_airspaces(
     );
 
     // Record the imported edition so we don't re-import the same data
+    if let Some(parent) = std::path::Path::new(&marker_path).parent() {
+        fs::create_dir_all(parent)?;
+    }
     fs::write(&marker_path, &subscription.edition_date)?;
     info!(
         edition = %subscription.edition_date,

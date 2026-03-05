@@ -225,13 +225,14 @@ impl AirspacesRepository {
 
     /// Delete all airspaces from a given source
     pub async fn delete_by_source(&self, source: AirspaceSource) -> Result<usize> {
+        use crate::schema::airspaces::dsl::{airspaces, source as source_col};
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            let count = diesel::sql_query("DELETE FROM airspaces WHERE source = $1")
-                .bind::<crate::schema::sql_types::AirspaceSource, _>(source)
-                .execute(&mut conn)?;
+            let count =
+                diesel::delete(airspaces.filter(source_col.eq(source))).execute(&mut conn)?;
             info!("Deleted {} airspaces with source {:?}", count, source);
             Ok(count)
         })
@@ -244,16 +245,21 @@ impl AirspacesRepository {
         source: AirspaceSource,
         country_code: &str,
     ) -> Result<usize> {
+        use crate::schema::airspaces::dsl::{
+            airspaces, country_code as country_code_col, source as source_col,
+        };
+
         let pool = self.pool.clone();
         let country = country_code.to_string();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            let count =
-                diesel::sql_query("DELETE FROM airspaces WHERE source = $1 AND country_code = $2")
-                    .bind::<crate::schema::sql_types::AirspaceSource, _>(source)
-                    .bind::<sql_types::Text, _>(&country)
-                    .execute(&mut conn)?;
+            let count = diesel::delete(
+                airspaces
+                    .filter(source_col.eq(source))
+                    .filter(country_code_col.eq(&country)),
+            )
+            .execute(&mut conn)?;
             info!(
                 "Deleted {} airspaces with source {:?} and country {}",
                 count, source, country
