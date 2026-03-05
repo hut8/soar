@@ -11,15 +11,22 @@ use crate::auth::AuthUser;
 use crate::club_join_requests::{NewClubJoinRequest, STATUS_PENDING};
 use crate::club_join_requests_repo::ClubJoinRequestsRepository;
 use crate::notifications;
+use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
-use super::views::ClubJoinRequestView;
+use super::views::{ClubJoinRequestView, UserView};
 use super::{DataListResponse, json_error};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateJoinRequestBody {
     pub message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetClubAdminBody {
+    pub is_club_admin: bool,
 }
 
 /// Create a join request for the current user to join a club
@@ -315,6 +322,70 @@ pub async fn cancel_join_request(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to cancel join request",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Set or remove club admin status for a club member.
+/// Only club admins of the same club or system admins can do this.
+pub async fn set_club_admin(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path((club_id, user_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<SetClubAdminBody>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Only system admins or club admins of this club can change admin status
+    let is_club_admin = user.is_club_admin && user.club_id == Some(club_id);
+    if !user.is_admin && !is_club_admin {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a club admin to change admin status",
+        )
+        .into_response();
+    }
+
+    let users_repo = UsersRepository::new(state.pool.clone());
+
+    // Verify the target user is a member of this club
+    let target_user = match users_repo.get_by_id(user_id).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "User not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to fetch user");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user")
+                .into_response();
+        }
+    };
+
+    if target_user.club_id != Some(club_id) {
+        return json_error(StatusCode::BAD_REQUEST, "User is not a member of this club")
+            .into_response();
+    }
+
+    let update_request = crate::users::UpdateUserRequest {
+        first_name: None,
+        last_name: None,
+        email: None,
+        is_admin: None,
+        is_club_admin: Some(payload.is_club_admin),
+        club_id: None,
+        email_verified: None,
+    };
+
+    match users_repo.update_user(user_id, &update_request).await {
+        Ok(Some(updated)) => Json(UserView::from(updated)).into_response(),
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to update club admin status");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update club admin status",
             )
             .into_response()
         }

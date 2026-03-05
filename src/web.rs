@@ -699,6 +699,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             delete(actions::club_join_requests::cancel_join_request),
         )
         .route(
+            "/clubs/{id}/members/{user_id}/admin",
+            put(actions::club_join_requests::set_club_admin),
+        )
+        .route(
             "/coverage/hexes",
             get(actions::coverage::get_coverage_hexes),
         )
