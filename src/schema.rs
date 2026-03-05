@@ -22,6 +22,10 @@ pub mod sql_types {
     pub struct AirspaceClass;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "airspace_source"))]
+    pub struct AirspaceSource;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "airspace_type"))]
     pub struct AirspaceType;
 
@@ -359,12 +363,13 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
     use super::sql_types::AirspaceClass;
+    use super::sql_types::AirspaceSource;
     use super::sql_types::AirspaceType;
     use super::sql_types::AltitudeReference;
 
     airspaces (id) {
         id -> Uuid,
-        openaip_id -> Text,
+        openaip_id -> Nullable<Text>,
         name -> Text,
         airspace_class -> Nullable<AirspaceClass>,
         airspace_type -> AirspaceType,
@@ -383,6 +388,8 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         openaip_updated_at -> Nullable<Timestamptz>,
+        source -> AirspaceSource,
+        source_id -> Text,
     }
 }
 

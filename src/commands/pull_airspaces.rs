@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use tracing::{error, info};
 
-use soar::airspace::NewAirspace;
+use soar::airspace::{AirspaceSource, NewAirspace};
 use soar::airspaces_repo::AirspacesRepository;
 use soar::openaip_client::{
     OpenAipClient, map_airspace_type, map_altitude_reference, map_altitude_unit, map_icao_class,
@@ -299,8 +299,9 @@ fn convert_airspaces(
             let (lower_value, lower_unit, lower_ref) = convert_altitude_limit(&oa.lower_limit);
             let (upper_value, upper_unit, upper_ref) = convert_altitude_limit(&oa.upper_limit);
 
+            let source_id = oa.id.clone();
             let airspace = NewAirspace {
-                openaip_id: oa.id,
+                openaip_id: Some(oa.id),
                 name: oa.name,
                 airspace_class: map_icao_class(oa.icao_class),
                 airspace_type: map_airspace_type(oa.airspace_type),
@@ -314,6 +315,8 @@ fn convert_airspaces(
                 remarks: oa.remarks,
                 activity_type: oa.activity.map(|a| a.to_string()),
                 openaip_updated_at: oa.updated_at,
+                source: AirspaceSource::OpenAip,
+                source_id,
             };
 
             Ok((airspace, oa.geometry))

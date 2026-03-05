@@ -96,6 +96,9 @@
 	// Loading states
 	let mapLoading = $state(true);
 	let aircraftLoading = $state(false);
+	let showAircraftLoading = $state(false);
+	let aircraftLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+	let aircraftFetchId = 0; // monotonic counter to discard stale responses
 
 	// Debounce timers
 	let viewportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -287,7 +290,8 @@
 				timestamp: fix.receivedAt,
 				aircraftModel: aircraft.aircraftModel || '',
 				aircraftCategory: aircraft.aircraftCategory || null,
-				iconName: getAircraftIconName(shape)
+				iconName: getAircraftIconName(shape),
+				climbFpm: fix.climbFpm
 			}
 		};
 	}
@@ -468,6 +472,41 @@
 			}
 		});
 
+		// Add climb/descent indicators (arrows next to aircraft)
+		map.addLayer({
+			id: 'aircraft-climb-indicators',
+			type: 'symbol',
+			source: 'aircraft',
+			minzoom: 8,
+			layout: {
+				'text-field': [
+					'case',
+					['>', ['get', 'climbFpm'], 200],
+					'▲',
+					['<', ['get', 'climbFpm'], -200],
+					'▼',
+					''
+				],
+				'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+				'text-size': 14,
+				'text-offset': [1.2, 0],
+				'text-anchor': 'left',
+				'text-allow-overlap': true
+			},
+			paint: {
+				'text-color': [
+					'case',
+					['>', ['get', 'climbFpm'], 200],
+					'#22c55e',
+					['<', ['get', 'climbFpm'], -200],
+					'#ef4444',
+					'#ffffff'
+				],
+				'text-halo-color': 'rgba(0, 0, 0, 0.8)',
+				'text-halo-width': 1.5
+			}
+		});
+
 		// Add click handler for aircraft markers
 		map.on('click', 'aircraft-markers', async (e) => {
 			if (!e.features || e.features.length === 0) return;
@@ -565,7 +604,13 @@
 	async function fetchAircraftInViewport() {
 		if (!map) return;
 
+		const thisFetchId = ++aircraftFetchId;
+
 		aircraftLoading = true;
+		if (aircraftLoadingTimer) clearTimeout(aircraftLoadingTimer);
+		aircraftLoadingTimer = setTimeout(() => {
+			if (aircraftLoading) showAircraftLoading = true;
+		}, 1000);
 
 		try {
 			const bounds = map.getBounds();
@@ -582,6 +627,9 @@
 			const params = new URLSearchParams(paramEntries);
 
 			const response = await serverCall<AircraftSearchResponse>(`/aircraft?${params.toString()}`);
+
+			// Discard stale response if a newer fetch was started
+			if (thisFetchId !== aircraftFetchId) return;
 
 			logger.debug('[AIRCRAFT] Fetched {total} items from API (clustered: {clustered})', {
 				total: response.items.length,
@@ -634,10 +682,20 @@
 			updateAircraftSource();
 			updateClusterSource();
 		} catch (err) {
+			// Ignore errors from superseded requests
+			if (thisFetchId !== aircraftFetchId) return;
 			logger.error('Failed to fetch aircraft: {error}', { error: err });
 			toaster.error({ title: 'Failed to load aircraft' });
 		} finally {
-			aircraftLoading = false;
+			// Only update loading state if this is still the latest request
+			if (thisFetchId === aircraftFetchId) {
+				aircraftLoading = false;
+				if (aircraftLoadingTimer) {
+					clearTimeout(aircraftLoadingTimer);
+					aircraftLoadingTimer = null;
+				}
+				showAircraftLoading = false;
+			}
 		}
 	}
 
@@ -957,6 +1015,9 @@
 			if (areaSubscriptionDebounceTimer) {
 				clearTimeout(areaSubscriptionDebounceTimer);
 			}
+			if (aircraftLoadingTimer) {
+				clearTimeout(aircraftLoadingTimer);
+			}
 			fixFeed.stopLiveFixesFeed();
 			airspaceLayerManager.dispose();
 			airportLayerManager.dispose();
@@ -1115,8 +1176,8 @@
 			</div>
 		{/if}
 
-		<!-- Aircraft loading indicator -->
-		{#if aircraftLoading}
+		<!-- Aircraft loading indicator (delayed 1s to avoid flicker) -->
+		{#if showAircraftLoading}
 			<div
 				class="absolute right-4 bottom-4 z-10 flex items-center gap-2 rounded-lg bg-surface-800/90 px-3 py-2 text-sm text-white shadow-lg"
 			>
