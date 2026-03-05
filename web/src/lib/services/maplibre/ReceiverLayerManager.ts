@@ -14,7 +14,7 @@ import type { Receiver, DataListResponse } from '$lib/types';
 const logger = getLogger(['soar', 'maplibre', 'ReceiverLayerManager']);
 
 /** Maximum viewport area (in square miles) at which receivers are displayed */
-const MAX_VIEWPORT_AREA_FOR_RECEIVERS = 10000;
+const MAX_VIEWPORT_AREA_FOR_RECEIVERS = 50000;
 
 /** Debounce delay for receiver updates (ms) */
 const DEBOUNCE_MS = 100;
@@ -279,13 +279,13 @@ export class ReceiverLayerManager {
 			source: SOURCE_ID,
 			layout: {
 				'icon-image': ICON_IMAGE_ID,
-				'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.6, 10, 0.8, 14, 1.0],
+				'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.5, 8, 0.8, 12, 1.0, 14, 1.2],
 				'icon-allow-overlap': true
 			},
 			paint: {
-				'icon-color': '#f97316',
-				'icon-halo-color': 'rgba(255, 255, 255, 0.95)',
-				'icon-halo-width': 2
+				'icon-color': '#c2410c',
+				'icon-halo-color': 'rgba(0, 0, 0, 0.6)',
+				'icon-halo-width': 3
 			}
 		});
 
@@ -294,7 +294,7 @@ export class ReceiverLayerManager {
 			id: SYMBOL_LAYER_ID,
 			type: 'symbol',
 			source: SOURCE_ID,
-			minzoom: 9, // Only show labels when zoomed in
+			minzoom: 8, // Only show labels when zoomed in
 			layout: {
 				'text-field': ['get', 'callsign'],
 				'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
