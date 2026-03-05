@@ -235,7 +235,7 @@
 		error = '';
 
 		try {
-			// Call API with pagination to get recently updated receivers
+			// Call API with pagination to get recently active receivers
 			const response = await serverCall<PaginatedDataResponse<Receiver>>(
 				`/receivers?page=${currentPage}&per_page=${perPage}`
 			);
@@ -277,7 +277,7 @@
 	onMount(() => {
 		// Load Google Maps script when component mounts
 		loadGoogleMapsScript();
-		// Load recently updated receivers
+		// Load recently active receivers
 		loadRecentReceivers();
 	});
 </script>
@@ -441,7 +441,7 @@
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 				<h2 class="h3">
 					{#if !searchQuery && selectedLatitude === null}
-						Recently Updated Receivers
+						Recently Active Receivers
 					{:else}
 						Results
 					{/if}

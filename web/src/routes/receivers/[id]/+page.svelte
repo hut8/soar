@@ -676,7 +676,9 @@
 						{/if}
 					</div>
 					<div class="text-surface-500-400-token text-sm">
-						<div>Last heard: {formatRelativeTime(receiver.updatedAt)}</div>
+						<div>
+							Last heard: {formatRelativeTime(receiver.latestPacketAt ?? receiver.updatedAt)}
+						</div>
 						<div class="text-xs">Added: {formatDateTime(receiver.createdAt)}</div>
 					</div>
 				</div>
@@ -846,7 +848,7 @@
 			<div class="card p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Info class="h-6 w-6" />
-					Receiver Data (Last 24 Hours)
+					Receiver Data
 				</h2>
 
 				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
@@ -942,9 +944,7 @@
 									<p>{statusesError}</p>
 								</div>
 							{:else if statuses.length === 0}
-								<p class="text-surface-500-400-token p-4 text-center">
-									No status reports in the last 24 hours
-								</p>
+								<p class="text-surface-500-400-token p-4 text-center">No status reports found</p>
 							{:else}
 								<!-- Desktop: Table -->
 								<div class="hidden md:block">
@@ -1449,6 +1449,10 @@
 					<!-- Raw Messages Tab Content -->
 					<Tabs.Content value="raw-messages">
 						<div class="mt-4">
+							<p class="text-surface-500-400-token mb-4 text-sm">
+								Raw messages are only retained for 24 hours due to Open Glider Network data usage
+								restrictions.
+							</p>
 							{#if loadingRawMessages}
 								<div class="flex items-center justify-center space-x-4 p-8">
 									<Progress class="h-6 w-6" />
@@ -1459,9 +1463,7 @@
 									<p>{rawMessagesError}</p>
 								</div>
 							{:else if rawMessages !== null && rawMessages.length === 0}
-								<p class="text-surface-500-400-token p-4 text-center">
-									No raw messages received in the last 24 hours
-								</p>
+								<p class="text-surface-500-400-token p-4 text-center">No raw messages received</p>
 							{:else if rawMessages !== null}
 								<!-- Desktop: Table -->
 								<div class="hidden md:block">
@@ -1564,6 +1566,10 @@
 					<!-- Received Fixes Tab Content -->
 					<Tabs.Content value="received-fixes">
 						<div class="mt-4">
+							<p class="text-surface-500-400-token mb-4 text-sm">
+								Received fixes are only retained for 24 hours due to Open Glider Network data usage
+								restrictions.
+							</p>
 							{#if fixes !== null && fixes.length > 0}
 								<div class="mb-4 flex items-center justify-end">
 									<label class="flex cursor-pointer items-center gap-2">
@@ -1583,9 +1589,7 @@
 									<p>{fixesError}</p>
 								</div>
 							{:else if fixes !== null && fixes.length === 0}
-								<p class="text-surface-500-400-token p-4 text-center">
-									No fixes received in the last 24 hours
-								</p>
+								<p class="text-surface-500-400-token p-4 text-center">No fixes received</p>
 							{:else if fixes !== null}
 								<!-- Desktop: Table -->
 								<div class="hidden md:block">
@@ -1993,10 +1997,28 @@
 </div>
 
 <style>
-	/* Improve tab selection visibility, especially on mobile where tabs stack vertically */
+	/* Improve tab selection visibility */
 	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
 		background-color: rgb(var(--color-primary-500) / 0.15);
 		color: rgb(var(--color-primary-500));
 		font-weight: 600;
+	}
+
+	/* On mobile, tabs stack vertically so the underline indicator doesn't work well.
+	   Use a left border and stronger background to make the active tab obvious. */
+	@media (max-width: 639px) {
+		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+			background-color: rgb(var(--color-primary-500) / 0.2);
+			border-left: 3px solid rgb(var(--color-primary-500));
+		}
+
+		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger']) {
+			border-left: 3px solid transparent;
+		}
+
+		/* Hide the animated underline indicator on mobile since tabs are vertical */
+		.receiver-detail-page :global([data-scope='tabs'][data-part='indicator']) {
+			display: none;
+		}
 	}
 </style>
