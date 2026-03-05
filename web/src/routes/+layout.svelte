@@ -112,7 +112,12 @@
 		const token = localStorage.getItem('auth_token');
 		if (token) {
 			authApi.getCurrentUser(token).then(
-				(user) => auth.updateUser(user),
+				(user) => {
+					// Only update if the token hasn't changed (e.g. user hasn't logged out)
+					if (localStorage.getItem('auth_token') === token) {
+						auth.updateUser(user);
+					}
+				},
 				() => {} // Silently ignore — stale localStorage is fine as fallback
 			);
 		}

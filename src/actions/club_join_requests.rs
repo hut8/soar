@@ -76,45 +76,28 @@ pub async fn create_join_request(
         message: payload.message,
     };
 
-    // Check if the club has any members — if not, auto-approve and make the user an admin
-    let users_repo = UsersRepository::new(state.pool.clone());
-    let club_is_empty = match users_repo.get_by_club_id(club_id).await {
-        Ok(members) => members.is_empty(),
-        Err(e) => {
-            error!(error = %e, "Failed to check club membership");
-            false
-        }
-    };
-
     match repo.create(new_request).await {
         Ok(request) => {
-            if club_is_empty {
-                // Auto-approve: first member becomes club admin
-                match repo.approve_and_set_club(request.id, user.id).await {
-                    Ok(Some(approved)) => {
-                        // Make the user a club admin
-                        let update_request = crate::users::UpdateUserRequest {
-                            first_name: None,
-                            last_name: None,
-                            email: None,
-                            is_admin: None,
-                            is_club_admin: Some(true),
-                            club_id: None,
-                            email_verified: None,
-                        };
-                        if let Err(e) = users_repo.update_user(user.id, &update_request).await {
-                            error!(error = %e, "Failed to set club admin for first member");
-                        }
-                        return (
-                            StatusCode::CREATED,
-                            Json(ClubJoinRequestView::from(approved)),
-                        )
-                            .into_response();
-                    }
-                    Ok(None) | Err(_) => {
-                        error!("Failed to auto-approve first club member");
-                        // Fall through to return the pending request
-                    }
+            // Try to auto-approve if the club has no members (first member becomes admin).
+            // This is fully transactional — the emptiness check, approval, club_id update,
+            // and is_club_admin promotion all happen in a single DB transaction.
+            match repo
+                .auto_approve_first_member(request.id, user.id, club_id)
+                .await
+            {
+                Ok(Some(approved)) => {
+                    return (
+                        StatusCode::CREATED,
+                        Json(ClubJoinRequestView::from(approved)),
+                    )
+                        .into_response();
+                }
+                Ok(None) => {
+                    // Club already has members — continue with normal pending flow
+                }
+                Err(e) => {
+                    error!(error = %e, "Failed to auto-approve first club member");
+                    // Fall through to return the pending request
                 }
             }
 
