@@ -39,7 +39,7 @@
 	let club = $derived($clubStore.club);
 
 	onMount(async () => {
-		if (clubId) {
+		if (clubId && userBelongsToClub) {
 			await loadMembers();
 		}
 	});

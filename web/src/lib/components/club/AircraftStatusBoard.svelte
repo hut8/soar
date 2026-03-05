@@ -75,18 +75,24 @@
 
 	function cleanStaleAssignments() {
 		const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+		const keysToDelete: string[] = [];
+
 		for (let i = 0; i < localStorage.length; i++) {
 			const key = localStorage.key(i);
 			if (key?.startsWith('soar:ground-pilots:')) {
 				try {
 					const val = JSON.parse(localStorage.getItem(key) || '');
 					if (val.updatedAt && new Date(val.updatedAt).getTime() < cutoff) {
-						localStorage.removeItem(key);
+						keysToDelete.push(key);
 					}
 				} catch {
 					// Ignore malformed entries
 				}
 			}
+		}
+
+		for (const key of keysToDelete) {
+			localStorage.removeItem(key);
 		}
 	}
 
@@ -112,9 +118,9 @@
 					method: 'POST',
 					body: JSON.stringify({
 						pilot_id: assignment.pilotId,
-						isTowPilot: assignment.role === 'tow_pilot',
+						is_tow_pilot: assignment.role === 'tow_pilot',
 						is_student: assignment.role === 'student',
-						isInstructor: assignment.role === 'instructor'
+						is_instructor: assignment.role === 'instructor'
 					})
 				});
 			}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, setContext } from 'svelte';
+	import { setContext } from 'svelte';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import { Building, Plane, Info, ClipboardList, Users, ChevronDown, Shield } from '@lucide/svelte';
@@ -47,9 +47,10 @@
 		{ href: 'admin/stripe', label: 'Stripe' }
 	];
 
-	onMount(async () => {
+	$effect(() => {
 		if (clubId) {
-			await loadClub();
+			adminDropdownOpen = false;
+			loadClub();
 		}
 	});
 

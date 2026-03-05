@@ -87,9 +87,9 @@
 					method: 'POST',
 					body: JSON.stringify({
 						pilot_id: selectedPilotId,
-						isTowPilot: selectedRole === 'tow_pilot',
+						is_tow_pilot: selectedRole === 'tow_pilot',
 						is_student: selectedRole === 'student',
-						isInstructor: selectedRole === 'instructor'
+						is_instructor: selectedRole === 'instructor'
 					})
 				});
 				toaster.success({ title: `${pilot.firstName} ${pilot.lastName} assigned to flight` });
