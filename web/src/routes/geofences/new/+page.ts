@@ -5,7 +5,7 @@ import type { PageLoad } from './$types';
 // Disable SSR for this page
 export const ssr = false;
 
-export const load: PageLoad = async () => {
+export const load: PageLoad = async ({ url }) => {
 	if (browser) {
 		const token = localStorage.getItem('auth_token');
 		if (!token) {
@@ -13,5 +13,11 @@ export const load: PageLoad = async () => {
 		}
 	}
 
-	return {};
+	const airportIdParam = url.searchParams.get('airportId');
+	const clubId = url.searchParams.get('clubId');
+
+	return {
+		airportId: airportIdParam ? parseInt(airportIdParam, 10) : undefined,
+		clubId: clubId || undefined
+	};
 };

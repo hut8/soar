@@ -13,7 +13,8 @@
 		ExternalLink,
 		Image,
 		ClipboardList,
-		Users
+		Users,
+		Shield
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall, ServerError } from '$lib/api/server';
@@ -351,6 +352,15 @@
 							>
 								<UserCheck class="mr-2 h-4 w-4" />
 								Join Requests
+							</a>
+							<a
+								href={resolve(
+									`/geofences/new?clubId=${clubId}${club.homeBaseAirportId ? `&airportId=${club.homeBaseAirportId}` : ''}`
+								)}
+								class="btn preset-filled-secondary-500 btn-sm"
+							>
+								<Shield class="mr-2 h-4 w-4" />
+								Create Geofence
 							</a>
 						</div>
 					{/if}

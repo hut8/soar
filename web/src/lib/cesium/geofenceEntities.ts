@@ -5,6 +5,7 @@
 
 import {
 	Entity,
+	Cartesian2,
 	Cartesian3,
 	Color,
 	CylinderGraphics,
@@ -125,7 +126,8 @@ export function createGeofenceCenterEntity(geofence: Geofence): Entity {
 			color: Color.RED,
 			outlineColor: Color.WHITE,
 			outlineWidth: 2,
-			heightReference: HeightReference.CLAMP_TO_GROUND
+			heightReference: HeightReference.CLAMP_TO_GROUND,
+			disableDepthTestDistance: Number.POSITIVE_INFINITY
 		},
 		label: new LabelGraphics({
 			text: geofence.name,
@@ -135,8 +137,9 @@ export function createGeofenceCenterEntity(geofence: Geofence): Entity {
 			outlineWidth: 2,
 			style: 2, // FILL_AND_OUTLINE
 			verticalOrigin: VerticalOrigin.BOTTOM,
-			pixelOffset: new Cartesian3(0, -15, 0) as unknown as import('cesium').Cartesian2,
-			heightReference: HeightReference.CLAMP_TO_GROUND
+			pixelOffset: new Cartesian2(0, -15),
+			heightReference: HeightReference.CLAMP_TO_GROUND,
+			disableDepthTestDistance: Number.POSITIVE_INFINITY
 		}),
 		properties: {
 			geofenceId: geofence.id,
