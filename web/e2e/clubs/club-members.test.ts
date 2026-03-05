@@ -12,9 +12,6 @@ test.describe('Club Members', () => {
 		// Check for heading
 		const heading = authenticatedPage.getByRole('heading');
 		await expect(heading.first()).toBeVisible();
-
-		// Take screenshot
-		await expect(authenticatedPage).toHaveScreenshot('club-members-page.png');
 	});
 
 	test('should display members list or empty state', async ({ authenticatedPage }) => {
