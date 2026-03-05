@@ -98,6 +98,7 @@
 	let aircraftLoading = $state(false);
 	let showAircraftLoading = $state(false);
 	let aircraftLoadingTimer: ReturnType<typeof setTimeout> | null = null;
+	let aircraftFetchId = 0; // monotonic counter to discard stale responses
 
 	// Debounce timers
 	let viewportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -567,6 +568,8 @@
 	async function fetchAircraftInViewport() {
 		if (!map) return;
 
+		const thisFetchId = ++aircraftFetchId;
+
 		aircraftLoading = true;
 		if (aircraftLoadingTimer) clearTimeout(aircraftLoadingTimer);
 		aircraftLoadingTimer = setTimeout(() => {
@@ -588,6 +591,9 @@
 			const params = new URLSearchParams(paramEntries);
 
 			const response = await serverCall<AircraftSearchResponse>(`/aircraft?${params.toString()}`);
+
+			// Discard stale response if a newer fetch was started
+			if (thisFetchId !== aircraftFetchId) return;
 
 			logger.debug('[AIRCRAFT] Fetched {total} items from API (clustered: {clustered})', {
 				total: response.items.length,
@@ -640,15 +646,20 @@
 			updateAircraftSource();
 			updateClusterSource();
 		} catch (err) {
+			// Ignore errors from superseded requests
+			if (thisFetchId !== aircraftFetchId) return;
 			logger.error('Failed to fetch aircraft: {error}', { error: err });
 			toaster.error({ title: 'Failed to load aircraft' });
 		} finally {
-			aircraftLoading = false;
-			if (aircraftLoadingTimer) {
-				clearTimeout(aircraftLoadingTimer);
-				aircraftLoadingTimer = null;
+			// Only update loading state if this is still the latest request
+			if (thisFetchId === aircraftFetchId) {
+				aircraftLoading = false;
+				if (aircraftLoadingTimer) {
+					clearTimeout(aircraftLoadingTimer);
+					aircraftLoadingTimer = null;
+				}
+				showAircraftLoading = false;
 			}
-			showAircraftLoading = false;
 		}
 	}
 
