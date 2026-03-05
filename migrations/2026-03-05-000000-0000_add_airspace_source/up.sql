@@ -38,3 +38,11 @@ ALTER TABLE airspaces DROP CONSTRAINT airspaces_openaip_id_key;
 
 -- Make openaip_id nullable (FAA records won't have one)
 ALTER TABLE airspaces ALTER COLUMN openaip_id DROP NOT NULL;
+
+-- safety-assured:start
+-- Safe: airspaces table is small (~1,500 rows) and the SHARE lock during
+-- index creation will be brief. CONCURRENTLY is not used because diesel
+-- migration run does not support run_in_transaction = false.
+CREATE UNIQUE INDEX idx_airspaces_source_source_id ON airspaces (source, source_id);
+CREATE INDEX idx_airspaces_source ON airspaces (source);
+-- safety-assured:end

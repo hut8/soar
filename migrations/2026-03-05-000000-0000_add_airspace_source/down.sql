@@ -1,3 +1,7 @@
+-- Drop indexes
+DROP INDEX IF EXISTS idx_airspaces_source;
+DROP INDEX IF EXISTS idx_airspaces_source_source_id;
+
 -- Remove source tracking columns
 ALTER TABLE airspaces DROP COLUMN source_id;
 ALTER TABLE airspaces DROP COLUMN source;
