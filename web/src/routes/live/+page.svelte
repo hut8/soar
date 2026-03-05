@@ -96,6 +96,8 @@
 	// Loading states
 	let mapLoading = $state(true);
 	let aircraftLoading = $state(false);
+	let showAircraftLoading = $state(false);
+	let aircraftLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Debounce timers
 	let viewportDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -566,6 +568,10 @@
 		if (!map) return;
 
 		aircraftLoading = true;
+		if (aircraftLoadingTimer) clearTimeout(aircraftLoadingTimer);
+		aircraftLoadingTimer = setTimeout(() => {
+			if (aircraftLoading) showAircraftLoading = true;
+		}, 1000);
 
 		try {
 			const bounds = map.getBounds();
@@ -638,6 +644,11 @@
 			toaster.error({ title: 'Failed to load aircraft' });
 		} finally {
 			aircraftLoading = false;
+			if (aircraftLoadingTimer) {
+				clearTimeout(aircraftLoadingTimer);
+				aircraftLoadingTimer = null;
+			}
+			showAircraftLoading = false;
 		}
 	}
 
@@ -957,6 +968,9 @@
 			if (areaSubscriptionDebounceTimer) {
 				clearTimeout(areaSubscriptionDebounceTimer);
 			}
+			if (aircraftLoadingTimer) {
+				clearTimeout(aircraftLoadingTimer);
+			}
 			fixFeed.stopLiveFixesFeed();
 			airspaceLayerManager.dispose();
 			airportLayerManager.dispose();
@@ -1115,8 +1129,8 @@
 			</div>
 		{/if}
 
-		<!-- Aircraft loading indicator -->
-		{#if aircraftLoading}
+		<!-- Aircraft loading indicator (delayed 1s to avoid flicker) -->
+		{#if showAircraftLoading}
 			<div
 				class="absolute right-4 bottom-4 z-10 flex items-center gap-2 rounded-lg bg-surface-800/90 px-3 py-2 text-sm text-white shadow-lg"
 			>
