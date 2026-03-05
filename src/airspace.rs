@@ -6,6 +6,18 @@ use uuid::Uuid;
 
 use crate::schema::airspaces;
 
+/// Source of airspace data
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceSource")]
+pub enum AirspaceSource {
+    #[db_enum(rename = "openaip")]
+    #[serde(rename = "openaip")]
+    OpenAip,
+    #[db_enum(rename = "faa_nasr")]
+    #[serde(rename = "faa_nasr")]
+    FaaNasr,
+}
+
 /// ICAO Airspace Classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceClass")]
@@ -153,7 +165,7 @@ pub enum AltitudeReference {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AirspaceModel {
     pub id: Uuid,
-    pub openaip_id: String,
+    pub openaip_id: Option<String>,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,
@@ -171,12 +183,14 @@ pub struct AirspaceModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub openaip_updated_at: Option<DateTime<Utc>>,
+    pub source: AirspaceSource,
+    pub source_id: String,
 }
 
 /// Insertable airspace for upserts (geometry handled via raw SQL)
 #[derive(Debug, Clone)]
 pub struct NewAirspace {
-    pub openaip_id: String,
+    pub openaip_id: Option<String>,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,
@@ -190,6 +204,8 @@ pub struct NewAirspace {
     pub remarks: Option<String>,
     pub activity_type: Option<String>,
     pub openaip_updated_at: Option<DateTime<Utc>>,
+    pub source: AirspaceSource,
+    pub source_id: String,
 }
 
 /// GeoJSON Feature for API responses
@@ -205,7 +221,6 @@ pub struct AirspaceGeoJson {
 #[serde(rename_all = "camelCase")]
 pub struct AirspaceProperties {
     pub id: Uuid,
-    pub openaip_id: String,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,
@@ -214,6 +229,7 @@ pub struct AirspaceProperties {
     pub upper_limit: String,
     pub remarks: Option<String>,
     pub activity_type: Option<String>,
+    pub source: AirspaceSource,
 }
 
 impl AirspaceGeoJson {

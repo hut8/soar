@@ -4,7 +4,7 @@ use diesel::sql_types;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::airspace::{AirspaceGeoJson, AirspaceProperties, NewAirspace};
+use crate::airspace::{AirspaceGeoJson, AirspaceProperties, AirspaceSource, NewAirspace};
 use crate::web::PgPool;
 
 #[derive(Clone)]
@@ -42,15 +42,18 @@ impl AirspacesRepository {
                         openaip_id, name, airspace_class, airspace_type, country_code,
                         lower_value, lower_unit, lower_reference,
                         upper_value, upper_unit, upper_reference,
-                        remarks, activity_type, openaip_updated_at, geometry
+                        remarks, activity_type, openaip_updated_at, geometry,
+                        source, source_id
                     ) VALUES (
                         $1, $2, $3, $4, $5,
                         $6, $7, $8,
                         $9, $10, $11,
                         $12, $13, $14,
-                        ST_GeomFromGeoJSON($15)::geography
+                        ST_GeomFromGeoJSON($15)::geography,
+                        $16, $17
                     )
-                    ON CONFLICT (openaip_id) DO UPDATE SET
+                    ON CONFLICT (source, source_id) DO UPDATE SET
+                        openaip_id = EXCLUDED.openaip_id,
                         name = EXCLUDED.name,
                         airspace_class = EXCLUDED.airspace_class,
                         airspace_type = EXCLUDED.airspace_type,
@@ -68,7 +71,7 @@ impl AirspacesRepository {
                         updated_at = NOW()
                     "#,
                 )
-                .bind::<sql_types::Text, _>(&airspace.openaip_id)
+                .bind::<sql_types::Nullable<sql_types::Text>, _>(airspace.openaip_id.as_deref())
                 .bind::<sql_types::Text, _>(&airspace.name)
                 .bind::<sql_types::Nullable<crate::schema::sql_types::AirspaceClass>, _>(
                     airspace.airspace_class,
@@ -89,6 +92,8 @@ impl AirspacesRepository {
                 .bind::<sql_types::Nullable<sql_types::Text>, _>(airspace.activity_type.as_deref())
                 .bind::<sql_types::Nullable<sql_types::Timestamptz>, _>(airspace.openaip_updated_at)
                 .bind::<sql_types::Text, _>(&geojson_str)
+                .bind::<crate::schema::sql_types::AirspaceSource, _>(airspace.source)
+                .bind::<sql_types::Text, _>(&airspace.source_id)
                 .execute(&mut conn)?;
 
                 inserted += 1;
@@ -128,8 +133,6 @@ impl AirspacesRepository {
                 #[diesel(sql_type = sql_types::Uuid)]
                 id: Uuid,
                 #[diesel(sql_type = sql_types::Text)]
-                openaip_id: String,
-                #[diesel(sql_type = sql_types::Text)]
                 name: String,
                 #[diesel(sql_type = sql_types::Nullable<crate::schema::sql_types::AirspaceClass>)]
                 airspace_class: Option<crate::airspace::AirspaceClass>,
@@ -153,6 +156,8 @@ impl AirspacesRepository {
                 remarks: Option<String>,
                 #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
                 activity_type: Option<String>,
+                #[diesel(sql_type = crate::schema::sql_types::AirspaceSource)]
+                source: crate::airspace::AirspaceSource,
                 #[diesel(sql_type = sql_types::Text)]
                 geometry_geojson: String,
             }
@@ -160,10 +165,10 @@ impl AirspacesRepository {
             let results: Vec<AirspaceGeoJsonRow> = diesel::sql_query(
                 r#"
                 SELECT
-                    id, openaip_id, name, airspace_class, airspace_type, country_code,
+                    id, name, airspace_class, airspace_type, country_code,
                     lower_value, lower_unit, lower_reference,
                     upper_value, upper_unit, upper_reference,
-                    remarks, activity_type,
+                    remarks, activity_type, source,
                     ST_AsGeoJSON(geometry)::text as geometry_geojson
                 FROM airspaces
                 WHERE geometry_geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
@@ -191,7 +196,6 @@ impl AirspacesRepository {
                         geometry,
                         properties: AirspaceProperties {
                             id: row.id,
-                            openaip_id: row.openaip_id,
                             name: row.name,
                             airspace_class: row.airspace_class,
                             airspace_type: row.airspace_type,
@@ -208,12 +212,53 @@ impl AirspacesRepository {
                             ),
                             remarks: row.remarks,
                             activity_type: row.activity_type,
+                            source: row.source,
                         },
                     }
                 })
                 .collect();
 
             Ok(features)
+        })
+        .await?
+    }
+
+    /// Delete all airspaces from a given source
+    pub async fn delete_by_source(&self, source: AirspaceSource) -> Result<usize> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let count = diesel::sql_query("DELETE FROM airspaces WHERE source = $1")
+                .bind::<crate::schema::sql_types::AirspaceSource, _>(source)
+                .execute(&mut conn)?;
+            info!("Deleted {} airspaces with source {:?}", count, source);
+            Ok(count)
+        })
+        .await?
+    }
+
+    /// Delete airspaces from a given source and country
+    pub async fn delete_by_source_and_country(
+        &self,
+        source: AirspaceSource,
+        country_code: &str,
+    ) -> Result<usize> {
+        let pool = self.pool.clone();
+        let country = country_code.to_string();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let count =
+                diesel::sql_query("DELETE FROM airspaces WHERE source = $1 AND country_code = $2")
+                    .bind::<crate::schema::sql_types::AirspaceSource, _>(source)
+                    .bind::<sql_types::Text, _>(&country)
+                    .execute(&mut conn)?;
+            info!(
+                "Deleted {} airspaces with source {:?} and country {}",
+                count, source, country
+            );
+            Ok(count)
         })
         .await?
     }
