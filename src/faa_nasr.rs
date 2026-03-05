@@ -187,19 +187,38 @@ fn map_local_type_to_airspace_type(local_type: &str) -> AirspaceType {
     }
 }
 
-/// Convert a shapefile Shape to a GeoJSON MultiPolygon value
+/// Convert a shapefile Shape to a GeoJSON MultiPolygon value.
+///
+/// Shapefile polygons can contain multiple outer rings (clockwise) and holes
+/// (counter-clockwise). Each outer ring starts a new polygon, and subsequent
+/// holes belong to the most recent outer ring.
 fn shape_to_geojson_multipolygon(shape: &Shape) -> Option<serde_json::Value> {
     match shape {
         Shape::Polygon(polygon) => {
-            let rings: Vec<Vec<[f64; 2]>> = polygon
-                .rings()
-                .iter()
-                .map(|ring| ring.points().iter().map(|p| [p.x, p.y]).collect::<Vec<_>>())
-                .collect();
+            let mut polygons: Vec<Vec<Vec<[f64; 2]>>> = Vec::new();
+
+            for ring in polygon.rings() {
+                let coords: Vec<[f64; 2]> = ring.points().iter().map(|p| [p.x, p.y]).collect();
+
+                // Check ring orientation: positive signed area = counter-clockwise (hole),
+                // negative = clockwise (outer ring) in shapefile convention
+                let signed_area = ring_signed_area(&coords);
+
+                if signed_area <= 0.0 {
+                    // Outer ring (clockwise) — start a new polygon
+                    polygons.push(vec![coords]);
+                } else if let Some(last) = polygons.last_mut() {
+                    // Hole (counter-clockwise) — add to the most recent polygon
+                    last.push(coords);
+                } else {
+                    // Hole without an outer ring — treat as outer ring
+                    polygons.push(vec![coords]);
+                }
+            }
 
             Some(serde_json::json!({
                 "type": "MultiPolygon",
-                "coordinates": [rings]
+                "coordinates": polygons
             }))
         }
         Shape::NullShape => None,
@@ -208,6 +227,19 @@ fn shape_to_geojson_multipolygon(shape: &Shape) -> Option<serde_json::Value> {
             None
         }
     }
+}
+
+/// Calculate the signed area of a ring (Shoelace formula).
+/// Negative = clockwise (outer ring in shapefile), positive = counter-clockwise (hole).
+fn ring_signed_area(coords: &[[f64; 2]]) -> f64 {
+    let mut area = 0.0;
+    let n = coords.len();
+    for i in 0..n {
+        let j = (i + 1) % n;
+        area += coords[i][0] * coords[j][1];
+        area -= coords[j][0] * coords[i][1];
+    }
+    area / 2.0
 }
 
 /// Convert FAA altitude fields to our database format

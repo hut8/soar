@@ -289,25 +289,6 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
         }
     };
 
-    // Delete US OpenAIP airspaces after successful FAA NASR import
-    if faa_import_ok {
-        let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
-        match repo
-            .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
-            .await
-        {
-            Ok(count) => {
-                if count > 0 {
-                    info!(
-                        "Deleted {} US OpenAIP airspaces (replaced by FAA NASR)",
-                        count
-                    );
-                }
-            }
-            Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
-        }
-    }
-
     // Pull airspaces from OpenAIP (if API key is available)
     if env::var("OPENAIP_API_KEY").is_ok() {
         info!("Pulling airspaces from OpenAIP...");
@@ -319,34 +300,19 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
         )
         .await
         {
-            Ok(_) => {
-                info!("Airspaces sync completed successfully");
-                // Delete US OpenAIP airspaces that were re-imported during global sync,
-                // since FAA NASR data is authoritative for US airspace
-                if faa_import_ok {
-                    let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
-                    match repo
-                        .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
-                        .await
-                    {
-                        Ok(count) => {
-                            if count > 0 {
-                                info!(
-                                    "Deleted {} US OpenAIP airspaces (replaced by FAA NASR)",
-                                    count
-                                );
-                            }
-                        }
-                        Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
-                    }
-                }
-            }
+            Ok(_) => info!("Airspaces sync completed successfully"),
             Err(e) => {
                 warn!("Airspaces sync failed (non-fatal): {}", e);
             }
         }
     } else {
         info!("Skipping OpenAIP airspaces sync - OPENAIP_API_KEY not set");
+    }
+
+    // Delete US OpenAIP airspaces after all syncs complete,
+    // since FAA NASR data is authoritative for US airspace
+    if faa_import_ok {
+        delete_us_openaip_airspaces(&diesel_pool).await;
     }
 
     Ok(())
@@ -365,6 +331,25 @@ fn get_nasr_edition_marker_path() -> Result<String> {
         format!("{}/.cache/soar", home)
     };
     Ok(format!("{}/nasr_edition.txt", base))
+}
+
+/// Delete US OpenAIP airspaces since FAA NASR data is authoritative.
+async fn delete_us_openaip_airspaces(diesel_pool: &Pool<ConnectionManager<PgConnection>>) {
+    let repo = soar::airspaces_repo::AirspacesRepository::new(diesel_pool.clone());
+    match repo
+        .delete_by_source_and_country(soar::airspace::AirspaceSource::OpenAip, "US")
+        .await
+    {
+        Ok(count) => {
+            if count > 0 {
+                info!(
+                    "Deleted {} US OpenAIP airspaces (replaced by FAA NASR)",
+                    count
+                );
+            }
+        }
+        Err(e) => warn!("Failed to delete US OpenAIP airspaces: {}", e),
+    }
 }
 
 /// Download, extract, and import FAA NASR airspace shapefile data.
@@ -402,8 +387,8 @@ async fn pull_faa_nasr_airspaces(
     let nasr_zip_path = format!("{}/class_airspace_shape_files.zip", temp_dir);
     download_file_atomically(client, &subscription.url, &nasr_zip_path, 3).await?;
 
-    // Extract the shapefile
-    let nasr_extract_dir = format!("{}/nasr_airspace", temp_dir);
+    // Extract the shapefile (directory is edition-specific to avoid stale data)
+    let nasr_extract_dir = format!("{}/nasr_airspace_{}", temp_dir, subscription.edition_date);
     if !std::path::Path::new(&nasr_extract_dir).exists() {
         info!("Extracting NASR airspace shapefile...");
         fs::create_dir_all(&nasr_extract_dir)?;
