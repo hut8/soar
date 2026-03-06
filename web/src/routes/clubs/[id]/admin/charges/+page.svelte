@@ -208,66 +208,66 @@
 				{/if}
 			</div>
 		</div>
-	{/if}
 
-	{#if loading}
-		<div class="flex justify-center py-8">
-			<div
-				class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
-			></div>
-		</div>
-	{:else if charges.length === 0}
-		<div class="card p-8 text-center">
-			<DollarSign class="mx-auto mb-4 h-12 w-12 opacity-50" />
-			<p class="mb-2 text-lg">No charges yet</p>
-			<p class="text-sm opacity-75">Create a charge for a club member to get started</p>
-		</div>
-	{:else}
-		<div class="card">
-			<div class="table-container">
-				<table class="table-hover table">
-					<thead>
-						<tr>
-							<th>Member</th>
-							<th>Type</th>
-							<th>Amount</th>
-							<th>Status</th>
-							<th>Description</th>
-							<th>Date</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each charges as charge (charge.id)}
-							<tr>
-								<td>{getMemberName(charge.userId)}</td>
-								<td>{formatPaymentType(charge.paymentType)}</td>
-								<td class="font-semibold">{formatCurrency(charge.amountCents)}</td>
-								<td>
-									<span class="flex items-center gap-1 {getStatusColor(charge.status)}">
-										{#if charge.status === 'succeeded'}
-											<CheckCircle class="h-4 w-4" />
-										{:else if charge.status === 'failed' || charge.status === 'canceled'}
-											<XCircle class="h-4 w-4" />
-										{:else if charge.status === 'pending'}
-											<Clock class="h-4 w-4" />
-										{:else}
-											<AlertCircle class="h-4 w-4" />
-										{/if}
-										{charge.status}
-									</span>
-								</td>
-								<td class="max-w-[200px] truncate text-sm opacity-75">
-									{charge.description || '-'}
-								</td>
-								<td class="text-sm opacity-75">
-									{formatDate(charge.createdAt)}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+		{#if loading}
+			<div class="flex justify-center py-8">
+				<div
+					class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+				></div>
 			</div>
-		</div>
+		{:else if charges.length === 0}
+			<div class="card p-8 text-center">
+				<DollarSign class="mx-auto mb-4 h-12 w-12 opacity-50" />
+				<p class="mb-2 text-lg">No charges yet</p>
+				<p class="text-sm opacity-75">Create a charge for a club member to get started</p>
+			</div>
+		{:else}
+			<div class="card">
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
+							<tr>
+								<th>Member</th>
+								<th>Type</th>
+								<th>Amount</th>
+								<th>Status</th>
+								<th>Description</th>
+								<th>Date</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each charges as charge (charge.id)}
+								<tr>
+									<td>{getMemberName(charge.userId)}</td>
+									<td>{formatPaymentType(charge.paymentType)}</td>
+									<td class="font-semibold">{formatCurrency(charge.amountCents)}</td>
+									<td>
+										<span class="flex items-center gap-1 {getStatusColor(charge.status)}">
+											{#if charge.status === 'succeeded'}
+												<CheckCircle class="h-4 w-4" />
+											{:else if charge.status === 'failed' || charge.status === 'canceled'}
+												<XCircle class="h-4 w-4" />
+											{:else if charge.status === 'pending'}
+												<Clock class="h-4 w-4" />
+											{:else}
+												<AlertCircle class="h-4 w-4" />
+											{/if}
+											{charge.status}
+										</span>
+									</td>
+									<td class="max-w-[200px] truncate text-sm opacity-75">
+										{charge.description || '-'}
+									</td>
+									<td class="text-sm opacity-75">
+										{formatDate(charge.createdAt)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 

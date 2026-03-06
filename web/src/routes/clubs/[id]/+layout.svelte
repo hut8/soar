@@ -222,10 +222,12 @@
 							</button>
 
 							{#if adminDropdownOpen}
-								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 								<div
 									class="absolute top-full left-0 z-10 mt-1 min-w-[160px] rounded-lg border border-surface-200 bg-surface-50 py-1 shadow-lg dark:border-surface-700 dark:bg-surface-900"
 									onclick={(e) => e.stopPropagation()}
+									onkeydown={(e) => e.key === 'Escape' && closeAdminDropdown()}
+									role="menu"
+									tabindex="-1"
 								>
 									{#each adminSubItems as item (item.href)}
 										<a
