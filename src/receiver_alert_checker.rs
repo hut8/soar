@@ -239,6 +239,14 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                             condition = %condition.condition_key(),
                             "Failed to send receiver alert email"
                         );
+                        // Record as sent to prevent retry storms on persistent failures.
+                        // The exponential backoff will space out subsequent attempts.
+                        if let Err(e) = alerts_repo
+                            .record_alert_sent(alert.id, condition.condition_key())
+                            .await
+                        {
+                            error!(error = %e, "Failed to record alert attempt");
+                        }
                         metrics::counter!("receiver_alerts.emails_failed_total").increment(1);
                     }
                 }
@@ -313,17 +321,19 @@ fn evaluate_conditions(
 
 async fn fetch_users(users_repo: &UsersRepository, user_ids: &[Uuid]) -> HashMap<Uuid, User> {
     let mut map = HashMap::new();
-    for user_id in user_ids {
-        match users_repo.get_by_id(*user_id).await {
-            Ok(Some(user)) => {
-                map.insert(*user_id, user);
+    match users_repo.get_by_ids(user_ids).await {
+        Ok(users) => {
+            for user in users {
+                map.insert(user.id, user);
             }
-            Ok(None) => {
-                warn!(user_id = %user_id, "User not found for receiver alert");
+            for user_id in user_ids {
+                if !map.contains_key(user_id) {
+                    warn!(user_id = %user_id, "User not found for receiver alert");
+                }
             }
-            Err(e) => {
-                error!(error = %e, user_id = %user_id, "Failed to fetch user");
-            }
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to fetch users for receiver alerts");
         }
     }
     map
