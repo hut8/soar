@@ -10,6 +10,7 @@ use crate::actions::{DataListResponse, DataResponse, json_error};
 use crate::auth::AuthUser;
 use crate::receiver_alerts::UpsertReceiverAlertRequest;
 use crate::receiver_alerts_repo::ReceiverAlertsRepository;
+use crate::receiver_repo::ReceiverRepository;
 use crate::web::AppState;
 
 /// GET /data/receivers/{id}/alerts - Get current user's alert for this receiver
@@ -42,8 +43,25 @@ pub async fn upsert_receiver_alert(
     Path(receiver_id): Path<Uuid>,
     Json(req): Json<UpsertReceiverAlertRequest>,
 ) -> impl IntoResponse {
+    let receiver_repo = ReceiverRepository::new(state.pool.clone());
     let repo = ReceiverAlertsRepository::new(state.pool);
     let user_id = auth_user.0.id;
+
+    // Verify receiver exists
+    match receiver_repo.get_receiver_by_id(receiver_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to verify receiver existence");
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to verify receiver",
+            )
+            .into_response();
+        }
+    }
 
     // Validate thresholds
     if req.down_after_minutes < 5 {

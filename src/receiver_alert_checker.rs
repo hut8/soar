@@ -265,23 +265,26 @@ fn evaluate_conditions(
 ) -> Vec<AlertCondition> {
     let mut conditions = Vec::new();
 
-    // Check for receiver down
-    if alert.alert_on_down {
-        let threshold = chrono::Duration::minutes(alert.down_after_minutes as i64);
-        let is_down = match receiver.latest_packet_at {
-            Some(last_packet) => (now - last_packet) > threshold,
-            None => true, // Never received a packet — consider it down
-        };
-        if is_down {
-            let minutes_since = receiver.latest_packet_at.map(|lp| (now - lp).num_minutes());
-            conditions.push(AlertCondition::Down {
-                minutes_since_last_packet: minutes_since,
-            });
+    // Determine whether the receiver is considered "down" based on last packet time
+    let down_threshold = chrono::Duration::minutes(alert.down_after_minutes as i64);
+    let (is_down, minutes_since_last_packet) = match receiver.latest_packet_at {
+        Some(last_packet) => {
+            let diff = now - last_packet;
+            (diff > down_threshold, Some(diff.num_minutes()))
         }
+        None => (true, None),
+    };
+
+    // Check for receiver down
+    if alert.alert_on_down && is_down {
+        conditions.push(AlertCondition::Down {
+            minutes_since_last_packet,
+        });
     }
 
-    // Check CPU and temperature from latest status
-    if let Some(status) = latest_status {
+    // Check CPU and temperature from latest status.
+    // Skip when receiver is down to avoid spurious alerts from stale data.
+    if !is_down && let Some(status) = latest_status {
         if alert.alert_on_high_cpu
             && let Some(cpu_load) = &status.cpu_load
         {

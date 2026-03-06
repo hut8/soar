@@ -122,6 +122,15 @@
 			saving = false;
 		}
 	}
+
+	function formatCondition(key: string): string {
+		const labels: Record<string, string> = {
+			down: 'Receiver Offline',
+			high_cpu: 'High CPU Load',
+			high_temperature: 'High Temperature'
+		};
+		return labels[key] ?? key;
+	}
 </script>
 
 {#if !$auth.isAuthenticated}
@@ -250,7 +259,7 @@
 						<input
 							id="temp-threshold"
 							type="number"
-							min="0"
+							min="1"
 							max="200"
 							bind:value={temperatureThresholdC}
 							class="input w-24 px-2 py-1 text-sm"
@@ -306,7 +315,7 @@
 					<p class="text-surface-500-400-token text-xs">
 						Last alert sent: {new Date(alert.lastAlertedAt).toLocaleString()}
 						{#if alert.lastCondition}
-							({alert.lastCondition})
+							({formatCondition(alert.lastCondition)})
 						{/if}
 					</p>
 				</div>

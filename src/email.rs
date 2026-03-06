@@ -1280,11 +1280,16 @@ The SOAR Team"#,
     }
 
     fn build_receiver_alert_html(&self, data: &ReceiverAlertEmailData) -> String {
-        let ordinal = match data.alert_number {
-            1 => "1st".to_string(),
-            2 => "2nd".to_string(),
-            3 => "3rd".to_string(),
-            n => format!("{}th", n),
+        let n = data.alert_number;
+        let ordinal = if (11..=13).contains(&(n % 100)) {
+            format!("{n}th")
+        } else {
+            match n % 10 {
+                1 => format!("{n}st"),
+                2 => format!("{n}nd"),
+                3 => format!("{n}rd"),
+                _ => format!("{n}th"),
+            }
         };
 
         format!(
