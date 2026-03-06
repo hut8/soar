@@ -670,7 +670,7 @@
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
 							{#if receiver.software}
-								<span class="chip preset-tonal-surface-500 text-sm">{receiver.software}</span>
+								<span class="preset-tonal-surface-500 chip text-sm">{receiver.software}</span>
 							{/if}
 						</div>
 						{#if receiver.description}

@@ -151,12 +151,7 @@ impl OgnGenericProcessor {
 
     /// Update receiver software field from the TOCALL if we haven't seen it before.
     /// Warns if the software changes from what was previously stored.
-    async fn update_software_if_needed(
-        &self,
-        receiver_id: Uuid,
-        callsign: &str,
-        software: &str,
-    ) {
+    async fn update_software_if_needed(&self, receiver_id: Uuid, callsign: &str, software: &str) {
         // Fast path: if we already know this receiver's software, just compare
         if let Some(cached) = self.software_cache.get(&receiver_id) {
             if cached != software {
@@ -190,8 +185,7 @@ impl OgnGenericProcessor {
                             "Receiver software changed"
                         );
                     }
-                    self.software_cache
-                        .insert(receiver_id, prev.clone());
+                    self.software_cache.insert(receiver_id, prev.clone());
                 } else {
                     // We just set it for the first time
                     debug!(
