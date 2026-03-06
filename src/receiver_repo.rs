@@ -1037,19 +1037,32 @@ impl ReceiverRepository {
             let mut conn = pool.get()?;
 
             // Read the current value
-            let current: Option<String> = receivers::table
+            let mut current: Option<String> = receivers::table
                 .filter(receivers::id.eq(receiver_id))
                 .select(receivers::software)
                 .first(&mut conn)?;
 
             if current.is_none() {
-                // Set it for the first time and bump updated_at
-                diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
-                    .set((
-                        receivers::software.eq(&software),
-                        receivers::updated_at.eq(Utc::now()),
-                    ))
-                    .execute(&mut conn)?;
+                // Attempt to set it for the first time and bump updated_at,
+                // but only if software is still NULL to avoid races.
+                let rows_affected = diesel::update(
+                    receivers::table
+                        .filter(receivers::id.eq(receiver_id))
+                        .filter(receivers::software.is_null()),
+                )
+                .set((
+                    receivers::software.eq(&software),
+                    receivers::updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+                if rows_affected == 0 {
+                    // Another task set software concurrently; re-read
+                    current = receivers::table
+                        .filter(receivers::id.eq(receiver_id))
+                        .select(receivers::software)
+                        .first(&mut conn)?;
+                }
             }
 
             Ok(current)
