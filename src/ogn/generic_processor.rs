@@ -19,6 +19,9 @@ pub struct OgnGenericProcessor {
     /// Cache mapping receiver callsign to receiver ID
     /// This avoids repeated database lookups for the same receiver
     receiver_cache: Arc<Cache<String, Uuid>>,
+    /// Cache mapping receiver ID to known software string (TOCALL).
+    /// Once populated, we skip the DB update and just compare in-memory.
+    software_cache: Arc<Cache<Uuid, String>>,
 }
 
 impl OgnGenericProcessor {
@@ -35,11 +38,17 @@ impl OgnGenericProcessor {
             .time_to_live(std::time::Duration::from_secs(86400))
             .build();
 
+        let software_cache = Cache::builder()
+            .max_capacity(100_000)
+            .time_to_live(std::time::Duration::from_secs(86400))
+            .build();
+
         Self {
             receiver_repo,
             aprs_messages_repo,
             archive_service: None,
             receiver_cache: Arc::new(receiver_cache),
+            software_cache: Arc::new(software_cache),
         }
     }
 
@@ -99,14 +108,19 @@ impl OgnGenericProcessor {
             }
         };
 
-        // Step 4: Extract unparsed data from packet
+        // Step 4: Update receiver software (TOCALL) if this is a receiver-originated packet
+        let software = packet.to.0.clone();
+        self.update_software_if_needed(receiver_id, &receiver_callsign, &software)
+            .await;
+
+        // Step 5: Extract unparsed data from packet
         let unparsed = match &packet.data {
             AprsData::Position(pos) => pos.comment.unparsed.clone(),
             AprsData::Status(status) => status.comment.unparsed.clone(),
             _ => None,
         };
 
-        // Step 5: Insert APRS message
+        // Step 6: Insert APRS message
         let new_aprs_message =
             NewAprsMessage::new(raw_message.to_string(), received_at, receiver_id, unparsed);
 
@@ -129,6 +143,67 @@ impl OgnGenericProcessor {
                     receiver_callsign, e
                 );
                 None
+            }
+        }
+    }
+
+    /// Update receiver software field from the TOCALL if we haven't seen it before.
+    /// Warns if the software changes from what was previously stored.
+    async fn update_software_if_needed(
+        &self,
+        receiver_id: Uuid,
+        callsign: &str,
+        software: &str,
+    ) {
+        // Fast path: if we already know this receiver's software, just compare
+        if let Some(cached) = self.software_cache.get(&receiver_id) {
+            if cached != software {
+                warn!(
+                    receiver = %callsign,
+                    old_software = %cached,
+                    new_software = %software,
+                    "Receiver software changed"
+                );
+            }
+            return;
+        }
+
+        // Cache miss: check DB and set if needed
+        match self
+            .receiver_repo
+            .update_receiver_software(receiver_id, software)
+            .await
+        {
+            Ok(previous) => {
+                if let Some(ref prev) = previous {
+                    // Was already set in DB
+                    if prev != software {
+                        warn!(
+                            receiver = %callsign,
+                            old_software = %prev,
+                            new_software = %software,
+                            "Receiver software changed"
+                        );
+                    }
+                    self.software_cache
+                        .insert(receiver_id, prev.clone());
+                } else {
+                    // We just set it for the first time
+                    debug!(
+                        receiver = %callsign,
+                        software = %software,
+                        "Set receiver software"
+                    );
+                    self.software_cache
+                        .insert(receiver_id, software.to_string());
+                }
+            }
+            Err(e) => {
+                error!(
+                    receiver = %callsign,
+                    error = %e,
+                    "Failed to update receiver software"
+                );
             }
         }
     }

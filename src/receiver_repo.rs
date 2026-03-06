@@ -95,6 +95,7 @@ impl ReceiverRepository {
                         country: None,
                         postal_code: None,
                         geocoded: false,
+                        software: None,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -223,6 +224,7 @@ impl ReceiverRepository {
                 country: None,
                 postal_code: None,
                 geocoded: false,
+                software: None,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -1017,6 +1019,39 @@ impl ReceiverRepository {
         }
 
         Ok(true)
+    }
+
+    /// Update the software field for a receiver.
+    /// Only sets the value if it is currently NULL. Returns the previously stored value (if any).
+    pub async fn update_receiver_software(
+        &self,
+        receiver_id: Uuid,
+        software: &str,
+    ) -> Result<Option<String>> {
+        use crate::schema::receivers;
+
+        let pool = self.pool.clone();
+        let software = software.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            let mut conn = pool.get()?;
+
+            // Read the current value
+            let current: Option<String> = receivers::table
+                .filter(receivers::id.eq(receiver_id))
+                .select(receivers::software)
+                .first(&mut conn)?;
+
+            if current.is_none() {
+                // Set it for the first time
+                diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
+                    .set(receivers::software.eq(&software))
+                    .execute(&mut conn)?;
+            }
+
+            Ok(current)
+        })
+        .await?
     }
 }
 
