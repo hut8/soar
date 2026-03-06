@@ -230,14 +230,14 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 **Our version of Skeleton UI uses `preset-` classes, NOT `variant-` classes.** The `variant-*` prefix is from an older version of Skeleton and does not exist in our codebase. Always use `preset-` equivalents (e.g., `preset-tonal-surface-500`, `preset-outlined`, `preset-filled-primary-500`).
 
 #### Dropdown / Popover Background Styling (CRITICAL)
-**NEVER use `preset-filled-surface` or `variant-filled-surface` for dropdown or popover backgrounds** - these classes produce transparent backgrounds. Instead, always use explicit Tailwind background classes with both light and dark mode:
+For dropdown or popover backgrounds, always use explicit Tailwind background classes with both light and dark mode:
 
 ```svelte
 <!-- CORRECT: Explicit background classes -->
 <div class="bg-surface-50 dark:bg-surface-800 border border-surface-300 dark:border-surface-600 shadow-lg">
 
-<!-- WRONG: produces transparent backgrounds -->
-<div class="preset-filled-surface border border-surface-400 shadow-lg">
+<!-- WRONG: variant-* classes don't exist in our Skeleton version, resulting in no background -->
+<div class="variant-filled-surface border border-surface-400 shadow-lg">
 ```
 
 For Skeleton UI `<Combobox.Content>` or any `[data-popover-content]` elements, you must also add CSS overrides:
