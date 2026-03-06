@@ -347,8 +347,9 @@
 			// Extract hex data from GeoJSON features for deck.gl
 			const hexData = response.features.map((f) => f.properties);
 
-			// Calculate max fix count for color/elevation scaling
+			// Calculate max fix count for color/elevation scaling (log scale)
 			const maxFixCount = Math.max(...hexData.map((d) => d.fixCount), 1);
+			const logMax = Math.log1p(maxFixCount);
 
 			// Create deck.gl H3HexagonLayer
 			const hexLayer = new H3HexagonLayer<CoverageHexProperties>({
@@ -358,8 +359,8 @@
 				extruded: true,
 				filled: true,
 				getHexagon: (d: CoverageHexProperties) => d.h3Index,
-				getFillColor: (d: CoverageHexProperties) => getHexColor(d.fixCount / maxFixCount),
-				getElevation: (d: CoverageHexProperties) => (d.fixCount / maxFixCount) * 5000,
+				getFillColor: (d: CoverageHexProperties) => getHexColor(Math.log1p(d.fixCount) / logMax),
+				getElevation: (d: CoverageHexProperties) => (Math.log1p(d.fixCount) / logMax) * 5000,
 				elevationScale: 1,
 				opacity: 0.8,
 				// Hover: show popup
@@ -652,7 +653,7 @@
 
 						{#if showReceiverDropdown && receiverSearchResults.length > 0}
 							<div
-								class="receiver-dropdown variant-filled-surface absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-surface-400 shadow-lg"
+								class="receiver-dropdown absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border border-surface-300 bg-surface-50 shadow-lg dark:border-surface-600 dark:bg-surface-800"
 							>
 								{#each receiverSearchResults as receiver (receiver.id)}
 									<button
@@ -754,6 +755,11 @@
 />
 
 <style>
+	/* Ensure MapLibre popups render above the deck.gl canvas */
+	:global(.maplibregl-popup) {
+		z-index: 3 !important;
+	}
+
 	/* Receiver marker styling - matches operations page */
 	:global(.receiver-marker) {
 		display: flex;

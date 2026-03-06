@@ -1411,10 +1411,11 @@ impl FixesRepository {
             let polygon_wkt = format!("POLYGON(({}))", coords.join(", "));
 
             // Use exact timestamps from hex aggregates for efficient partition pruning
+            // Include fractional seconds (%.f) to avoid truncating sub-second precision
             let time_filter = format!(
                 "received_at >= '{}' AND received_at <= '{}'",
-                first_seen.format("%Y-%m-%d %H:%M:%S%:z"),
-                last_seen.format("%Y-%m-%d %H:%M:%S%:z")
+                first_seen.format("%Y-%m-%d %H:%M:%S%.f%:z"),
+                last_seen.format("%Y-%m-%d %H:%M:%S%.f%:z")
             );
 
             // Build base query for counting
