@@ -39,6 +39,14 @@ export type FlightView = {
   clubId: string | null;
   towedByAircraftId: string | null;
   towedByFlightId: string | null;
+  /**
+   * Tow release altitude in feet MSL
+   */
+  towReleaseAltitudeMslFt: number | null;
+  /**
+   * Altitude gain during tow in feet (release altitude minus towplane takeoff altitude)
+   */
+  towReleaseHeightDeltaFt: number | null;
   takeoffAltitudeOffsetFt: number | null;
   landingAltitudeOffsetFt: number | null;
   takeoffRunwayIdent: string | null;
@@ -55,6 +63,10 @@ export type FlightView = {
   latestAltitudeMslFeet: number | null;
   latestAltitudeAglFeet: number | null;
   latestFixTimestamp: string | null;
+  /**
+   * Timestamp of the last fix assigned to this flight (always available, stored on flight row)
+   */
+  lastFixAt: string;
   previousFlightId: string | null;
   nextFlightId: string | null;
   callsign: string | null;

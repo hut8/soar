@@ -23,11 +23,8 @@
 	let showEditor = $state(false);
 	let elapsedMinutes = $state(0);
 
-	// Airborne detection: currentFix with speed >= 25 knots
-	let isAirborne = $derived(
-		(aircraft.currentFix != null && (aircraft.currentFix.groundSpeedKnots ?? 0) >= 25) ||
-			flight != null
-	);
+	// Airborne detection: has an active (not timed-out/stale) flight in progress
+	let isAirborne = $derived(flight != null && flight.state === 'active');
 
 	// Tow info
 	let towInfo = $derived(() => {
@@ -113,7 +110,7 @@
 				? 'bg-success-500 text-white'
 				: 'bg-surface-300 text-surface-700 dark:bg-surface-600 dark:text-surface-200'}"
 		>
-			{isAirborne ? 'Airborne' : 'On Ground'}
+			{isAirborne ? 'Airborne' : 'Ground'}
 		</span>
 	</div>
 

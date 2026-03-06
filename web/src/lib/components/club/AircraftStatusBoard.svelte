@@ -142,36 +142,36 @@
 		}
 	}
 
-	// Sort aircraft: airborne first, then by distance
+	// Sort aircraft: airborne first (most recent takeoff at top), then on-ground (most recent activity at top)
 	let sortedAircraft = $derived(() => {
+		// Precompute flight lookup map and timestamps to avoid repeated work in comparator
+		const flightByAircraftId = new Map(
+			flightsInProgress.filter((f) => f.aircraftId).map((f) => [f.aircraftId!, f])
+		);
+		const takeoffMs = new Map(
+			flightsInProgress
+				.filter((f) => f.aircraftId && f.takeoffTime)
+				.map((f) => [f.aircraftId!, new Date(f.takeoffTime!).getTime()])
+		);
+		const lastFixMs = new Map(
+			aircraft.filter((a) => a.lastFixAt).map((a) => [a.id, new Date(a.lastFixAt!).getTime()])
+		);
+
 		return [...aircraft].sort((a, b) => {
-			const aAirborne =
-				(a.currentFix != null && (a.currentFix.groundSpeedKnots ?? 0) >= 25) ||
-				flightsInProgress.some((f) => f.aircraftId === a.id);
-			const bAirborne =
-				(b.currentFix != null && (b.currentFix.groundSpeedKnots ?? 0) >= 25) ||
-				flightsInProgress.some((f) => f.aircraftId === b.id);
+			const aFlight = flightByAircraftId.get(a.id);
+			const bFlight = flightByAircraftId.get(b.id);
+			const aAirborne = aFlight != null && aFlight.state === 'active';
+			const bAirborne = bFlight != null && bFlight.state === 'active';
 
 			if (aAirborne !== bAirborne) return aAirborne ? -1 : 1;
 
-			if (userLocation && a.latitude != null && b.latitude != null) {
-				const distA = haversine(userLocation.lat, userLocation.lng, a.latitude!, a.longitude!);
-				const distB = haversine(userLocation.lat, userLocation.lng, b.latitude!, b.longitude!);
-				return distA - distB;
+			if (aAirborne && bAirborne) {
+				return (takeoffMs.get(b.id) ?? 0) - (takeoffMs.get(a.id) ?? 0);
 			}
-			return 0;
+
+			return (lastFixMs.get(b.id) ?? 0) - (lastFixMs.get(a.id) ?? 0);
 		});
 	});
-
-	function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-		const R = 3440.065;
-		const dLat = ((lat2 - lat1) * Math.PI) / 180;
-		const dLon = ((lon2 - lon1) * Math.PI) / 180;
-		const a =
-			Math.sin(dLat / 2) ** 2 +
-			Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-		return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-	}
 
 	function getFlightForAircraft(ac: Aircraft): Flight | null {
 		return flightsInProgress.find((f) => f.aircraftId === ac.id) || null;

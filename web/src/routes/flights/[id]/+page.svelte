@@ -7,7 +7,6 @@
 		Plane,
 		PlaneTakeoff,
 		PlaneLanding,
-		Gauge,
 		TrendingUp,
 		Route,
 		MoveUpRight,
@@ -1418,13 +1417,19 @@
 				</div>
 			{/if}
 
-			<!-- Duration -->
-			{#if duration}
+			<!-- Distance & Duration -->
+			{#if data.flight.totalDistanceMeters != null || duration}
 				<div class="flex items-start gap-3">
-					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
+					<Route class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
-						<div class="text-surface-600-300-token text-sm">Duration</div>
-						<div class="font-semibold">{duration}</div>
+						{#if data.flight.totalDistanceMeters != null}
+							<div class="text-surface-600-300-token text-sm">Total Distance</div>
+							<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
+						{/if}
+						{#if duration}
+							<div class="text-surface-600-300-token text-sm">Duration</div>
+							<div class="font-semibold">{duration}</div>
+						{/if}
 					</div>
 				</div>
 			{/if}
@@ -1447,17 +1452,6 @@
 				</div>
 			{/if}
 
-			<!-- Total Distance -->
-			{#if data.flight.totalDistanceMeters}
-				<div class="flex items-start gap-3">
-					<Route class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Total Distance</div>
-						<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
-					</div>
-				</div>
-			{/if}
-
 			<!-- Maximum Displacement -->
 			{#if data.flight.maximumDisplacementMeters}
 				<div class="flex items-start gap-3">
@@ -1474,7 +1468,7 @@
 				</div>
 			{/if}
 
-			<!-- Tow Aircraft -->
+			<!-- Tow Information -->
 			{#if data.flight.towedByAircraftId}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
@@ -1483,6 +1477,25 @@
 						<div class="font-semibold">
 							<TowAircraftLink aircraftId={data.flight.towedByAircraftId} size="md" />
 						</div>
+						{#if data.flight.towedByFlightId}
+							<div class="mt-1">
+								<a href="/flights/{data.flight.towedByFlightId}" class="anchor text-xs">
+									View tow flight
+								</a>
+							</div>
+						{/if}
+						{#if data.flight.towReleaseAltitudeMslFt != null || data.flight.towReleaseHeightDeltaFt != null}
+							<div class="text-surface-600-300-token text-sm">Tow Release</div>
+							<div class="font-semibold">
+								{#if data.flight.towReleaseAltitudeMslFt != null}{data.flight.towReleaseAltitudeMslFt.toLocaleString()}
+									ft MSL{/if}
+								{#if data.flight.towReleaseHeightDeltaFt != null}
+									<span class="text-surface-600-300-token text-sm font-normal">
+										({data.flight.towReleaseHeightDeltaFt.toLocaleString()} ft gain)
+									</span>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/if}

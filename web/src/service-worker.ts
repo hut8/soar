@@ -36,6 +36,10 @@ self.addEventListener('fetch', (event) => {
 	// Ignore non-GET requests
 	if (event.request.method !== 'GET') return;
 
+	// Never intercept API calls - let them go directly to the server
+	const url = new URL(event.request.url);
+	if (url.pathname.startsWith('/data/')) return;
+
 	async function respond() {
 		const url = new URL(event.request.url);
 		const cache = await caches.open(CACHE);

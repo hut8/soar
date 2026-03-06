@@ -91,22 +91,30 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 		});
 
 		if (!response.ok) {
-			// Handle 401 Unauthorized - invalid/expired token
+			// Handle 401 Unauthorized - only treat as session expiry if we
+			// actually sent a token and the server still rejected it.
+			// A "missing token" response when we did send one likely means a
+			// proxy or service-worker stripped the header — don't nuke the session.
 			if (response.status === 401 && browser) {
-				// Clear the token from localStorage
-				localStorage.removeItem('auth_token');
+				const hadToken = headers['Authorization'] != null || headers['authorization'] != null;
+				const bodyText = await response.text();
+				const isMissingToken = bodyText.includes('Missing authorization token');
 
-				// Log the user out
-				auth.logout();
+				if (hadToken && !isMissingToken) {
+					// Token was sent but is invalid/expired — clear it
+					localStorage.removeItem('auth_token');
+					auth.logout();
 
-				// Show a toast notification
-				toaster.error({
-					title: 'Session Expired',
-					description: 'Your session has expired. Please log in again.'
-				});
+					toaster.error({
+						title: 'Session Expired',
+						description: 'Your session has expired. Please log in again.'
+					});
 
-				// Throw error with a user-friendly message
-				throw new ServerError('Session expired', response.status);
+					throw new ServerError('Session expired', response.status);
+				}
+
+				// Otherwise just throw without logging out
+				throw new ServerError(bodyText || 'Unauthorized', response.status);
 			}
 
 			// Try to parse error as JSON first (standard format: {"errors": "message"})
