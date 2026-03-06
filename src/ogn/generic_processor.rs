@@ -108,10 +108,12 @@ impl OgnGenericProcessor {
             }
         };
 
-        // Step 4: Update receiver software (TOCALL) if this is a receiver-originated packet
-        let software = packet.to.0.clone();
-        self.update_software_if_needed(receiver_id, &receiver_callsign, &software)
-            .await;
+        // Step 4: Update receiver software (TOCALL) only for receiver-originated packets
+        if packet.from.0 == receiver_callsign {
+            let software = packet.to.0.clone();
+            self.update_software_if_needed(receiver_id, &receiver_callsign, &software)
+                .await;
+        }
 
         // Step 5: Extract unparsed data from packet
         let unparsed = match &packet.data {
@@ -164,6 +166,9 @@ impl OgnGenericProcessor {
                     new_software = %software,
                     "Receiver software changed"
                 );
+                // Update cache so we only warn once per change
+                self.software_cache
+                    .insert(receiver_id, software.to_string());
             }
             return;
         }

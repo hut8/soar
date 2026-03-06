@@ -1043,9 +1043,12 @@ impl ReceiverRepository {
                 .first(&mut conn)?;
 
             if current.is_none() {
-                // Set it for the first time
+                // Set it for the first time and bump updated_at
                 diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
-                    .set(receivers::software.eq(&software))
+                    .set((
+                        receivers::software.eq(&software),
+                        receivers::updated_at.eq(Utc::now()),
+                    ))
                     .execute(&mut conn)?;
             }
 
