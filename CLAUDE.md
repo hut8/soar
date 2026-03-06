@@ -226,6 +226,31 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 - **Tailwind CSS**: Use utility-first CSS approach
 - **TypeScript**: Full type safety required
 
+#### Dropdown / Popover Background Styling (CRITICAL)
+**NEVER use `variant-filled-surface` for dropdown or popover backgrounds** - this Skeleton utility class produces transparent backgrounds in the current version. Instead, always use explicit Tailwind background classes with both light and dark mode:
+
+```svelte
+<!-- CORRECT: Explicit background classes -->
+<div class="bg-surface-50 dark:bg-surface-800 border border-surface-300 dark:border-surface-600 shadow-lg">
+
+<!-- WRONG: variant-filled-surface produces transparent backgrounds -->
+<div class="variant-filled-surface border border-surface-400 shadow-lg">
+```
+
+For Skeleton UI `<Combobox.Content>` or any `[data-popover-content]` elements, you must also add CSS overrides:
+```css
+:global(.my-wrapper [data-popover-content]) {
+    background-color: var(--color-surface-50);
+    color: var(--color-surface-900);
+}
+:global(.dark .my-wrapper [data-popover-content]) {
+    background-color: var(--color-surface-800);
+    color: var(--color-surface-50);
+}
+```
+
+See `ClubSelector.svelte` and `AirportSelector.svelte` for working examples.
+
 #### TypeScript Type Generation (CRITICAL)
 **All data types returned from the Rust backend to the TypeScript frontend MUST be generated using ts-rs.**
 
