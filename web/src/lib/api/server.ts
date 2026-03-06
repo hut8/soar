@@ -96,7 +96,7 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 			// A "missing token" response when we did send one likely means a
 			// proxy or service-worker stripped the header — don't nuke the session.
 			if (response.status === 401 && browser) {
-				const hadToken = headers['Authorization'] != null;
+				const hadToken = headers['Authorization'] != null || headers['authorization'] != null;
 				const bodyText = await response.text();
 				const isMissingToken = bodyText.includes('Missing authorization token');
 

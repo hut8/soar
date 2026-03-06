@@ -148,6 +148,14 @@
 		const flightByAircraftId = new Map(
 			flightsInProgress.filter((f) => f.aircraftId).map((f) => [f.aircraftId!, f])
 		);
+		const takeoffMs = new Map(
+			flightsInProgress
+				.filter((f) => f.aircraftId && f.takeoffTime)
+				.map((f) => [f.aircraftId!, new Date(f.takeoffTime!).getTime()])
+		);
+		const lastFixMs = new Map(
+			aircraft.filter((a) => a.lastFixAt).map((a) => [a.id, new Date(a.lastFixAt!).getTime()])
+		);
 
 		return [...aircraft].sort((a, b) => {
 			const aFlight = flightByAircraftId.get(a.id);
@@ -158,16 +166,10 @@
 			if (aAirborne !== bAirborne) return aAirborne ? -1 : 1;
 
 			if (aAirborne && bAirborne) {
-				// Both airborne: most recent takeoff first
-				const aTime = aFlight?.takeoffTime ? new Date(aFlight.takeoffTime).getTime() : 0;
-				const bTime = bFlight?.takeoffTime ? new Date(bFlight.takeoffTime).getTime() : 0;
-				return bTime - aTime;
+				return (takeoffMs.get(b.id) ?? 0) - (takeoffMs.get(a.id) ?? 0);
 			}
 
-			// Both on ground: most recent activity first (lastFixAt as proxy for last landing)
-			const aTime = a.lastFixAt ? new Date(a.lastFixAt).getTime() : 0;
-			const bTime = b.lastFixAt ? new Date(b.lastFixAt).getTime() : 0;
-			return bTime - aTime;
+			return (lastFixMs.get(b.id) ?? 0) - (lastFixMs.get(a.id) ?? 0);
 		});
 	});
 

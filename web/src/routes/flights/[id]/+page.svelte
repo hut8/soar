@@ -1487,9 +1487,8 @@
 						{#if data.flight.towReleaseAltitudeMslFt != null || data.flight.towReleaseHeightDeltaFt != null}
 							<div class="text-surface-600-300-token text-sm">Tow Release</div>
 							<div class="font-semibold">
-								{#if data.flight.towReleaseAltitudeMslFt != null}
-									{data.flight.towReleaseAltitudeMslFt.toLocaleString()} ft MSL
-								{/if}
+								{#if data.flight.towReleaseAltitudeMslFt != null}{data.flight.towReleaseAltitudeMslFt.toLocaleString()}
+									ft MSL{/if}
 								{#if data.flight.towReleaseHeightDeltaFt != null}
 									<span class="text-surface-600-300-token text-sm font-normal">
 										({data.flight.towReleaseHeightDeltaFt.toLocaleString()} ft gain)
