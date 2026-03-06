@@ -122,7 +122,7 @@ pub async fn get_users_by_club(
     match users_repo.get_by_club_id(club_id).await {
         Ok(users) => {
             let user_views: Vec<UserView> = users.into_iter().map(UserView::from).collect();
-            Json(user_views).into_response()
+            Json(DataListResponse { data: user_views }).into_response()
         }
         Err(e) => {
             error!(error = %e, "Failed to get users by club");
