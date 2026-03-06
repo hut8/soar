@@ -2,6 +2,8 @@
 	import { X, Radio, MapPin, Info, Clock, ExternalLink, Loader2 } from '@lucide/svelte';
 	import type { Receiver } from '$lib/types';
 	import { serverCall } from '$lib/api/server';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatRelative, formatDate as fmtDate } from '$lib/utils/dateFormatters';
 
 	interface ReceiverStatistics {
 		averageUpdateIntervalSeconds: number | null;
@@ -80,26 +82,11 @@
 
 	function formatRelativeTime(dateStr: string | null): string {
 		if (!dateStr) return 'Unknown';
-		const date = new Date(dateStr);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffMins = Math.floor(diffMs / 60000);
-		const diffHours = Math.floor(diffMins / 60);
-		const diffDays = Math.floor(diffHours / 24);
-
-		if (diffMins < 1) return 'Just now';
-		if (diffMins < 60) return `${diffMins}m ago`;
-		if (diffHours < 24) return `${diffHours}h ago`;
-		if (diffDays < 30) return `${diffDays}d ago`;
-		return date.toLocaleDateString();
+		return formatRelative(dateStr);
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		return fmtDate(dateStr, $resolvedTimezone);
 	}
 
 	function buildLocationString(receiver: Receiver): string {

@@ -7,6 +7,8 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatShortDateTime } from '$lib/utils/dateFormatters';
 	import { toaster } from '$lib/toaster';
 	import type { ClubJoinRequestView, DataResponse, DataListResponse } from '$lib/types';
 	import type { ClubView } from '$lib/types/generated/ClubView';
@@ -95,13 +97,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		return formatShortDateTime(dateStr, $resolvedTimezone);
 	}
 
 	function getUserName(request: ClubJoinRequestView): string {

@@ -13,6 +13,8 @@
 	import { createAircraftEntity } from '$lib/cesium/entities';
 	import type { Flight, Fix, DataListResponse, AircraftCategory } from '$lib/types';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTimeWithSeconds } from '$lib/utils/dateFormatters';
 
 	const logger = getLogger(['soar', 'cesium', 'TimelineController']);
 
@@ -335,7 +337,7 @@
 					<p class="text-sm opacity-75">
 						{flight.registration || flight.deviceAddress}
 						{#if currentTime}
-							• {currentTime.toLocaleTimeString()}
+							• {formatTimeWithSeconds(currentTime, $resolvedTimezone)}
 						{/if}
 					</p>
 				</div>
@@ -403,10 +405,12 @@
 				<!-- Progress Bar -->
 				<div class="space-y-1">
 					<div class="flex items-center justify-between text-xs opacity-75">
-						<span>{fixes[0] ? new Date(fixes[0].receivedAt).toLocaleTimeString() : ''}</span>
+						<span
+							>{fixes[0] ? formatTimeWithSeconds(fixes[0].receivedAt, $resolvedTimezone) : ''}</span
+						>
 						<span
 							>{fixes[fixes.length - 1]
-								? new Date(fixes[fixes.length - 1].receivedAt).toLocaleTimeString()
+								? formatTimeWithSeconds(fixes[fixes.length - 1].receivedAt, $resolvedTimezone)
 								: ''}</span
 						>
 					</div>
@@ -429,11 +433,15 @@
 					</p>
 					<p>
 						<strong>Takeoff:</strong>
-						{flight.takeoffTime ? new Date(flight.takeoffTime).toLocaleString() : 'Unknown'}
+						{flight.takeoffTime
+							? formatTimeWithSeconds(flight.takeoffTime, $resolvedTimezone)
+							: 'Unknown'}
 					</p>
 					<p>
 						<strong>Landing:</strong>
-						{flight.landingTime ? new Date(flight.landingTime).toLocaleString() : 'In Progress'}
+						{flight.landingTime
+							? formatTimeWithSeconds(flight.landingTime, $resolvedTimezone)
+							: 'In Progress'}
 					</p>
 				</div>
 			{:else}

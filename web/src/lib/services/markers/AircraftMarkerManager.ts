@@ -10,7 +10,9 @@ import { getLogger } from '$lib/logging';
 import { getMarkerColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
 import { formatPrimaryAddress } from '$lib/formatters';
 import type { Aircraft, Fix } from '$lib/types';
-import dayjs from 'dayjs';
+import { get } from 'svelte/store';
+import { resolvedTimezone } from '$lib/stores/timezone';
+import { formatISODateTime } from '$lib/utils/dateFormatters';
 
 const logger = getLogger(['soar', 'AircraftMarkerManager']);
 
@@ -251,7 +253,7 @@ export class AircraftMarkerManager {
 		markerContent.appendChild(infoLabel);
 
 		// Create the marker with proper title including aircraft model and full timestamp
-		const fullTimestamp = dayjs(fix.receivedAt).format('YYYY-MM-DD HH:mm:ss UTC');
+		const fullTimestamp = formatISODateTime(fix.receivedAt, get(resolvedTimezone));
 		const title = aircraft.aircraftModel
 			? `${tailNumber} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
@@ -387,7 +389,7 @@ export class AircraftMarkerManager {
 
 		// Update the marker title with full timestamp
 		const { altitudeText } = formatAltitudeWithTime(fix.altitudeMslFeet, fix.receivedAt);
-		const fullTimestamp = dayjs(fix.receivedAt).format('YYYY-MM-DD HH:mm:ss UTC');
+		const fullTimestamp = formatISODateTime(fix.receivedAt, get(resolvedTimezone));
 		const displayName = aircraft.registration || formatPrimaryAddress(aircraft);
 		const title = aircraft.aircraftModel
 			? `${displayName} (${aircraft.aircraftModel}) - ${altitudeText} - Last seen: ${fullTimestamp}`

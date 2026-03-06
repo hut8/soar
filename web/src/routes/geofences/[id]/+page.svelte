@@ -17,6 +17,8 @@
 	import type { Geofence, GeofenceSubscriber } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate } from '$lib/utils/dateFormatters';
 
 	const logger = getLogger(['soar', 'Geofences', 'Edit']);
 
@@ -269,7 +271,7 @@
 										{/if}
 									</span>
 									<span class="text-surface-600-300-token text-xs">
-										Since {new Date(subscriber.createdAt).toLocaleDateString()}
+										Since {formatDate(subscriber.createdAt, $resolvedTimezone)}
 									</span>
 								</div>
 							{/each}

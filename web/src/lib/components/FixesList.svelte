@@ -2,6 +2,12 @@
 	import { Activity, Loader2 } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import {
+		formatRelative,
+		formatISODateTime,
+		formatTimeWithSeconds
+	} from '$lib/utils/dateFormatters';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { Fix, FixWithExtras, RawMessageResponse, DataResponse } from '$lib/types';
 	import { serverCall } from '$lib/api/server';
@@ -114,15 +120,15 @@
 	}
 
 	function formatRelativeTime(dateString: string): string {
-		return dayjs(dateString).fromNow();
+		return formatRelative(dateString);
 	}
 
 	function formatDate(dateString: string): string {
-		return dayjs(dateString).format('YYYY-MM-DD HH:mm:ss');
+		return formatISODateTime(dateString, $resolvedTimezone);
 	}
 
 	function formatLocalTime(dateString: string): string {
-		return dayjs(dateString).format('HH:mm:ss');
+		return formatTimeWithSeconds(dateString, $resolvedTimezone);
 	}
 
 	function formatFixTime(dateString: string): string {

@@ -18,6 +18,8 @@
 	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTime, formatRelative } from '$lib/utils/dateFormatters';
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
@@ -200,12 +202,12 @@
 
 	function formatRelativeTime(dateString: string | null | undefined): string {
 		if (!dateString) return '—';
-		return dayjs(dateString).fromNow();
+		return formatRelative(dateString);
 	}
 
 	function formatLocalTime(dateString: string | null | undefined): string {
 		if (!dateString) return '';
-		return dayjs(dateString).format('HH:mm');
+		return formatTime(dateString, $resolvedTimezone);
 	}
 
 	function calculateFlightDuration(

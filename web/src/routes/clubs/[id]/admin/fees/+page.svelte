@@ -6,6 +6,8 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate } from '$lib/utils/dateFormatters';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 	import type { TowFeeView } from '$lib/types/generated/TowFeeView';
 	import type { DataResponse, DataListResponse } from '$lib/types';
@@ -299,7 +301,7 @@
 									</td>
 									<td class="font-semibold">{formatCost(fee.cost)}</td>
 									<td class="text-sm opacity-75">
-										{new Date(fee.updatedAt).toLocaleDateString()}
+										{formatDate(fee.updatedAt, $resolvedTimezone)}
 									</td>
 									{#if userBelongsToClub}
 										<td class="text-right">

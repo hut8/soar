@@ -11,6 +11,8 @@
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { DataListResponse, DataResponse, PaymentView, CheckoutResponse } from '$lib/types';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate as fmtDate } from '$lib/utils/dateFormatters';
 
 	let payments = $state<PaymentView[]>([]);
 	let loading = $state(true);
@@ -54,7 +56,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString();
+		return fmtDate(dateStr, $resolvedTimezone);
 	}
 
 	function getStatusColor(status: string): string {

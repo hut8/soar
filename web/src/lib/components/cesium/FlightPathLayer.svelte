@@ -9,6 +9,7 @@
 	} from '$lib/cesium/entities';
 	import type { Flight, Fix, DataResponse, DataListResponse } from '$lib/types';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
 
 	const logger = getLogger(['soar', 'cesium', 'FlightPathLayer']);
 
@@ -75,7 +76,7 @@
 
 		// Create flight path polyline
 		try {
-			const pathEntity = createFlightPathEntity(flight, fixes, colorScheme);
+			const pathEntity = createFlightPathEntity(flight, fixes, colorScheme, $resolvedTimezone);
 			viewer.entities.add(pathEntity);
 			entities.push(pathEntity);
 		} catch (error) {

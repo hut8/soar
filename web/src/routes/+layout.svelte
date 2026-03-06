@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import TimezoneSelector from '$lib/components/TimezoneSelector.svelte';
 	import {
 		backendMode,
 		BACKEND_LABELS,
@@ -444,6 +445,9 @@
 								{/if}
 							</div>
 						{/if}
+
+						<!-- Timezone Selector -->
+						<TimezoneSelector />
 
 						<!-- Theme Toggle -->
 						<button

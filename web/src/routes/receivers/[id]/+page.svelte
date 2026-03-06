@@ -30,6 +30,8 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatISODateTime, formatRelative } from '$lib/utils/dateFormatters';
 	import type {
 		Aircraft,
 		Receiver,
@@ -513,11 +515,11 @@
 	}
 
 	function formatDateTime(dateStr: string): string {
-		return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss UTC');
+		return formatISODateTime(dateStr, $resolvedTimezone);
 	}
 
 	function formatRelativeTime(dateStr: string): string {
-		return dayjs(dateStr).fromNow();
+		return formatRelative(dateStr);
 	}
 
 	async function nextFixesPage() {

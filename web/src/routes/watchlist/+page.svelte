@@ -7,6 +7,8 @@
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import { formatPrimaryAddress } from '$lib/formatters';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate } from '$lib/utils/dateFormatters';
 
 	const logger = getLogger(['soar', 'Watchlist']);
 
@@ -153,7 +155,7 @@
 
 						<!-- Added Date -->
 						<p class="text-surface-600-300-token mt-2 text-xs">
-							Added {new Date(entry.createdAt).toLocaleDateString()}
+							Added {formatDate(entry.createdAt, $resolvedTimezone)}
 						</p>
 					</div>
 				{/each}

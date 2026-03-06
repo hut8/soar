@@ -13,6 +13,8 @@
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate as fmtDate } from '$lib/utils/dateFormatters';
 	import type { ClubView } from '$lib/types/generated/ClubView';
 	import type { UserView } from '$lib/types/generated/UserView';
 	import type { DataResponse, DataListResponse, PaymentView } from '$lib/types';
@@ -123,7 +125,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString();
+		return fmtDate(dateStr, $resolvedTimezone);
 	}
 
 	function getStatusColor(status: string): string {
