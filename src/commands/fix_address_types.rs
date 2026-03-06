@@ -98,44 +98,47 @@ pub async fn handle_fix_address_types(pool: &PgPool, dry_run: bool) -> Result<()
             }
         };
 
+        // Check for conflicts in both dry-run and real mode so counts are accurate
+        let conflict = match target_column {
+            "icao" => aircraft::table
+                .filter(aircraft::icao_address.eq(*address))
+                .filter(aircraft::id.ne(*aircraft_id))
+                .select(aircraft::id)
+                .first::<uuid::Uuid>(&mut conn)
+                .optional()
+                .context("Failed to check for icao_address conflict")?,
+            "flarm" => aircraft::table
+                .filter(aircraft::flarm_address.eq(*address))
+                .filter(aircraft::id.ne(*aircraft_id))
+                .select(aircraft::id)
+                .first::<uuid::Uuid>(&mut conn)
+                .optional()
+                .context("Failed to check for flarm_address conflict")?,
+            "ogn" => aircraft::table
+                .filter(aircraft::ogn_address.eq(*address))
+                .filter(aircraft::id.ne(*aircraft_id))
+                .select(aircraft::id)
+                .first::<uuid::Uuid>(&mut conn)
+                .optional()
+                .context("Failed to check for ogn_address conflict")?,
+            _ => unreachable!(),
+        };
+
+        if let Some(conflicting_id) = conflict {
+            warn!(
+                "Conflict: aircraft {} has addr {:06X} in other_address, but aircraft {} already has it in {}_address. Skipping.",
+                aircraft_id, address, conflicting_id, target_column
+            );
+            conflicts += 1;
+            continue;
+        }
+
         if dry_run {
             info!(
                 "Would move aircraft {} (addr={:06X}, tracker={:?}) from other_address to {}_address",
                 aircraft_id, address, tracker_device_type, target_column
             );
         } else {
-            // Check for conflicts: does another aircraft already have this address in the target column?
-            let conflict = match target_column {
-                "icao" => aircraft::table
-                    .filter(aircraft::icao_address.eq(*address))
-                    .filter(aircraft::id.ne(*aircraft_id))
-                    .select(aircraft::id)
-                    .first::<uuid::Uuid>(&mut conn)
-                    .optional()?,
-                "flarm" => aircraft::table
-                    .filter(aircraft::flarm_address.eq(*address))
-                    .filter(aircraft::id.ne(*aircraft_id))
-                    .select(aircraft::id)
-                    .first::<uuid::Uuid>(&mut conn)
-                    .optional()?,
-                "ogn" => aircraft::table
-                    .filter(aircraft::ogn_address.eq(*address))
-                    .filter(aircraft::id.ne(*aircraft_id))
-                    .select(aircraft::id)
-                    .first::<uuid::Uuid>(&mut conn)
-                    .optional()?,
-                _ => unreachable!(),
-            };
-
-            if let Some(conflicting_id) = conflict {
-                warn!(
-                    "Conflict: aircraft {} has addr {:06X} in other_address, but aircraft {} already has it in {}_address. Skipping.",
-                    aircraft_id, address, conflicting_id, target_column
-                );
-                conflicts += 1;
-                continue;
-            }
-
             // Move the address: set the target column and clear other_address
             match target_column {
                 "icao" => {
@@ -144,8 +147,8 @@ pub async fn handle_fix_address_types(pool: &PgPool, dry_run: bool) -> Result<()
                             aircraft::icao_address.eq(Some(*address)),
                             aircraft::other_address.eq(None::<i32>),
                         ))
-                        .execute(&mut conn)?;
-                    moved_to_icao += 1;
+                        .execute(&mut conn)
+                        .context("Failed to update aircraft icao_address")?;
                 }
                 "flarm" => {
                     diesel::update(aircraft::table.filter(aircraft::id.eq(*aircraft_id)))
@@ -153,8 +156,8 @@ pub async fn handle_fix_address_types(pool: &PgPool, dry_run: bool) -> Result<()
                             aircraft::flarm_address.eq(Some(*address)),
                             aircraft::other_address.eq(None::<i32>),
                         ))
-                        .execute(&mut conn)?;
-                    moved_to_flarm += 1;
+                        .execute(&mut conn)
+                        .context("Failed to update aircraft flarm_address")?;
                 }
                 "ogn" => {
                     diesel::update(aircraft::table.filter(aircraft::id.eq(*aircraft_id)))
@@ -162,17 +165,17 @@ pub async fn handle_fix_address_types(pool: &PgPool, dry_run: bool) -> Result<()
                             aircraft::ogn_address.eq(Some(*address)),
                             aircraft::other_address.eq(None::<i32>),
                         ))
-                        .execute(&mut conn)?;
-                    moved_to_ogn += 1;
+                        .execute(&mut conn)
+                        .context("Failed to update aircraft ogn_address")?;
                 }
                 _ => unreachable!(),
             }
         }
 
         match target_column {
-            "icao" if dry_run => moved_to_icao += 1,
-            "flarm" if dry_run => moved_to_flarm += 1,
-            "ogn" if dry_run => moved_to_ogn += 1,
+            "icao" => moved_to_icao += 1,
+            "flarm" => moved_to_flarm += 1,
+            "ogn" => moved_to_ogn += 1,
             _ => {}
         }
     }
