@@ -29,9 +29,14 @@
 		}
 	}
 
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && showDropdown) {
+			showDropdown = false;
+		}
+	}
+
 	function getShortLabel(pref: string, resolved: string): string {
 		if (pref === LOCAL_TIMEZONE) {
-			// Show abbreviated timezone from Intl
 			try {
 				return (
 					new Intl.DateTimeFormat('en-US', {
@@ -61,20 +66,25 @@
 	}
 </script>
 
-<svelte:window onclick={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} onkeydown={handleKeydown} />
 
 <div class="tz-selector relative">
 	<button
 		class="preset-tonal-surface-500 btn btn-sm"
 		onclick={() => (showDropdown = !showDropdown)}
 		title="Change timezone"
+		aria-haspopup="true"
+		aria-expanded={showDropdown}
 	>
 		<Clock size={18} />
 		<span class="hidden sm:inline">{getShortLabel($timezonePreference, $resolvedTimezone)}</span>
 	</button>
 
 	{#if showDropdown}
-		<div class="absolute top-12 right-0 z-50 w-52 card preset-filled-surface-50-950 p-2 shadow-xl">
+		<div
+			class="absolute top-12 right-0 z-50 w-52 card preset-filled-surface-50-950 p-2 shadow-xl"
+			role="menu"
+		>
 			<div class="mb-2 px-3 py-1 text-xs font-semibold text-surface-600 dark:text-surface-400">
 				Timezone
 			</div>
@@ -84,6 +94,7 @@
 						? 'preset-filled-primary-500'
 						: 'preset-tonal-surface-500'} btn-sm"
 					onclick={() => selectTimezone(tz.value)}
+					role="menuitem"
 				>
 					{tz.label}
 				</button>

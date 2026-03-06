@@ -16,13 +16,27 @@ function getBrowserTimezone(): string {
 	return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+function isValidTimezone(tz: string): boolean {
+	if (tz === LOCAL_TIMEZONE || tz === 'UTC') return true;
+	try {
+		Intl.DateTimeFormat(undefined, { timeZone: tz });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function createTimezoneStore() {
 	const stored = browser ? localStorage.getItem(STORAGE_KEY) : null;
-	const { subscribe, set } = writable<string>(stored || LOCAL_TIMEZONE);
+	const initial = stored && isValidTimezone(stored) ? stored : LOCAL_TIMEZONE;
+	const { subscribe, set } = writable<string>(initial);
 
 	return {
 		subscribe,
 		setTimezone: (tz: string) => {
+			if (!isValidTimezone(tz)) {
+				tz = LOCAL_TIMEZONE;
+			}
 			set(tz);
 			if (browser) {
 				localStorage.setItem(STORAGE_KEY, tz);

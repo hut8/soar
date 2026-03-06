@@ -8,7 +8,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { getLogger } from '$lib/logging';
 	import { resolvedTimezone } from '$lib/stores/timezone';
-	import { formatShortDateTime } from '$lib/utils/dateFormatters';
+	import { formatDateTime } from '$lib/utils/dateFormatters';
 	import { toaster } from '$lib/toaster';
 	import type { ClubJoinRequestView, DataResponse, DataListResponse } from '$lib/types';
 	import type { ClubView } from '$lib/types/generated/ClubView';
@@ -97,7 +97,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return formatShortDateTime(dateStr, $resolvedTimezone);
+		return formatDateTime(dateStr, $resolvedTimezone);
 	}
 
 	function getUserName(request: ClubJoinRequestView): string {

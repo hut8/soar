@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { MapPin, Clock, ExternalLink, MoveUp, AlertCircle } from '@lucide/svelte';
-	import dayjs from 'dayjs';
-	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { resolvedTimezone } from '$lib/stores/timezone';
 	import { formatTime, formatRelative } from '$lib/utils/dateFormatters';
 	import {
@@ -16,8 +14,6 @@
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'FlightsList']);
-
-	dayjs.extend(relativeTime);
 
 	interface Props {
 		flights: Flight[];

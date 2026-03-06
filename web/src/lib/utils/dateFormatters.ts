@@ -1,8 +1,10 @@
 /**
  * Centralized date/time formatting utilities.
  *
- * All functions accept an IANA timezone string (e.g. "America/New_York", "UTC")
- * and append the timezone abbreviation to the output so times are never ambiguous.
+ * All functions accept an IANA timezone string (e.g. "America/New_York", "UTC").
+ * Functions that include a time component append the timezone abbreviation
+ * (e.g. "EST") to the output so times are never ambiguous.
+ * Date-only functions (formatDate, formatISODate) omit the timezone suffix.
  */
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';

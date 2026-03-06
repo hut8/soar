@@ -14,7 +14,7 @@
 	import type { Flight, Fix, DataListResponse, AircraftCategory } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 	import { resolvedTimezone } from '$lib/stores/timezone';
-	import { formatTimeWithSeconds } from '$lib/utils/dateFormatters';
+	import { formatTimeWithSeconds, formatDateTime } from '$lib/utils/dateFormatters';
 
 	const logger = getLogger(['soar', 'cesium', 'TimelineController']);
 
@@ -433,14 +433,12 @@
 					</p>
 					<p>
 						<strong>Takeoff:</strong>
-						{flight.takeoffTime
-							? formatTimeWithSeconds(flight.takeoffTime, $resolvedTimezone)
-							: 'Unknown'}
+						{flight.takeoffTime ? formatDateTime(flight.takeoffTime, $resolvedTimezone) : 'Unknown'}
 					</p>
 					<p>
 						<strong>Landing:</strong>
 						{flight.landingTime
-							? formatTimeWithSeconds(flight.landingTime, $resolvedTimezone)
+							? formatDateTime(flight.landingTime, $resolvedTimezone)
 							: 'In Progress'}
 					</p>
 				</div>
