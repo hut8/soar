@@ -242,11 +242,21 @@ impl FixProcessor {
                     return;
                 }
 
-                let spontaneous_address_type = match tracker_device_type.as_str() {
-                    "OGFLR" => crate::aircraft::AddressType::Flarm,
-                    "OGADSB" => crate::aircraft::AddressType::Icao,
-                    _ => crate::aircraft::AddressType::Unknown,
-                };
+                // Determine the effective address type for database routing.
+                // Prefer the address_type parsed from the OGN ID field (which encodes
+                // ICAO/Flarm/OGN explicitly). Fall back to inferring from the APRS
+                // destination callsign (tracker_device_type) only when the ID field
+                // didn't provide a specific type.
+                let effective_address_type =
+                    if address_type != crate::aircraft::AddressType::Unknown {
+                        address_type
+                    } else {
+                        match tracker_device_type.as_str() {
+                            "OGFLR" => crate::aircraft::AddressType::Flarm,
+                            "OGADSB" => crate::aircraft::AddressType::Icao,
+                            _ => crate::aircraft::AddressType::Unknown,
+                        }
+                    };
 
                 // Extract all available fields from packet for device creation/update
                 // The model field can be either a 3-4 character ICAO code or a full model name
@@ -286,7 +296,7 @@ impl FixProcessor {
                 metrics::counter!("aprs.aircraft.stage_total", "stage" => "before_db").increment(1);
                 match self
                     .aircraft_cache
-                    .get_or_upsert(device_address, spontaneous_address_type, packet_fields)
+                    .get_or_upsert(device_address, effective_address_type, packet_fields)
                     .await
                 {
                     Ok(aircraft) => {

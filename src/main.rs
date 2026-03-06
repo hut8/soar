@@ -22,9 +22,9 @@ mod migration_email_reporter;
 mod telemetry;
 
 use commands::{
-    handle_archive, handle_dump_aircraft_dbs, handle_ingest, handle_load_data,
-    handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
-    handle_sitemap_generation,
+    handle_archive, handle_dump_aircraft_dbs, handle_fix_address_types, handle_ingest,
+    handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
+    handle_seed_test_data, handle_sitemap_generation,
 };
 use migration_email_reporter::{
     MigrationEmailConfig, MigrationReport, send_migration_email_report,
@@ -301,6 +301,17 @@ enum Commands {
         /// Optional local ADS-B Exchange source file (if not specified, downloads from remote)
         #[arg(long)]
         adsb_source: Option<String>,
+    },
+    /// One-time fix: move misidentified aircraft addresses to correct typed columns
+    ///
+    /// Aircraft created from live APRS data had their address routed to other_address
+    /// instead of the correct column (icao_address, flarm_address, ogn_address) because
+    /// the address_type from the OGN ID field was not used. This command re-parses raw
+    /// messages to determine the correct address_type and moves addresses accordingly.
+    FixAddressTypes {
+        /// Only report what would be changed without making any modifications
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -832,6 +843,7 @@ async fn main() -> Result<()> {
         Commands::Resurrect { .. } => "resurrect",
         Commands::VerifyRuntime { .. } => "verify-runtime",
         Commands::DumpAircraftDbs { .. } => "dump-aircraft-dbs",
+        Commands::FixAddressTypes { .. } => "fix-address-types",
         Commands::SeedTestData { .. } => "seed-test-data",
         Commands::RunAggregates { .. } => "run-aggregates",
     };
@@ -1247,6 +1259,7 @@ async fn main() -> Result<()> {
         Commands::Sitemap { .. } => "soar-sitemap",
         Commands::Migrate {} => "soar-migrate",
         Commands::SeedTestData {} => "soar-seed-test-data",
+        Commands::FixAddressTypes { .. } => "soar-fix-address-types",
         Commands::RunAggregates { .. } => "soar-run-aggregates",
         // These should not reach here due to early returns
         Commands::Ingest { .. } => unreachable!(),
@@ -1476,6 +1489,9 @@ async fn main() -> Result<()> {
             resolutions,
         } => commands::run_aggregates(diesel_pool, start_date, end_date, resolutions.clone()).await,
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
+        Commands::FixAddressTypes { dry_run } => {
+            handle_fix_address_types(&diesel_pool, dry_run).await
+        }
         Commands::DumpAircraftDbs { .. } => {
             // This should never be reached due to early return above
             unreachable!("DumpAircraftDbs should be handled before database setup")

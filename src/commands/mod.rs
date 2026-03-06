@@ -1,5 +1,6 @@
 pub mod archive;
 pub mod dump_aircraft_dbs;
+pub mod fix_address_types;
 pub mod ingest;
 pub mod load_data;
 pub mod pull_airspaces;
@@ -11,6 +12,7 @@ pub mod sitemap;
 
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_aircraft_dbs::handle_dump_aircraft_dbs;
+pub use fix_address_types::handle_fix_address_types;
 pub use ingest::handle_ingest;
 pub use load_data::handle_load_data;
 pub use pull_airspaces::handle_pull_airspaces;
