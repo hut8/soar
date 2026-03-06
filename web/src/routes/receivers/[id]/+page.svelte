@@ -45,6 +45,7 @@
 	} from '$lib/types';
 	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
+	import ReceiverCoverageMap from '$lib/components/ReceiverCoverageMap.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -1950,35 +1951,34 @@
 				</Tabs>
 			</div>
 
-			<!-- Map Section -->
+			<!-- Coverage Map Section -->
 			{#if receiver.latitude !== null && receiver.longitude !== null}
 				<div class="card p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
-						Location Map
+						Coverage Map
 					</h2>
 					<div class="border-surface-300-600-token overflow-hidden rounded-lg border">
-						<!-- Embedded Google Map -->
-						<iframe
-							src={`https://maps.google.com/maps?q=${receiver.latitude},${receiver.longitude}&output=embed`}
-							width="100%"
-							height="500"
-							style="border:0;"
-							allowfullscreen
-							loading="lazy"
-							referrerpolicy="no-referrer-when-downgrade"
-							title="Location map for {receiver.callsign}"
-						></iframe>
+						<ReceiverCoverageMap
+							{receiverId}
+							receiverLatitude={receiver.latitude}
+							receiverLongitude={receiver.longitude}
+							height="500px"
+						/>
 					</div>
 					<div class="mt-3 flex flex-wrap gap-2">
+						<a href={resolve('/receivers/coverage')} class="preset-tonal-primary-500 btn btn-sm">
+							<ExternalLink class="mr-2 h-4 w-4" />
+							View Full Coverage Map
+						</a>
 						<a
 							href={generateGoogleMapsUrl(receiver)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-tonal-primary-500 btn btn-sm"
+							class="preset-tonal-secondary-500 btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
-							View Larger Map
+							Open in Google Maps
 						</a>
 						<a
 							href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
