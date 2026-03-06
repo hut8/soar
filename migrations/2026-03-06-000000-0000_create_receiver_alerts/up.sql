@@ -28,4 +28,3 @@ CREATE TABLE receiver_alerts (
     UNIQUE (user_id, receiver_id)
 );
 
-CREATE INDEX CONCURRENTLY idx_receiver_alerts_receiver_id ON receiver_alerts(receiver_id);
