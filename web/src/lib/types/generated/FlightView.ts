@@ -63,6 +63,10 @@ export type FlightView = {
   latestAltitudeMslFeet: number | null;
   latestAltitudeAglFeet: number | null;
   latestFixTimestamp: string | null;
+  /**
+   * Timestamp of the last fix assigned to this flight (always available, stored on flight row)
+   */
+  lastFixAt: string;
   previousFlightId: string | null;
   nextFlightId: string | null;
   callsign: string | null;

@@ -104,8 +104,11 @@ pub struct FlightView {
     pub latest_altitude_msl_feet: Option<i32>,
     pub latest_altitude_agl_feet: Option<i32>,
 
-    // Latest fix timestamp (for active flights)
+    // Latest fix timestamp (for active flights, from separate fix query)
     pub latest_fix_timestamp: Option<DateTime<Utc>>,
+
+    /// Timestamp of the last fix assigned to this flight (always available, stored on flight row)
+    pub last_fix_at: DateTime<Utc>,
 
     // Navigation to previous/next flights for the same device (chronologically by takeoff time)
     pub previous_flight_id: Option<Uuid>,
@@ -211,6 +214,7 @@ impl FlightView {
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,
             latest_fix_timestamp,
+            last_fix_at: flight.last_fix_at,
             previous_flight_id,
             next_flight_id,
             callsign: flight.callsign,
