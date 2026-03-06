@@ -42,9 +42,9 @@
 		try {
 			const response = await serverCall<{ data: Aircraft }>(`/aircraft/${aircraftId}`);
 			aircraft = response.data;
-			loading = false;
 		} catch (error) {
 			logger.error('Failed to load aircraft {aircraftId}: {error}', { aircraftId, error });
+		} finally {
 			loading = false;
 		}
 	});

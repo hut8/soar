@@ -144,9 +144,14 @@
 
 	// Sort aircraft: airborne first (most recent takeoff at top), then on-ground (most recent activity at top)
 	let sortedAircraft = $derived(() => {
+		// Precompute flight lookup map and timestamps to avoid repeated work in comparator
+		const flightByAircraftId = new Map(
+			flightsInProgress.filter((f) => f.aircraftId).map((f) => [f.aircraftId!, f])
+		);
+
 		return [...aircraft].sort((a, b) => {
-			const aFlight = flightsInProgress.find((f) => f.aircraftId === a.id);
-			const bFlight = flightsInProgress.find((f) => f.aircraftId === b.id);
+			const aFlight = flightByAircraftId.get(a.id);
+			const bFlight = flightByAircraftId.get(b.id);
 			const aAirborne = aFlight != null && aFlight.state === 'active';
 			const bAirborne = bFlight != null && bFlight.state === 'active';
 

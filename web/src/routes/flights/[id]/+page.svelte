@@ -1418,11 +1418,11 @@
 			{/if}
 
 			<!-- Distance & Duration -->
-			{#if data.flight.totalDistanceMeters || duration}
+			{#if data.flight.totalDistanceMeters != null || duration}
 				<div class="flex items-start gap-3">
 					<Route class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
-						{#if data.flight.totalDistanceMeters}
+						{#if data.flight.totalDistanceMeters != null}
 							<div class="text-surface-600-300-token text-sm">Total Distance</div>
 							<div class="font-semibold">{formatDistance(data.flight.totalDistanceMeters)}</div>
 						{/if}
@@ -1484,10 +1484,17 @@
 								</a>
 							</div>
 						{/if}
-						{#if data.flight.towReleaseHeightDeltaFt}
-							<div class="text-surface-600-300-token text-sm">Release Height</div>
+						{#if data.flight.towReleaseAltitudeMslFt != null || data.flight.towReleaseHeightDeltaFt != null}
+							<div class="text-surface-600-300-token text-sm">Tow Release</div>
 							<div class="font-semibold">
-								{data.flight.towReleaseHeightDeltaFt.toLocaleString()} ft
+								{#if data.flight.towReleaseAltitudeMslFt != null}
+									{data.flight.towReleaseAltitudeMslFt.toLocaleString()} ft MSL
+								{/if}
+								{#if data.flight.towReleaseHeightDeltaFt != null}
+									<span class="text-surface-600-300-token text-sm font-normal">
+										({data.flight.towReleaseHeightDeltaFt.toLocaleString()} ft gain)
+									</span>
+								{/if}
 							</div>
 						{/if}
 					</div>
