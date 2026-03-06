@@ -40,7 +40,12 @@
 
 	onMount(async () => {
 		if (clubId) {
-			await Promise.all([loadClub(), loadCharges(), loadMembers()]);
+			if (isClubAdmin) {
+				await Promise.all([loadClub(), loadCharges(), loadMembers()]);
+			} else {
+				await loadClub();
+				loading = false;
+			}
 		}
 	});
 
@@ -180,7 +185,15 @@
 		</div>
 	{/if}
 
-	{#if club}
+	{#if !isClubAdmin}
+		<div class="alert variant-ghost-warning mb-4">
+			<AlertCircle class="h-5 w-5" />
+			<div>
+				<p class="font-semibold">Access Restricted</p>
+				<p>You must be a club admin to manage charges.</p>
+			</div>
+		</div>
+	{:else if club}
 		<div class="mb-6 card p-4">
 			<div class="flex items-center justify-between">
 				<div>

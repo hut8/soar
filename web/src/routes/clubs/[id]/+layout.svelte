@@ -95,13 +95,19 @@
 	}
 
 	async function loadStripeStatus() {
+		clubHasPayments = false;
+		const requestedClubId = clubId;
 		try {
 			const response = await serverCall<DataResponse<StripeConnectStatusView>>(
-				`/clubs/${clubId}/stripe/status`
+				`/clubs/${requestedClubId}/stripe/status`
 			);
-			clubHasPayments = response.data.chargesEnabled;
+			if (clubId === requestedClubId) {
+				clubHasPayments = response.data.chargesEnabled;
+			}
 		} catch {
-			clubHasPayments = false;
+			if (clubId === requestedClubId) {
+				clubHasPayments = false;
+			}
 		}
 	}
 

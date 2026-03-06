@@ -30,7 +30,11 @@
 	onMount(async () => {
 		if (clubId) {
 			await loadClub();
-			await loadRequests();
+			if (isClubAdmin) {
+				await loadRequests();
+			} else {
+				loadingRequests = false;
+			}
 		}
 	});
 

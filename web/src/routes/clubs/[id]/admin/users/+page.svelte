@@ -37,7 +37,11 @@
 	onMount(async () => {
 		if (clubId) {
 			await loadClub();
-			await loadPilots();
+			if (isClubAdmin) {
+				await loadPilots();
+			} else {
+				loadingPilots = false;
+			}
 		}
 	});
 
