@@ -169,6 +169,15 @@
 			// Clear deck.gl layers if no data
 			if (hexCount === 0) {
 				deckOverlay.setProps({ layers: [] });
+
+				// Clear any stale hover popup and cursor state
+				if (currentPopup) {
+					currentPopup.remove();
+					currentPopup = null;
+				}
+				if (map) {
+					map.getCanvas().style.cursor = '';
+				}
 				return;
 			}
 
@@ -319,8 +328,22 @@
 		});
 
 		return () => {
-			deckOverlay?.finalize();
-			map?.remove();
+			if (moveDebounceTimer !== null) {
+				clearTimeout(moveDebounceTimer);
+				moveDebounceTimer = null;
+			}
+			if (currentPopup) {
+				currentPopup.remove();
+				currentPopup = null;
+			}
+			if (deckOverlay) {
+				deckOverlay.finalize();
+				deckOverlay = null;
+			}
+			if (map) {
+				map.remove();
+				map = null;
+			}
 		};
 	});
 </script>
