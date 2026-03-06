@@ -39,6 +39,10 @@ export type FlightView = {
   clubId: string | null;
   towedByAircraftId: string | null;
   towedByFlightId: string | null;
+  /**
+   * Altitude gain during tow in feet (release altitude minus towplane takeoff altitude)
+   */
+  towReleaseHeightDeltaFt: number | null;
   takeoffAltitudeOffsetFt: number | null;
   landingAltitudeOffsetFt: number | null;
   takeoffRunwayIdent: string | null;

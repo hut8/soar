@@ -79,6 +79,8 @@ pub struct FlightView {
     // Tow information (for glider flights)
     pub towed_by_aircraft_id: Option<Uuid>,
     pub towed_by_flight_id: Option<Uuid>,
+    /// Altitude gain during tow in feet (release altitude minus towplane takeoff altitude)
+    pub tow_release_height_delta_ft: Option<i32>,
 
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
@@ -189,6 +191,7 @@ impl FlightView {
             club_id: flight.club_id,
             towed_by_aircraft_id: flight.towed_by_aircraft_id,
             towed_by_flight_id: flight.towed_by_flight_id,
+            tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,

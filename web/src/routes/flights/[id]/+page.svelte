@@ -1468,7 +1468,7 @@
 				</div>
 			{/if}
 
-			<!-- Tow Aircraft -->
+			<!-- Tow Information -->
 			{#if data.flight.towedByAircraftId}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
@@ -1477,6 +1477,19 @@
 						<div class="font-semibold">
 							<TowAircraftLink aircraftId={data.flight.towedByAircraftId} size="md" />
 						</div>
+						{#if data.flight.towedByFlightId}
+							<div class="mt-1">
+								<a href="/flights/{data.flight.towedByFlightId}" class="anchor text-xs">
+									View tow flight
+								</a>
+							</div>
+						{/if}
+						{#if data.flight.towReleaseHeightDeltaFt}
+							<div class="text-surface-600-300-token text-sm">Release Height</div>
+							<div class="font-semibold">
+								{data.flight.towReleaseHeightDeltaFt.toLocaleString()} ft
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/if}
