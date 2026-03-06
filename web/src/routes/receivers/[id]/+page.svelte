@@ -28,8 +28,8 @@
 	} from '@lucide/svelte';
 	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
-	import dayjs from 'dayjs';
-	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatISODateTime, formatRelative } from '$lib/utils/dateFormatters';
 	import type {
 		Aircraft,
 		Receiver,
@@ -46,8 +46,6 @@
 	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import ReceiverCoverageMap from '$lib/components/ReceiverCoverageMap.svelte';
-
-	dayjs.extend(relativeTime);
 
 	// Extends AircraftFixCount with fetched aircraft details
 	interface AircraftFixCountWithDetails extends AircraftFixCount {
@@ -514,11 +512,11 @@
 	}
 
 	function formatDateTime(dateStr: string): string {
-		return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss UTC');
+		return formatISODateTime(dateStr, $resolvedTimezone);
 	}
 
 	function formatRelativeTime(dateStr: string): string {
-		return dayjs(dateStr).fromNow();
+		return formatRelative(dateStr);
 	}
 
 	async function nextFixesPage() {

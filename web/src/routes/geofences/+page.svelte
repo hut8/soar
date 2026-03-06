@@ -6,6 +6,8 @@
 	import type { GeofenceWithCounts } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate } from '$lib/utils/dateFormatters';
 
 	const logger = getLogger(['soar', 'Geofences']);
 
@@ -161,7 +163,7 @@
 
 						<!-- Created Date -->
 						<p class="text-surface-600-300-token mt-2 text-xs">
-							Created {new Date(geofence.createdAt).toLocaleDateString()}
+							Created {formatDate(geofence.createdAt, $resolvedTimezone)}
 						</p>
 					</div>
 				{/each}

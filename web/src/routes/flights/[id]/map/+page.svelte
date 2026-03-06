@@ -13,8 +13,9 @@
 		Flight,
 		Fix
 	} from '$lib/types';
-	import dayjs from 'dayjs';
 	import { serverCall } from '$lib/api/server';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTime12h } from '$lib/utils/dateFormatters';
 	import FlightProfile from '$lib/components/FlightProfile.svelte';
 	import { getLogger } from '$lib/logging';
 
@@ -205,7 +206,7 @@
 					climbRate: fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : null,
 					groundSpeed:
 						fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : null,
-					timestamp: dayjs(fix.receivedAt).format('h:mm:ss A')
+					timestamp: formatTime12h(fix.receivedAt, $resolvedTimezone)
 				},
 				geometry: {
 					type: 'Point',

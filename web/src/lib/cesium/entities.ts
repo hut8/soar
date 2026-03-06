@@ -16,6 +16,7 @@ import {
 import type { Aircraft, Fix, Flight, Airport, Receiver, AircraftCluster } from '$lib/types';
 import { altitudeToColor, formatAltitudeWithTime } from '$lib/utils/mapColors';
 import { getAircraftTitle } from '$lib/formatters';
+import { formatDateTime } from '$lib/utils/dateFormatters';
 
 /**
  * Feet to meters conversion factor
@@ -132,7 +133,8 @@ export function createAircraftEntity(
 export function createFlightPathEntity(
 	flight: Flight,
 	fixes: Fix[],
-	colorScheme: 'altitude' | 'time' = 'altitude'
+	colorScheme: 'altitude' | 'time' = 'altitude',
+	timezone: string = 'UTC'
 ): Entity {
 	if (fixes.length === 0) {
 		throw new Error('Cannot create flight path with zero fixes');
@@ -171,8 +173,8 @@ export function createFlightPathEntity(
 		description: `
 			<h3>Flight Path</h3>
 			<p><strong>Aircraft:</strong> ${flight.registration || flight.deviceAddress}</p>
-			<p><strong>Takeoff:</strong> ${flight.takeoffTime ? new Date(flight.takeoffTime).toLocaleString() : 'Unknown'}</p>
-			<p><strong>Landing:</strong> ${flight.landingTime ? new Date(flight.landingTime).toLocaleString() : 'In Progress'}</p>
+			<p><strong>Takeoff:</strong> ${flight.takeoffTime ? formatDateTime(flight.takeoffTime, timezone) : 'Unknown'}</p>
+			<p><strong>Landing:</strong> ${flight.landingTime ? formatDateTime(flight.landingTime, timezone) : 'In Progress'}</p>
 			<p><strong>Duration:</strong> ${flight.durationSeconds ? Math.round(flight.durationSeconds / 60) + ' min' : 'N/A'}</p>
 			<p><strong>Max Altitude:</strong> ${Math.max(...fixes.map((f) => f.altitudeMslFeet || 0))} ft</p>
 		`,

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { MapPin, Clock, ExternalLink, MoveUp, AlertCircle } from '@lucide/svelte';
-	import dayjs from 'dayjs';
-	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTime, formatRelative } from '$lib/utils/dateFormatters';
 	import {
 		getAircraftCategoryDescription,
 		getAircraftCategoryColor,
@@ -14,8 +14,6 @@
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'FlightsList']);
-
-	dayjs.extend(relativeTime);
 
 	interface Props {
 		flights: Flight[];
@@ -89,12 +87,12 @@
 
 	function formatRelativeTime(dateString: string | null | undefined): string {
 		if (!dateString) return '—';
-		return dayjs(dateString).fromNow();
+		return formatRelative(dateString);
 	}
 
 	function formatLocalTime(dateString: string | null | undefined): string {
 		if (!dateString) return '';
-		return dayjs(dateString).format('HH:mm');
+		return formatTime(dateString, $resolvedTimezone);
 	}
 
 	function calculateFlightDuration(

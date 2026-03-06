@@ -3,6 +3,8 @@
 	import { Radio, Plus, Trash2, Edit2, Power, PowerOff, AlertCircle } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatDate } from '$lib/utils/dateFormatters';
 	import type { DataStream, StreamFormat, DataListResponse, DataResponse } from '$lib/types';
 
 	const logger = getLogger(['soar', 'DataStreamsPage']);
@@ -323,7 +325,7 @@
 									</button>
 								</td>
 								<td class="text-sm opacity-75">
-									{new Date(stream.updatedAt).toLocaleDateString()}
+									{formatDate(stream.updatedAt, $resolvedTimezone)}
 								</td>
 								<td class="text-right">
 									<div class="flex justify-end gap-2">

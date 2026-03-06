@@ -39,6 +39,8 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import durationPlugin from 'dayjs/plugin/duration';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTime12h, formatDate as fmtDate } from '$lib/utils/dateFormatters';
 	import {
 		getAircraftCategoryDescription,
 		formatAircraftAddress,
@@ -330,7 +332,7 @@
 					climbRate: fix.climbFpm !== null ? Math.round(fix.climbFpm) + ' fpm' : null,
 					groundSpeed:
 						fix.groundSpeedKnots !== null ? Math.round(fix.groundSpeedKnots) + ' kt' : null,
-					timestamp: dayjs(fix.receivedAt).format('h:mm:ss A')
+					timestamp: formatTime12h(fix.receivedAt, $resolvedTimezone)
 				},
 				geometry: {
 					type: 'Point',
@@ -1937,17 +1939,17 @@
 							<!-- Time Information -->
 							<div>
 								<div class="text-surface-600-300-token text-sm">Start Time</div>
-								<div class="font-semibold">{dayjs(gap.gapStart).format('h:mm:ss A')}</div>
+								<div class="font-semibold">{formatTime12h(gap.gapStart, $resolvedTimezone)}</div>
 								<div class="text-surface-500-400-token text-xs">
-									{dayjs(gap.gapStart).format('MMM D, YYYY')}
+									{fmtDate(gap.gapStart, $resolvedTimezone)}
 								</div>
 							</div>
 
 							<div>
 								<div class="text-surface-600-300-token text-sm">End Time</div>
-								<div class="font-semibold">{dayjs(gap.gapEnd).format('h:mm:ss A')}</div>
+								<div class="font-semibold">{formatTime12h(gap.gapEnd, $resolvedTimezone)}</div>
 								<div class="text-surface-500-400-token text-xs">
-									{dayjs(gap.gapEnd).format('MMM D, YYYY')}
+									{fmtDate(gap.gapEnd, $resolvedTimezone)}
 								</div>
 							</div>
 

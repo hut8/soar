@@ -9,7 +9,8 @@
 		Receiver
 	} from '$lib/types';
 	import { getAircraftTitle } from '$lib/formatters';
-	import dayjs from 'dayjs';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatTimestamp as fmtTimestamp, formatShortDateTime } from '$lib/utils/dateFormatters';
 	import { resolve } from '$app/paths';
 
 	let {
@@ -44,7 +45,7 @@
 	}
 
 	function formatTimestamp(timestamp: string): string {
-		return dayjs(timestamp).format('MMM D, HH:mm:ss');
+		return fmtTimestamp(timestamp, $resolvedTimezone);
 	}
 
 	function formatDuration(hours: number): string {
@@ -222,14 +223,14 @@
 						<div class="rounded-lg bg-surface-100 p-4 dark:bg-surface-800">
 							<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">First Seen</dt>
 							<dd class="mt-1 text-sm font-medium">
-								{dayjs(hexProperties.firstSeenAt).format('MMM D, HH:mm')}
+								{formatShortDateTime(hexProperties.firstSeenAt, $resolvedTimezone)}
 							</dd>
 						</div>
 
 						<div class="rounded-lg bg-surface-100 p-4 dark:bg-surface-800">
 							<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">Last Seen</dt>
 							<dd class="mt-1 text-sm font-medium">
-								{dayjs(hexProperties.lastSeenAt).format('MMM D, HH:mm')}
+								{formatShortDateTime(hexProperties.lastSeenAt, $resolvedTimezone)}
 							</dd>
 						</div>
 

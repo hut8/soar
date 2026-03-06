@@ -17,6 +17,8 @@
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
+	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { formatShortDateTime } from '$lib/utils/dateFormatters';
 	import type { Airport, Flight, Club, DataResponse, DataListResponse } from '$lib/types';
 
 	const logger = getLogger(['soar', 'AirportDetailsPage']);
@@ -159,13 +161,7 @@
 
 	function formatDateTime(dateStr: string | null | undefined): string {
 		if (!dateStr) return '—';
-		const date = new Date(dateStr);
-		return date.toLocaleString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		return formatShortDateTime(dateStr, $resolvedTimezone);
 	}
 
 	function getFlightStatus(flight: Flight): string {
