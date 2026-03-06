@@ -171,7 +171,7 @@
 					Club Info
 				</a>
 
-				{#if isMember}
+				{#if isMember || $auth.user?.isAdmin}
 					<a
 						href={resolve(`/clubs/${clubId}/operations`)}
 						class="btn btn-sm {activeTab === 'operations'
@@ -192,7 +192,7 @@
 						Members
 					</a>
 
-					{#if clubHasPayments}
+					{#if clubHasPayments && isMember}
 						<a
 							href={resolve('/payments')}
 							class="btn btn-sm {activeTab === 'payments'
