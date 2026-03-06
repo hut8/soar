@@ -20,9 +20,15 @@ type PgPool = Pool<ConnectionManager<PgConnection>>;
 /// Detected alert condition for a receiver
 #[derive(Debug)]
 enum AlertCondition {
-    Down { minutes_since_last_packet: i64 },
-    HighCpu { cpu_load: f64 },
-    HighTemperature { temperature_c: f64 },
+    Down {
+        minutes_since_last_packet: Option<i64>,
+    },
+    HighCpu {
+        cpu_load: f64,
+    },
+    HighTemperature {
+        temperature_c: f64,
+    },
 }
 
 impl AlertCondition {
@@ -37,10 +43,13 @@ impl AlertCondition {
     fn description(&self) -> String {
         match self {
             AlertCondition::Down {
-                minutes_since_last_packet,
+                minutes_since_last_packet: Some(mins),
             } => {
-                format!("No data received for {} minutes", minutes_since_last_packet)
+                format!("No data received for {} minutes", mins)
             }
+            AlertCondition::Down {
+                minutes_since_last_packet: None,
+            } => "No data ever received from this receiver".to_string(),
             AlertCondition::HighCpu { cpu_load } => {
                 format!("CPU load at {:.0}%", cpu_load * 100.0)
             }
@@ -107,10 +116,12 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
             .push(alert);
     }
 
-    // Pre-fetch all users we might need
+    // Pre-fetch all users we might need (deduplicated to avoid redundant queries)
     let user_ids: Vec<Uuid> = alerts_by_receiver
         .values()
         .flat_map(|alerts| alerts.iter().map(|a| a.user_id))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
         .collect();
     let users = fetch_users(&users_repo, &user_ids).await;
 
@@ -262,10 +273,7 @@ fn evaluate_conditions(
             None => true, // Never received a packet — consider it down
         };
         if is_down {
-            let minutes_since = receiver
-                .latest_packet_at
-                .map(|lp| (now - lp).num_minutes())
-                .unwrap_or(-1);
+            let minutes_since = receiver.latest_packet_at.map(|lp| (now - lp).num_minutes());
             conditions.push(AlertCondition::Down {
                 minutes_since_last_packet: minutes_since,
             });
@@ -359,7 +367,7 @@ mod tests {
     fn test_condition_keys() {
         assert_eq!(
             AlertCondition::Down {
-                minutes_since_last_packet: 30
+                minutes_since_last_packet: Some(30)
             }
             .condition_key(),
             "down"

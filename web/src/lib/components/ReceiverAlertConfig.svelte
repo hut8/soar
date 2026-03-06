@@ -11,11 +11,11 @@
 
 	let { receiverId }: { receiverId: string } = $props();
 
-	let isAuthenticated = $state(false);
 	let alert = $state<ReceiverAlertView | null>(null);
 	let loading = $state(true);
 	let saving = $state(false);
 	let hasSubscription = $state(false);
+	let alertLoaded = $state(false);
 
 	// Form state
 	let alertOnDown = $state(true);
@@ -27,11 +27,11 @@
 	let sendEmail = $state(true);
 	let baseCooldownMinutes = $state(30);
 
-	auth.subscribe((state) => {
-		isAuthenticated = state.isAuthenticated;
-		if (state.isAuthenticated) {
+	$effect(() => {
+		if ($auth.isAuthenticated && !alertLoaded) {
+			alertLoaded = true;
 			loadAlert();
-		} else {
+		} else if (!$auth.isAuthenticated) {
 			loading = false;
 		}
 	});
@@ -124,7 +124,7 @@
 	}
 </script>
 
-{#if !isAuthenticated}
+{#if !$auth.isAuthenticated}
 	<!-- Don't render anything if not logged in -->
 {:else if loading}
 	<div class="card p-6">
