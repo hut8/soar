@@ -3,8 +3,8 @@
 #
 # Placeholders:
 #   {{POSTGRES_DATABASE}} - Database name (soar or soar_staging)
-#   {{POSTGRES_DATASOURCE_UID}} - Datasource UID (soar-postgres or soar-postgres-staging)
-#   {{POSTGRES_DATASOURCE_NAME}} - Datasource name (soar-postgres or soar-postgres-staging)
+#   {{POSTGRES_DATASOURCE_UID}} - Datasource UID (soar-postgres-production or soar-postgres-staging)
+#   {{POSTGRES_DATASOURCE_NAME}} - Datasource name (soar-postgres-production or soar-postgres-staging)
 #
 # Connection goes through PgBouncer on port 6432 with auth_type=any (no password needed)
 

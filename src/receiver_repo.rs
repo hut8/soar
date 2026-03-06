@@ -454,15 +454,15 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get recently updated receivers
-    /// Returns the most recently updated receivers, ordered by updated_at descending
-    pub async fn get_recently_updated_receivers(&self, limit: i64) -> Result<Vec<ReceiverRecord>> {
+    /// Get recently active receivers
+    /// Returns receivers ordered by latest_packet_at descending (most recently heard from first)
+    pub async fn get_recently_active_receivers(&self, limit: i64) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
             let mut conn = pool.get()?;
             let receiver_models = receivers::table
-                .order(receivers::updated_at.desc())
+                .order(receivers::latest_packet_at.desc().nulls_last())
                 .limit(limit)
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;

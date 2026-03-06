@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { BarChart3, Activity, Radio } from '@lucide/svelte';
+	import { BarChart3, Activity, Radio, Mountain, MapPin } from '@lucide/svelte';
 	import { getGrafanaUrl, isStaging } from '$lib/config';
 
 	// Generate metrics with environment-specific Grafana URLs
@@ -9,19 +9,31 @@
 	const metrics = $derived([
 		{
 			title: 'Web Performance',
-			url: `${grafanaBase}/public-dashboards/${staging ? '9c476a10e31f48bf9a9e0edd13f4285c' : '3ba212e4a59f44a48669e546ca62389b'}`,
+			url: `${grafanaBase}/public-dashboards/${staging ? '9c476a10e31f48bf9a9e0edd13f4285c' : '9aa033e64fda42e4ab5a50bb285f3147'}`,
 			icon: BarChart3,
 			description: 'HTTP request metrics, WebSocket connections, and endpoint performance'
 		},
 		{
 			title: 'Processor Performance',
-			url: `${grafanaBase}/public-dashboards/${staging ? '15160e9b72244eab82a2031e16d17a97' : 'cbc0efd7f06f45a38815503dca1ff356'}`,
+			url: `${grafanaBase}/public-dashboards/${staging ? '15160e9b72244eab82a2031e16d17a97' : 'c50a7055b83b47bcaed3eeff5eaafbee'}`,
 			icon: Activity,
 			description: 'APRS message processing, elevation lookups, and flight tracking metrics'
 		},
 		{
-			title: 'APRS Ingest Performance',
-			url: `${grafanaBase}/public-dashboards/${staging ? '6ad16fc10c5941b5b09a0ff086309bd8' : 'c3f6fb97f4c04001a04e6f85394a6164'}`,
+			title: 'Elevation Processing',
+			url: `${grafanaBase}/public-dashboards/d35fb0208fe44e1ebaa2f3aaed787131`,
+			icon: Mountain,
+			description: 'Elevation data processing and altitude above ground level (AGL) calculations'
+		},
+		{
+			title: 'Geocoding',
+			url: `${grafanaBase}/public-dashboards/bc1226e0d5cc49449f27e71efd36519b`,
+			icon: MapPin,
+			description: 'Pelias geocoding service performance and reverse geocoding metrics'
+		},
+		{
+			title: 'Data Ingest',
+			url: `${grafanaBase}/public-dashboards/${staging ? '6ad16fc10c5941b5b09a0ff086309bd8' : 'f6c527ae83ac445eb59e8f99965fb9ac'}`,
 			icon: Radio,
 			description: 'OGN APRS-IS connection status and message publishing metrics'
 		}

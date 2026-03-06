@@ -750,8 +750,8 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
                 PG_DATASOURCE_NAME="soar-postgres-staging"
             else
                 PG_DATABASE="soar"
-                PG_DATASOURCE_UID="soar-postgres"
-                PG_DATASOURCE_NAME="soar-postgres"
+                PG_DATASOURCE_UID="soar-postgres-production"
+                PG_DATASOURCE_NAME="soar-postgres-production"
             fi
 
             # Process template (no password needed - PgBouncer uses auth_type=any on localhost)
@@ -1024,13 +1024,13 @@ if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
             POSTGRES_DATASOURCE_UID="soar-postgres-staging"
             POSTGRES_DATASOURCE_NAME="soar-postgres-staging"
         else
-            POSTGRES_DATASOURCE_UID="soar-postgres"
-            POSTGRES_DATASOURCE_NAME="soar-postgres"
+            POSTGRES_DATASOURCE_UID="soar-postgres-production"
+            POSTGRES_DATASOURCE_NAME="soar-postgres-production"
         fi
 
         # Check if datasource exists by UID or name
         POSTGRES_UID_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE uid='$POSTGRES_DATASOURCE_UID';" 2>/dev/null || true)
-        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME' OR name='soar-postgres';" 2>/dev/null || true)
+        POSTGRES_NAME_EXISTS=$(sudo sqlite3 /var/lib/grafana/grafana.db "SELECT uid FROM data_source WHERE name='$POSTGRES_DATASOURCE_NAME';" 2>/dev/null || true)
 
         if [ -n "$POSTGRES_UID_EXISTS" ]; then
             log_info "Datasource '$POSTGRES_DATASOURCE_UID': ${GREEN}FOUND (by UID)${NC}"
