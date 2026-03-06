@@ -29,12 +29,19 @@
 	let submitting = $state(false);
 
 	let clubId = $derived($page.params.id || '');
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isClubAdmin = $derived(
+		$auth.isAuthenticated &&
+			(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin)
+	);
 
 	onMount(async () => {
 		if (clubId) {
 			await loadClub();
-			await loadPilots();
+			if (isClubAdmin) {
+				await loadPilots();
+			} else {
+				loadingPilots = false;
+			}
 		}
 	});
 
@@ -144,7 +151,7 @@
 				</div>
 			</div>
 
-			{#if userBelongsToClub}
+			{#if isClubAdmin}
 				<button onclick={openAddModal} class="btn preset-filled-primary-500">
 					<UserPlus class="mr-2 h-5 w-5" />
 					Add Pilot
@@ -163,11 +170,11 @@
 		<div class="alert preset-filled-error-500">
 			<p>{error}</p>
 		</div>
-	{:else if !userBelongsToClub}
+	{:else if !isClubAdmin}
 		<!-- Not Authorized -->
 		<div class="alert preset-filled-warning-500">
 			<p class="font-semibold">Access Restricted</p>
-			<p>You must be a member of this club to view pilots.</p>
+			<p>You must be a club admin to manage users.</p>
 		</div>
 	{:else if pilots.length === 0}
 		<!-- Empty State -->

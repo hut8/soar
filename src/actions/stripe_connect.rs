@@ -61,10 +61,11 @@ pub async fn start_onboarding(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to manage Stripe Connect",
+            "You must be a club admin to manage Stripe Connect",
         )
         .into_response();
     }
@@ -238,10 +239,11 @@ pub async fn get_dashboard_link(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to access the Stripe dashboard",
+            "You must be a club admin to access the Stripe dashboard",
         )
         .into_response();
     }

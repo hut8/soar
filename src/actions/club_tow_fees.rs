@@ -101,11 +101,12 @@ pub async fn create_club_tow_fee(
     Path(club_id): Path<Uuid>,
     Json(request): Json<CreateTowFeeRequest>,
 ) -> impl IntoResponse {
-    // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    // Only club admins and site admins can create tow fees
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to manage tow fees",
+            "You must be a club admin to manage tow fees",
         )
         .into_response();
     }
@@ -183,11 +184,12 @@ pub async fn update_club_tow_fee(
     Path((club_id, fee_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateTowFeeRequest>,
 ) -> impl IntoResponse {
-    // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    // Only club admins and site admins can update tow fees
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to manage tow fees",
+            "You must be a club admin to manage tow fees",
         )
         .into_response();
     }
@@ -260,11 +262,12 @@ pub async fn delete_club_tow_fee(
     State(state): State<AppState>,
     Path((club_id, fee_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    // Only club admins and site admins can delete tow fees
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to manage tow fees",
+            "You must be a club admin to manage tow fees",
         )
         .into_response();
     }

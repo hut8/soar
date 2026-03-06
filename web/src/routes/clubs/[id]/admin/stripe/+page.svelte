@@ -22,11 +22,19 @@
 	let actionLoading = $state(false);
 
 	let clubId = $derived($page.params.id || '');
-	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isClubAdmin = $derived(
+		$auth.isAuthenticated &&
+			(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin)
+	);
 
 	onMount(async () => {
 		if (clubId) {
-			await Promise.all([loadClub(), loadStripeStatus()]);
+			if (isClubAdmin) {
+				await Promise.all([loadClub(), loadStripeStatus()]);
+			} else {
+				await loadClub();
+				loading = false;
+			}
 		}
 	});
 
@@ -106,7 +114,15 @@
 		</div>
 	{/if}
 
-	{#if club && stripeStatus}
+	{#if !isClubAdmin}
+		<div class="alert variant-ghost-warning mb-4">
+			<AlertCircle class="h-5 w-5" />
+			<div>
+				<p class="font-semibold">Access Restricted</p>
+				<p>You must be a club admin to manage Stripe settings.</p>
+			</div>
+		</div>
+	{:else if club && stripeStatus}
 		<div class="mb-6 card p-4">
 			<h2 class="mb-2 h3">{club.name}</h2>
 			<p class="text-sm opacity-75">Manage Stripe payment processing for your club</p>
@@ -123,7 +139,7 @@
 				<button
 					onclick={startOnboarding}
 					class="variant-filled-primary btn btn-lg"
-					disabled={actionLoading || !userBelongsToClub}
+					disabled={actionLoading || !isClubAdmin}
 				>
 					{#if actionLoading}
 						<Loader class="h-5 w-5 animate-spin" />
@@ -143,7 +159,7 @@
 				<button
 					onclick={startOnboarding}
 					class="variant-filled-warning btn btn-lg"
-					disabled={actionLoading || !userBelongsToClub}
+					disabled={actionLoading || !isClubAdmin}
 				>
 					{#if actionLoading}
 						<Loader class="h-5 w-5 animate-spin" />
@@ -194,7 +210,7 @@
 					<button
 						onclick={openDashboard}
 						class="variant-filled-primary btn"
-						disabled={actionLoading || !userBelongsToClub}
+						disabled={actionLoading || !isClubAdmin}
 					>
 						{#if actionLoading}
 							<Loader class="h-5 w-5 animate-spin" />

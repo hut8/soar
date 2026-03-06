@@ -109,15 +109,20 @@ pub async fn get_users_by_club(
 ) -> impl IntoResponse {
     let users_repo = UsersRepository::new(state.pool);
 
-    // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
-        return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
+    // Only club admins and site admins can list all users
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
+        return (
+            StatusCode::FORBIDDEN,
+            "You must be a club admin to list users",
+        )
+            .into_response();
     }
 
     match users_repo.get_by_club_id(club_id).await {
         Ok(users) => {
             let user_views: Vec<UserView> = users.into_iter().map(UserView::from).collect();
-            Json(user_views).into_response()
+            Json(DataListResponse { data: user_views }).into_response()
         }
         Err(e) => {
             error!(error = %e, "Failed to get users by club");
@@ -170,11 +175,14 @@ pub async fn create_pilot(
 ) -> impl IntoResponse {
     let users_repo = UsersRepository::new(state.pool);
 
-    // Verify that the user is admin or belongs to the same club
-    if !auth_user.0.is_admin && auth_user.0.club_id != payload.club_id {
+    // Only club admins and site admins can create pilots
+    let is_club_admin = auth_user.0.is_club_admin
+        && payload.club_id.is_some()
+        && auth_user.0.club_id == payload.club_id;
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to add pilots",
+            "You must be a club admin to add pilots",
         )
         .into_response();
     }

@@ -93,10 +93,11 @@ pub async fn create_charge(
     Path(club_id): Path<Uuid>,
     Json(request): Json<CreateChargeRequest>,
 ) -> impl IntoResponse {
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to create charges",
+            "You must be a club admin to create charges",
         )
         .into_response();
     }
@@ -194,10 +195,11 @@ pub async fn list_club_charges(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
+    let is_club_admin = auth_user.0.is_club_admin && auth_user.0.club_id == Some(club_id);
+    if !auth_user.0.is_admin && !is_club_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to view charges",
+            "You must be a club admin to view charges",
         )
         .into_response();
     }
