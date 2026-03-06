@@ -32,6 +32,7 @@ mod tests {
     };
     use crate::ingest_config::{DataStream, StreamFormat};
     use crate::payments::{PaymentStatus, PaymentType};
+    use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
 
     #[test]
     fn export_types() {
@@ -121,5 +122,10 @@ mod tests {
             .expect("Failed to export ReceiverAggregateStatsResponse type");
         ReceiverStatisticsResponse::export(&cfg)
             .expect("Failed to export ReceiverStatisticsResponse type");
+
+        // Receiver alert types
+        ReceiverAlertView::export(&cfg).expect("Failed to export ReceiverAlertView type");
+        UpsertReceiverAlertRequest::export(&cfg)
+            .expect("Failed to export UpsertReceiverAlertRequest type");
     }
 }

@@ -363,9 +363,9 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
     use super::sql_types::AirspaceClass;
-    use super::sql_types::AirspaceSource;
     use super::sql_types::AirspaceType;
     use super::sql_types::AltitudeReference;
+    use super::sql_types::AirspaceSource;
 
     airspaces (id) {
         id -> Uuid,
@@ -397,6 +397,22 @@ diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
 
+    club_analytics_daily (club_id, date) {
+        club_id -> Uuid,
+        date -> Date,
+        club_name -> Nullable<Varchar>,
+        flight_count -> Int4,
+        active_devices -> Int4,
+        total_airtime_seconds -> Int8,
+        tow_count -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
     club_join_requests (id) {
         id -> Uuid,
         user_id -> Uuid,
@@ -406,22 +422,6 @@ diesel::table! {
         reviewed_by -> Nullable<Uuid>,
         reviewed_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use postgis_diesel::sql_types::*;
-
-    club_analytics_daily (club_id, date) {
-        club_id -> Uuid,
-        date -> Date,
-        club_name -> Nullable<Varchar>,
-        flight_count -> Int4,
-        active_devices -> Int4,
-        total_airtime_seconds -> Int8,
-        tow_count -> Int4,
         updated_at -> Timestamptz,
     }
 }
@@ -725,6 +725,30 @@ diesel::table! {
         raw_message_hash -> Bytea,
         raw_message -> Bytea,
         source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
+
+    receiver_alerts (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        receiver_id -> Uuid,
+        alert_on_down -> Bool,
+        down_after_minutes -> Int4,
+        alert_on_high_cpu -> Bool,
+        cpu_threshold -> Numeric,
+        alert_on_high_temperature -> Bool,
+        temperature_threshold_c -> Numeric,
+        send_email -> Bool,
+        base_cooldown_minutes -> Int4,
+        consecutive_alerts -> Int4,
+        last_alerted_at -> Nullable<Timestamptz>,
+        last_condition -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -1142,13 +1166,11 @@ diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(airports -> locations (location_id));
 diesel::joinable!(club_join_requests -> clubs (club_id));
-diesel::joinable!(club_join_requests -> users (user_id));
 diesel::joinable!(club_tow_fees -> clubs (club_id));
 diesel::joinable!(club_tow_fees -> users (modified_by));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));
-diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> users (user_id));
@@ -1162,6 +1184,8 @@ diesel::joinable!(geofences -> clubs (club_id));
 diesel::joinable!(geofences -> users (owner_user_id));
 diesel::joinable!(payments -> clubs (club_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
+diesel::joinable!(receiver_alerts -> receivers (receiver_id));
+diesel::joinable!(receiver_alerts -> users (user_id));
 diesel::joinable!(receiver_coverage_h3 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
@@ -1204,6 +1228,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     locations,
     payments,
     raw_messages,
+    receiver_alerts,
     receiver_coverage_h3,
     receiver_statuses,
     receivers,

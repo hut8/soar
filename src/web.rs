@@ -793,6 +793,22 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/aggregate-stats",
             get(actions::get_receiver_aggregate_stats),
         )
+        .route(
+            "/receivers/{id}/alerts",
+            get(actions::receiver_alerts::get_receiver_alert),
+        )
+        .route(
+            "/receivers/{id}/alerts",
+            put(actions::receiver_alerts::upsert_receiver_alert),
+        )
+        .route(
+            "/receivers/{id}/alerts",
+            delete(actions::receiver_alerts::delete_receiver_alert),
+        )
+        .route(
+            "/user/receiver-alerts",
+            get(actions::receiver_alerts::list_user_receiver_alerts),
+        )
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))
