@@ -1212,4 +1212,186 @@ The SOAR Team"#,
             geofence_url = geofence_url,
         )
     }
+
+    /// Send receiver alert email
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send_receiver_alert_email(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        receiver_callsign: &str,
+        condition_description: String,
+        condition_key: &str,
+        alert_number: i32,
+        receiver_id: uuid::Uuid,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        let environment = get_environment_name();
+        let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
+
+        let alert_type_label = match condition_key {
+            "down" => "Receiver Offline",
+            "high_cpu" => "High CPU Load",
+            "high_temperature" => "High Temperature",
+            _ => "Alert",
+        };
+
+        let subject = format!(
+            "{}{} - {} - SOAR",
+            get_staging_prefix(),
+            alert_type_label,
+            receiver_callsign
+        );
+
+        let data = ReceiverAlertEmailData {
+            to_name,
+            receiver_callsign,
+            condition_description: &condition_description,
+            alert_type_label,
+            alert_number,
+            receiver_url: &receiver_url,
+            environment: &environment,
+        };
+
+        let html_body = self.build_receiver_alert_html(&data);
+        let text_body = self.build_receiver_alert_text(&data);
+
+        let email = Message::builder()
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
+            .subject(subject)
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(text_body),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_HTML)
+                            .body(html_body),
+                    ),
+            )?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
+
+    fn build_receiver_alert_html(&self, data: &ReceiverAlertEmailData) -> String {
+        let n = data.alert_number;
+        let ordinal = if (11..=13).contains(&(n % 100)) {
+            format!("{n}th")
+        } else {
+            match n % 10 {
+                1 => format!("{n}st"),
+                2 => format!("{n}nd"),
+                3 => format!("{n}rd"),
+                _ => format!("{n}th"),
+            }
+        };
+
+        format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 24px; text-align: center; }}
+        .header h1 {{ margin: 0 0 8px 0; font-size: 24px; font-weight: 600; }}
+        .header .callsign {{ font-size: 20px; font-weight: 500; opacity: 0.95; font-family: monospace; }}
+        .content {{ padding: 24px; }}
+        .greeting {{ font-size: 16px; margin-bottom: 16px; }}
+        .alert-message {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; border-radius: 4px; margin-bottom: 24px; font-size: 16px; }}
+        .detail-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }}
+        .detail-row:last-child {{ border-bottom: none; }}
+        .detail-label {{ color: #666; }}
+        .detail-value {{ font-weight: 500; text-align: right; }}
+        .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px; }}
+        .footer {{ background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{alert_type}</h1>
+            <div class="callsign">{callsign}</div>
+        </div>
+        <div class="content">
+            <p class="greeting">Hi {name},</p>
+            <div class="alert-message">
+                <strong>{condition}</strong>
+            </div>
+            <div class="flight-details">
+                <div class="detail-row">
+                    <span class="detail-label">Receiver</span>
+                    <span class="detail-value">{callsign}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Alert Type</span>
+                    <span class="detail-value">{alert_type}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Alert #</span>
+                    <span class="detail-value">{ordinal} notification</span>
+                </div>
+            </div>
+            <a href="{receiver_url}" class="cta-button">View Receiver</a>
+        </div>
+        <div class="footer">
+            <p>You are receiving this email because you subscribed to alerts for this receiver on SOAR ({environment}).</p>
+            <p>To stop receiving these alerts, visit the receiver page and remove your alert subscription.</p>
+        </div>
+    </div>
+</body>
+</html>"#,
+            alert_type = html_escape(data.alert_type_label),
+            callsign = html_escape(data.receiver_callsign),
+            name = html_escape(data.to_name),
+            condition = html_escape(data.condition_description),
+            ordinal = ordinal,
+            receiver_url = data.receiver_url,
+            environment = data.environment,
+        )
+    }
+
+    fn build_receiver_alert_text(&self, data: &ReceiverAlertEmailData) -> String {
+        format!(
+            r#"Hi {to_name},
+
+{alert_type}: {callsign}
+
+{condition}
+
+This is alert #{alert_number} for this condition. Alerts will continue with increasing intervals until the condition resolves.
+
+View receiver: {receiver_url}
+
+To stop receiving these alerts, visit the receiver page and remove your alert subscription.
+
+Best regards,
+The SOAR Team"#,
+            to_name = data.to_name,
+            alert_type = data.alert_type_label,
+            callsign = data.receiver_callsign,
+            condition = data.condition_description,
+            alert_number = data.alert_number,
+            receiver_url = data.receiver_url,
+        )
+    }
+}
+
+/// Data for building receiver alert emails
+struct ReceiverAlertEmailData<'a> {
+    to_name: &'a str,
+    receiver_callsign: &'a str,
+    condition_description: &'a str,
+    alert_type_label: &'a str,
+    alert_number: i32,
+    receiver_url: &'a str,
+    environment: &'a str,
 }

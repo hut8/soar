@@ -477,6 +477,10 @@ pub async fn handle_run(
     );
     info!("Graceful shutdown handler configured");
 
+    // Start receiver alert checker (every 60 seconds)
+    soar::receiver_alert_checker::start_receiver_alert_checker(diesel_pool.clone(), 60);
+    info!("Receiver alert checker started (interval: 60s)");
+
     // All processing tasks are now running via socket server and envelope router
     // Just wait for shutdown signal
     info!("Main processing loop started. Press Ctrl+C to stop.");
