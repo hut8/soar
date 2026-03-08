@@ -10,7 +10,8 @@
 		Calendar,
 		UserPlus,
 		ChevronLeft,
-		ChevronRight
+		ChevronRight,
+		Users
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
@@ -30,6 +31,7 @@
 		Aircraft,
 		User,
 		ClubWithSoaring,
+		AirportUserPresence,
 		DataResponse,
 		DataListResponse
 	} from '$lib/types';
@@ -64,6 +66,10 @@
 	let flightsInProgressDetails = $state<FlightDetails[]>([]);
 	let completedFlightsDetails = $state<FlightDetails[]>([]);
 
+	// Airport user presence
+	let presentUsers = $state<AirportUserPresence[]>([]);
+	let loadingPresence = $state(false);
+
 	// Pilot modal state
 	let pilotModalOpen = $state(false);
 	let selectedFlightId = $state('');
@@ -71,18 +77,23 @@
 	let clubId = $derived($page.params.id || '');
 	let club = $derived($clubStore.club);
 	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isAdmin = $derived(
+		$auth.isAuthenticated &&
+			($auth.user?.isAdmin || ($auth.user?.isClubAdmin && $auth.user?.clubId === clubId))
+	);
 	let isToday = $derived(selectedDate === dayjs().format('YYYY-MM-DD'));
 
 	onMount(async () => {
 		if (clubId) {
-			await Promise.all([loadFlights(), loadClubAircraft(), loadMembers()]);
+			await Promise.all([loadFlights(), loadClubAircraft(), loadMembers(), loadAirportPresence()]);
 		}
 	});
 
-	// Reload flights when date changes
+	// Reload flights and presence when date changes
 	$effect(() => {
 		if (selectedDate && clubId) {
 			loadFlights();
+			loadAirportPresence();
 		}
 	});
 
@@ -195,6 +206,26 @@
 		}
 	}
 
+	async function loadAirportPresence() {
+		if (!isAdmin) {
+			presentUsers = [];
+			return;
+		}
+		loadingPresence = true;
+		try {
+			const dateParam = dayjs(selectedDate).format('YYYYMMDD');
+			const response = await serverCall<DataListResponse<AirportUserPresence>>(
+				`/clubs/${clubId}/airport-presence?date=${dateParam}`
+			);
+			presentUsers = response.data || [];
+		} catch {
+			// Silently fail - the club may not have a home base airport configured
+			presentUsers = [];
+		} finally {
+			loadingPresence = false;
+		}
+	}
+
 	function formatAircraftAddress(address: string, addressType: string): string {
 		const typePrefix = addressType === 'Flarm' ? 'F' : addressType === 'Ogn' ? 'O' : 'I';
 		return `${typePrefix}-${address}`;
@@ -295,6 +326,60 @@
 <div class="flex flex-col gap-6 lg:flex-row">
 	<!-- Main flights column -->
 	<div class="min-w-0 flex-1 space-y-6">
+		<!-- Members Present at Airport (admin only) -->
+		{#if isAdmin && (presentUsers.length > 0 || loadingPresence)}
+			<section class="card">
+				<header class="card-header">
+					<h2 class="flex items-center gap-2 h2">
+						<Users class="h-5 w-5" />
+						Members Present
+					</h2>
+					<p class="text-surface-500-400-token">
+						{#if loadingPresence}
+							Loading...
+						{:else}
+							{presentUsers.length} member{presentUsers.length === 1 ? '' : 's'} at the airport on
+							{dayjs(selectedDate).format('MMMM D, YYYY')}
+						{/if}
+					</p>
+				</header>
+
+				{#if !loadingPresence}
+					<div class="p-4">
+						<div class="flex flex-wrap gap-2">
+							{#each presentUsers as user (user.userId)}
+								<div
+									class="flex items-center gap-2 rounded-full bg-surface-100 px-3 py-1.5 dark:bg-surface-700"
+								>
+									<span class="text-sm font-medium">{user.firstName} {user.lastName}</span>
+									<div class="flex gap-1">
+										{#if user.isInstructor}
+											<span class="badge preset-filled-primary-500 text-xs" title="Instructor"
+												>CFI</span
+											>
+										{/if}
+										{#if user.isTowPilot}
+											<span class="badge preset-filled-secondary-500 text-xs" title="Tow Pilot"
+												>Tow</span
+											>
+										{/if}
+										{#if user.isExaminer}
+											<span class="badge preset-filled-warning-500 text-xs" title="Examiner"
+												>DPE</span
+											>
+										{/if}
+									</div>
+									<span class="text-surface-500-400-token text-xs" title="Last seen">
+										{formatRelativeTime(user.lastSeenAt)}
+									</span>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
 		<!-- Loading State -->
 		{#if loadingFlights}
 			<div class="space-y-4 card p-12 text-center">

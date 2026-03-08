@@ -33,6 +33,7 @@ mod tests {
     use crate::ingest_config::{DataStream, StreamFormat};
     use crate::payments::{PaymentStatus, PaymentType};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
+    use crate::user_fixes::AirportUserPresence;
 
     #[test]
     fn export_types() {
@@ -127,5 +128,8 @@ mod tests {
         ReceiverAlertView::export(&cfg).expect("Failed to export ReceiverAlertView type");
         UpsertReceiverAlertRequest::export(&cfg)
             .expect("Failed to export UpsertReceiverAlertRequest type");
+
+        // User presence types
+        AirportUserPresence::export(&cfg).expect("Failed to export AirportUserPresence type");
     }
 }

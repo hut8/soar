@@ -8,8 +8,11 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::aircraft_repo::AircraftRepository;
+use crate::auth::AuthUser;
 use crate::clubs_repo::ClubsRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::user_fixes::AirportUserPresence;
+use crate::user_fixes_repo::UserFixesRepository;
 use crate::web::AppState;
 
 use super::{
@@ -212,6 +215,93 @@ pub async fn get_club_flights(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get club flights",
+            )
+            .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AirportPresenceParams {
+    pub date: Option<String>, // YYYYMMDD format
+}
+
+/// 2 km radius for airport presence detection
+const AIRPORT_PRESENCE_RADIUS_METERS: f64 = 2000.0;
+
+/// GET /clubs/{id}/airport-presence - Get users present at the club's home base airport
+/// Requires the caller to be an admin (site admin or club admin for this club).
+pub async fn get_airport_user_presence(
+    auth_user: AuthUser,
+    Path(club_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Query(params): Query<AirportPresenceParams>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Only site admins or club admins for this club can view presence
+    let is_club_admin = user.is_club_admin && user.club_id == Some(club_id);
+    if !user.is_admin && !is_club_admin {
+        return json_error(StatusCode::FORBIDDEN, "Admin access required").into_response();
+    }
+
+    // Look up the club to get its home base airport
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+    let club = match clubs_repo.get_by_id(club_id).await {
+        Ok(Some(club)) => club,
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Club not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to get club");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get club")
+                .into_response();
+        }
+    };
+
+    let airport_id = match club.home_base_airport_id {
+        Some(id) => id,
+        None => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Club does not have a home base airport configured",
+            )
+            .into_response();
+        }
+    };
+
+    // Parse date, default to today
+    let date = if let Some(date_str) = params.date {
+        match chrono::NaiveDate::parse_from_str(&date_str, "%Y%m%d") {
+            Ok(d) => d,
+            Err(_) => {
+                return json_error(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid date format. Use YYYYMMDD (e.g., 20250102)",
+                )
+                .into_response();
+            }
+        }
+    } else {
+        chrono::Utc::now().date_naive()
+    };
+
+    let user_fixes_repo = UserFixesRepository::new(state.pool);
+
+    match user_fixes_repo
+        .get_users_present_at_airport(airport_id, date, AIRPORT_PRESENCE_RADIUS_METERS)
+        .await
+    {
+        Ok(records) => {
+            let presence: Vec<AirportUserPresence> =
+                records.into_iter().map(AirportUserPresence::from).collect();
+            Json(DataListResponse { data: presence }).into_response()
+        }
+        Err(e) => {
+            error!(club_id = %club_id, airport_id = airport_id, error = %e, "Failed to get airport user presence");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get airport user presence",
             )
             .into_response()
         }
