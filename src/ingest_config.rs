@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::SocketTarget;
+
 /// Stream data format
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
@@ -98,6 +100,14 @@ impl From<DataStream> for TomlDataStream {
 pub struct IngestConfigFile {
     #[serde(default = "default_retry_delay")]
     pub retry_delay: u64,
+    /// Socket address for connecting to soar-run.
+    ///
+    /// Formats:
+    /// - `None` (default): uses the default Unix socket path from `soar::socket_path()`
+    /// - `"unix:///path/to/socket"`: explicit Unix socket path
+    /// - `"tcp://host:port"`: TCP connection (for remote ingest)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub socket_address: Option<String>,
     #[serde(default)]
     pub streams: Vec<TomlDataStream>,
 }
@@ -132,6 +142,35 @@ impl IngestConfigFile {
     pub fn data_streams(&self) -> Vec<DataStream> {
         self.streams.iter().cloned().map(DataStream::from).collect()
     }
+
+    /// Parse `socket_address` into a `SocketTarget`.
+    ///
+    /// - `None` → default Unix socket from `soar::socket_path()`
+    /// - `"unix:///path/to/sock"` → `SocketTarget::Unix(path)`
+    /// - `"tcp://host:port"` → `SocketTarget::Tcp(addr)`
+    pub fn socket_target(&self) -> Result<SocketTarget> {
+        match &self.socket_address {
+            None => Ok(SocketTarget::Unix(crate::socket_path())),
+            Some(addr) => parse_socket_address(addr),
+        }
+    }
+}
+
+/// Parse a socket address string into a `SocketTarget`.
+fn parse_socket_address(addr: &str) -> Result<SocketTarget> {
+    if let Some(path) = addr.strip_prefix("unix://") {
+        Ok(SocketTarget::Unix(PathBuf::from(path)))
+    } else if let Some(host_port) = addr.strip_prefix("tcp://") {
+        let socket_addr: std::net::SocketAddr = host_port
+            .parse()
+            .with_context(|| format!("Invalid TCP socket address: {}", host_port))?;
+        Ok(SocketTarget::Tcp(socket_addr))
+    } else {
+        anyhow::bail!(
+            "Invalid socket_address format: '{}'. Expected 'unix:///path' or 'tcp://host:port'",
+            addr
+        );
+    }
 }
 
 /// Resolve the ingest config file path.
@@ -159,6 +198,7 @@ mod tests {
     fn test_config_roundtrip() {
         let config = IngestConfigFile {
             retry_delay: 10,
+            socket_address: None,
             streams: vec![TomlDataStream {
                 id: Uuid::new_v4(),
                 name: "Test OGN".to_string(),
@@ -189,6 +229,7 @@ mod tests {
 
         let config = IngestConfigFile {
             retry_delay: 5,
+            socket_address: None,
             streams: vec![
                 TomlDataStream {
                     id: Uuid::new_v4(),
@@ -225,6 +266,59 @@ mod tests {
         assert_eq!(loaded.streams[0].name, "OGN Full Feed");
         assert_eq!(loaded.streams[1].name, "Local Beast");
         assert!(!loaded.streams[1].enabled);
+    }
+
+    #[test]
+    fn test_socket_target_default() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: None,
+            streams: vec![],
+        };
+        let target = config.socket_target().unwrap();
+        assert!(matches!(target, SocketTarget::Unix(_)));
+    }
+
+    #[test]
+    fn test_socket_target_unix() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("unix:///var/run/soar/run.sock".to_string()),
+            streams: vec![],
+        };
+        let target = config.socket_target().unwrap();
+        match target {
+            SocketTarget::Unix(path) => {
+                assert_eq!(path, std::path::PathBuf::from("/var/run/soar/run.sock"));
+            }
+            _ => panic!("Expected Unix target"),
+        }
+    }
+
+    #[test]
+    fn test_socket_target_tcp() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("tcp://10.0.0.1:9384".to_string()),
+            streams: vec![],
+        };
+        let target = config.socket_target().unwrap();
+        match target {
+            SocketTarget::Tcp(addr) => {
+                assert_eq!(addr.to_string(), "10.0.0.1:9384");
+            }
+            _ => panic!("Expected TCP target"),
+        }
+    }
+
+    #[test]
+    fn test_socket_target_invalid() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("http://example.com".to_string()),
+            streams: vec![],
+        };
+        assert!(config.socket_target().is_err());
     }
 
     #[test]

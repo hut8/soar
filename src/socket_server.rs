@@ -1,13 +1,14 @@
-// Unix socket server for soar-run
+// Socket server for soar-run
 //
-// This server listens on a Unix domain socket and accepts connections
-// from ingesters (ingest-ogn, ingest-adsb). It reads length-prefixed
+// This server listens on Unix domain sockets and/or TCP sockets and accepts
+// connections from ingesters (ingest-ogn, ingest-adsb). It reads length-prefixed
 // protobuf messages and sends them to the intake queue.
 
 use anyhow::{Context, Result};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use tokio::io::{AsyncReadExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
+use tokio::net::{TcpListener, UnixListener};
 use tracing::{error, info, warn};
 
 use crate::protocol::{Envelope, deserialize_envelope};
@@ -75,23 +76,28 @@ impl SocketServer {
                     connection_id += 1;
                     let id = connection_id;
 
-                    info!("Accepted connection #{} from {:?}", id, addr);
-                    metrics::gauge!("socket.connections.active").increment(1.0);
-                    metrics::counter!("socket.connections.accepted_total").increment(1);
+                    info!("Accepted unix connection #{} from {:?}", id, addr);
+                    metrics::gauge!("socket.connections.active", "transport" => "unix")
+                        .increment(1.0);
+                    metrics::counter!("socket.connections.accepted_total", "transport" => "unix")
+                        .increment(1);
 
                     let intake_tx = intake_tx.clone();
                     tokio::spawn(async move {
                         if let Err(e) = handle_connection(stream, intake_tx, id).await {
-                            error!(connection_id = id, error = %e, "Connection error");
+                            error!(connection_id = id, error = %e, "Unix connection error");
                         }
-                        metrics::gauge!("socket.connections.active").decrement(1.0);
-                        metrics::counter!("socket.connections.closed_total").increment(1);
-                        info!("Connection #{} closed", id);
+                        metrics::gauge!("socket.connections.active", "transport" => "unix")
+                            .decrement(1.0);
+                        metrics::counter!("socket.connections.closed_total", "transport" => "unix")
+                            .increment(1);
+                        info!("Unix connection #{} closed", id);
                     });
                 }
                 Err(e) => {
-                    error!(error = %e, "Accept error");
-                    metrics::counter!("socket.errors.accept_total").increment(1);
+                    error!(error = %e, "Unix accept error");
+                    metrics::counter!("socket.errors.accept_total", "transport" => "unix")
+                        .increment(1);
                 }
             }
         }
@@ -103,11 +109,62 @@ impl SocketServer {
     }
 }
 
-/// Handle a single connection
+/// Start a TCP listener that accepts connections and feeds envelopes to the same channel.
 ///
-/// Reads length-prefixed messages from the socket and sends them to the intake queue.
-async fn handle_connection(
-    stream: UnixStream,
+/// This allows remote ingest instances (e.g., on a Raspberry Pi) to send data
+/// over TCP to the soar-run process.
+pub async fn start_tcp_listener(
+    addr: SocketAddr,
+    intake_tx: flume::Sender<Envelope>,
+) -> Result<()> {
+    let listener = TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("Failed to bind TCP listener on {}", addr))?;
+
+    info!("TCP socket server listening on {}", addr);
+    metrics::gauge!("socket.server.tcp_started").set(1.0);
+
+    let mut connection_id = 0u64;
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, peer_addr)) => {
+                connection_id += 1;
+                let id = connection_id;
+
+                // Set TCP_NODELAY for low latency
+                stream.set_nodelay(true).ok();
+
+                info!("Accepted tcp connection #{} from {}", id, peer_addr);
+                metrics::gauge!("socket.connections.active", "transport" => "tcp").increment(1.0);
+                metrics::counter!("socket.connections.accepted_total", "transport" => "tcp")
+                    .increment(1);
+
+                let intake_tx = intake_tx.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(stream, intake_tx, id).await {
+                        error!(connection_id = id, peer = %peer_addr, error = %e, "TCP connection error");
+                    }
+                    metrics::gauge!("socket.connections.active", "transport" => "tcp")
+                        .decrement(1.0);
+                    metrics::counter!("socket.connections.closed_total", "transport" => "tcp")
+                        .increment(1);
+                    info!("TCP connection #{} from {} closed", id, peer_addr);
+                });
+            }
+            Err(e) => {
+                error!(error = %e, "TCP accept error");
+                metrics::counter!("socket.errors.accept_total", "transport" => "tcp").increment(1);
+            }
+        }
+    }
+}
+
+/// Handle a single connection (transport-agnostic)
+///
+/// Reads length-prefixed messages from the reader and sends them to the intake queue.
+async fn handle_connection<R: AsyncRead + Unpin>(
+    stream: R,
     intake_tx: flume::Sender<Envelope>,
     connection_id: u64,
 ) -> Result<()> {

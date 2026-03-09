@@ -1,0 +1,23 @@
+# Ingest configuration for the radar Raspberry Pi
+#
+# This runs soar-ingest locally on the Pi, connecting to readsb on localhost.
+# Data is sent to soar-run on supervillain via TCP. The persistent queue
+# handles spooling to disk when the network link is down.
+#
+# Why: readsb drops Beast TCP connections when clients can't read fast enough.
+# Running ingest on localhost eliminates network-induced drops.
+
+retry_delay = 5
+
+# Send data to soar-run on supervillain over TCP
+socket_address = "tcp://supervillain:9384"
+
+[[streams]]
+id = "550e8400-e29b-41d4-a716-446655440002"
+name = "Local Beast Receiver"
+format = "adsb"
+host = "localhost"
+port = 30005
+enabled = true
+created_at = "2026-02-26T00:00:00Z"
+updated_at = "2026-02-26T00:00:00Z"
