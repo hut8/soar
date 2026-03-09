@@ -1230,12 +1230,7 @@ The SOAR Team"#,
         let environment = get_environment_name();
         let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
 
-        let alert_type_label = match condition_key {
-            "down" => "Receiver Offline",
-            "high_cpu" => "High CPU Load",
-            "high_temperature" => "High Temperature",
-            _ => "Alert",
-        };
+        let alert_type_label = condition_key_to_label(condition_key);
 
         let subject = format!(
             "{}{} - {} - SOAR",
@@ -1400,12 +1395,7 @@ The SOAR Team"#,
         let environment = get_environment_name();
         let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
 
-        let condition_label = match condition_key {
-            "down" => "Receiver Offline",
-            "high_cpu" => "High CPU Load",
-            "high_temperature" => "High Temperature",
-            _ => "Alert",
-        };
+        let condition_label = condition_key_to_label(condition_key);
 
         let subject = format!(
             "{}Resolved: {} - {} - SOAR",
@@ -1493,7 +1483,7 @@ The SOAR Team"#,
                     <span class="detail-value">{condition_label}</span>
                 </div>
                 <div class="detail-row">
-                    <span class="detail-label">Alerts Sent</span>
+                    <span class="detail-label">Notifications</span>
                     <span class="detail-value">{alerts_sent}</span>
                 </div>
             </div>
@@ -1522,7 +1512,7 @@ Resolved: {condition_label} - {callsign}
 
 The "{condition_label}" condition for {callsign} has cleared.
 
-{alerts_sent} alert(s) were sent during this incident.
+{alerts_sent} notification(s) were sent during this incident.
 
 View receiver: {receiver_url}
 
@@ -1545,6 +1535,16 @@ struct ReceiverRecoveryEmailData<'a> {
     alerts_sent: i32,
     receiver_url: &'a str,
     environment: &'a str,
+}
+
+/// Map a receiver alert condition key to a human-readable label.
+fn condition_key_to_label(key: &str) -> &'static str {
+    match key {
+        "down" => "Receiver Offline",
+        "high_cpu" => "High CPU Load",
+        "high_temperature" => "High Temperature",
+        _ => "Alert",
+    }
 }
 
 /// Data for building receiver alert emails

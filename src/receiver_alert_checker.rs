@@ -174,13 +174,13 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                         && let Some(user_email) = &user.email
                     {
                         let user_name = format!("{} {}", user.first_name, user.last_name);
-                        let condition_label = alert.last_condition.as_deref().unwrap_or("unknown");
+                        let condition_key = alert.last_condition.as_deref().unwrap_or("unknown");
                         match email_service
                             .send_receiver_recovery_email(
                                 user_email,
                                 &user_name,
                                 &receiver.callsign,
-                                condition_label,
+                                condition_key,
                                 alert.consecutive_alerts,
                                 receiver.id,
                             )
@@ -190,7 +190,7 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                                 info!(
                                     receiver = %receiver.callsign,
                                     user = %user_email,
-                                    condition = %condition_label,
+                                    condition = %condition_key,
                                     "Receiver recovery email sent"
                                 );
                                 recovery_sent += 1;
