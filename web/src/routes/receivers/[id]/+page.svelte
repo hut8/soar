@@ -670,8 +670,10 @@
 							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
-							{#if receiver.software}
-								<span class="preset-tonal-surface-500 chip text-sm">{receiver.software}</span>
+							{#if receiver.protocols?.length}
+								{#each receiver.protocols as protocol (protocol)}
+									<span class="preset-tonal-surface-500 chip text-sm">{protocol}</span>
+								{/each}
 							{/if}
 						</div>
 						{#if receiver.description}

@@ -95,7 +95,7 @@ impl ReceiverRepository {
                         country: None,
                         postal_code: None,
                         geocoded: false,
-                        software: None,
+                        protocols: None,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -224,7 +224,7 @@ impl ReceiverRepository {
                 country: None,
                 postal_code: None,
                 geocoded: false,
-                software: None,
+                protocols: None,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -1021,51 +1021,46 @@ impl ReceiverRepository {
         Ok(true)
     }
 
-    /// Update the software field for a receiver.
-    /// Only sets the value if it is currently NULL. Returns the previously stored value (if any).
-    pub async fn update_receiver_software(
+    /// Add a protocol to the receiver's protocols array if not already present.
+    /// Returns the current list of protocols after the operation.
+    pub async fn add_receiver_protocol(
         &self,
         receiver_id: Uuid,
-        software: &str,
-    ) -> Result<Option<String>> {
-        use crate::schema::receivers;
+        protocol: &str,
+    ) -> Result<Vec<String>> {
+        use diesel::sql_types;
 
         let pool = self.pool.clone();
-        let software = software.to_string();
+        let protocol = protocol.to_string();
 
-        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+        tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
             let mut conn = pool.get()?;
 
-            // Read the current value
-            let mut current: Option<String> = receivers::table
-                .filter(receivers::id.eq(receiver_id))
-                .select(receivers::software)
+            // Use array_append with a check to avoid duplicates in a single atomic UPDATE.
+            // Only appends if the protocol is not already in the array.
+            diesel::sql_query(
+                r#"
+                UPDATE receivers
+                SET protocols = CASE
+                    WHEN protocols IS NULL THEN ARRAY[$1]
+                    WHEN NOT ($1 = ANY(protocols)) THEN array_append(protocols, $1)
+                    ELSE protocols
+                END,
+                updated_at = NOW()
+                WHERE id = $2
+                "#,
+            )
+            .bind::<sql_types::Text, _>(&protocol)
+            .bind::<sql_types::Uuid, _>(receiver_id)
+            .execute(&mut conn)?;
+
+            // Read back the current protocols
+            let current: Option<Vec<String>> = crate::schema::receivers::table
+                .filter(crate::schema::receivers::id.eq(receiver_id))
+                .select(crate::schema::receivers::protocols)
                 .first(&mut conn)?;
 
-            if current.is_none() {
-                // Attempt to set it for the first time and bump updated_at,
-                // but only if software is still NULL to avoid races.
-                let rows_affected = diesel::update(
-                    receivers::table
-                        .filter(receivers::id.eq(receiver_id))
-                        .filter(receivers::software.is_null()),
-                )
-                .set((
-                    receivers::software.eq(&software),
-                    receivers::updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
-
-                if rows_affected == 0 {
-                    // Another task set software concurrently; re-read
-                    current = receivers::table
-                        .filter(receivers::id.eq(receiver_id))
-                        .select(receivers::software)
-                        .first(&mut conn)?;
-                }
-            }
-
-            Ok(current)
+            Ok(current.unwrap_or_default())
         })
         .await?
     }
