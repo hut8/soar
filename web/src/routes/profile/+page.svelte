@@ -43,14 +43,18 @@
 		}
 	});
 
+	let alertsError = $state(false);
+
 	async function loadReceiverAlerts() {
 		loadingAlerts = true;
+		alertsError = false;
 		try {
 			const response =
 				await serverCall<DataListResponse<ReceiverAlertView>>('/user/receiver-alerts');
 			receiverAlerts = response.data ?? [];
 		} catch {
 			receiverAlerts = [];
+			alertsError = true;
 		} finally {
 			loadingAlerts = false;
 		}
@@ -337,6 +341,11 @@
 					<Loader2 class="h-4 w-4 animate-spin" />
 					<span class="text-surface-500-400-token text-sm">Loading subscriptions...</span>
 				</div>
+			{:else if alertsError}
+				<p class="text-sm text-error-500">
+					Failed to load alert subscriptions.
+					<button type="button" class="underline" onclick={loadReceiverAlerts}>Retry</button>
+				</p>
 			{:else if receiverAlerts.length === 0}
 				<p class="text-surface-500-400-token text-sm">
 					No receiver alert subscriptions. Visit a receiver page to create one.
@@ -369,9 +378,9 @@
 									<span class="badge preset-filled-warning-500 text-xs">
 										Active ({ra.consecutiveAlerts})
 									</span>
-								{:else if ra.lastAlertedAt}
+								{:else if ra.lastAlertedAt && ra.lastCondition}
 									<span class="text-surface-500-400-token text-xs">
-										Last: {formatCondition(ra.lastCondition ?? '')}
+										Last: {formatCondition(ra.lastCondition)}
 									</span>
 								{/if}
 								<ExternalLink class="h-4 w-4 text-surface-400" />

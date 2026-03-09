@@ -166,6 +166,7 @@
 					<span class="text-surface-600-300-token text-sm">No alert subscription</span>
 				</div>
 				<button
+					type="button"
 					class="btn preset-filled-primary-500 btn-sm"
 					onclick={() => {
 						expanded = true;
@@ -178,7 +179,10 @@
 		{:else}
 			<!-- Expanded header (subscribed or creating) -->
 			<button
+				type="button"
 				class="flex w-full items-center justify-between"
+				aria-expanded={expanded}
+				aria-controls="alert-subscription-panel"
 				onclick={() => {
 					expanded = !expanded;
 				}}
@@ -206,7 +210,7 @@
 			</button>
 
 			{#if expanded}
-				<div class="mt-4 space-y-6">
+				<div id="alert-subscription-panel" class="mt-4 space-y-6">
 					<!-- Down Detection -->
 					<div class="space-y-3">
 						<Switch
@@ -369,7 +373,12 @@
 
 					<!-- Action Buttons -->
 					<div class="flex gap-3 pt-2">
-						<button class="btn preset-filled-primary-500" onclick={saveAlert} disabled={saving}>
+						<button
+							type="button"
+							class="btn preset-filled-primary-500"
+							onclick={saveAlert}
+							disabled={saving}
+						>
 							{#if saving}
 								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 							{:else}
@@ -378,12 +387,18 @@
 							{hasSubscription ? 'Update' : 'Subscribe'}
 						</button>
 						{#if hasSubscription}
-							<button class="btn preset-tonal-error" onclick={deleteAlert} disabled={saving}>
+							<button
+								type="button"
+								class="btn preset-tonal-error"
+								onclick={deleteAlert}
+								disabled={saving}
+							>
 								<Trash2 class="mr-2 h-4 w-4" />
 								Remove
 							</button>
 						{:else}
 							<button
+								type="button"
 								class="preset-tonal-surface-500 btn"
 								onclick={() => {
 									expanded = false;

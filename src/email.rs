@@ -1357,8 +1357,8 @@ The SOAR Team"#,
             condition = html_escape(data.condition_description),
             ordinal = ordinal,
             detected_at = html_escape(data.detected_at),
-            receiver_url = data.receiver_url,
-            environment = data.environment,
+            receiver_url = html_escape(data.receiver_url),
+            environment = html_escape(data.environment),
         )
     }
 
@@ -1548,8 +1548,8 @@ The SOAR Team"#,
                     html_escape(d)
                 ))
                 .unwrap_or_default(),
-            receiver_url = data.receiver_url,
-            environment = data.environment,
+            receiver_url = html_escape(data.receiver_url),
+            environment = html_escape(data.environment),
         )
     }
 

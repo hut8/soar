@@ -72,17 +72,20 @@ impl ReceiverAlertsRepository {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverAlertView>> {
             let mut conn = pool.get()?;
-            let results: Vec<(ReceiverAlertRecord, String)> = receiver_alerts::table
-                .inner_join(receivers::table)
+            let results: Vec<(ReceiverAlertRecord, Option<String>)> = receiver_alerts::table
+                .left_join(receivers::table)
                 .filter(receiver_alerts::user_id.eq(user_id))
                 .order(receiver_alerts::created_at.desc())
-                .select((ReceiverAlertRecord::as_select(), receivers::callsign))
+                .select((
+                    ReceiverAlertRecord::as_select(),
+                    receivers::callsign.nullable(),
+                ))
                 .load(&mut conn)?;
             Ok(results
                 .into_iter()
                 .map(|(record, callsign)| {
                     let mut view: ReceiverAlertView = record.into();
-                    view.receiver_callsign = Some(callsign);
+                    view.receiver_callsign = callsign;
                     view
                 })
                 .collect())
