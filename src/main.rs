@@ -1269,11 +1269,16 @@ async fn main() -> Result<()> {
 
     // For Migrate command, handle errors specially to send notifications
     let (diesel_pool, migration_info) = if matches!(cli.command, Commands::Migrate {}) {
+        let migrate_started_at = chrono::Local::now();
         let migrate_start = std::time::Instant::now();
         match setup_diesel_database(app_name_prefix, true).await {
             Ok(result) => (
                 result.pool,
-                Some((result.applied_migrations, result.duration_secs)),
+                Some((
+                    result.applied_migrations,
+                    result.duration_secs,
+                    migrate_started_at,
+                )),
             ),
             Err(e) => {
                 let duration_secs = migrate_start.elapsed().as_secs_f64();
@@ -1281,8 +1286,12 @@ async fn main() -> Result<()> {
 
                 // Send failure email
                 if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                    let report =
-                        MigrationReport::failure(error_message.clone(), None, duration_secs);
+                    let report = MigrationReport::failure(
+                        error_message.clone(),
+                        None,
+                        duration_secs,
+                        migrate_started_at,
+                    );
                     if let Err(email_err) = send_migration_email_report(&email_config, &report) {
                         warn!("Failed to send migration failure email: {}", email_err);
                     }
@@ -1465,10 +1474,12 @@ async fn main() -> Result<()> {
             }
 
             // Send success notification (email) only if migrations were actually applied
-            let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
+            let (applied_migrations, duration_secs, started_at) =
+                migration_info.unwrap_or((vec![], 0.0, chrono::Local::now()));
             if !applied_migrations.is_empty() {
                 if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                    let report = MigrationReport::success(applied_migrations, duration_secs);
+                    let report =
+                        MigrationReport::success(applied_migrations, duration_secs, started_at);
                     if let Err(e) = send_migration_email_report(&email_config, &report) {
                         warn!("Failed to send migration success email: {}", e);
                     }
