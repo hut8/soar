@@ -22,7 +22,8 @@ pub struct OgnGenericProcessor {
     receiver_cache: Arc<Cache<String, Uuid>>,
     /// Cache mapping receiver ID to known protocols (TOCALL values).
     /// Once populated, we skip the DB update for already-known protocols.
-    protocol_cache: Arc<Cache<Uuid, HashSet<String>>>,
+    /// Wrapped in Arc to avoid cloning the entire HashSet on cache hits.
+    protocol_cache: Arc<Cache<Uuid, Arc<HashSet<String>>>>,
 }
 
 impl OgnGenericProcessor {
@@ -173,7 +174,7 @@ impl OgnGenericProcessor {
                     "Updated receiver protocols"
                 );
                 self.protocol_cache
-                    .insert(receiver_id, protocols.into_iter().collect());
+                    .insert(receiver_id, Arc::new(protocols.into_iter().collect()));
             }
             Err(e) => {
                 error!(

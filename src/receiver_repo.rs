@@ -1033,12 +1033,19 @@ impl ReceiverRepository {
         let pool = self.pool.clone();
         let protocol = protocol.to_string();
 
+        #[derive(QueryableByName)]
+        struct ProtocolsRow {
+            #[diesel(sql_type = sql_types::Array<sql_types::Text>)]
+            protocols: Vec<String>,
+        }
+
         tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
             let mut conn = pool.get()?;
 
-            // Use array_append with a check to avoid duplicates in a single atomic UPDATE.
-            // Only appends if the protocol is not already in the array.
-            diesel::sql_query(
+            // Atomically append the protocol if not already present.
+            // Only bumps updated_at when the array actually changes.
+            // Uses RETURNING to avoid a separate SELECT.
+            let row: ProtocolsRow = diesel::sql_query(
                 r#"
                 UPDATE receivers
                 SET protocols = CASE
@@ -1046,21 +1053,19 @@ impl ReceiverRepository {
                     WHEN NOT ($1 = ANY(protocols)) THEN array_append(protocols, $1)
                     ELSE protocols
                 END,
-                updated_at = NOW()
+                updated_at = CASE
+                    WHEN protocols IS NULL OR NOT ($1 = ANY(protocols)) THEN NOW()
+                    ELSE updated_at
+                END
                 WHERE id = $2
+                RETURNING protocols
                 "#,
             )
             .bind::<sql_types::Text, _>(&protocol)
             .bind::<sql_types::Uuid, _>(receiver_id)
-            .execute(&mut conn)?;
+            .get_result(&mut conn)?;
 
-            // Read back the current protocols
-            let current: Option<Vec<String>> = crate::schema::receivers::table
-                .filter(crate::schema::receivers::id.eq(receiver_id))
-                .select(crate::schema::receivers::protocols)
-                .first(&mut conn)?;
-
-            Ok(current.unwrap_or_default())
+            Ok(row.protocols)
         })
         .await?
     }
