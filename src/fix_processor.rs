@@ -8,7 +8,6 @@ use crate::aircraft_repo::{AircraftCache, AircraftPacketFields};
 use crate::elevation::ElevationService;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
-use crate::flights::haversine_distance;
 use crate::manufacturer_names::normalize_aircraft_model;
 use crate::nats_publisher::NatsFixPublisher;
 use crate::ogn::PacketContext;
@@ -16,12 +15,6 @@ use crate::receiver_repo::ReceiverRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use ogn_parser::AprsPacket;
-
-/// Maximum distance in meters between a fix and its receiver for OGN/APRS data.
-/// Fixes beyond this threshold are rejected as misattributed (e.g., from MQTT gateways
-/// or receivers with incorrect locations). 400 km is well above the p99 of legitimate
-/// OGN reception (~330 km) while filtering clearly bogus data.
-const MAX_RECEIVER_DISTANCE_M: f64 = 400_000.0;
 
 /// Elevation processing mode configuration
 #[derive(Clone)]
@@ -327,30 +320,6 @@ impl FixProcessor {
                                 metrics::histogram!("aprs.aircraft.fix_creation_ms").record(
                                     fix_creation_start.elapsed().as_micros() as f64 / 1000.0,
                                 );
-
-                                // Check fix-to-receiver distance for OGN/APRS data.
-                                // Skip if receiver has no known location (the fix is still valid,
-                                // we just can't verify distance).
-                                if let Some((rx_lat, rx_lon)) = context.receiver_location {
-                                    let distance_m = haversine_distance(
-                                        fix.latitude,
-                                        fix.longitude,
-                                        rx_lat,
-                                        rx_lon,
-                                    );
-                                    if distance_m > MAX_RECEIVER_DISTANCE_M {
-                                        trace!(
-                                            "Rejecting fix: receiver distance {:.0} km exceeds {:.0} km threshold",
-                                            distance_m / 1000.0,
-                                            MAX_RECEIVER_DISTANCE_M / 1000.0,
-                                        );
-                                        metrics::counter!(
-                                            "aprs.fixes.rejected.receiver_distance_total"
-                                        )
-                                        .increment(1);
-                                        return;
-                                    }
-                                }
 
                                 let process_internal_start = std::time::Instant::now();
                                 self.process_fix_internal(fix).await;
