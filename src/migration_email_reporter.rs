@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Local};
 use std::env;
 
 /// Get the environment name for display purposes
@@ -61,26 +62,38 @@ pub struct MigrationReport {
     pub success: bool,
     pub applied_migrations: Vec<String>,
     pub duration_secs: f64,
+    pub started_at: DateTime<Local>,
     pub error_message: Option<String>,
     pub log_excerpt: Option<String>,
 }
 
 impl MigrationReport {
-    pub fn success(applied_migrations: Vec<String>, duration_secs: f64) -> Self {
+    pub fn success(
+        applied_migrations: Vec<String>,
+        duration_secs: f64,
+        started_at: DateTime<Local>,
+    ) -> Self {
         Self {
             success: true,
             applied_migrations,
             duration_secs,
+            started_at,
             error_message: None,
             log_excerpt: None,
         }
     }
 
-    pub fn failure(error: String, log_excerpt: Option<String>, duration_secs: f64) -> Self {
+    pub fn failure(
+        error: String,
+        log_excerpt: Option<String>,
+        duration_secs: f64,
+        started_at: DateTime<Local>,
+    ) -> Self {
         Self {
             success: false,
             applied_migrations: Vec::new(),
             duration_secs,
+            started_at,
             error_message: Some(error),
             log_excerpt,
         }
@@ -141,16 +154,18 @@ impl MigrationReport {
         <div class="summary">
             <strong>Environment:</strong> {}<br>
             <strong>Hostname:</strong> {}<br>
-            <strong>Duration:</strong> {}<br>
-            <strong>Time:</strong> {}
+            <strong>Started:</strong> {}<br>
+            <strong>Finished:</strong> {}<br>
+            <strong>Duration:</strong> {}
         </div>"#,
             status_color,
             environment,
             status_text,
             environment,
             hostname,
-            Self::format_duration(self.duration_secs),
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            self.started_at.format("%Y-%m-%d %H:%M:%S %Z"),
+            Local::now().format("%Y-%m-%d %H:%M:%S %Z"),
+            Self::format_duration(self.duration_secs)
         );
 
         if self.success {

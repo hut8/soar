@@ -233,8 +233,17 @@ impl ReceiverRepository {
                 .do_nothing() // If it already exists, just return the existing ID
                 .returning(receivers::id)
                 .get_result::<Uuid>(&mut conn)
-                .or_else(|_| {
-                    // If insert was skipped due to conflict, fetch the existing receiver
+                .or_else(|insert_err| {
+                    // ON CONFLICT DO NOTHING returns no rows, so Diesel gives NotFound.
+                    // For any other error, log it since the fallback SELECT may also fail
+                    // and we'd lose the original cause.
+                    if !matches!(insert_err, diesel::result::Error::NotFound) {
+                        warn!(
+                            %callsign,
+                            error = %insert_err,
+                            "Receiver insert failed with unexpected error, attempting SELECT fallback"
+                        );
+                    }
                     receivers::table
                         .filter(receivers::callsign.eq(&callsign))
                         .select(receivers::id)
