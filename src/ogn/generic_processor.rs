@@ -100,8 +100,9 @@ impl OgnGenericProcessor {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to insert/lookup receiver {}: {}",
-                        receiver_callsign, e
+                        receiver_callsign = %receiver_callsign,
+                        error = %e,
+                        "Failed to insert/lookup receiver"
                     );
                     return None;
                 }
