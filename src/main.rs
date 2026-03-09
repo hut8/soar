@@ -13,7 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 mod commands;
@@ -809,22 +809,12 @@ async fn main() -> Result<()> {
                         }
 
                         // Monthly budget check: hard cap on total events per calendar month
-                        let now_secs = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
-                        let now_minute = (now_secs / 60) as u32;
-
-                        // Calculate month identifier: days since epoch / 30.44 is imprecise,
-                        // so use chrono-free approach: year*12 + month from unix timestamp
-                        let days_since_epoch = now_secs / 86400;
-                        // Approximate year and month from days since epoch (1970-01-01)
-                        // Good enough for month boundaries — off by hours at most
-                        let approx_years = days_since_epoch / 365;
-                        let year = 1970 + approx_years;
-                        let day_of_year = days_since_epoch - approx_years * 365;
-                        let month = (day_of_year / 31).min(11); // 0-indexed month estimate
-                        let month_id = (year * 12 + month) as u32;
+                        let now = chrono::Utc::now();
+                        let now_minute = (now.timestamp() as u64 / 60) as u32;
+                        let month_id = {
+                            use chrono::Datelike;
+                            (now.year() as u32) * 12 + now.month0()
+                        };
 
                         loop {
                             let current = SENTRY_MONTHLY_COUNTER.load(Ordering::Relaxed);
