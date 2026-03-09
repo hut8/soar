@@ -7,7 +7,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest, big_decimal_to_f64};
-use crate::schema::receiver_alerts;
+use crate::schema::{receiver_alerts, receivers};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -39,6 +39,7 @@ impl From<ReceiverAlertRecord> for ReceiverAlertView {
             id: r.id,
             user_id: r.user_id,
             receiver_id: r.receiver_id,
+            receiver_callsign: None,
             alert_on_down: r.alert_on_down,
             down_after_minutes: r.down_after_minutes,
             alert_on_high_cpu: r.alert_on_high_cpu,
@@ -65,16 +66,25 @@ impl ReceiverAlertsRepository {
         Self { pool }
     }
 
-    /// Get all alerts for a user
+    /// Get all alerts for a user (with receiver callsigns)
     pub async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<ReceiverAlertView>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverAlertView>> {
             let mut conn = pool.get()?;
-            let records = receiver_alerts::table
+            let results: Vec<(ReceiverAlertRecord, String)> = receiver_alerts::table
+                .inner_join(receivers::table)
                 .filter(receiver_alerts::user_id.eq(user_id))
                 .order(receiver_alerts::created_at.desc())
-                .load::<ReceiverAlertRecord>(&mut conn)?;
-            Ok(records.into_iter().map(|r| r.into()).collect())
+                .select((ReceiverAlertRecord::as_select(), receivers::callsign))
+                .load(&mut conn)?;
+            Ok(results
+                .into_iter()
+                .map(|(record, callsign)| {
+                    let mut view: ReceiverAlertView = record.into();
+                    view.receiver_callsign = Some(callsign);
+                    view
+                })
+                .collect())
         })
         .await?
     }

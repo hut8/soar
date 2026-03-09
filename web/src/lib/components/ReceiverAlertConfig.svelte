@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { Bell, BellOff, Loader2, Trash2, Save } from '@lucide/svelte';
+	import {
+		Bell,
+		BellOff,
+		ChevronDown,
+		ChevronUp,
+		Loader2,
+		Trash2,
+		Save,
+		Plus
+	} from '@lucide/svelte';
 	import { Switch } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
@@ -16,6 +25,7 @@
 	let saving = $state(false);
 	let hasSubscription = $state(false);
 	let alertLoaded = $state(false);
+	let expanded = $state(false);
 
 	// Form state
 	let alertOnDown = $state(true);
@@ -46,9 +56,11 @@
 			if (response?.data?.id) {
 				alert = response.data;
 				hasSubscription = true;
+				expanded = true;
 				populateForm(alert);
 			} else {
 				hasSubscription = false;
+				expanded = false;
 			}
 		} catch (err: unknown) {
 			hasSubscription = false;
@@ -105,6 +117,7 @@
 			await serverCall(`/receivers/${receiverId}/alerts`, { method: 'DELETE' });
 			alert = null;
 			hasSubscription = false;
+			expanded = false;
 			// Reset to defaults
 			alertOnDown = true;
 			downAfterMinutes = 30;
@@ -144,200 +157,245 @@
 	</div>
 {:else}
 	<div class="card p-6">
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="flex items-center gap-2 h2">
-				{#if hasSubscription}
-					<Bell class="h-6 w-6 text-primary-500" />
-				{:else}
-					<BellOff class="h-6 w-6" />
-				{/if}
-				Alert Subscription
-			</h2>
-			{#if hasSubscription && alert?.consecutiveAlerts && alert.consecutiveAlerts > 0}
-				<span class="badge preset-filled-warning-500 text-xs">
-					Active alert ({alert.consecutiveAlerts} sent)
-				</span>
-			{/if}
-		</div>
-
-		<div class="space-y-6">
-			<!-- Down Detection -->
-			<div class="space-y-3">
-				<Switch
-					class="flex w-full items-center justify-between"
-					checked={alertOnDown}
-					onCheckedChange={(details) => {
-						alertOnDown = details.checked;
+		<!-- Header — always visible -->
+		{#if !hasSubscription && !expanded}
+			<!-- Collapsed: no subscription -->
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<BellOff class="h-5 w-5 text-surface-400" />
+					<span class="text-surface-600-300-token text-sm">No alert subscription</span>
+				</div>
+				<button
+					class="btn preset-filled-primary-500 btn-sm"
+					onclick={() => {
+						expanded = true;
 					}}
 				>
-					<div>
-						<Switch.Label class="font-semibold">Receiver Offline Detection</Switch.Label>
-						<p class="text-surface-600-300-token text-sm">
-							Alert when no data is received for a period of time
-						</p>
-					</div>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
-					<Switch.HiddenInput name="alert-on-down" />
-				</Switch>
-				{#if alertOnDown}
-					<div class="ml-4 flex items-center gap-2">
-						<label for="down-minutes" class="text-sm whitespace-nowrap">Alert after</label>
-						<input
-							id="down-minutes"
-							type="number"
-							min="5"
-							max="1440"
-							bind:value={downAfterMinutes}
-							class="input w-24 px-2 py-1 text-sm"
-						/>
-						<span class="text-sm">minutes offline</span>
-					</div>
-				{/if}
+					<Plus class="mr-1 h-4 w-4" />
+					Create Alert
+				</button>
 			</div>
+		{:else}
+			<!-- Expanded header (subscribed or creating) -->
+			<button
+				class="flex w-full items-center justify-between"
+				onclick={() => {
+					expanded = !expanded;
+				}}
+			>
+				<h2 class="flex items-center gap-2 h2">
+					{#if hasSubscription}
+						<Bell class="h-6 w-6 text-primary-500" />
+					{:else}
+						<BellOff class="h-6 w-6" />
+					{/if}
+					Alert Subscription
+				</h2>
+				<div class="flex items-center gap-2">
+					{#if hasSubscription && alert?.consecutiveAlerts && alert.consecutiveAlerts > 0}
+						<span class="badge preset-filled-warning-500 text-xs">
+							Active alert ({alert.consecutiveAlerts} sent)
+						</span>
+					{/if}
+					{#if expanded}
+						<ChevronUp class="h-5 w-5" />
+					{:else}
+						<ChevronDown class="h-5 w-5" />
+					{/if}
+				</div>
+			</button>
 
-			<!-- High CPU -->
-			<div class="space-y-3">
-				<Switch
-					class="flex w-full items-center justify-between"
-					checked={alertOnHighCpu}
-					onCheckedChange={(details) => {
-						alertOnHighCpu = details.checked;
-					}}
-				>
-					<div>
-						<Switch.Label class="font-semibold">High CPU Load</Switch.Label>
-						<p class="text-surface-600-300-token text-sm">
-							Alert when CPU usage exceeds a threshold
-						</p>
-					</div>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
-					<Switch.HiddenInput name="alert-on-cpu" />
-				</Switch>
-				{#if alertOnHighCpu}
-					<div class="ml-4 flex items-center gap-2">
-						<label for="cpu-threshold" class="text-sm whitespace-nowrap">Alert above</label>
-						<input
-							id="cpu-threshold"
-							type="number"
-							min="1"
-							max="100"
-							bind:value={cpuThreshold}
-							class="input w-24 px-2 py-1 text-sm"
-						/>
-						<span class="text-sm">% CPU</span>
-					</div>
-				{/if}
-			</div>
-
-			<!-- High Temperature -->
-			<div class="space-y-3">
-				<Switch
-					class="flex w-full items-center justify-between"
-					checked={alertOnHighTemperature}
-					onCheckedChange={(details) => {
-						alertOnHighTemperature = details.checked;
-					}}
-				>
-					<div>
-						<Switch.Label class="font-semibold">High Temperature</Switch.Label>
-						<p class="text-surface-600-300-token text-sm">
-							Alert when CPU temperature exceeds a threshold
-						</p>
-					</div>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
-					<Switch.HiddenInput name="alert-on-temp" />
-				</Switch>
-				{#if alertOnHighTemperature}
-					<div class="ml-4 flex items-center gap-2">
-						<label for="temp-threshold" class="text-sm whitespace-nowrap">Alert above</label>
-						<input
-							id="temp-threshold"
-							type="number"
-							min="1"
-							max="200"
-							bind:value={temperatureThresholdC}
-							class="input w-24 px-2 py-1 text-sm"
-						/>
-						<span class="text-sm">&deg;C</span>
-					</div>
-				{/if}
-			</div>
-
-			<!-- Email & Cooldown -->
-			<div class="border-surface-200-700-token space-y-3 border-t pt-4">
-				<Switch
-					class="flex w-full items-center justify-between"
-					checked={sendEmail}
-					onCheckedChange={(details) => {
-						sendEmail = details.checked;
-					}}
-				>
-					<div>
-						<Switch.Label class="font-semibold">Email Notifications</Switch.Label>
-						<p class="text-surface-600-300-token text-sm">
-							Receive email alerts when conditions are triggered
-						</p>
-					</div>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
-					<Switch.HiddenInput name="send-email" />
-				</Switch>
-				{#if sendEmail}
-					<div class="ml-4 flex items-center gap-2">
-						<label for="cooldown" class="text-sm whitespace-nowrap">Base cooldown</label>
-						<input
-							id="cooldown"
-							type="number"
-							min="5"
-							max="1440"
-							bind:value={baseCooldownMinutes}
-							class="input w-24 px-2 py-1 text-sm"
-						/>
-						<span class="text-sm">minutes</span>
-					</div>
-					<p class="text-surface-500-400-token ml-4 text-xs">
-						Repeat alerts use exponential backoff: {baseCooldownMinutes}min, {baseCooldownMinutes *
-							2}min, {baseCooldownMinutes * 4}min, ... up to 24h
-					</p>
-				{/if}
-			</div>
-
-			<!-- Last alert info -->
-			{#if hasSubscription && alert?.lastAlertedAt}
-				<div class="border-surface-200-700-token border-t pt-4">
-					<p class="text-surface-500-400-token text-xs">
-						Last alert sent: {new Date(alert.lastAlertedAt).toLocaleString()}
-						{#if alert.lastCondition}
-							({formatCondition(alert.lastCondition)})
+			{#if expanded}
+				<div class="mt-4 space-y-6">
+					<!-- Down Detection -->
+					<div class="space-y-3">
+						<Switch
+							class="flex w-full items-center justify-between"
+							checked={alertOnDown}
+							onCheckedChange={(details) => {
+								alertOnDown = details.checked;
+							}}
+						>
+							<div>
+								<Switch.Label class="font-semibold">Receiver Offline Detection</Switch.Label>
+								<p class="text-surface-600-300-token text-sm">
+									Alert when no data is received for a period of time
+								</p>
+							</div>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="alert-on-down" />
+						</Switch>
+						{#if alertOnDown}
+							<div class="ml-4 flex items-center gap-2">
+								<label for="down-minutes" class="text-sm whitespace-nowrap">Alert after</label>
+								<input
+									id="down-minutes"
+									type="number"
+									min="5"
+									max="1440"
+									bind:value={downAfterMinutes}
+									class="input w-24 px-2 py-1 text-sm"
+								/>
+								<span class="text-sm">minutes offline</span>
+							</div>
 						{/if}
-					</p>
+					</div>
+
+					<!-- High CPU -->
+					<div class="space-y-3">
+						<Switch
+							class="flex w-full items-center justify-between"
+							checked={alertOnHighCpu}
+							onCheckedChange={(details) => {
+								alertOnHighCpu = details.checked;
+							}}
+						>
+							<div>
+								<Switch.Label class="font-semibold">High CPU Load</Switch.Label>
+								<p class="text-surface-600-300-token text-sm">
+									Alert when CPU usage exceeds a threshold
+								</p>
+							</div>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="alert-on-cpu" />
+						</Switch>
+						{#if alertOnHighCpu}
+							<div class="ml-4 flex items-center gap-2">
+								<label for="cpu-threshold" class="text-sm whitespace-nowrap">Alert above</label>
+								<input
+									id="cpu-threshold"
+									type="number"
+									min="1"
+									max="100"
+									bind:value={cpuThreshold}
+									class="input w-24 px-2 py-1 text-sm"
+								/>
+								<span class="text-sm">% CPU</span>
+							</div>
+						{/if}
+					</div>
+
+					<!-- High Temperature -->
+					<div class="space-y-3">
+						<Switch
+							class="flex w-full items-center justify-between"
+							checked={alertOnHighTemperature}
+							onCheckedChange={(details) => {
+								alertOnHighTemperature = details.checked;
+							}}
+						>
+							<div>
+								<Switch.Label class="font-semibold">High Temperature</Switch.Label>
+								<p class="text-surface-600-300-token text-sm">
+									Alert when CPU temperature exceeds a threshold
+								</p>
+							</div>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="alert-on-temp" />
+						</Switch>
+						{#if alertOnHighTemperature}
+							<div class="ml-4 flex items-center gap-2">
+								<label for="temp-threshold" class="text-sm whitespace-nowrap">Alert above</label>
+								<input
+									id="temp-threshold"
+									type="number"
+									min="1"
+									max="200"
+									bind:value={temperatureThresholdC}
+									class="input w-24 px-2 py-1 text-sm"
+								/>
+								<span class="text-sm">&deg;C</span>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Email & Cooldown -->
+					<div class="border-surface-200-700-token space-y-3 border-t pt-4">
+						<Switch
+							class="flex w-full items-center justify-between"
+							checked={sendEmail}
+							onCheckedChange={(details) => {
+								sendEmail = details.checked;
+							}}
+						>
+							<div>
+								<Switch.Label class="font-semibold">Email Notifications</Switch.Label>
+								<p class="text-surface-600-300-token text-sm">
+									Receive email alerts when conditions are triggered
+								</p>
+							</div>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="send-email" />
+						</Switch>
+						{#if sendEmail}
+							<div class="ml-4 flex items-center gap-2">
+								<label for="cooldown" class="text-sm whitespace-nowrap">Base cooldown</label>
+								<input
+									id="cooldown"
+									type="number"
+									min="5"
+									max="1440"
+									bind:value={baseCooldownMinutes}
+									class="input w-24 px-2 py-1 text-sm"
+								/>
+								<span class="text-sm">minutes</span>
+							</div>
+							<p class="text-surface-500-400-token ml-4 text-xs">
+								Repeat alerts use exponential backoff: {baseCooldownMinutes}min, {baseCooldownMinutes *
+									2}min, {baseCooldownMinutes * 4}min, ... up to 24h
+							</p>
+						{/if}
+					</div>
+
+					<!-- Last alert info -->
+					{#if hasSubscription && alert?.lastAlertedAt}
+						<div class="border-surface-200-700-token border-t pt-4">
+							<p class="text-surface-500-400-token text-xs">
+								Last alert sent: {new Date(alert.lastAlertedAt).toLocaleString()}
+								{#if alert.lastCondition}
+									({formatCondition(alert.lastCondition)})
+								{/if}
+							</p>
+						</div>
+					{/if}
+
+					<!-- Action Buttons -->
+					<div class="flex gap-3 pt-2">
+						<button class="btn preset-filled-primary-500" onclick={saveAlert} disabled={saving}>
+							{#if saving}
+								<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+							{:else}
+								<Save class="mr-2 h-4 w-4" />
+							{/if}
+							{hasSubscription ? 'Update' : 'Subscribe'}
+						</button>
+						{#if hasSubscription}
+							<button class="btn preset-tonal-error" onclick={deleteAlert} disabled={saving}>
+								<Trash2 class="mr-2 h-4 w-4" />
+								Remove
+							</button>
+						{:else}
+							<button
+								class="preset-tonal-surface-500 btn"
+								onclick={() => {
+									expanded = false;
+								}}
+								disabled={saving}
+							>
+								Cancel
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/if}
-
-			<!-- Action Buttons -->
-			<div class="flex gap-3 pt-2">
-				<button class="btn preset-filled-primary-500" onclick={saveAlert} disabled={saving}>
-					{#if saving}
-						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
-					{:else}
-						<Save class="mr-2 h-4 w-4" />
-					{/if}
-					{hasSubscription ? 'Update' : 'Subscribe'}
-				</button>
-				{#if hasSubscription}
-					<button class="btn preset-tonal-error" onclick={deleteAlert} disabled={saving}>
-						<Trash2 class="mr-2 h-4 w-4" />
-						Remove
-					</button>
-				{/if}
-			</div>
-		</div>
+		{/if}
 	</div>
 {/if}

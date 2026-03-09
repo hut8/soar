@@ -12,6 +12,7 @@ pub struct ReceiverAlertView {
     pub id: Uuid,
     pub user_id: Uuid,
     pub receiver_id: Uuid,
+    pub receiver_callsign: Option<String>,
 
     pub alert_on_down: bool,
     pub down_after_minutes: i32,
