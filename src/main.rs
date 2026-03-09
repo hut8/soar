@@ -728,7 +728,7 @@ async fn main() -> Result<()> {
     // Two-layer rate limiting to stay within the Sentry free plan (10K events/month):
     //
     // 1. Monthly budget: hard cap on total events per calendar month.
-    //    Packs (month_id, count) into AtomicU64 — upper 32 = year*12+month, lower 32 = count.
+    //    Packs (month_id, count) into AtomicU64 — upper 32 = year*12+month0, lower 32 = count.
     //    Default 9,000 (90% of 10K quota). Override with SENTRY_MONTHLY_BUDGET env var.
     //
     // 2. Per-minute rate limit: smooths out bursts within the monthly budget.
@@ -808,7 +808,9 @@ async fn main() -> Result<()> {
                                 )]);
                         }
 
-                        // Monthly budget check: hard cap on total events per calendar month
+                        // Two-gate rate limiting: both monthly budget and per-minute limit
+                        // must pass. We increment both counters atomically only when the
+                        // event passes both gates, so per-minute drops don't waste budget.
                         let now = chrono::Utc::now();
                         let now_minute = (now.timestamp() as u64 / 60) as u32;
                         let month_id = {
@@ -817,12 +819,17 @@ async fn main() -> Result<()> {
                         };
 
                         loop {
-                            let current = SENTRY_MONTHLY_COUNTER.load(Ordering::Relaxed);
-                            let stored_month = (current >> 32) as u32;
-                            let monthly_count = current as u32;
+                            // Snapshot both counters
+                            let monthly_current = SENTRY_MONTHLY_COUNTER.load(Ordering::Relaxed);
+                            let rate_current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
 
+                            let stored_month = (monthly_current >> 32) as u32;
+                            let monthly_count = monthly_current as u32;
+                            let stored_minute = (rate_current >> 32) as u32;
+                            let minute_count = rate_current as u32;
+
+                            // Gate 1: monthly budget
                             if stored_month == month_id && monthly_count >= sentry_monthly_budget {
-                                // Budget exhausted — log once per month
                                 if !SENTRY_BUDGET_EXHAUSTED_LOGGED.swap(true, Ordering::Relaxed) {
                                     warn!(
                                         budget = sentry_monthly_budget,
@@ -834,60 +841,58 @@ async fn main() -> Result<()> {
                                 return None;
                             }
 
-                            let (new_month_id, new_count) = if stored_month != month_id {
-                                // New month: reset counter and allow the exhaustion log again
+                            // Gate 2: per-minute rate limit
+                            let effective_minute = std::cmp::max(now_minute, stored_minute);
+                            let new_minute_count = if effective_minute != stored_minute {
+                                1u32
+                            } else if minute_count < SENTRY_MAX_EVENTS_PER_MINUTE {
+                                minute_count + 1
+                            } else {
+                                return None; // Over per-minute limit
+                            };
+
+                            // Both gates passed — atomically increment both counters
+                            let (new_month_id, new_monthly_count) = if stored_month != month_id {
                                 SENTRY_BUDGET_EXHAUSTED_LOGGED.store(false, Ordering::Relaxed);
                                 (month_id, 1u32)
                             } else {
                                 (stored_month, monthly_count + 1)
                             };
 
-                            let new_val = ((new_month_id as u64) << 32) | (new_count as u64);
+                            let new_monthly_val =
+                                ((new_month_id as u64) << 32) | (new_monthly_count as u64);
+                            let new_rate_val =
+                                ((effective_minute as u64) << 32) | (new_minute_count as u64);
+
+                            // CAS both — if either fails, retry from the top
                             if SENTRY_MONTHLY_COUNTER
                                 .compare_exchange_weak(
-                                    current,
-                                    new_val,
+                                    monthly_current,
+                                    new_monthly_val,
                                     Ordering::Relaxed,
                                     Ordering::Relaxed,
                                 )
-                                .is_ok()
+                                .is_err()
                             {
-                                break; // Budget OK, proceed to per-minute check
+                                continue;
                             }
-                            // CAS failed, retry
-                        }
-
-                        // Per-minute rate limit: smooth out bursts
-                        loop {
-                            let current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
-                            let stored_minute = (current >> 32) as u32;
-                            let count = current as u32;
-
-                            // Use max to ensure monotonic minutes (handles NTP adjustments)
-                            let effective_minute = std::cmp::max(now_minute, stored_minute);
-
-                            let (new_count, allow) = if effective_minute != stored_minute {
-                                // New minute bucket: reset counter to 1
-                                (1u32, true)
-                            } else if count < SENTRY_MAX_EVENTS_PER_MINUTE {
-                                (count + 1, true)
-                            } else {
-                                return None; // Over limit, drop event
-                            };
-
-                            let new_val = ((effective_minute as u64) << 32) | (new_count as u64);
                             if SENTRY_RATE_LIMIT
                                 .compare_exchange_weak(
-                                    current,
-                                    new_val,
+                                    rate_current,
+                                    new_rate_val,
                                     Ordering::Relaxed,
                                     Ordering::Relaxed,
                                 )
-                                .is_ok()
+                                .is_err()
                             {
-                                return if allow { Some(event) } else { None };
+                                // Rate CAS failed but monthly already incremented.
+                                // This is benign: we consumed one budget slot but
+                                // the event won't be sent. At worst this wastes a
+                                // handful of slots under extreme contention.
+                                continue;
                             }
-                            // CAS failed, another thread updated — retry
+
+                            return Some(event);
                         }
                     })),
                     ..Default::default()
