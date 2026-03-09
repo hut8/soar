@@ -4,8 +4,7 @@
 	"version": "0.0.0-git",
 	"type": "module",
 	"engines": {
-		"node": ">=24.0.0",
-		"npm": ">=11.0.0"
+		"bun": ">=1.0.0"
 	},
 	"scripts": {
 		"dev": "vite dev",
@@ -18,7 +17,7 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"test:e2e": "playwright test",
-		"test": "npm run test:e2e"
+		"test": "bun run test:e2e"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.3",

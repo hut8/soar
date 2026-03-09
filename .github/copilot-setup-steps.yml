@@ -14,10 +14,10 @@ prerequisites:
     verify: rustc --version
     notes: Required for backend development
 
-  - name: Node.js
-    version: ">=24.0.0"
-    install: https://nodejs.org/
-    verify: node --version && npm --version
+  - name: Bun
+    version: ">=1.0.0"
+    install: curl -fsSL https://bun.sh/install | bash
+    verify: bun --version
     notes: Required for frontend development (SvelteKit)
 
   - name: PostgreSQL with PostGIS
@@ -68,9 +68,9 @@ setup_steps:
       - cargo fmt (Rust formatting)
       - cargo clippy (Rust linting)
       - cargo test (Rust tests)
-      - npm lint (Frontend linting)
-      - npm check (TypeScript validation)
-      - npm test (Playwright E2E tests)
+      - bun run lint (Frontend linting)
+      - bun run check (TypeScript validation)
+      - bun test (Playwright E2E tests)
 
   - step: 4
     name: Configure Environment
@@ -121,9 +121,9 @@ setup_steps:
     name: Install Frontend Dependencies
     commands:
       - cd web
-      - npm ci
+      - bun install
       - cd ..
-    description: Installs all Node.js dependencies for SvelteKit frontend
+    description: Installs all dependencies for SvelteKit frontend
 
   - step: 8
     name: Verify Rust Build
@@ -141,7 +141,7 @@ setup_steps:
     name: Verify Frontend Build
     commands:
       - cd web
-      - npm run build
+      - bun run build
       - cd ..
     description: Builds the SvelteKit frontend as a static site
 
@@ -194,7 +194,7 @@ common_commands:
       description: Run Rust linter
     - command: cargo fmt
       description: Format Rust code
-    - command: cd web && npm run dev
+    - command: cd web && bun run dev
       description: Start SvelteKit dev server (port 5173)
     - command: cargo run -- web --port 61225
       description: Start backend web server
@@ -208,9 +208,9 @@ common_commands:
       description: Run Rust unit tests
     - command: cargo nextest run
       description: Run tests with nextest (faster)
-    - command: cd web && npm test
+    - command: cd web && bun test
       description: Run Playwright E2E tests
-    - command: cd web && npm run check
+    - command: cd web && bun run check
       description: Run TypeScript type checking
     - command: cargo audit
       description: Run security audit
@@ -228,7 +228,7 @@ common_commands:
       description: Run all quality checks
     - command: cargo fmt
       description: Format Rust code
-    - command: cd web && npm run format
+    - command: cd web && bun run format
       description: Format frontend code
 
 branch_workflow:

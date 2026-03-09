@@ -264,10 +264,10 @@ docker-compose -f docker-compose.dev.yml down
 docker-compose -f docker-compose.dev.yml exec backend cargo test
 
 # Frontend tests
-docker-compose -f docker-compose.dev.yml exec frontend npm test
+docker-compose -f docker-compose.dev.yml exec frontend bun test
 
 # E2E tests (after starting services)
-cd web && npm run test:e2e
+cd web && bun run test:e2e
 ```
 
 ## Environment Variables
@@ -285,9 +285,9 @@ See `.env.docker.example` for all options.
 
 | Task | Docker | Manual |
 |------|--------|--------|
-| Initial setup | `docker-compose up` | Install Postgres, NATS, Rust, Node.js, run migrations |
+| Initial setup | `docker-compose up` | Install Postgres, NATS, Rust, Bun, run migrations |
 | Start dev env | One command | Start Postgres, NATS, backend, frontend separately |
-| Switch branches | Automatic rebuild | Manual cargo build, npm install |
+| Switch branches | Automatic rebuild | Manual cargo build, bun install |
 | Clean state | `docker-compose down -v` | Drop DB, clear caches manually |
 | Share config | .env.docker file | Everyone configures separately |
 
