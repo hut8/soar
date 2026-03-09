@@ -1400,7 +1400,7 @@ The SOAR Team"#,
         alerts_sent: i32,
         receiver_id: uuid::Uuid,
         resolved_at: DateTime<Utc>,
-        last_notified_at: Option<DateTime<Utc>>,
+        first_alerted_at: Option<DateTime<Utc>>,
     ) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -1409,8 +1409,12 @@ The SOAR Team"#,
 
         let condition_label = condition_key_to_label(condition_key);
         let resolved_at_str = resolved_at.format("%Y-%m-%d %H:%M UTC").to_string();
-        let last_notified_str =
-            last_notified_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string());
+        let first_alerted_str =
+            first_alerted_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string());
+        let duration_str = first_alerted_at.map(|start| {
+            let duration = resolved_at - start;
+            format_duration(duration.num_seconds())
+        });
 
         let subject = format!(
             "{}Resolved: {} - {} - SOAR",
@@ -1425,7 +1429,8 @@ The SOAR Team"#,
             condition_label,
             alerts_sent,
             resolved_at: &resolved_at_str,
-            last_notified_at: last_notified_str.as_deref(),
+            first_alerted_at: first_alerted_str.as_deref(),
+            duration: duration_str.as_deref(),
             receiver_url: &receiver_url,
             environment: &environment,
         };
@@ -1506,7 +1511,7 @@ The SOAR Team"#,
                 <div class="detail-row">
                     <span class="detail-label">Resolved At</span>
                     <span class="detail-value">{resolved_at}</span>
-                </div>{last_notified_row}
+                </div>{started_row}{duration_row}
             </div>
             <a href="{receiver_url}" class="cta-button">View Receiver</a>
         </div>
@@ -1521,15 +1526,26 @@ The SOAR Team"#,
             name = html_escape(data.to_name),
             alerts_sent = data.alerts_sent,
             resolved_at = html_escape(data.resolved_at),
-            last_notified_row = data
-                .last_notified_at
+            started_row = data
+                .first_alerted_at
                 .map(|t| format!(
                     r#"
                 <div class="detail-row">
-                    <span class="detail-label">Last Notified</span>
+                    <span class="detail-label">Started At</span>
                     <span class="detail-value">{}</span>
                 </div>"#,
                     html_escape(t)
+                ))
+                .unwrap_or_default(),
+            duration_row = data
+                .duration
+                .map(|d| format!(
+                    r#"
+                <div class="detail-row">
+                    <span class="detail-label">Active Duration</span>
+                    <span class="detail-value">{}</span>
+                </div>"#,
+                    html_escape(d)
                 ))
                 .unwrap_or_default(),
             receiver_url = data.receiver_url,
@@ -1552,8 +1568,11 @@ Resolved at: {resolved_at}
             callsign = data.receiver_callsign,
             resolved_at = data.resolved_at,
         );
-        if let Some(t) = data.last_notified_at {
-            text.push_str(&format!("Last notified: {}\n", t));
+        if let Some(t) = data.first_alerted_at {
+            text.push_str(&format!("Started at: {}\n", t));
+        }
+        if let Some(d) = data.duration {
+            text.push_str(&format!("Active duration: {}\n", d));
         }
         text.push_str(&format!(
             r#"{alerts_sent} notification(s) were sent during this incident.
@@ -1576,7 +1595,8 @@ struct ReceiverRecoveryEmailData<'a> {
     condition_label: &'a str,
     alerts_sent: i32,
     resolved_at: &'a str,
-    last_notified_at: Option<&'a str>,
+    first_alerted_at: Option<&'a str>,
+    duration: Option<&'a str>,
     receiver_url: &'a str,
     environment: &'a str,
 }

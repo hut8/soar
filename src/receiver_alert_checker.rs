@@ -184,7 +184,7 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                                 alert.consecutive_alerts,
                                 receiver.id,
                                 now,
-                                alert.last_alerted_at,
+                                alert.first_alerted_at,
                             )
                             .await
                         {
@@ -266,7 +266,11 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                             "Receiver alert email sent"
                         );
                         if let Err(e) = alerts_repo
-                            .record_alert_sent(alert.id, condition.condition_key())
+                            .record_alert_sent(
+                                alert.id,
+                                condition.condition_key(),
+                                alert.consecutive_alerts == 0,
+                            )
                             .await
                         {
                             error!(error = %e, "Failed to record alert sent");
@@ -284,7 +288,11 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                         // Record as sent to prevent retry storms on persistent failures.
                         // The exponential backoff will space out subsequent attempts.
                         if let Err(e) = alerts_repo
-                            .record_alert_sent(alert.id, condition.condition_key())
+                            .record_alert_sent(
+                                alert.id,
+                                condition.condition_key(),
+                                alert.consecutive_alerts == 0,
+                            )
                             .await
                         {
                             error!(error = %e, "Failed to record alert attempt");

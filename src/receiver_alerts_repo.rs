@@ -31,6 +31,7 @@ pub struct ReceiverAlertRecord {
     pub last_condition: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub first_alerted_at: Option<DateTime<Utc>>,
 }
 
 impl From<ReceiverAlertRecord> for ReceiverAlertView {
@@ -189,20 +190,40 @@ impl ReceiverAlertsRepository {
         .await?
     }
 
-    /// Update the alert state after sending a notification (increment consecutive_alerts, set last_alerted_at)
-    pub async fn record_alert_sent(&self, alert_id: Uuid, condition: &str) -> Result<()> {
+    /// Update the alert state after sending a notification (increment consecutive_alerts, set last_alerted_at).
+    /// When `is_first_alert` is true, also sets `first_alerted_at` to mark incident start.
+    pub async fn record_alert_sent(
+        &self,
+        alert_id: Uuid,
+        condition: &str,
+        is_first_alert: bool,
+    ) -> Result<()> {
         let pool = self.pool.clone();
         let condition = condition.to_string();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let mut conn = pool.get()?;
-            diesel::update(receiver_alerts::table.find(alert_id))
-                .set((
-                    receiver_alerts::consecutive_alerts.eq(receiver_alerts::consecutive_alerts + 1),
-                    receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
-                    receiver_alerts::last_condition.eq(&condition),
-                    receiver_alerts::updated_at.eq(diesel::dsl::now),
-                ))
-                .execute(&mut conn)?;
+            if is_first_alert {
+                diesel::update(receiver_alerts::table.find(alert_id))
+                    .set((
+                        receiver_alerts::consecutive_alerts
+                            .eq(receiver_alerts::consecutive_alerts + 1),
+                        receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::first_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::last_condition.eq(&condition),
+                        receiver_alerts::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+            } else {
+                diesel::update(receiver_alerts::table.find(alert_id))
+                    .set((
+                        receiver_alerts::consecutive_alerts
+                            .eq(receiver_alerts::consecutive_alerts + 1),
+                        receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::last_condition.eq(&condition),
+                        receiver_alerts::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+            }
             Ok(())
         })
         .await?
@@ -217,6 +238,7 @@ impl ReceiverAlertsRepository {
                 .set((
                     receiver_alerts::consecutive_alerts.eq(0),
                     receiver_alerts::last_condition.eq(None::<String>),
+                    receiver_alerts::first_alerted_at.eq(None::<DateTime<Utc>>),
                     receiver_alerts::updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn)?;
