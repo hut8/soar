@@ -140,6 +140,7 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
     let now = Utc::now();
     let mut alerts_sent = 0u64;
     let mut alerts_cleared = 0u64;
+    let mut recovery_sent = 0u64;
 
     for (receiver_id, receiver_alerts) in &alerts_by_receiver {
         // Fetch receiver info
@@ -166,8 +167,46 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
             let conditions = evaluate_conditions(alert, &receiver, &latest_status, now);
 
             if conditions.is_empty() {
-                // Condition has cleared — reset backoff if it was previously active
+                // Condition has cleared — send recovery email and reset backoff
                 if alert.consecutive_alerts > 0 {
+                    // Send recovery notification
+                    if let Some(user) = users.get(&alert.user_id)
+                        && let Some(user_email) = &user.email
+                    {
+                        let user_name = format!("{} {}", user.first_name, user.last_name);
+                        let condition_label = alert.last_condition.as_deref().unwrap_or("unknown");
+                        match email_service
+                            .send_receiver_recovery_email(
+                                user_email,
+                                &user_name,
+                                &receiver.callsign,
+                                condition_label,
+                                alert.consecutive_alerts,
+                                receiver.id,
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                info!(
+                                    receiver = %receiver.callsign,
+                                    user = %user_email,
+                                    condition = %condition_label,
+                                    "Receiver recovery email sent"
+                                );
+                                recovery_sent += 1;
+                                metrics::counter!("receiver_alerts.recovery_emails_sent_total")
+                                    .increment(1);
+                            }
+                            Err(e) => {
+                                error!(
+                                    error = %e,
+                                    receiver = %receiver.callsign,
+                                    "Failed to send receiver recovery email"
+                                );
+                            }
+                        }
+                    }
+
                     if let Err(e) = alerts_repo.reset_alert_state(alert.id).await {
                         error!(error = %e, alert_id = %alert.id, "Failed to reset alert state");
                     } else {
@@ -254,10 +293,11 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
         }
     }
 
-    if alerts_sent > 0 || alerts_cleared > 0 {
+    if alerts_sent > 0 || alerts_cleared > 0 || recovery_sent > 0 {
         info!(
             alerts_sent = alerts_sent,
             alerts_cleared = alerts_cleared,
+            recovery_sent = recovery_sent,
             "Receiver alert check complete"
         );
     }
