@@ -17,6 +17,7 @@ pub mod geofences;
 pub mod payments;
 pub mod pilots;
 pub mod raw_messages;
+pub mod receiver_alerts;
 pub mod receivers;
 pub mod status;
 pub mod stripe_connect;

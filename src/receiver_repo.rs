@@ -95,6 +95,7 @@ impl ReceiverRepository {
                         country: None,
                         postal_code: None,
                         geocoded: false,
+                        software: None,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -223,6 +224,7 @@ impl ReceiverRepository {
                 country: None,
                 postal_code: None,
                 geocoded: false,
+                software: None,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -231,8 +233,17 @@ impl ReceiverRepository {
                 .do_nothing() // If it already exists, just return the existing ID
                 .returning(receivers::id)
                 .get_result::<Uuid>(&mut conn)
-                .or_else(|_| {
-                    // If insert was skipped due to conflict, fetch the existing receiver
+                .or_else(|insert_err| {
+                    // ON CONFLICT DO NOTHING returns no rows, so Diesel gives NotFound.
+                    // For any other error, log it since the fallback SELECT may also fail
+                    // and we'd lose the original cause.
+                    if !matches!(insert_err, diesel::result::Error::NotFound) {
+                        warn!(
+                            %callsign,
+                            error = %insert_err,
+                            "Receiver insert failed with unexpected error, attempting SELECT fallback"
+                        );
+                    }
                     receivers::table
                         .filter(receivers::callsign.eq(&callsign))
                         .select(receivers::id)
@@ -1017,6 +1028,55 @@ impl ReceiverRepository {
         }
 
         Ok(true)
+    }
+
+    /// Update the software field for a receiver.
+    /// Only sets the value if it is currently NULL. Returns the previously stored value (if any).
+    pub async fn update_receiver_software(
+        &self,
+        receiver_id: Uuid,
+        software: &str,
+    ) -> Result<Option<String>> {
+        use crate::schema::receivers;
+
+        let pool = self.pool.clone();
+        let software = software.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            let mut conn = pool.get()?;
+
+            // Read the current value
+            let mut current: Option<String> = receivers::table
+                .filter(receivers::id.eq(receiver_id))
+                .select(receivers::software)
+                .first(&mut conn)?;
+
+            if current.is_none() {
+                // Attempt to set it for the first time and bump updated_at,
+                // but only if software is still NULL to avoid races.
+                let rows_affected = diesel::update(
+                    receivers::table
+                        .filter(receivers::id.eq(receiver_id))
+                        .filter(receivers::software.is_null()),
+                )
+                .set((
+                    receivers::software.eq(&software),
+                    receivers::updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+                if rows_affected == 0 {
+                    // Another task set software concurrently; re-read
+                    current = receivers::table
+                        .filter(receivers::id.eq(receiver_id))
+                        .select(receivers::software)
+                        .first(&mut conn)?;
+                }
+            }
+
+            Ok(current)
+        })
+        .await?
     }
 }
 

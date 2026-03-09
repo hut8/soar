@@ -113,6 +113,21 @@ impl UsersRepository {
         .await?
     }
 
+    /// Get multiple users by IDs (batch)
+    pub async fn get_by_ids(&self, ids: &[Uuid]) -> Result<Vec<User>> {
+        let pool = self.pool.clone();
+        let ids = ids.to_vec();
+        tokio::task::spawn_blocking(move || -> Result<Vec<User>> {
+            let mut conn = pool.get()?;
+            let records = users::table
+                .filter(users::id.eq_any(&ids))
+                .filter(users::deleted_at.is_null())
+                .load::<UserRecord>(&mut conn)?;
+            Ok(records.into_iter().map(|r| r.into()).collect())
+        })
+        .await?
+    }
+
     /// Get user by email
     pub async fn get_by_email(&self, email: &str) -> Result<Option<User>> {
         let pool = self.pool.clone();

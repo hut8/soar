@@ -53,6 +53,7 @@ pub struct ReceiverRecord {
     pub country: Option<String>,
     pub postal_code: Option<String>,
     pub geocoded: bool,
+    pub software: Option<String>,
     // Note: location (PostGIS geography) field omitted - use raw SQL queries to access receivers.location when needed
 }
 
@@ -100,6 +101,7 @@ impl Receiver {
             country: None,
             postal_code: None,
             geocoded: false,
+            software: None,
         };
 
         (receiver_record, photos, links)
@@ -131,6 +133,7 @@ pub struct ReceiverModel {
     pub country: Option<String>,
     pub postal_code: Option<String>,
     pub geocoded: bool,
+    pub software: Option<String>,
 }
 
 /// Insert model for new receivers
@@ -154,6 +157,7 @@ pub struct NewReceiverModel {
     pub country: Option<String>,
     pub postal_code: Option<String>,
     pub geocoded: bool,
+    pub software: Option<String>,
 }
 
 // Note: UpdateReceiverModel removed - location updates are handled via raw SQL in ReceiverRepository
@@ -220,6 +224,7 @@ impl From<ReceiverRecord> for ReceiverModel {
             country: record.country,
             postal_code: record.postal_code,
             geocoded: record.geocoded,
+            software: record.software,
         }
     }
 }
@@ -245,6 +250,7 @@ impl From<ReceiverModel> for ReceiverRecord {
             country: model.country,
             postal_code: model.postal_code,
             geocoded: model.geocoded,
+            software: model.software,
         }
     }
 }

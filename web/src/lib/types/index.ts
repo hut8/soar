@@ -56,6 +56,10 @@ import type { AircraftImageSource } from './generated/AircraftImageSource';
 import type { ReceiverStatusView } from './generated/ReceiverStatusView';
 import type { RawMessageView } from './generated/RawMessageView';
 
+// Import auto-generated receiver alert types from Rust
+import type { ReceiverAlertView } from './generated/ReceiverAlertView';
+import type { UpsertReceiverAlertRequest } from './generated/UpsertReceiverAlertRequest';
+
 // Import auto-generated receiver aggregate stats types from Rust
 import type { AprsTypeCount } from './generated/AprsTypeCount';
 import type { AircraftFixCount } from './generated/AircraftFixCount';
@@ -136,7 +140,10 @@ export type {
 	AprsTypeCount,
 	AircraftFixCount,
 	ReceiverAggregateStatsResponse,
-	ReceiverStatisticsResponse
+	ReceiverStatisticsResponse,
+	// Receiver alert types
+	ReceiverAlertView,
+	UpsertReceiverAlertRequest
 };
 
 // Type aliases for backward compatibility

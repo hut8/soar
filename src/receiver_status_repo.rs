@@ -170,6 +170,27 @@ impl ReceiverStatusRepository {
         .await?
     }
 
+    /// Get the most recent status for a receiver
+    pub async fn get_latest_status_for_receiver(
+        &self,
+        receiver_id: Uuid,
+    ) -> Result<Option<ReceiverStatus>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+            let status = receiver_statuses::table
+                .filter(receiver_statuses::receiver_id.eq(receiver_id))
+                .order(receiver_statuses::received_at.desc())
+                .first::<ReceiverStatus>(&mut conn)
+                .optional()?;
+            Ok(status)
+        })
+        .await?
+    }
+
     /// Get average time between status updates for a receiver
     /// Returns the average interval in seconds between consecutive status updates
     pub async fn get_average_update_interval(

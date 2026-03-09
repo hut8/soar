@@ -4,7 +4,7 @@ use futures_util::FutureExt;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::fixes::Fix;
 
@@ -116,7 +116,7 @@ async fn run_publisher_loop(worker_id: usize, client: &Client, rx: &flume::Recei
         // Log heartbeat every 60 seconds
         if last_heartbeat.elapsed() >= HEARTBEAT_INTERVAL {
             let queue_len = rx.len();
-            info!(
+            debug!(
                 worker_id,
                 "NATS publisher alive: {} published since last heartbeat, {} in queue",
                 fixes_published,

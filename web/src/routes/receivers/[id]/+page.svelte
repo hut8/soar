@@ -46,6 +46,7 @@
 	import { getAircraftCategoryDescription, getAircraftCategoryColor } from '$lib/formatters';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import ReceiverCoverageMap from '$lib/components/ReceiverCoverageMap.svelte';
+	import ReceiverAlertConfig from '$lib/components/ReceiverAlertConfig.svelte';
 
 	// Extends AircraftFixCount with fetched aircraft details
 	interface AircraftFixCountWithDetails extends AircraftFixCount {
@@ -669,6 +670,9 @@
 							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
+							{#if receiver.software}
+								<span class="preset-tonal-surface-500 chip text-sm">{receiver.software}</span>
+							{/if}
 						</div>
 						{#if receiver.description}
 							<p class="text-surface-600-300-token text-lg">{receiver.description}</p>
@@ -842,6 +846,11 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Alert Subscription (only visible when logged in) -->
+			{#if receiverId}
+				<ReceiverAlertConfig {receiverId} />
+			{/if}
 
 			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
 			<div class="card p-6">
