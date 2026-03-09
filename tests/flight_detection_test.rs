@@ -5,6 +5,7 @@
 //!
 //! Test data files are located in tests/data/flights/ and can be generated
 //! using the dump-flight-messages.sh script.
+#![recursion_limit = "256"]
 mod common;
 
 use common::TestDatabase;
