@@ -77,7 +77,7 @@ diesel_migrations = "2.3"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 flate2 = "1.1"
-tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
+tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
@@ -86,7 +86,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
 sentry = { version = "0.46", default-features = false, features = ["backtrace", "contexts", "panic", "tracing", "reqwest", "rustls"] }
 sentry-tracing = "0.46"
-uuid = { version = "1.21", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.22", features = ["v4", "v7", "serde"] }
 zstd = "0.13"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.32"
@@ -99,7 +99,7 @@ opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
 postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
 rust_decimal = { version = "1.40", default-features = false, features = ["std", "serde", "borsh"] }
-zip = "8.0"
+zip = "8.2"
 flydent = "0.6.0"
 flume = { version = "0.12", features = ["async"] }
 sitemap-rs = "0.4.0"
@@ -115,7 +115,7 @@ shapefile = "0.7"
 kml = "0.13"
 hex = "0.4.3"
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.124"
+aws-sdk-s3 = "1.125"
 prost = "0.14"
 prost-types = "0.14"
 crc32fast = "1.4"
