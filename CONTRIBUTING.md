@@ -231,7 +231,7 @@ git push origin feature/your-feature-name
 
 - Use Prettier for formatting (enforced by CI)
 - Follow TypeScript best practices
-- Use ESLint configuration (enforced by CI)
+- Use oxlint configuration (enforced by CI)
 - Write type-safe code with proper TypeScript types
 - Use Svelte 5 syntax and patterns
 

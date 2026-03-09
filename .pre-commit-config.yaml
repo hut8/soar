@@ -19,7 +19,7 @@ repos:
         stages: [pre-commit, pre-push]
 
       - id: web-lint
-        name: Run web linter (ESLint + Prettier check)
+        name: Run web linter (oxlint + Prettier check)
         entry: bash -c 'cd web && bun run lint'
         language: system
         files: ^web/.*\.(js|ts|svelte)$

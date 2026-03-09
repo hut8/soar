@@ -170,7 +170,7 @@ Shared VS Code settings ensure:
 
 2. Open a TypeScript file and make changes
    - Prettier should format on save
-   - ESLint should show errors inline
+   - oxlint should show errors inline
 
 ## Maintenance
 

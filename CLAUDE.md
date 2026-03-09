@@ -191,7 +191,7 @@ Before working with the frontend code, you MUST have Node.js 24+ installed and d
    bun run check
    ```
 
-**CRITICAL**: The `web/` directory requires `node_modules` to be installed before you can run any bun commands like `bun run lint`, `bun run format`, or `bun run check`. If you get "command not found" errors for prettier or eslint, you need to run `bun install` first.
+**CRITICAL**: The `web/` directory requires `node_modules` to be installed before you can run any bun commands like `bun run lint`, `bun run format`, or `bun run check`. If you get "command not found" errors for prettier or oxlint, you need to run `bun install` first.
 
 #### Static Site Generation (CRITICAL)
 - **NO Server-Side Rendering (SSR) ANYWHERE** - The frontend MUST be compiled statically
@@ -469,7 +469,7 @@ All changes must pass these checks locally:
 
 2. **Frontend Quality**:
    - `bun run format` (Prettier - auto-fix formatting)
-   - `bun run lint` (ESLint + Prettier check)
+   - `bun run lint` (oxlint + Prettier check)
    - `bun run check` (TypeScript validation)
    - `bun test` (Playwright E2E tests)
    - `bun run build` (build verification)
