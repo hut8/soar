@@ -19,7 +19,6 @@ anyhow = "1.0"
 argon2 = "0.5"
 async-nats = "0.46"
 async-trait = "0.1"
-bcrypt = "0.19"
 bigdecimal = { version = "0.4", features = ["serde"] }
 axum = { version = "0.8.8", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.5", features = ["typed-header"] }
