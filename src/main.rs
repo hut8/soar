@@ -11,9 +11,9 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
 mod commands;
@@ -767,11 +767,23 @@ async fn main() -> Result<()> {
     let is_staging = soar_env == "staging";
 
     // Initialize Sentry for error tracking (must be done early, guard must stay alive)
-    // Rate limit: max 10 error events per minute to avoid exhausting monthly quota.
-    // Packs (minute, count) into a single AtomicU64 for lock-free thread safety:
-    // upper 32 bits = minute, lower 32 bits = event count.
+    //
+    // Two-layer rate limiting to stay within the Sentry free plan (10K events/month):
+    //
+    // 1. Monthly budget: hard cap on total events per calendar month.
+    //    Packs (month_id, count) into AtomicU64 — upper 32 = year*12+month0, lower 32 = count.
+    //    Default 9,000 (90% of 10K quota). Override with SENTRY_MONTHLY_BUDGET env var.
+    //
+    // 2. Per-minute rate limit: smooths out bursts within the monthly budget.
+    //    Packs (minute, count) into AtomicU64 — upper 32 = unix minute, lower 32 = count.
     static SENTRY_RATE_LIMIT: AtomicU64 = AtomicU64::new(0);
-    const SENTRY_MAX_EVENTS_PER_MINUTE: u32 = 10;
+    static SENTRY_MONTHLY_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static SENTRY_BUDGET_EXHAUSTED_LOGGED: AtomicBool = AtomicBool::new(false);
+    const SENTRY_MAX_EVENTS_PER_MINUTE: u32 = 5;
+    let sentry_monthly_budget: u32 = env::var("SENTRY_MONTHLY_BUDGET")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9_000);
 
     let _sentry_guard = if let Ok(dsn) = env::var("SENTRY_DSN") {
         if !dsn.is_empty() {
@@ -782,7 +794,7 @@ async fn main() -> Result<()> {
                     environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
-                    before_send: Some(std::sync::Arc::new(|mut event| {
+                    before_send: Some(std::sync::Arc::new(move |mut event| {
                         // Filter out transient database errors (e.g. during PostgreSQL restarts)
                         const TRANSIENT_PATTERNS: &[&str] = &[
                             "the database system is shutting down",
@@ -816,42 +828,114 @@ async fn main() -> Result<()> {
                                 )]);
                         }
 
-                        let now_minute = (SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs()
-                            / 60) as u32;
+                        // Label unlabeled OpenTelemetry SDK events (e.g. OTLP export failures)
+                        if event.message.as_deref().unwrap_or("").is_empty()
+                            && let Some(logger) = event.logger.as_deref()
+                            && logger.starts_with("opentelemetry")
+                        {
+                            // Extract error from "Rust Tracing Fields" context
+                            let error_detail = event
+                                .contexts
+                                .get("Rust Tracing Fields")
+                                .and_then(|ctx| match ctx {
+                                    sentry::protocol::Context::Other(map) => map.get("error"),
+                                    _ => None,
+                                })
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown error");
+                            event.message =
+                                Some(format!("OpenTelemetry export failed: {error_detail}"));
+                            event.fingerprint =
+                                std::borrow::Cow::Owned(vec![std::borrow::Cow::Borrowed(
+                                    "opentelemetry-export-failed",
+                                )]);
+                        }
+
+                        // Two-gate rate limiting: both monthly budget and per-minute limit
+                        // must pass. We increment both counters atomically only when the
+                        // event passes both gates, so per-minute drops don't waste budget.
+                        let now = chrono::Utc::now();
+                        let now_minute = (now.timestamp() as u64 / 60) as u32;
+                        let month_id = {
+                            use chrono::Datelike;
+                            (now.year() as u32) * 12 + now.month0()
+                        };
 
                         loop {
-                            let current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
-                            let stored_minute = (current >> 32) as u32;
-                            let count = current as u32;
+                            // Snapshot both counters
+                            let monthly_current = SENTRY_MONTHLY_COUNTER.load(Ordering::Relaxed);
+                            let rate_current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
 
-                            // Use max to ensure monotonic minutes (handles NTP adjustments)
+                            let stored_month = (monthly_current >> 32) as u32;
+                            let monthly_count = monthly_current as u32;
+                            let stored_minute = (rate_current >> 32) as u32;
+                            let minute_count = rate_current as u32;
+
+                            // Gate 1: monthly budget
+                            if stored_month == month_id && monthly_count >= sentry_monthly_budget {
+                                if !SENTRY_BUDGET_EXHAUSTED_LOGGED.swap(true, Ordering::Relaxed) {
+                                    warn!(
+                                        budget = sentry_monthly_budget,
+                                        sent = monthly_count,
+                                        "Sentry monthly event budget exhausted, dropping remaining events"
+                                    );
+                                }
+                                metrics::counter!("sentry.events.budget_exhausted").increment(1);
+                                return None;
+                            }
+
+                            // Gate 2: per-minute rate limit
                             let effective_minute = std::cmp::max(now_minute, stored_minute);
-
-                            let (new_count, allow) = if effective_minute != stored_minute {
-                                // New minute bucket: reset counter to 1
-                                (1u32, true)
-                            } else if count < SENTRY_MAX_EVENTS_PER_MINUTE {
-                                (count + 1, true)
+                            let new_minute_count = if effective_minute != stored_minute {
+                                1u32
+                            } else if minute_count < SENTRY_MAX_EVENTS_PER_MINUTE {
+                                minute_count + 1
                             } else {
-                                return None; // Over limit, drop event
+                                return None; // Over per-minute limit
                             };
 
-                            let new_val = ((effective_minute as u64) << 32) | (new_count as u64);
-                            if SENTRY_RATE_LIMIT
+                            // Both gates passed — atomically increment both counters
+                            let (new_month_id, new_monthly_count) = if stored_month != month_id {
+                                SENTRY_BUDGET_EXHAUSTED_LOGGED.store(false, Ordering::Relaxed);
+                                (month_id, 1u32)
+                            } else {
+                                (stored_month, monthly_count + 1)
+                            };
+
+                            let new_monthly_val =
+                                ((new_month_id as u64) << 32) | (new_monthly_count as u64);
+                            let new_rate_val =
+                                ((effective_minute as u64) << 32) | (new_minute_count as u64);
+
+                            // CAS both — if either fails, retry from the top
+                            if SENTRY_MONTHLY_COUNTER
                                 .compare_exchange_weak(
-                                    current,
-                                    new_val,
+                                    monthly_current,
+                                    new_monthly_val,
                                     Ordering::Relaxed,
                                     Ordering::Relaxed,
                                 )
-                                .is_ok()
+                                .is_err()
                             {
-                                return if allow { Some(event) } else { None };
+                                continue;
                             }
-                            // CAS failed, another thread updated — retry
+                            if SENTRY_RATE_LIMIT
+                                .compare_exchange_weak(
+                                    rate_current,
+                                    new_rate_val,
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                )
+                                .is_err()
+                            {
+                                // Rate CAS failed but monthly already incremented.
+                                // This is benign: we consumed one budget slot but
+                                // the event won't be sent. At worst this wastes a
+                                // handful of slots under extreme contention.
+                                continue;
+                            }
+
+                            return Some(event);
                         }
                     })),
                     ..Default::default()
@@ -1312,11 +1396,16 @@ async fn main() -> Result<()> {
 
     // For Migrate command, handle errors specially to send notifications
     let (diesel_pool, migration_info) = if matches!(cli.command, Commands::Migrate {}) {
+        let migrate_started_at = chrono::Local::now();
         let migrate_start = std::time::Instant::now();
         match setup_diesel_database(app_name_prefix, true).await {
             Ok(result) => (
                 result.pool,
-                Some((result.applied_migrations, result.duration_secs)),
+                Some((
+                    result.applied_migrations,
+                    result.duration_secs,
+                    migrate_started_at,
+                )),
             ),
             Err(e) => {
                 let duration_secs = migrate_start.elapsed().as_secs_f64();
@@ -1324,8 +1413,12 @@ async fn main() -> Result<()> {
 
                 // Send failure email
                 if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                    let report =
-                        MigrationReport::failure(error_message.clone(), None, duration_secs);
+                    let report = MigrationReport::failure(
+                        error_message.clone(),
+                        None,
+                        duration_secs,
+                        migrate_started_at,
+                    );
                     if let Err(email_err) = send_migration_email_report(&email_config, &report) {
                         warn!("Failed to send migration failure email: {}", email_err);
                     }
@@ -1520,10 +1613,12 @@ async fn main() -> Result<()> {
             }
 
             // Send success notification (email) only if migrations were actually applied
-            let (applied_migrations, duration_secs) = migration_info.unwrap_or((vec![], 0.0));
+            let (applied_migrations, duration_secs, started_at) =
+                migration_info.unwrap_or((vec![], 0.0, chrono::Local::now()));
             if !applied_migrations.is_empty() {
                 if let Ok(email_config) = MigrationEmailConfig::from_env() {
-                    let report = MigrationReport::success(applied_migrations, duration_secs);
+                    let report =
+                        MigrationReport::success(applied_migrations, duration_secs, started_at);
                     if let Err(e) = send_migration_email_report(&email_config, &report) {
                         warn!("Failed to send migration success email: {}", e);
                     }
