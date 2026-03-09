@@ -11,7 +11,7 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
@@ -724,11 +724,23 @@ async fn main() -> Result<()> {
     let is_staging = soar_env == "staging";
 
     // Initialize Sentry for error tracking (must be done early, guard must stay alive)
-    // Rate limit: max 10 error events per minute to avoid exhausting monthly quota.
-    // Packs (minute, count) into a single AtomicU64 for lock-free thread safety:
-    // upper 32 bits = minute, lower 32 bits = event count.
+    //
+    // Two-layer rate limiting to stay within the Sentry free plan (10K events/month):
+    //
+    // 1. Monthly budget: hard cap on total events per calendar month.
+    //    Packs (month_id, count) into AtomicU64 — upper 32 = year*12+month, lower 32 = count.
+    //    Default 9,000 (90% of 10K quota). Override with SENTRY_MONTHLY_BUDGET env var.
+    //
+    // 2. Per-minute rate limit: smooths out bursts within the monthly budget.
+    //    Packs (minute, count) into AtomicU64 — upper 32 = unix minute, lower 32 = count.
     static SENTRY_RATE_LIMIT: AtomicU64 = AtomicU64::new(0);
-    const SENTRY_MAX_EVENTS_PER_MINUTE: u32 = 10;
+    static SENTRY_MONTHLY_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static SENTRY_BUDGET_EXHAUSTED_LOGGED: AtomicBool = AtomicBool::new(false);
+    const SENTRY_MAX_EVENTS_PER_MINUTE: u32 = 5;
+    let sentry_monthly_budget: u32 = env::var("SENTRY_MONTHLY_BUDGET")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9_000);
 
     let _sentry_guard = if let Ok(dsn) = env::var("SENTRY_DSN") {
         if !dsn.is_empty() {
@@ -739,7 +751,7 @@ async fn main() -> Result<()> {
                     environment: Some(std::borrow::Cow::Owned(soar_env.clone())),
                     // Sample rate for performance tracing (transactions), not error capture
                     traces_sample_rate: if is_production { 0.01 } else { 0.1 },
-                    before_send: Some(std::sync::Arc::new(|mut event| {
+                    before_send: Some(std::sync::Arc::new(move |mut event| {
                         // Filter out transient database errors (e.g. during PostgreSQL restarts)
                         const TRANSIENT_PATTERNS: &[&str] = &[
                             "the database system is shutting down",
@@ -773,12 +785,66 @@ async fn main() -> Result<()> {
                                 )]);
                         }
 
-                        let now_minute = (SystemTime::now()
+                        // Monthly budget check: hard cap on total events per calendar month
+                        let now_secs = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap_or_default()
-                            .as_secs()
-                            / 60) as u32;
+                            .as_secs();
+                        let now_minute = (now_secs / 60) as u32;
 
+                        // Calculate month identifier: days since epoch / 30.44 is imprecise,
+                        // so use chrono-free approach: year*12 + month from unix timestamp
+                        let days_since_epoch = now_secs / 86400;
+                        // Approximate year and month from days since epoch (1970-01-01)
+                        // Good enough for month boundaries — off by hours at most
+                        let approx_years = days_since_epoch / 365;
+                        let year = 1970 + approx_years;
+                        let day_of_year = days_since_epoch - approx_years * 365;
+                        let month = (day_of_year / 31).min(11); // 0-indexed month estimate
+                        let month_id = (year * 12 + month) as u32;
+
+                        loop {
+                            let current = SENTRY_MONTHLY_COUNTER.load(Ordering::Relaxed);
+                            let stored_month = (current >> 32) as u32;
+                            let monthly_count = current as u32;
+
+                            if stored_month == month_id && monthly_count >= sentry_monthly_budget {
+                                // Budget exhausted — log once per month
+                                if !SENTRY_BUDGET_EXHAUSTED_LOGGED.swap(true, Ordering::Relaxed) {
+                                    warn!(
+                                        budget = sentry_monthly_budget,
+                                        sent = monthly_count,
+                                        "Sentry monthly event budget exhausted, dropping remaining events"
+                                    );
+                                }
+                                metrics::counter!("sentry.events.budget_exhausted").increment(1);
+                                return None;
+                            }
+
+                            let (new_month_id, new_count) = if stored_month != month_id {
+                                // New month: reset counter and allow the exhaustion log again
+                                SENTRY_BUDGET_EXHAUSTED_LOGGED.store(false, Ordering::Relaxed);
+                                (month_id, 1u32)
+                            } else {
+                                (stored_month, monthly_count + 1)
+                            };
+
+                            let new_val = ((new_month_id as u64) << 32) | (new_count as u64);
+                            if SENTRY_MONTHLY_COUNTER
+                                .compare_exchange_weak(
+                                    current,
+                                    new_val,
+                                    Ordering::Relaxed,
+                                    Ordering::Relaxed,
+                                )
+                                .is_ok()
+                            {
+                                break; // Budget OK, proceed to per-minute check
+                            }
+                            // CAS failed, retry
+                        }
+
+                        // Per-minute rate limit: smooth out bursts
                         loop {
                             let current = SENTRY_RATE_LIMIT.load(Ordering::Relaxed);
                             let stored_minute = (current >> 32) as u32;
