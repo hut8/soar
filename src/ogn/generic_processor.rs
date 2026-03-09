@@ -9,6 +9,20 @@ use uuid::Uuid;
 
 use super::packet_context::PacketContext;
 
+/// Cached receiver data: ID and optional location
+#[derive(Debug, Clone)]
+struct ReceiverCacheEntry {
+    id: Uuid,
+    /// None if receiver has no known location (null lat/lon or at 0,0)
+    location: Option<(f64, f64)>,
+}
+
+/// Returns true if the receiver coordinates represent a valid, known location.
+/// Coordinates near (0,0) are treated as "null island" — the receiver has no real location.
+fn is_valid_receiver_location(lat: f64, lon: f64) -> bool {
+    lat.abs() >= 0.1 || lon.abs() >= 0.1
+}
+
 /// Generic processor that handles archiving, receiver identification, and APRS message insertion
 /// This runs before packet-type-specific processing to ensure all packets are properly recorded
 #[derive(Clone)]
@@ -16,9 +30,9 @@ pub struct OgnGenericProcessor {
     receiver_repo: ReceiverRepository,
     aprs_messages_repo: RawMessagesRepository,
     archive_service: Option<ArchiveService>,
-    /// Cache mapping receiver callsign to receiver ID
+    /// Cache mapping receiver callsign to receiver ID and location
     /// This avoids repeated database lookups for the same receiver
-    receiver_cache: Arc<Cache<String, Uuid>>,
+    receiver_cache: Arc<Cache<String, ReceiverCacheEntry>>,
 }
 
 impl OgnGenericProcessor {
@@ -64,12 +78,12 @@ impl OgnGenericProcessor {
         // Step 2: Identify the receiver callsign
         let receiver_callsign = self.identify_receiver(packet);
 
-        // Step 3: Get receiver ID from cache or database
-        let receiver_id = if let Some(cached_id) = self.receiver_cache.get(&receiver_callsign) {
-            // Cache hit - use cached receiver ID
+        // Step 3: Get receiver ID and location from cache or database
+        let entry = if let Some(cached) = self.receiver_cache.get(&receiver_callsign) {
+            // Cache hit - use cached receiver data
             trace!("Receiver {} found in cache", receiver_callsign);
             metrics::counter!("generic_processor.receiver_cache.hit_total").increment(1);
-            cached_id
+            cached
         } else {
             // Cache miss - lookup/insert in database
             debug!(
@@ -80,14 +94,21 @@ impl OgnGenericProcessor {
 
             match self
                 .receiver_repo
-                .insert_minimal_receiver(&receiver_callsign)
+                .insert_minimal_receiver_with_location(&receiver_callsign)
                 .await
             {
-                Ok(id) => {
-                    // Store in cache for future lookups
-                    self.receiver_cache.insert(receiver_callsign.clone(), id);
+                Ok((id, lat, lon)) => {
+                    let location = match (lat, lon) {
+                        (Some(lat), Some(lon)) if is_valid_receiver_location(lat, lon) => {
+                            Some((lat, lon))
+                        }
+                        _ => None,
+                    };
+                    let entry = ReceiverCacheEntry { id, location };
+                    self.receiver_cache
+                        .insert(receiver_callsign.clone(), entry.clone());
                     debug!("Cached receiver {} with ID {}", receiver_callsign, id);
-                    id
+                    entry
                 }
                 Err(e) => {
                     error!(
@@ -108,7 +129,7 @@ impl OgnGenericProcessor {
 
         // Step 5: Insert APRS message
         let new_aprs_message =
-            NewAprsMessage::new(raw_message.to_string(), received_at, receiver_id, unparsed);
+            NewAprsMessage::new(raw_message.to_string(), received_at, entry.id, unparsed);
 
         let received_at_timestamp = new_aprs_message.received_at;
         match self.aprs_messages_repo.insert_aprs(new_aprs_message).await {
@@ -119,8 +140,9 @@ impl OgnGenericProcessor {
                 );
                 Some(PacketContext {
                     raw_message_id: id,
-                    receiver_id,
+                    receiver_id: entry.id,
                     received_at: received_at_timestamp,
+                    receiver_location: entry.location,
                 })
             }
             Err(e) => {
@@ -130,6 +152,18 @@ impl OgnGenericProcessor {
                 );
                 None
             }
+        }
+    }
+
+    /// Update the cached location for a receiver (called when receiver position is updated)
+    pub fn update_cached_receiver_location(&self, callsign: &str, latitude: f64, longitude: f64) {
+        if let Some(mut entry) = self.receiver_cache.get(callsign) {
+            entry.location = if is_valid_receiver_location(latitude, longitude) {
+                Some((latitude, longitude))
+            } else {
+                None
+            };
+            self.receiver_cache.insert(callsign.to_string(), entry);
         }
     }
 

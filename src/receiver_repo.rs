@@ -243,6 +243,54 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Insert a minimal receiver and return its ID along with its current location (if any).
+    /// This is used by the generic processor to populate the receiver cache with location data
+    /// for receiver-to-fix distance checks.
+    pub async fn insert_minimal_receiver_with_location(
+        &self,
+        callsign: &str,
+    ) -> Result<(Uuid, Option<f64>, Option<f64>)> {
+        let pool = self.pool.clone();
+        let callsign = callsign.trim().to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<(Uuid, Option<f64>, Option<f64>)> {
+            let mut conn = pool.get()?;
+
+            let new_receiver = NewReceiverModel {
+                callsign: callsign.clone(),
+                description: None,
+                contact: None,
+                email: None,
+                ogn_db_country: None,
+                from_ogn_db: false,
+                latitude: None,
+                longitude: None,
+                street_address: None,
+                city: None,
+                region: None,
+                country: None,
+                postal_code: None,
+                geocoded: false,
+            };
+
+            // Try to insert, on conflict fetch existing
+            let result: (Uuid, Option<f64>, Option<f64>) = diesel::insert_into(receivers::table)
+                .values(&new_receiver)
+                .on_conflict(receivers::callsign)
+                .do_nothing()
+                .returning((receivers::id, receivers::latitude, receivers::longitude))
+                .get_result(&mut conn)
+                .or_else(|_| {
+                    receivers::table
+                        .filter(receivers::callsign.eq(&callsign))
+                        .select((receivers::id, receivers::latitude, receivers::longitude))
+                        .first(&mut conn)
+                })?;
+            Ok(result)
+        })
+        .await?
+    }
+
     /// Get the total count of receivers in the database
     pub async fn get_receiver_count(&self) -> Result<i64> {
         let pool = self.pool.clone();

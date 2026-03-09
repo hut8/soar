@@ -11,4 +11,7 @@ pub struct PacketContext {
     /// Timestamp when the message was received from APRS-IS
     /// This is captured at ingestion time to prevent clock skew from queue processing delays
     pub received_at: chrono::DateTime<chrono::Utc>,
+    /// Receiver location (latitude, longitude) if known.
+    /// None if receiver has no location or is at (0,0) (null island).
+    pub receiver_location: Option<(f64, f64)>,
 }
