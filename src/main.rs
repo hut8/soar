@@ -785,6 +785,29 @@ async fn main() -> Result<()> {
                                 )]);
                         }
 
+                        // Label unlabeled OpenTelemetry SDK events (e.g. OTLP export failures)
+                        if event.message.as_deref().unwrap_or("").is_empty()
+                            && let Some(logger) = event.logger.as_deref()
+                            && logger.starts_with("opentelemetry")
+                        {
+                            // Extract error from "Rust Tracing Fields" context
+                            let error_detail = event
+                                .contexts
+                                .get("Rust Tracing Fields")
+                                .and_then(|ctx| match ctx {
+                                    sentry::protocol::Context::Other(map) => map.get("error"),
+                                    _ => None,
+                                })
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown error");
+                            event.message =
+                                Some(format!("OpenTelemetry export failed: {error_detail}"));
+                            event.fingerprint =
+                                std::borrow::Cow::Owned(vec![std::borrow::Cow::Borrowed(
+                                    "opentelemetry-export-failed",
+                                )]);
+                        }
+
                         // Monthly budget check: hard cap on total events per calendar month
                         let now_secs = SystemTime::now()
                             .duration_since(UNIX_EPOCH)
