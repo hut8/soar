@@ -183,6 +183,8 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                                 condition_key,
                                 alert.consecutive_alerts,
                                 receiver.id,
+                                now,
+                                alert.last_alerted_at,
                             )
                             .await
                         {
@@ -252,6 +254,7 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                         condition.condition_key(),
                         alert.consecutive_alerts + 1,
                         receiver.id,
+                        now,
                     )
                     .await
                 {

@@ -1224,6 +1224,7 @@ The SOAR Team"#,
         condition_key: &str,
         alert_number: i32,
         receiver_id: uuid::Uuid,
+        detected_at: DateTime<Utc>,
     ) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -1231,6 +1232,7 @@ The SOAR Team"#,
         let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
 
         let alert_type_label = condition_key_to_label(condition_key);
+        let detected_at_str = detected_at.format("%Y-%m-%d %H:%M UTC").to_string();
 
         let subject = format!(
             "{}{} - {} - SOAR",
@@ -1245,6 +1247,7 @@ The SOAR Team"#,
             condition_description: &condition_description,
             alert_type_label,
             alert_number,
+            detected_at: &detected_at_str,
             receiver_url: &receiver_url,
             environment: &environment,
         };
@@ -1334,6 +1337,10 @@ The SOAR Team"#,
                     <span class="detail-label">Alert #</span>
                     <span class="detail-value">{ordinal} notification</span>
                 </div>
+                <div class="detail-row">
+                    <span class="detail-label">Detected At</span>
+                    <span class="detail-value">{detected_at}</span>
+                </div>
             </div>
             <a href="{receiver_url}" class="cta-button">View Receiver</a>
         </div>
@@ -1349,6 +1356,7 @@ The SOAR Team"#,
             name = html_escape(data.to_name),
             condition = html_escape(data.condition_description),
             ordinal = ordinal,
+            detected_at = html_escape(data.detected_at),
             receiver_url = data.receiver_url,
             environment = data.environment,
         )
@@ -1362,6 +1370,7 @@ The SOAR Team"#,
 
 {condition}
 
+Detected at: {detected_at}
 This is alert #{alert_number} for this condition. Alerts will continue with increasing intervals until the condition resolves.
 
 View receiver: {receiver_url}
@@ -1374,6 +1383,7 @@ The SOAR Team"#,
             alert_type = data.alert_type_label,
             callsign = data.receiver_callsign,
             condition = data.condition_description,
+            detected_at = data.detected_at,
             alert_number = data.alert_number,
             receiver_url = data.receiver_url,
         )
@@ -1389,6 +1399,8 @@ The SOAR Team"#,
         condition_key: &str,
         alerts_sent: i32,
         receiver_id: uuid::Uuid,
+        resolved_at: DateTime<Utc>,
+        last_notified_at: Option<DateTime<Utc>>,
     ) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -1396,6 +1408,9 @@ The SOAR Team"#,
         let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
 
         let condition_label = condition_key_to_label(condition_key);
+        let resolved_at_str = resolved_at.format("%Y-%m-%d %H:%M UTC").to_string();
+        let last_notified_str =
+            last_notified_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string());
 
         let subject = format!(
             "{}Resolved: {} - {} - SOAR",
@@ -1409,6 +1424,8 @@ The SOAR Team"#,
             receiver_callsign,
             condition_label,
             alerts_sent,
+            resolved_at: &resolved_at_str,
+            last_notified_at: last_notified_str.as_deref(),
             receiver_url: &receiver_url,
             environment: &environment,
         };
@@ -1486,6 +1503,10 @@ The SOAR Team"#,
                     <span class="detail-label">Notifications</span>
                     <span class="detail-value">{alerts_sent}</span>
                 </div>
+                <div class="detail-row">
+                    <span class="detail-label">Resolved At</span>
+                    <span class="detail-value">{resolved_at}</span>
+                </div>{last_notified_row}
             </div>
             <a href="{receiver_url}" class="cta-button">View Receiver</a>
         </div>
@@ -1499,31 +1520,52 @@ The SOAR Team"#,
             callsign = html_escape(data.receiver_callsign),
             name = html_escape(data.to_name),
             alerts_sent = data.alerts_sent,
+            resolved_at = html_escape(data.resolved_at),
+            last_notified_row = data
+                .last_notified_at
+                .map(|t| format!(
+                    r#"
+                <div class="detail-row">
+                    <span class="detail-label">Last Notified</span>
+                    <span class="detail-value">{}</span>
+                </div>"#,
+                    html_escape(t)
+                ))
+                .unwrap_or_default(),
             receiver_url = data.receiver_url,
             environment = data.environment,
         )
     }
 
     fn build_receiver_recovery_text(&self, data: &ReceiverRecoveryEmailData) -> String {
-        format!(
+        let mut text = format!(
             r#"Hi {to_name},
 
 Resolved: {condition_label} - {callsign}
 
 The "{condition_label}" condition for {callsign} has cleared.
 
-{alerts_sent} notification(s) were sent during this incident.
+Resolved at: {resolved_at}
+"#,
+            to_name = data.to_name,
+            condition_label = data.condition_label,
+            callsign = data.receiver_callsign,
+            resolved_at = data.resolved_at,
+        );
+        if let Some(t) = data.last_notified_at {
+            text.push_str(&format!("Last notified: {}\n", t));
+        }
+        text.push_str(&format!(
+            r#"{alerts_sent} notification(s) were sent during this incident.
 
 View receiver: {receiver_url}
 
 Best regards,
 The SOAR Team"#,
-            to_name = data.to_name,
-            condition_label = data.condition_label,
-            callsign = data.receiver_callsign,
             alerts_sent = data.alerts_sent,
             receiver_url = data.receiver_url,
-        )
+        ));
+        text
     }
 }
 
@@ -1533,6 +1575,8 @@ struct ReceiverRecoveryEmailData<'a> {
     receiver_callsign: &'a str,
     condition_label: &'a str,
     alerts_sent: i32,
+    resolved_at: &'a str,
+    last_notified_at: Option<&'a str>,
     receiver_url: &'a str,
     environment: &'a str,
 }
@@ -1554,6 +1598,7 @@ struct ReceiverAlertEmailData<'a> {
     condition_description: &'a str,
     alert_type_label: &'a str,
     alert_number: i32,
+    detected_at: &'a str,
     receiver_url: &'a str,
     environment: &'a str,
 }
