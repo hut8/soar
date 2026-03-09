@@ -10,4 +10,4 @@ ALTER TABLE fixes DROP CONSTRAINT IF EXISTS fixes_aircraft_id_fkey;
 
 ALTER TABLE fixes
     ADD CONSTRAINT fixes_aircraft_id_fkey
-    FOREIGN KEY (aircraft_id) REFERENCES aircraft(id) ON DELETE SET NULL;
+    FOREIGN KEY (aircraft_id) REFERENCES aircraft(id);
