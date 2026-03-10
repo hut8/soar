@@ -23,7 +23,7 @@ updates:
         applies-to: version-updates
         update-types:
           - "patch"
-          - "minor"      
+          - "minor"
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
@@ -37,10 +37,20 @@ updates:
         applies-to: version-updates
         update-types:
           - "patch"
-          - "minor"         
+          - "minor"
   - package-ecosystem: "github-actions"
     # Workflow files stored in the default location of `.github/workflows`
     # You don't need to specify `/.github/workflows` for `directory`. You can use `directory: "/"`.
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      major:
+        applies-to: version-updates
+        update-types:
+          - "major"
+      minor:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+          - "minor"
