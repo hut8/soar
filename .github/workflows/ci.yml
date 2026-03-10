@@ -782,8 +782,6 @@ jobs:
   build-release-arm64:
     name: Build Release Binary (ARM64 Static musl)
     runs-on: ubuntu-22.04
-    # Only build ARM64 on main pushes and releases (not PRs — too slow)
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'release' && github.event.action == 'published')
 
     steps:
       - name: Checkout code
