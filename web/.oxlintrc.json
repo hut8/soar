@@ -1,0 +1,10 @@
+{
+	"overrides": [
+		{
+			"files": ["**/*.svelte"],
+			"rules": {
+				"no-unassigned-vars": "off"
+			}
+		}
+	]
+}

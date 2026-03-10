@@ -35,7 +35,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **NEVER skip CI checks** - Local development must match GitHub Actions pipeline
 - **ASK BEFORE removing large amounts of working code** - Get confirmation before major deletions
 - **AVOID duplicate code** - Check for existing implementations before writing new code
-- Pre-commit hooks run: `cargo fmt`, `cargo clippy`, `cargo test`, `npm lint`, `npm check`, `npm test`
+- Pre-commit hooks run: `cargo fmt`, `cargo clippy`, `cargo test`, `bun run lint`, `bun run check`, `bun run test`
 
 ### COMMIT AND DATABASE RULES
 - **NEVER add Co-Authored-By lines** - Do not include Claude Code attribution in commits
@@ -168,32 +168,30 @@ python3 infrastructure/dashboards/build.py --verify
 #### Initial Setup (REQUIRED)
 Before working with the frontend code, you MUST have Node.js 24+ installed and dependencies installed:
 
-1. **Install Node.js 24+**:
+1. **Install Bun**:
    ```bash
-   # Using 'n' (recommended)
-   sudo n 24
+   curl -fsSL https://bun.sh/install | bash
 
    # Verify version
-   node --version  # Should be v24.x.x
-   npm --version   # Should be v11.x.x
+   bun --version  # Should be v1.x.x
    ```
 
 2. **Install Dependencies**:
    ```bash
    cd web
-   npm install
+   bun install
    ```
 
 3. **Verify Setup**:
    ```bash
    # Check formatting and linting pass
-   npm run lint
+   bun run lint
 
    # Check TypeScript compilation
-   npm run check
+   bun run check
    ```
 
-**CRITICAL**: The `web/` directory requires `node_modules` to be installed before you can run any npm commands like `npm run lint`, `npm run format`, or `npm run check`. If you get "command not found" errors for prettier or eslint, you need to run `npm install` first.
+**CRITICAL**: The `web/` directory requires `node_modules` to be installed before you can run any bun commands like `bun run lint`, `bun run format`, or `bun run check`. If you get "command not found" errors for prettier or oxlint, you need to run `bun install` first.
 
 #### Static Site Generation (CRITICAL)
 - **NO Server-Side Rendering (SSR) ANYWHERE** - The frontend MUST be compiled statically
@@ -470,13 +468,13 @@ All changes must pass these checks locally:
    - `cargo audit` (security audit)
 
 2. **Frontend Quality**:
-   - `npm run format` (Prettier - auto-fix formatting)
-   - `npm run lint` (ESLint + Prettier check)
-   - `npm run check` (TypeScript validation)
-   - `npm test` (Playwright E2E tests)
-   - `npm run build` (build verification)
+   - `bun run format` (Prettier - auto-fix formatting)
+   - `bun run lint` (oxlint + Prettier check)
+   - `bun run check` (TypeScript validation)
+   - `bun run test` (Playwright E2E tests)
+   - `bun run build` (build verification)
 
-   **Note**: If formatting issues are found by `npm run lint`, run `npm run format` to auto-fix them.
+   **Note**: If formatting issues are found by `bun run lint`, run `bun run format` to auto-fix them.
 
 3. **File Quality**:
    - No trailing whitespace
@@ -601,7 +599,7 @@ mod tests {
 - **Framework**: Playwright v1.56+
 - **Test Directory**: `web/e2e/`
 - **Documentation**: See `web/e2e/README.md` for comprehensive testing guide
-- **Running tests**: `cd web && npm test`
+- **Running tests**: `cd web && bun test`
 
 ## Performance Guidelines
 

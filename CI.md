@@ -34,13 +34,13 @@ The CI workflow consists of several jobs that run in sequence:
 ### 1. Test SvelteKit Project (`test-sveltekit`)
 
 - **Platform**: Ubuntu Latest
-- **Node.js**: Version 20
+- **Runtime**: Bun
 - **Steps**:
-  - Install dependencies with `npm ci`
-  - Run linter with `npm run lint`
-  - Run type checking with `npm run check`
-  - Run tests with `npm test`
-  - Build the project with `npm run build`
+  - Install dependencies with `bun install --frozen-lockfile`
+  - Run linter with `bun run lint`
+  - Run type checking with `bun run check`
+  - Run tests with `bun run test`
+  - Build the project with `bun run build`
   - Upload build artifacts for use by Rust build
 
 ### 2. Test Rust Project (`test-rust`)
@@ -145,11 +145,11 @@ To run the same checks locally:
 ```bash
 # SvelteKit checks
 cd web
-npm ci
-npm run lint
-npm run check
-npm test
-npm run build
+bun install --frozen-lockfile
+bun run lint
+bun run check
+bun run test
+bun run build
 
 # Rust checks
 cargo fmt --check

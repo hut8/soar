@@ -20,7 +20,7 @@ export default defineConfig({
 	use: {
 		// Base URL points to shared preview server
 		// In CI: Started by CI workflow on port 4173
-		// Locally: Start with `npm run preview` before running tests
+		// Locally: Start with `bun run preview` before running tests
 		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
 
 		// Ignore HTTPS errors for test environments
@@ -71,7 +71,7 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	// NOTE: Web server is started externally (by CI workflow or manually with `npm run preview`)
+	// NOTE: Web server is started externally (by CI workflow or manually with `bun run preview`)
 	// All test workers share the same server and database
 	// Tests ensure data isolation through unique identifiers (timestamps, UUIDs)
 

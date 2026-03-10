@@ -83,7 +83,7 @@ await page.waitForTimeout(1000); // Avoid this!
 
 ```typescript
 // Wait for network requests
-await page.waitForResponse(resp => 
+await page.waitForResponse(resp =>
     resp.url().includes('/api/devices') && resp.status() === 200
 );
 
@@ -134,7 +134,7 @@ test.describe('Responsive Design', () => {
     test('should display mobile menu on small screens', async ({ page }) => {
         await page.setViewportSize(devices['iPhone 12'].viewport);
         await page.goto('/');
-        
+
         await expect(page.locator('.mobile-menu-button')).toBeVisible();
         await expect(page.locator('.desktop-nav')).not.toBeVisible();
     });
@@ -237,7 +237,7 @@ test('check devices', async ({ page }) => {});
 
 ## Before Committing
 
-- Run `npm test` to execute all E2E tests
+- Run `bun run test` to execute all E2E tests
 - Ensure tests pass in headless mode
 - Check that screenshots and videos are not committed (should be in `.gitignore`)
 - Verify test coverage for critical user flows
