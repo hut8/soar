@@ -835,7 +835,6 @@ diesel::table! {
         country -> Nullable<Text>,
         postal_code -> Nullable<Text>,
         geocoded -> Bool,
-        software -> Nullable<Text>,
         protocols -> Nullable<Array<Text>>,
     }
 }
