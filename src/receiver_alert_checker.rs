@@ -245,6 +245,8 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
 
             // Send one alert per subscription per check cycle (highest priority condition first)
             if let Some(condition) = conditions.first() {
+                // Use the incident start time if available, otherwise this is the first alert
+                let detected_at = alert.first_alerted_at.unwrap_or(now);
                 match email_service
                     .send_receiver_alert_email(
                         &user_email,
@@ -254,7 +256,7 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
                         condition.condition_key(),
                         alert.consecutive_alerts + 1,
                         receiver.id,
-                        now,
+                        detected_at,
                     )
                     .await
                 {

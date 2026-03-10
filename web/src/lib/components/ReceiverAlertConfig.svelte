@@ -24,7 +24,7 @@
 	let loading = $state(true);
 	let saving = $state(false);
 	let hasSubscription = $state(false);
-	let alertLoaded = $state(false);
+	let lastLoadedReceiverId = $state('');
 	let expanded = $state(false);
 
 	// Form state
@@ -38,8 +38,8 @@
 	let baseCooldownMinutes = $state(30);
 
 	$effect(() => {
-		if ($auth.isAuthenticated && !alertLoaded) {
-			alertLoaded = true;
+		if ($auth.isAuthenticated && lastLoadedReceiverId !== receiverId) {
+			lastLoadedReceiverId = receiverId;
 			loadAlert();
 		} else if (!$auth.isAuthenticated) {
 			loading = false;
@@ -182,7 +182,7 @@
 				type="button"
 				class="flex w-full items-center justify-between"
 				aria-expanded={expanded}
-				aria-controls="alert-subscription-panel"
+				aria-controls={expanded ? 'alert-subscription-panel' : undefined}
 				onclick={() => {
 					expanded = !expanded;
 				}}
