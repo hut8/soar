@@ -80,16 +80,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
-      - name: Cache cross
-        id: cache-cross
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cross
-          key: ${{ runner.os }}-cross-0.2.5
-
       - name: Install cross
-        if: steps.cache-cross.outputs.cache-hit != 'true'
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross@0.2.5
 
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
