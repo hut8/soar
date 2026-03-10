@@ -1,8 +1,8 @@
 [Unit]
 Description=SOAR Run (Staging) - APRS Data Collection Service
 Documentation=https://github.com/hut8/soar
-After=network-online.target postgresql.service nats-server.service
-Wants=network-online.target nats-server.service
+After=network-online.target postgresql.service nats-server.service tailscaled.service
+Wants=network-online.target nats-server.service tailscaled.service
 Requires=postgresql.service
 # Wants=nats-server.service ensures NATS starts when this service starts
 # Service will reconnect automatically via built-in retry logic if NATS restarts
@@ -13,7 +13,7 @@ User=soar
 Group=soar
 WorkingDirectory=/var/lib/soar
 SyslogIdentifier=soar-run-staging
-ExecStart=/usr/local/bin/soar-staging run --archive
+ExecStart=/usr/local/bin/soar-staging run --archive --tcp-listen 127.0.0.1:9384 --listen-tailscale
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables (staging environment)

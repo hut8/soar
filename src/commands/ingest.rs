@@ -52,10 +52,12 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let socket_path = soar::socket_path();
+    let socket_target = ingest_config
+        .socket_target()
+        .context("Failed to parse socket_address from config")?;
     info!(
-        "Starting unified ingest service - socket: {:?}",
-        socket_path
+        "Starting unified ingest service - socket: {}",
+        socket_target
     );
 
     for stream in &ingest_config.streams {
@@ -226,13 +228,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
 
     // Create a single socket client for sending to soar-run
     let mut socket_client = match soar::socket_client::SocketClient::connect(
-        &socket_path,
+        socket_target.clone(),
         soar::protocol::IngestSource::Ogn, // Dummy - not used with send_serialized
     )
     .await
     {
         Ok(client) => {
-            info!("Socket connected to soar-run at {:?}", socket_path);
+            info!("Socket connected to soar-run at {}", socket_target);
             client
         }
         Err(e) => {
@@ -240,7 +242,10 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
                 "Failed to connect socket to soar-run (will buffer to queue): {}",
                 e
             );
-            soar::socket_client::SocketClient::new(&socket_path, soar::protocol::IngestSource::Ogn)
+            soar::socket_client::SocketClient::new(
+                socket_target.clone(),
+                soar::protocol::IngestSource::Ogn,
+            )
         }
     };
 
