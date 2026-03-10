@@ -1,22 +1,24 @@
-// Unix socket client for ingesters
+// Socket client for ingesters
 //
 // This client connects to the soar-run socket server and sends
 // length-prefixed protobuf messages. It handles reconnection with
 // exponential backoff.
+//
+// Supports both Unix domain sockets (local) and TCP sockets (remote).
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 use tokio::net::UnixStream;
 use tracing::{info, warn};
 
+use crate::SocketTarget;
 use crate::protocol::{IngestSource, new_envelope, serialize_envelope};
 
 /// Socket client for ingesters
 pub struct SocketClient {
-    socket_path: PathBuf,
-    stream: Option<BufWriter<UnixStream>>,
+    target: SocketTarget,
+    stream: Option<BufWriter<Box<dyn AsyncWrite + Unpin + Send>>>,
     source: IngestSource,
 }
 
@@ -27,14 +29,13 @@ impl SocketClient {
     /// to connect when send() is called or when reconnect() is called explicitly.
     ///
     /// # Arguments
-    /// * `socket_path` - Path to Unix socket
+    /// * `target` - Socket target (Unix path or TCP address)
     /// * `source` - Source of messages (OGN, Beast, or SBS)
-    pub fn new<P: AsRef<Path>>(socket_path: P, source: IngestSource) -> Self {
-        let socket_path = socket_path.as_ref().to_path_buf();
+    pub fn new(target: SocketTarget, source: IngestSource) -> Self {
         metrics::gauge!("socket.client.connected").set(0.0);
 
         Self {
-            socket_path,
+            target,
             stream: None,
             source,
         }
@@ -43,26 +44,20 @@ impl SocketClient {
     /// Connect to the soar-run socket server
     ///
     /// # Arguments
-    /// * `socket_path` - Path to Unix socket
+    /// * `target` - Socket target (Unix path or TCP address)
     /// * `source` - Source of messages (OGN, Beast, or SBS)
-    pub async fn connect<P: AsRef<Path>>(socket_path: P, source: IngestSource) -> Result<Self> {
-        let socket_path = socket_path.as_ref().to_path_buf();
-
-        let stream = UnixStream::connect(&socket_path)
-            .await
-            .with_context(|| format!("Failed to connect to socket: {:?}", socket_path))?;
-
-        let stream = BufWriter::new(stream);
+    pub async fn connect(target: SocketTarget, source: IngestSource) -> Result<Self> {
+        let stream = connect_to_target(&target).await?;
 
         info!(
-            "Connected to soar-run at {:?} (source: {:?})",
-            socket_path,
+            "Connected to soar-run at {} (source: {:?})",
+            target,
             source.as_str_name()
         );
         metrics::gauge!("socket.client.connected").set(1.0);
 
         Ok(Self {
-            socket_path,
+            target,
             stream: Some(stream),
             source,
         })
@@ -129,16 +124,16 @@ impl SocketClient {
         self.stream = None;
         metrics::gauge!("socket.client.connected").set(0.0);
 
-        info!("Attempting to reconnect to {:?}", self.socket_path);
+        info!("Attempting to reconnect to {}", self.target);
 
         let mut delay = Duration::from_secs(1);
         let max_delay = Duration::from_secs(60);
 
         loop {
-            match UnixStream::connect(&self.socket_path).await {
+            match connect_to_target(&self.target).await {
                 Ok(stream) => {
-                    self.stream = Some(BufWriter::new(stream));
-                    info!("Reconnected to soar-run at {:?}", self.socket_path);
+                    self.stream = Some(stream);
+                    info!("Reconnected to soar-run at {}", self.target);
                     metrics::gauge!("socket.client.connected").set(1.0);
                     metrics::counter!("socket.client.reconnects_total").increment(1);
                     return Ok(());
@@ -158,5 +153,29 @@ impl SocketClient {
     /// Check if connected
     pub fn is_connected(&self) -> bool {
         self.stream.is_some()
+    }
+}
+
+/// Connect to the target and return a boxed async writer
+async fn connect_to_target(
+    target: &SocketTarget,
+) -> Result<BufWriter<Box<dyn AsyncWrite + Unpin + Send>>> {
+    match target {
+        SocketTarget::Unix(path) => {
+            let stream = UnixStream::connect(path)
+                .await
+                .with_context(|| format!("Failed to connect to Unix socket: {:?}", path))?;
+            Ok(BufWriter::new(Box::new(stream)))
+        }
+        SocketTarget::Tcp(addr) => {
+            let stream = tokio::net::TcpStream::connect(addr)
+                .await
+                .with_context(|| format!("Failed to connect to TCP socket: {}", addr))?;
+
+            // Set TCP_NODELAY for low latency (disable Nagle's algorithm)
+            stream.set_nodelay(true).ok();
+
+            Ok(BufWriter::new(Box::new(stream)))
+        }
     }
 }

@@ -39,6 +39,7 @@ pub async fn handle_run(
     skip_ogn_aircraft_types: &[String],
     no_aprs: bool,
     no_adsb: bool,
+    tcp_listen: &[String],
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<()> {
     // Validate that at least one consumer is enabled
@@ -335,10 +336,28 @@ pub async fn handle_run(
     );
 
     // Spawn socket accept loop task
+    let envelope_tx_for_unix = envelope_tx.clone();
     tokio::spawn(async move {
-        socket_server.accept_loop(envelope_tx).await;
+        socket_server.accept_loop(envelope_tx_for_unix).await;
     });
     info!("Spawned socket server accept loop");
+
+    // Bind and spawn TCP listeners for remote ingest instances
+    // Bind eagerly so we fail fast on port conflicts / permission errors
+    for tcp_addr_str in tcp_listen {
+        let tcp_addr: std::net::SocketAddr = tcp_addr_str
+            .parse()
+            .with_context(|| format!("Invalid --tcp-listen address: {}", tcp_addr_str))?;
+        let tcp_listener = soar::socket_server::bind_tcp_listener(tcp_addr)
+            .await
+            .with_context(|| format!("Failed to start TCP listener on {}", tcp_addr))?;
+        let tcp_tx = envelope_tx.clone();
+        tokio::spawn(soar::socket_server::run_tcp_accept_loop(
+            tcp_listener,
+            tcp_tx,
+        ));
+        info!("Spawned TCP listener on {}", tcp_addr);
+    }
 
     // Spawn envelope router task
     let ogn_intake_tx_for_router = ogn_intake_opt.as_ref().map(|(tx, _)| tx.clone());

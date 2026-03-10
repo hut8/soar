@@ -161,6 +161,17 @@ enum Commands {
         #[arg(long)]
         no_adsb: bool,
 
+        /// Listen for TCP connections from remote ingest instances.
+        /// Can be specified multiple times (e.g., --tcp-listen 127.0.0.1:9384)
+        #[arg(long)]
+        tcp_listen: Vec<String>,
+
+        /// Also listen on the Tailscale interface for TCP connections.
+        /// Discovers the Tailscale IPv4 address via `tailscale ip -4`.
+        /// Uses port 9384 by default, or specify a custom port.
+        #[arg(long, default_missing_value = "9384", num_args = 0..=1)]
+        listen_tailscale: Option<u16>,
+
         /// Enable tokio-console for async task monitoring (port 6669)
         #[arg(long)]
         enable_tokio_console: bool,
@@ -711,6 +722,44 @@ fn determine_archive_dir() -> Result<String> {
 
     info!("Using archive directory: {}", home_archive);
     Ok(home_archive)
+}
+
+/// Discover the Tailscale IPv4 address by running `tailscale ip -4`.
+///
+/// If Tailscale returns multiple addresses (one per line), uses the first one.
+async fn discover_tailscale_ip() -> Result<String> {
+    let output = tokio::process::Command::new("tailscale")
+        .args(["ip", "-4"])
+        .output()
+        .await
+        .context("Failed to run `tailscale ip -4` — is Tailscale installed?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "`tailscale ip -4` exited with {}: {}",
+            output.status,
+            stderr.trim()
+        );
+    }
+
+    let stdout = String::from_utf8(output.stdout).context("Tailscale returned non-UTF8 output")?;
+
+    // tailscale ip -4 can return multiple addresses (one per line); take the first
+    let ip = stdout
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!("`tailscale ip -4` returned empty output — is Tailscale connected?")
+        })?
+        .trim()
+        .to_string();
+
+    // Validate it parses as an IP address
+    ip.parse::<std::net::Ipv4Addr>()
+        .with_context(|| format!("Tailscale returned invalid IPv4 address: {}", ip))?;
+
+    Ok(ip)
 }
 
 #[tokio::main]
@@ -1442,8 +1491,20 @@ async fn main() -> Result<()> {
             skip_ogn_aircraft_type,
             no_aprs,
             no_adsb,
+            mut tcp_listen,
+            listen_tailscale,
             enable_tokio_console: _,
         } => {
+            // If --listen-tailscale was given, discover the Tailscale IP and add it
+            if let Some(port) = listen_tailscale {
+                let tailscale_ip = discover_tailscale_ip()
+                    .await
+                    .context("--listen-tailscale requires Tailscale to be running")?;
+                let addr = format!("{}:{}", tailscale_ip, port);
+                info!("Tailscale listener: {}", addr);
+                tcp_listen.push(addr);
+            }
+
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
                 Some(determine_archive_dir()?)
@@ -1458,6 +1519,7 @@ async fn main() -> Result<()> {
                 &skip_ogn_aircraft_type,
                 no_aprs,
                 no_adsb,
+                &tcp_listen,
                 diesel_pool,
             )
             .await
