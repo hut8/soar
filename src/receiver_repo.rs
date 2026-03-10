@@ -1059,11 +1059,11 @@ impl ReceiverRepository {
                 UPDATE receivers
                 SET protocols = CASE
                     WHEN protocols IS NULL THEN ARRAY[$1]
-                    WHEN NOT ($1 = ANY(protocols)) THEN array_append(protocols, $1)
+                    WHEN array_position(protocols, $1) IS NULL THEN array_append(protocols, $1)
                     ELSE protocols
                 END,
                 updated_at = CASE
-                    WHEN protocols IS NULL OR NOT ($1 = ANY(protocols)) THEN NOW()
+                    WHEN protocols IS NULL OR array_position(protocols, $1) IS NULL THEN NOW()
                     ELSE updated_at
                 END
                 WHERE id = $2
