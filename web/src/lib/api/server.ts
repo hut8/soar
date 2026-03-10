@@ -3,6 +3,23 @@ import { loading } from '$lib/stores/loading';
 import { auth } from '$lib/stores/auth';
 import { toaster } from '$lib/toaster';
 
+/**
+ * Decode a JWT payload without verification and check if the token is expired.
+ * Returns true if the token is expired or malformed.
+ */
+function isTokenExpired(token: string): boolean {
+	try {
+		const parts = token.split('.');
+		if (parts.length !== 3) return true;
+		const payload = JSON.parse(atob(parts[1]));
+		if (typeof payload.exp !== 'number') return true;
+		// Compare with current time (exp is in seconds)
+		return payload.exp < Date.now() / 1000;
+	} catch {
+		return true;
+	}
+}
+
 // Get the API base URL based on environment and backend mode
 export function getApiBase(): string {
 	if (!dev) {
@@ -91,17 +108,17 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 		});
 
 		if (!response.ok) {
-			// Handle 401 Unauthorized - only treat as session expiry if we
-			// actually sent a token and the server still rejected it.
-			// A "missing token" response when we did send one likely means a
-			// proxy or service-worker stripped the header — don't nuke the session.
+			// Handle 401 Unauthorized - only log out if the token is actually
+			// expired. A server-side 401 for other reasons (transient error,
+			// user lookup failure, etc.) should NOT nuke the session.
 			if (response.status === 401 && browser) {
+				const tokenValue = localStorage.getItem('auth_token');
 				const hadToken = headers['Authorization'] != null || headers['authorization'] != null;
 				const bodyText = await response.text();
 				const isMissingToken = bodyText.includes('Missing authorization token');
 
-				if (hadToken && !isMissingToken) {
-					// Token was sent but is invalid/expired — clear it
+				if (hadToken && !isMissingToken && tokenValue && isTokenExpired(tokenValue)) {
+					// Token was sent AND is actually expired — clear it
 					localStorage.removeItem('auth_token');
 					auth.logout();
 
@@ -113,7 +130,7 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 					throw new ServerError('Session expired', response.status);
 				}
 
-				// Otherwise just throw without logging out
+				// Token is not expired or wasn't sent — don't log out
 				throw new ServerError(bodyText || 'Unauthorized', response.status);
 			}
 

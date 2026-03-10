@@ -14,6 +14,8 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use tracing::{error, warn};
+
 use crate::{users::User, users_repo::UsersRepository, web::AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,19 +97,29 @@ impl FromRequestParts<AppState> for AuthUser {
 
         // Create JWT service and verify token
         let jwt_service = JwtService::new(&jwt_secret);
-        let claims = jwt_service
-            .verify_token(bearer.token())
-            .map_err(|_| AuthError::InvalidToken)?;
+        let claims = jwt_service.verify_token(bearer.token()).map_err(|e| {
+            warn!(error = %e, "JWT token verification failed");
+            AuthError::InvalidToken
+        })?;
 
         // Get user from database
         let users_repo = UsersRepository::new(state.pool.clone());
-        let user_id = claims.user_id().map_err(|_| AuthError::InvalidToken)?;
+        let user_id = claims.user_id().map_err(|e| {
+            warn!(error = %e, "Invalid user ID in JWT claims");
+            AuthError::InvalidToken
+        })?;
 
         let user = users_repo
             .get_by_id(user_id)
             .await
-            .map_err(|_| AuthError::DatabaseError)?
-            .ok_or(AuthError::UserNotFound)?;
+            .map_err(|e| {
+                error!(error = %e, %user_id, "Database error during auth lookup");
+                AuthError::DatabaseError
+            })?
+            .ok_or_else(|| {
+                warn!(%user_id, "Authenticated user not found in database");
+                AuthError::UserNotFound
+            })?;
 
         Ok(AuthUser(user))
     }
