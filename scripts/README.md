@@ -65,8 +65,8 @@ SKIP_TESTS=1                      # Skip running tests (not recommended)
 The script performs the following steps:
 
 1. Checks out the specified branch (or uses current branch)
-2. Runs tests (cargo fmt, clippy, cargo test, npm lint, npm check)
-3. Builds the web frontend (`npm run build`)
+2. Runs tests (cargo fmt, clippy, cargo test, bun run lint, bun run check)
+3. Builds the web frontend (`bun run build`)
 4. Builds the Rust release binary (`cargo build --release`)
 5. Uploads debug symbols to Sentry (if configured)
 6. Creates a Sentry release (if configured)

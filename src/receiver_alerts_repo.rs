@@ -7,7 +7,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest, big_decimal_to_f64};
-use crate::schema::receiver_alerts;
+use crate::schema::{receiver_alerts, receivers};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -31,6 +31,7 @@ pub struct ReceiverAlertRecord {
     pub last_condition: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub first_alerted_at: Option<DateTime<Utc>>,
 }
 
 impl From<ReceiverAlertRecord> for ReceiverAlertView {
@@ -39,6 +40,7 @@ impl From<ReceiverAlertRecord> for ReceiverAlertView {
             id: r.id,
             user_id: r.user_id,
             receiver_id: r.receiver_id,
+            receiver_callsign: None,
             alert_on_down: r.alert_on_down,
             down_after_minutes: r.down_after_minutes,
             alert_on_high_cpu: r.alert_on_high_cpu,
@@ -65,16 +67,28 @@ impl ReceiverAlertsRepository {
         Self { pool }
     }
 
-    /// Get all alerts for a user
+    /// Get all alerts for a user (with receiver callsigns)
     pub async fn get_by_user(&self, user_id: Uuid) -> Result<Vec<ReceiverAlertView>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverAlertView>> {
             let mut conn = pool.get()?;
-            let records = receiver_alerts::table
+            let results: Vec<(ReceiverAlertRecord, Option<String>)> = receiver_alerts::table
+                .left_join(receivers::table)
                 .filter(receiver_alerts::user_id.eq(user_id))
                 .order(receiver_alerts::created_at.desc())
-                .load::<ReceiverAlertRecord>(&mut conn)?;
-            Ok(records.into_iter().map(|r| r.into()).collect())
+                .select((
+                    ReceiverAlertRecord::as_select(),
+                    receivers::callsign.nullable(),
+                ))
+                .load(&mut conn)?;
+            Ok(results
+                .into_iter()
+                .map(|(record, callsign)| {
+                    let mut view: ReceiverAlertView = record.into();
+                    view.receiver_callsign = callsign;
+                    view
+                })
+                .collect())
         })
         .await?
     }
@@ -179,20 +193,40 @@ impl ReceiverAlertsRepository {
         .await?
     }
 
-    /// Update the alert state after sending a notification (increment consecutive_alerts, set last_alerted_at)
-    pub async fn record_alert_sent(&self, alert_id: Uuid, condition: &str) -> Result<()> {
+    /// Update the alert state after sending a notification (increment consecutive_alerts, set last_alerted_at).
+    /// When `is_first_alert` is true, also sets `first_alerted_at` to mark incident start.
+    pub async fn record_alert_sent(
+        &self,
+        alert_id: Uuid,
+        condition: &str,
+        is_first_alert: bool,
+    ) -> Result<()> {
         let pool = self.pool.clone();
         let condition = condition.to_string();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let mut conn = pool.get()?;
-            diesel::update(receiver_alerts::table.find(alert_id))
-                .set((
-                    receiver_alerts::consecutive_alerts.eq(receiver_alerts::consecutive_alerts + 1),
-                    receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
-                    receiver_alerts::last_condition.eq(&condition),
-                    receiver_alerts::updated_at.eq(diesel::dsl::now),
-                ))
-                .execute(&mut conn)?;
+            if is_first_alert {
+                diesel::update(receiver_alerts::table.find(alert_id))
+                    .set((
+                        receiver_alerts::consecutive_alerts
+                            .eq(receiver_alerts::consecutive_alerts + 1),
+                        receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::first_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::last_condition.eq(&condition),
+                        receiver_alerts::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+            } else {
+                diesel::update(receiver_alerts::table.find(alert_id))
+                    .set((
+                        receiver_alerts::consecutive_alerts
+                            .eq(receiver_alerts::consecutive_alerts + 1),
+                        receiver_alerts::last_alerted_at.eq(diesel::dsl::now),
+                        receiver_alerts::last_condition.eq(&condition),
+                        receiver_alerts::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+            }
             Ok(())
         })
         .await?
@@ -207,6 +241,7 @@ impl ReceiverAlertsRepository {
                 .set((
                     receiver_alerts::consecutive_alerts.eq(0),
                     receiver_alerts::last_condition.eq(None::<String>),
+                    receiver_alerts::first_alerted_at.eq(None::<DateTime<Utc>>),
                     receiver_alerts::updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn)?;

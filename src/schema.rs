@@ -749,6 +749,7 @@ diesel::table! {
         last_condition -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        first_alerted_at -> Nullable<Timestamptz>,
     }
 }
 

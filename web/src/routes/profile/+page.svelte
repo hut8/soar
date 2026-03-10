@@ -5,7 +5,8 @@
 	import { onMount } from 'svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { Club, DataResponse } from '$lib/types';
-	import { X, Mail, Trash2 } from '@lucide/svelte';
+	import { X, Mail, Trash2, Bell, Loader2, ExternalLink } from '@lucide/svelte';
+	import type { ReceiverAlertView, DataListResponse } from '$lib/types';
 
 	let clubName: string | null = null;
 	let loadingClub = false;
@@ -19,6 +20,10 @@
 	let changingEmail = false;
 	let emailChangeError = '';
 
+	// Receiver alerts state
+	let receiverAlerts: ReceiverAlertView[] = [];
+	let loadingAlerts = false;
+
 	// Delete account modal state
 	let showDeleteAccountModal = false;
 	let deleteConfirmPassword = '';
@@ -30,10 +35,39 @@
 	onMount(() => {
 		if (!$auth.isAuthenticated) {
 			goto(resolve('/login'));
-		} else if ($auth.user?.clubId) {
-			loadClubName($auth.user.clubId);
+		} else {
+			if ($auth.user?.clubId) {
+				loadClubName($auth.user.clubId);
+			}
+			loadReceiverAlerts();
 		}
 	});
+
+	let alertsError = $state(false);
+
+	async function loadReceiverAlerts() {
+		loadingAlerts = true;
+		alertsError = false;
+		try {
+			const response =
+				await serverCall<DataListResponse<ReceiverAlertView>>('/user/receiver-alerts');
+			receiverAlerts = response.data ?? [];
+		} catch {
+			receiverAlerts = [];
+			alertsError = true;
+		} finally {
+			loadingAlerts = false;
+		}
+	}
+
+	function formatCondition(key: string): string {
+		const labels: Record<string, string> = {
+			down: 'Receiver Offline',
+			high_cpu: 'High CPU Load',
+			high_temperature: 'High Temperature'
+		};
+		return labels[key] ?? key;
+	}
 
 	async function loadClubName(clubId: string) {
 		loadingClub = true;
@@ -294,6 +328,67 @@
 					{$auth.user.clubId ? 'Member' : 'Independent'}
 				</div>
 			</div>
+		</div>
+
+		<!-- Receiver Alert Subscriptions -->
+		<div class="mx-auto max-w-2xl card p-6">
+			<h2 class="mb-4 flex items-center gap-2 text-xl font-semibold">
+				<Bell class="h-5 w-5" />
+				Receiver Alert Subscriptions
+			</h2>
+			{#if loadingAlerts}
+				<div class="flex items-center gap-2">
+					<Loader2 class="h-4 w-4 animate-spin" />
+					<span class="text-surface-500-400-token text-sm">Loading subscriptions...</span>
+				</div>
+			{:else if alertsError}
+				<p class="text-sm text-error-500">
+					Failed to load alert subscriptions.
+					<button type="button" class="underline" onclick={loadReceiverAlerts}>Retry</button>
+				</p>
+			{:else if receiverAlerts.length === 0}
+				<p class="text-surface-500-400-token text-sm">
+					No receiver alert subscriptions. Visit a receiver page to create one.
+				</p>
+			{:else}
+				<div class="space-y-3">
+					{#each receiverAlerts as ra (ra.id)}
+						<a
+							href={resolve(`/receivers/${ra.receiverId}`)}
+							class="border-surface-200-700-token hover:bg-surface-100-800-token flex items-center justify-between rounded-lg border p-3 transition-colors"
+						>
+							<div>
+								<div class="font-semibold">
+									{ra.receiverCallsign ?? 'Unknown Receiver'}
+								</div>
+								<div class="text-surface-500-400-token flex flex-wrap gap-x-3 text-xs">
+									{#if ra.alertOnDown}
+										<span>Offline ({ra.downAfterMinutes}min)</span>
+									{/if}
+									{#if ra.alertOnHighCpu}
+										<span>CPU (&gt;{Math.round(ra.cpuThreshold * 100)}%)</span>
+									{/if}
+									{#if ra.alertOnHighTemperature}
+										<span>Temp (&gt;{ra.temperatureThresholdC}&deg;C)</span>
+									{/if}
+								</div>
+							</div>
+							<div class="flex items-center gap-2">
+								{#if ra.consecutiveAlerts > 0}
+									<span class="badge preset-filled-warning-500 text-xs">
+										Active ({ra.consecutiveAlerts})
+									</span>
+								{:else if ra.lastAlertedAt && ra.lastCondition}
+									<span class="text-surface-500-400-token text-xs">
+										Last: {formatCondition(ra.lastCondition)}
+									</span>
+								{/if}
+								<ExternalLink class="h-4 w-4 text-surface-400" />
+							</div>
+						</a>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 {:else}

@@ -30,15 +30,11 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build SvelteKit project
         env:
@@ -46,7 +42,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        run: npm run build
+        run: bun run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7

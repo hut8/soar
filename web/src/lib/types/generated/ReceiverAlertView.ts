@@ -7,6 +7,7 @@ export type ReceiverAlertView = {
   id: string;
   userId: string;
   receiverId: string;
+  receiverCallsign: string | null;
   alertOnDown: boolean;
   downAfterMinutes: number;
   alertOnHighCpu: boolean;

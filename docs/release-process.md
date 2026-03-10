@@ -38,7 +38,7 @@ The `./release` script automates the entire release process:
 3. **Updates version files**
    - `Cargo.toml` - Rust backend version
    - `web/package.json` - Frontend version
-   - `web/package-lock.json` - Auto-updated by npm
+   - `web/bun.lock` - Auto-updated by bun
    - `Cargo.lock` - Auto-updated by cargo
 
 4. **Creates version commit**
@@ -113,7 +113,7 @@ If you need to create a release manually:
 ```bash
 # 1. Update versions
 sed -i 's/version = "0.1.0"/version = "0.2.0"/' Cargo.toml
-cd web && npm version 0.2.0 --no-git-tag-version && cd ..
+cd web && bun version 0.2.0 --no-git-tag-version && cd ..
 
 # 2. Update lock files
 cargo check
@@ -185,7 +185,7 @@ If you haven't deleted the tag yet:
 
 Before creating a release, ensure:
 
-- [ ] All tests pass (`cargo test`, `npm test`)
+- [ ] All tests pass (`cargo test`, `bun run test`)
 - [ ] CI is green on main branch
 - [ ] `CHANGELOG.md` is updated (if you maintain one)
 - [ ] Breaking changes are documented

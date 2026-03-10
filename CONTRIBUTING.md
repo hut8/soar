@@ -25,9 +25,10 @@ Before you start, ensure you have the following installed:
    source ~/.cargo/env
    ```
 
-2. **Node.js** (version 20 or higher)
-   - Download from [nodejs.org](https://nodejs.org/)
-   - Or use a version manager like [nvm](https://github.com/nvm-sh/nvm)
+2. **Bun** (version 1.0 or higher)
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
 
 3. **PostgreSQL** (version 15 or higher) with PostGIS
    ```bash
@@ -134,14 +135,14 @@ nats-server &
 cargo build
 
 # Test web build
-cd web && npm run build && cd ..
+cd web && bun run build && cd ..
 
 # Run all pre-commit checks
 pre-commit run --all-files
 
 # Run tests
 cargo test
-cd web && npm test && cd ..
+cd web && bun run test && cd ..
 ```
 
 ## Project Structure
@@ -191,12 +192,12 @@ git pull origin main
 ```bash
 # Format code
 cargo fmt
-cd web && npm run format && cd ..
+cd web && bun run format && cd ..
 
 # Run all checks locally (same as CI)
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
-cd web && npm run lint && npm run check && npm test && cd ..
+cd web && bun run lint && bun run check && bun run test && cd ..
 
 # Or let pre-commit handle it
 pre-commit run --all-files
@@ -230,7 +231,7 @@ git push origin feature/your-feature-name
 
 - Use Prettier for formatting (enforced by CI)
 - Follow TypeScript best practices
-- Use ESLint configuration (enforced by CI)
+- Use oxlint configuration (enforced by CI)
 - Write type-safe code with proper TypeScript types
 - Use Svelte 5 syntax and patterns
 
@@ -281,13 +282,13 @@ cargo tarpaulin --out html
 cd web
 
 # Run E2E tests with Playwright
-npm test
+bun run test
 
 # Run tests in headed mode (see browser)
-npm run test:headed
+bun run test:headed
 
 # Run specific test file
-npx playwright test tests/example.spec.ts
+bunx playwright test tests/example.spec.ts
 ```
 
 ### Database Tests
@@ -345,7 +346,7 @@ diesel migration generate migration_name
    ```bash
    # Fix formatting issues
    cargo fmt
-   cd web && npm run format && cd ..
+   cd web && bun run format && cd ..
 
    # Update hooks
    pre-commit autoupdate
@@ -380,8 +381,8 @@ diesel migration generate migration_name
    cd web
 
    # Clear node_modules and reinstall
-   rm -rf node_modules package-lock.json
-   npm install
+   rm -rf node_modules bun.lock
+   bun install
 
    # Clear build cache
    rm -rf .svelte-kit build
