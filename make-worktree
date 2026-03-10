@@ -55,13 +55,13 @@ echo ""
 echo -e "${BLUE}[3/3]${NC} ${BOLD}Launching background builds...${NC}"
 mkdir -p "$WORKTREE_DIR/.logs"
 
-# Background npm install
+# Background bun install
 (
     cd "$WORKTREE_DIR/web"
-    npm install &>"$WORKTREE_DIR/.logs/npm-install.log"
-    echo -e "${GREEN}✓ npm dependencies installed${NC}" >> "$WORKTREE_DIR/.logs/npm-install.log"
+    bun install &>"$WORKTREE_DIR/.logs/bun-install.log"
+    echo -e "${GREEN}✓ bun dependencies installed${NC}" >> "$WORKTREE_DIR/.logs/bun-install.log"
 ) &
-NPM_PID=$!
+BUN_PID=$!
 
 # Check for sccache and warn if not installed
 if command -v sccache &>/dev/null; then
@@ -94,7 +94,7 @@ fi
 ) &
 CARGO_PID=$!
 
-echo -e "${CYAN}  • npm install running in background (PID: $NPM_PID)${NC}"
+echo -e "${CYAN}  • bun install running in background (PID: $BUN_PID)${NC}"
 echo -e "${CYAN}  • cargo check running in background (PID: $CARGO_PID)${NC}"
 echo -e "${CYAN}  • Logs: $WORKTREE_DIR/.logs/${NC}"
 echo -e "${GREEN}✓ Background builds started${NC}"
@@ -102,7 +102,7 @@ echo ""
 
 echo -e "${GREEN}${BOLD}✓ Worktree setup complete!${NC}"
 echo -e "${YELLOW}Background builds are still running. Check progress with:${NC}"
-echo -e "${CYAN}  tail -f $WORKTREE_DIR/.logs/npm-install.log${NC}"
+echo -e "${CYAN}  tail -f $WORKTREE_DIR/.logs/bun-install.log${NC}"
 echo -e "${CYAN}  tail -f $WORKTREE_DIR/.logs/cargo-check.log${NC}"
 echo ""
 
