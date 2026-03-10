@@ -46,6 +46,16 @@ impl ReceiverPositionProcessor {
             let new_lat: f64 = position.latitude.as_();
             let new_lon: f64 = position.longitude.as_();
 
+            // Reject null island coordinates — these are effectively missing data
+            if new_lat.abs() < 0.1 && new_lon.abs() < 0.1 {
+                trace!(
+                    "Ignoring null island position ({}, {}) for receiver {}",
+                    new_lat, new_lon, callsign
+                );
+                metrics::counter!("aprs.receiver.null_island_position_total").increment(1);
+                return;
+            }
+
             // Check if we've seen this receiver before and warn if it moved significantly
             if let Some((old_lat, old_lon)) = self.position_cache.get(&callsign) {
                 let distance_m = haversine_distance(old_lat, old_lon, new_lat, new_lon);
