@@ -159,14 +159,44 @@ impl IngestConfigFile {
 /// Parse a socket address string into a `SocketTarget`.
 fn parse_socket_address(addr: &str) -> Result<SocketTarget> {
     if let Some(path) = addr.strip_prefix("unix://") {
-        Ok(SocketTarget::Unix(PathBuf::from(path)))
-    } else if let Some(host_port) = addr.strip_prefix("tcp://") {
-        if host_port.is_empty() || !host_port.contains(':') {
+        if path.is_empty() {
             anyhow::bail!(
-                "Invalid TCP socket address: '{}'. Expected 'tcp://host:port'",
+                "Invalid Unix socket address: '{}'. Path must not be empty",
                 addr
             );
         }
+        Ok(SocketTarget::Unix(PathBuf::from(path)))
+    } else if let Some(host_port) = addr.strip_prefix("tcp://") {
+        let (host, port_str) = host_port.split_once(':').ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid TCP socket address: '{}'. Expected 'tcp://host:port'",
+                addr
+            )
+        })?;
+
+        if host.trim().is_empty() {
+            anyhow::bail!(
+                "Invalid TCP socket address: '{}'. Host must not be empty",
+                addr
+            );
+        }
+
+        let port_str = port_str.trim();
+        if port_str.is_empty() {
+            anyhow::bail!(
+                "Invalid TCP socket address: '{}'. Port must not be empty",
+                addr
+            );
+        }
+
+        // Validate port is a valid u16
+        let _port: u16 = port_str.parse().with_context(|| {
+            format!(
+                "Invalid TCP socket address: '{}'. Port '{}' must be a number 0-65535",
+                addr, port_str
+            )
+        })?;
+
         Ok(SocketTarget::Tcp(host_port.to_string()))
     } else {
         anyhow::bail!(
@@ -345,6 +375,36 @@ mod tests {
         let config = IngestConfigFile {
             retry_delay: 5,
             socket_address: Some("tcp://supervillain".to_string()),
+            streams: vec![],
+        };
+        assert!(config.socket_target().is_err());
+    }
+
+    #[test]
+    fn test_socket_target_tcp_empty_host() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("tcp://:9384".to_string()),
+            streams: vec![],
+        };
+        assert!(config.socket_target().is_err());
+    }
+
+    #[test]
+    fn test_socket_target_tcp_invalid_port() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("tcp://host:notaport".to_string()),
+            streams: vec![],
+        };
+        assert!(config.socket_target().is_err());
+    }
+
+    #[test]
+    fn test_socket_target_unix_empty_path() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("unix://".to_string()),
             streams: vec![],
         };
         assert!(config.socket_target().is_err());

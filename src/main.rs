@@ -725,10 +725,13 @@ fn determine_archive_dir() -> Result<String> {
 }
 
 /// Discover the Tailscale IPv4 address by running `tailscale ip -4`.
-fn discover_tailscale_ip() -> Result<String> {
-    let output = std::process::Command::new("tailscale")
+///
+/// If Tailscale returns multiple addresses (one per line), uses the first one.
+async fn discover_tailscale_ip() -> Result<String> {
+    let output = tokio::process::Command::new("tailscale")
         .args(["ip", "-4"])
         .output()
+        .await
         .context("Failed to run `tailscale ip -4` — is Tailscale installed?")?;
 
     if !output.status.success() {
@@ -740,14 +743,17 @@ fn discover_tailscale_ip() -> Result<String> {
         );
     }
 
-    let ip = String::from_utf8(output.stdout)
-        .context("Tailscale returned non-UTF8 output")?
+    let stdout = String::from_utf8(output.stdout).context("Tailscale returned non-UTF8 output")?;
+
+    // tailscale ip -4 can return multiple addresses (one per line); take the first
+    let ip = stdout
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!("`tailscale ip -4` returned empty output — is Tailscale connected?")
+        })?
         .trim()
         .to_string();
-
-    if ip.is_empty() {
-        anyhow::bail!("`tailscale ip -4` returned empty output — is Tailscale connected?");
-    }
 
     // Validate it parses as an IP address
     ip.parse::<std::net::Ipv4Addr>()
@@ -1492,6 +1498,7 @@ async fn main() -> Result<()> {
             // If --listen-tailscale was given, discover the Tailscale IP and add it
             if let Some(port) = listen_tailscale {
                 let tailscale_ip = discover_tailscale_ip()
+                    .await
                     .context("--listen-tailscale requires Tailscale to be running")?;
                 let addr = format!("{}:{}", tailscale_ip, port);
                 info!("Tailscale listener: {}", addr);

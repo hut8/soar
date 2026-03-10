@@ -342,17 +342,20 @@ pub async fn handle_run(
     });
     info!("Spawned socket server accept loop");
 
-    // Spawn TCP listeners for remote ingest instances
+    // Bind and spawn TCP listeners for remote ingest instances
+    // Bind eagerly so we fail fast on port conflicts / permission errors
     for tcp_addr_str in tcp_listen {
         let tcp_addr: std::net::SocketAddr = tcp_addr_str
             .parse()
             .with_context(|| format!("Invalid --tcp-listen address: {}", tcp_addr_str))?;
+        let tcp_listener = soar::socket_server::bind_tcp_listener(tcp_addr)
+            .await
+            .with_context(|| format!("Failed to start TCP listener on {}", tcp_addr))?;
         let tcp_tx = envelope_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = soar::socket_server::start_tcp_listener(tcp_addr, tcp_tx).await {
-                error!(error = %e, "TCP listener on {} failed", tcp_addr);
-            }
-        });
+        tokio::spawn(soar::socket_server::run_tcp_accept_loop(
+            tcp_listener,
+            tcp_tx,
+        ));
         info!("Spawned TCP listener on {}", tcp_addr);
     }
 
