@@ -264,7 +264,7 @@ docker-compose -f docker-compose.dev.yml down
 docker-compose -f docker-compose.dev.yml exec backend cargo test
 
 # Frontend tests
-docker-compose -f docker-compose.dev.yml exec frontend bun test
+docker-compose -f docker-compose.dev.yml exec frontend bun run test
 
 # E2E tests (after starting services)
 cd web && bun run test:e2e

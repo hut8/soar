@@ -70,7 +70,7 @@ setup_steps:
       - cargo test (Rust tests)
       - bun run lint (Frontend linting)
       - bun run check (TypeScript validation)
-      - bun test (Playwright E2E tests)
+      - bun run test (Playwright E2E tests)
 
   - step: 4
     name: Configure Environment
@@ -208,7 +208,7 @@ common_commands:
       description: Run Rust unit tests
     - command: cargo nextest run
       description: Run tests with nextest (faster)
-    - command: cd web && bun test
+    - command: cd web && bun run test
       description: Run Playwright E2E tests
     - command: cd web && bun run check
       description: Run TypeScript type checking

@@ -244,5 +244,5 @@ function isDevice(obj: unknown): obj is Device {
 
 - Run `bun run lint` to check for linting errors
 - Run `bun run check` to verify TypeScript types
-- Run `bun test` to run E2E tests
+- Run `bun run test` to run E2E tests
 - Test in browser to ensure functionality works

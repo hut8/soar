@@ -237,7 +237,7 @@ test('check devices', async ({ page }) => {});
 
 ## Before Committing
 
-- Run `bun test` to execute all E2E tests
+- Run `bun run test` to execute all E2E tests
 - Ensure tests pass in headless mode
 - Check that screenshots and videos are not committed (should be in `.gitignore`)
 - Verify test coverage for critical user flows

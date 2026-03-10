@@ -465,7 +465,7 @@ See [DOCKER-DEVELOPMENT.md](DOCKER-DEVELOPMENT.md) for complete documentation, t
 This project uses **pre-commit hooks** that run the same checks as our CI pipeline:
 
 - **Rust**: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo audit`
-- **Web**: `bun run lint`, `bun run check`, `bun test`, `bun run build`
+- **Web**: `bun run lint`, `bun run check`, `bun run test`, `bun run build`
 - **General**: trailing whitespace, file endings, YAML/JSON validation
 
 The hooks run automatically on every commit. To run manually:

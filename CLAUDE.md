@@ -35,7 +35,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **NEVER skip CI checks** - Local development must match GitHub Actions pipeline
 - **ASK BEFORE removing large amounts of working code** - Get confirmation before major deletions
 - **AVOID duplicate code** - Check for existing implementations before writing new code
-- Pre-commit hooks run: `cargo fmt`, `cargo clippy`, `cargo test`, `bun run lint`, `bun run check`, `bun test`
+- Pre-commit hooks run: `cargo fmt`, `cargo clippy`, `cargo test`, `bun run lint`, `bun run check`, `bun run test`
 
 ### COMMIT AND DATABASE RULES
 - **NEVER add Co-Authored-By lines** - Do not include Claude Code attribution in commits
@@ -471,7 +471,7 @@ All changes must pass these checks locally:
    - `bun run format` (Prettier - auto-fix formatting)
    - `bun run lint` (oxlint + Prettier check)
    - `bun run check` (TypeScript validation)
-   - `bun test` (Playwright E2E tests)
+   - `bun run test` (Playwright E2E tests)
    - `bun run build` (build verification)
 
    **Note**: If formatting issues are found by `bun run lint`, run `bun run format` to auto-fix them.

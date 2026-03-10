@@ -39,7 +39,7 @@ The CI workflow consists of several jobs that run in sequence:
   - Install dependencies with `bun install --frozen-lockfile`
   - Run linter with `bun run lint`
   - Run type checking with `bun run check`
-  - Run tests with `bun test`
+  - Run tests with `bun run test`
   - Build the project with `bun run build`
   - Upload build artifacts for use by Rust build
 
@@ -148,7 +148,7 @@ cd web
 bun install --frozen-lockfile
 bun run lint
 bun run check
-bun test
+bun run test
 bun run build
 
 # Rust checks

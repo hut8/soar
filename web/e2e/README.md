@@ -41,7 +41,7 @@ The template database is created automatically when you run tests:
 
 ```bash
 cd web
-bun test
+bun run test
 ```
 
 The first time (or when using CI), Playwright's global setup will:
@@ -107,7 +107,7 @@ export SEED_COUNT=20
 
 ```bash
 cd web
-bun test
+bun run test
 # or
 bun run test:e2e
 ```
@@ -402,10 +402,10 @@ Configure test behavior with environment variables:
 
 ```bash
 # Use specific test user credentials
-TEST_USER_EMAIL=test@example.com TEST_USER_PASSWORD=password123 bun test
+TEST_USER_EMAIL=test@example.com TEST_USER_PASSWORD=password123 bun run test
 
 # Run in CI mode
-CI=true bun test
+CI=true bun run test
 ```
 
 ## Adding New Tests

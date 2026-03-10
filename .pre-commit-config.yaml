@@ -36,7 +36,7 @@ repos:
 
       - id: web-test
         name: Run web tests (Playwright E2E)
-        entry: bash -c 'cd web && bun test'
+        entry: bash -c 'cd web && bun run test'
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false

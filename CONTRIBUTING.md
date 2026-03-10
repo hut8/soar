@@ -142,7 +142,7 @@ pre-commit run --all-files
 
 # Run tests
 cargo test
-cd web && bun test && cd ..
+cd web && bun run test && cd ..
 ```
 
 ## Project Structure
@@ -197,7 +197,7 @@ cd web && bun run format && cd ..
 # Run all checks locally (same as CI)
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
-cd web && bun run lint && bun run check && bun test && cd ..
+cd web && bun run lint && bun run check && bun run test && cd ..
 
 # Or let pre-commit handle it
 pre-commit run --all-files
@@ -282,7 +282,7 @@ cargo tarpaulin --out html
 cd web
 
 # Run E2E tests with Playwright
-bun test
+bun run test
 
 # Run tests in headed mode (see browser)
 bun run test:headed

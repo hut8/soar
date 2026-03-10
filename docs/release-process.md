@@ -185,7 +185,7 @@ If you haven't deleted the tag yet:
 
 Before creating a release, ensure:
 
-- [ ] All tests pass (`cargo test`, `bun test`)
+- [ ] All tests pass (`cargo test`, `bun run test`)
 - [ ] CI is green on main branch
 - [ ] `CHANGELOG.md` is updated (if you maintain one)
 - [ ] Breaking changes are documented

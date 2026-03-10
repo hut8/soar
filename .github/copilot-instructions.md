@@ -394,7 +394,7 @@ BASE_URL=http://localhost:4173
 ### Test Commands
 - `cargo test` - Rust tests
 - `cargo nextest run` - Faster test runner
-- `cd web && bun test` - E2E tests
+- `cd web && bun run test` - E2E tests
 
 ### Quality Commands
 - `cargo fmt` - Format Rust code

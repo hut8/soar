@@ -31,7 +31,7 @@ Run Playwright tests with the update-snapshots flag:
 
 ```bash
 cd web
-bun test -- --update-snapshots
+bun run test -- --update-snapshots
 ```
 
 This will:
@@ -71,7 +71,7 @@ When UI changes intentionally modify the appearance of tested pages:
 
 ```bash
 cd web
-bun test -- --update-snapshots
+bun run test -- --update-snapshots
 git add web/e2e/**/*-snapshots/
 git commit -m "test: update snapshots after UI changes"
 ```
