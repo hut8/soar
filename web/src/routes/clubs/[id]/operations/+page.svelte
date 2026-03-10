@@ -187,11 +187,14 @@
 	}
 
 	async function loadMembers() {
+		const hasToken = !!localStorage.getItem('auth_token');
+		logger.info('loadMembers: clubId={clubId} hasToken={hasToken}', { clubId, hasToken });
 		try {
 			const response = await serverCall<DataListResponse<User>>(`/clubs/${clubId}/pilots`);
 			members = response.data || [];
+			logger.info('loadMembers: loaded {count} pilots', { count: members.length });
 		} catch (err) {
-			logger.error('Error loading members: {error}', { error: err });
+			logger.error('loadMembers failed: {error}', { error: err });
 		}
 	}
 

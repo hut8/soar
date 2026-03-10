@@ -35,16 +35,20 @@
 	async function loadPilots() {
 		if (!clubId) return;
 
+		const hasToken = typeof localStorage !== 'undefined' && !!localStorage.getItem('auth_token');
+		logger.info('loadPilots: clubId={clubId} hasToken={hasToken}', { clubId, hasToken });
+
 		loading = true;
 		error = '';
 
 		try {
 			const response = await serverCall<DataListResponse<User>>(`/clubs/${clubId}/pilots`);
 			pilots = response.data || [];
+			logger.info('loadPilots: loaded {count} pilots', { count: pilots.length });
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load pilots: ${errorMessage}`;
-			logger.error('Error loading pilots: {error}', { error: err });
+			logger.error('loadPilots failed: {error}', { error: err });
 		} finally {
 			loading = false;
 		}
