@@ -65,7 +65,7 @@ pub fn main() {
     // Run bun install to ensure dependencies are up to date
     println!("Running bun install...");
     let install_output = Command::new("bun")
-        .args(["install"])
+        .args(["install", "--frozen-lockfile"])
         .current_dir(web_dir)
         .output()
         .expect("Failed to execute bun install");
