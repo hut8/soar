@@ -3,6 +3,7 @@ use crate::raw_messages_repo::{NewAprsMessage, RawMessagesRepository};
 use crate::receiver_repo::ReceiverRepository;
 use moka::sync::Cache;
 use ogn_parser::{AprsData, AprsPacket};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
@@ -19,9 +20,10 @@ pub struct OgnGenericProcessor {
     /// Cache mapping receiver callsign to receiver ID
     /// This avoids repeated database lookups for the same receiver
     receiver_cache: Arc<Cache<String, Uuid>>,
-    /// Cache mapping receiver ID to known software string (TOCALL).
-    /// Once populated, we skip the DB update and just compare in-memory.
-    software_cache: Arc<Cache<Uuid, String>>,
+    /// Cache mapping receiver ID to known protocols (TOCALL values).
+    /// Once populated, we skip the DB update for already-known protocols.
+    /// Wrapped in Arc to avoid cloning the entire HashSet on cache hits.
+    protocol_cache: Arc<Cache<Uuid, Arc<HashSet<String>>>>,
 }
 
 impl OgnGenericProcessor {
@@ -38,7 +40,7 @@ impl OgnGenericProcessor {
             .time_to_live(std::time::Duration::from_secs(86400))
             .build();
 
-        let software_cache = Cache::builder()
+        let protocol_cache = Cache::builder()
             .max_capacity(100_000)
             .time_to_live(std::time::Duration::from_secs(86400))
             .build();
@@ -48,7 +50,7 @@ impl OgnGenericProcessor {
             aprs_messages_repo,
             archive_service: None,
             receiver_cache: Arc::new(receiver_cache),
-            software_cache: Arc::new(software_cache),
+            protocol_cache: Arc::new(protocol_cache),
         }
     }
 
@@ -109,10 +111,10 @@ impl OgnGenericProcessor {
             }
         };
 
-        // Step 4: Update receiver software (TOCALL) only for receiver-originated packets
+        // Step 4: Track receiver protocol (TOCALL) only for receiver-originated packets
         if packet.from.0 == receiver_callsign {
-            let software = packet.to.0.clone();
-            self.update_software_if_needed(receiver_id, &receiver_callsign, &software)
+            let protocol = packet.to.0.clone();
+            self.add_protocol_if_new(receiver_id, &receiver_callsign, &protocol)
                 .await;
         }
 
@@ -150,59 +152,36 @@ impl OgnGenericProcessor {
         }
     }
 
-    /// Update receiver software field from the TOCALL if we haven't seen it before.
-    /// Warns if the software changes from what was previously stored.
-    async fn update_software_if_needed(&self, receiver_id: Uuid, callsign: &str, software: &str) {
-        // Fast path: if we already know this receiver's software, just compare
-        if let Some(cached) = self.software_cache.get(&receiver_id) {
-            if cached != software {
-                warn!(
-                    receiver = %callsign,
-                    old_software = %cached,
-                    new_software = %software,
-                    "Receiver software changed"
-                );
-                // Update cache so we only warn once per change
-                self.software_cache
-                    .insert(receiver_id, software.to_string());
-            }
+    /// Add a protocol to the receiver if we haven't seen it before.
+    async fn add_protocol_if_new(&self, receiver_id: Uuid, callsign: &str, protocol: &str) {
+        // Fast path: if we already know this protocol for this receiver, skip
+        if let Some(cached) = self.protocol_cache.get(&receiver_id)
+            && cached.contains(protocol)
+        {
             return;
         }
 
-        // Cache miss: check DB and set if needed
+        // Cache miss or new protocol: update DB
         match self
             .receiver_repo
-            .update_receiver_software(receiver_id, software)
+            .add_receiver_protocol(receiver_id, protocol)
             .await
         {
-            Ok(previous) => {
-                if let Some(ref prev) = previous {
-                    // Was already set in DB
-                    if prev != software {
-                        warn!(
-                            receiver = %callsign,
-                            old_software = %prev,
-                            new_software = %software,
-                            "Receiver software changed"
-                        );
-                    }
-                    self.software_cache.insert(receiver_id, prev.clone());
-                } else {
-                    // We just set it for the first time
-                    debug!(
-                        receiver = %callsign,
-                        software = %software,
-                        "Set receiver software"
-                    );
-                    self.software_cache
-                        .insert(receiver_id, software.to_string());
-                }
+            Ok(protocols) => {
+                debug!(
+                    receiver = %callsign,
+                    protocol = %protocol,
+                    all_protocols = ?protocols,
+                    "Updated receiver protocols"
+                );
+                self.protocol_cache
+                    .insert(receiver_id, Arc::new(protocols.into_iter().collect()));
             }
             Err(e) => {
                 error!(
                     receiver = %callsign,
                     error = %e,
-                    "Failed to update receiver software"
+                    "Failed to add receiver protocol"
                 );
             }
         }

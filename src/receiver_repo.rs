@@ -95,7 +95,7 @@ impl ReceiverRepository {
                         country: None,
                         postal_code: None,
                         geocoded: false,
-                        software: None,
+                        protocols: vec![],
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -224,7 +224,7 @@ impl ReceiverRepository {
                 country: None,
                 postal_code: None,
                 geocoded: false,
-                software: None,
+                protocols: vec![],
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -1030,51 +1030,50 @@ impl ReceiverRepository {
         Ok(true)
     }
 
-    /// Update the software field for a receiver.
-    /// Only sets the value if it is currently NULL. Returns the previously stored value (if any).
-    pub async fn update_receiver_software(
+    /// Add a protocol to the receiver's protocols array if not already present.
+    /// Returns the current list of protocols after the operation.
+    pub async fn add_receiver_protocol(
         &self,
         receiver_id: Uuid,
-        software: &str,
-    ) -> Result<Option<String>> {
-        use crate::schema::receivers;
+        protocol: &str,
+    ) -> Result<Vec<String>> {
+        use diesel::sql_types;
 
         let pool = self.pool.clone();
-        let software = software.to_string();
+        let protocol = protocol.to_string();
 
-        tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+        #[derive(QueryableByName)]
+        struct ProtocolsRow {
+            #[diesel(sql_type = sql_types::Array<sql_types::Nullable<sql_types::Text>>)]
+            protocols: Vec<Option<String>>,
+        }
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
             let mut conn = pool.get()?;
 
-            // Read the current value
-            let mut current: Option<String> = receivers::table
-                .filter(receivers::id.eq(receiver_id))
-                .select(receivers::software)
-                .first(&mut conn)?;
+            // Atomically append the protocol if not already present.
+            // Only bumps updated_at when the array actually changes.
+            // Uses RETURNING to avoid a separate SELECT.
+            let row: ProtocolsRow = diesel::sql_query(
+                r#"
+                UPDATE receivers
+                SET protocols = CASE
+                    WHEN array_position(protocols, $1) IS NULL THEN array_append(protocols, $1)
+                    ELSE protocols
+                END,
+                updated_at = CASE
+                    WHEN array_position(protocols, $1) IS NULL THEN NOW()
+                    ELSE updated_at
+                END
+                WHERE id = $2
+                RETURNING protocols
+                "#,
+            )
+            .bind::<sql_types::Text, _>(&protocol)
+            .bind::<sql_types::Uuid, _>(receiver_id)
+            .get_result(&mut conn)?;
 
-            if current.is_none() {
-                // Attempt to set it for the first time and bump updated_at,
-                // but only if software is still NULL to avoid races.
-                let rows_affected = diesel::update(
-                    receivers::table
-                        .filter(receivers::id.eq(receiver_id))
-                        .filter(receivers::software.is_null()),
-                )
-                .set((
-                    receivers::software.eq(&software),
-                    receivers::updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
-
-                if rows_affected == 0 {
-                    // Another task set software concurrently; re-read
-                    current = receivers::table
-                        .filter(receivers::id.eq(receiver_id))
-                        .select(receivers::software)
-                        .first(&mut conn)?;
-                }
-            }
-
-            Ok(current)
+            Ok(row.protocols.into_iter().flatten().collect())
         })
         .await?
     }

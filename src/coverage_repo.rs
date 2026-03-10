@@ -326,8 +326,8 @@ impl CoverageRepository {
                 latest_packet_at: Option<DateTime<Utc>>,
                 #[diesel(sql_type = sql_types::Bool)]
                 from_ogn_db: bool,
-                #[diesel(sql_type = sql_types::Nullable<sql_types::Text>)]
-                software: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Array<sql_types::Nullable<sql_types::Text>>)]
+                protocols: Vec<Option<String>>,
             }
 
             let rows: Vec<ReceiverRow> = diesel::sql_query(
@@ -338,7 +338,7 @@ impl CoverageRepository {
                        ST_X(r.location::geometry) as longitude,
                        r.street_address, r.city, r.region, r.country, r.postal_code,
                        r.created_at, r.updated_at, r.latest_packet_at, r.from_ogn_db,
-                       r.software
+                       r.protocols
                 FROM receivers r
                 INNER JOIN receiver_coverage_h3 c ON r.id = c.receiver_id
                 WHERE c.h3_index = $1
@@ -374,7 +374,7 @@ impl CoverageRepository {
                     updated_at: r.updated_at,
                     latest_packet_at: r.latest_packet_at,
                     from_ogn_db: r.from_ogn_db,
-                    software: r.software,
+                    protocols: r.protocols.into_iter().flatten().collect(),
                 })
                 .collect();
 
