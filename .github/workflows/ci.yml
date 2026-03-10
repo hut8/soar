@@ -30,21 +30,17 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Run linter
-        run: npm run lint
+        run: bun run lint
 
       - name: Run type check
-        run: npm run check
+        run: bun run check
 
       - name: Build SvelteKit project
         env:
@@ -52,7 +48,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        run: npm run build
+        run: bun run build
 
   test-e2e:
     name: E2E Tests (Playwright)
@@ -90,6 +86,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
+      - name: Install unzip (required by setup-bun in container)
+        run: apt-get update -qq && apt-get install -y -qq unzip
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -98,13 +100,13 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install web dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build SvelteKit project
-        run: npm run build
+        run: bun run build
 
       - name: Install Playwright browsers (if not pre-installed in image)
-        run: npx playwright install --with-deps chromium
+        run: bunx playwright install --with-deps chromium
 
       - name: Wait for Mailpit to be ready
         working-directory: .
@@ -180,7 +182,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://localhost:61225
           # Mailpit is a service container, accessible by hostname not localhost
           MAILPIT_URL: http://mailpit:8025
-        run: npm test
+        run: bun run test
 
       - name: Stop backend server
         if: always()
@@ -234,9 +236,15 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
+      - name: Install unzip (required by setup-bun in container)
+        run: apt-get update -qq && apt-get install -y -qq unzip
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install web dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -306,9 +314,15 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
+      - name: Install unzip (required by setup-bun in container)
+        run: apt-get update -qq && apt-get install -y -qq unzip
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install web dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build SvelteKit project
         working-directory: ./web
@@ -316,7 +330,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        run: npm run build
+        run: bun run build
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -328,7 +342,7 @@ jobs:
 
       - name: Build static release binary
         env:
-          SKIP_WEB_BUILD: "1"  # Frontend already built via npm run build above
+          SKIP_WEB_BUILD: "1"  # Frontend already built via bun run build above
           # CRITICAL: tokio_unstable is required for tokio-console support
           # Without this flag, --enable-tokio-console will cause exit code 101 with no output
           # CRITICAL: force-frame-pointers=yes is required for Pyroscope profiling

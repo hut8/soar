@@ -422,7 +422,7 @@ soar ingest-adsb --server localhost --port 30005
    cargo build
 
    # Test web build
-   cd web && npm run build && cd ..
+   cd web && bun run build && cd ..
 
    # Run pre-commit on all files to ensure everything works
    pre-commit run --all-files
@@ -465,7 +465,7 @@ See [DOCKER-DEVELOPMENT.md](DOCKER-DEVELOPMENT.md) for complete documentation, t
 This project uses **pre-commit hooks** that run the same checks as our CI pipeline:
 
 - **Rust**: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo audit`
-- **Web**: `npm run lint`, `npm run check`, `npm test`, `npm run build`
+- **Web**: `bun run lint`, `bun run check`, `bun run test`, `bun run build`
 - **General**: trailing whitespace, file endings, YAML/JSON validation
 
 The hooks run automatically on every commit. To run manually:

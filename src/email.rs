@@ -1224,18 +1224,15 @@ The SOAR Team"#,
         condition_key: &str,
         alert_number: i32,
         receiver_id: uuid::Uuid,
+        detected_at: DateTime<Utc>,
     ) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
         let environment = get_environment_name();
         let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
 
-        let alert_type_label = match condition_key {
-            "down" => "Receiver Offline",
-            "high_cpu" => "High CPU Load",
-            "high_temperature" => "High Temperature",
-            _ => "Alert",
-        };
+        let alert_type_label = condition_key_to_label(condition_key);
+        let detected_at_str = detected_at.format("%Y-%m-%d %H:%M UTC").to_string();
 
         let subject = format!(
             "{}{} - {} - SOAR",
@@ -1250,6 +1247,7 @@ The SOAR Team"#,
             condition_description: &condition_description,
             alert_type_label,
             alert_number,
+            detected_at: &detected_at_str,
             receiver_url: &receiver_url,
             environment: &environment,
         };
@@ -1339,6 +1337,10 @@ The SOAR Team"#,
                     <span class="detail-label">Alert #</span>
                     <span class="detail-value">{ordinal} notification</span>
                 </div>
+                <div class="detail-row">
+                    <span class="detail-label">Detected At</span>
+                    <span class="detail-value">{detected_at}</span>
+                </div>
             </div>
             <a href="{receiver_url}" class="cta-button">View Receiver</a>
         </div>
@@ -1354,8 +1356,9 @@ The SOAR Team"#,
             name = html_escape(data.to_name),
             condition = html_escape(data.condition_description),
             ordinal = ordinal,
-            receiver_url = data.receiver_url,
-            environment = data.environment,
+            detected_at = html_escape(data.detected_at),
+            receiver_url = html_escape(data.receiver_url),
+            environment = html_escape(data.environment),
         )
     }
 
@@ -1367,6 +1370,7 @@ The SOAR Team"#,
 
 {condition}
 
+Detected at: {detected_at}
 This is alert #{alert_number} for this condition. Alerts will continue with increasing intervals until the condition resolves.
 
 View receiver: {receiver_url}
@@ -1379,9 +1383,231 @@ The SOAR Team"#,
             alert_type = data.alert_type_label,
             callsign = data.receiver_callsign,
             condition = data.condition_description,
+            detected_at = data.detected_at,
             alert_number = data.alert_number,
             receiver_url = data.receiver_url,
         )
+    }
+
+    /// Send receiver recovery email (condition cleared)
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send_receiver_recovery_email(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        receiver_callsign: &str,
+        condition_key: &str,
+        alerts_sent: i32,
+        receiver_id: uuid::Uuid,
+        resolved_at: DateTime<Utc>,
+        first_alerted_at: Option<DateTime<Utc>>,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+        let environment = get_environment_name();
+        let receiver_url = format!("{}/receivers/{}", base_url, receiver_id);
+
+        let condition_label = condition_key_to_label(condition_key);
+        let resolved_at_str = resolved_at.format("%Y-%m-%d %H:%M UTC").to_string();
+        let first_alerted_str =
+            first_alerted_at.map(|t| t.format("%Y-%m-%d %H:%M UTC").to_string());
+        let duration_str = first_alerted_at.map(|start| {
+            let duration = resolved_at - start;
+            format_duration(duration.num_seconds())
+        });
+
+        let subject = format!(
+            "{}Resolved: {} - {} - SOAR",
+            get_staging_prefix(),
+            condition_label,
+            receiver_callsign
+        );
+
+        let data = ReceiverRecoveryEmailData {
+            to_name,
+            receiver_callsign,
+            condition_label,
+            alerts_sent,
+            resolved_at: &resolved_at_str,
+            first_alerted_at: first_alerted_str.as_deref(),
+            duration: duration_str.as_deref(),
+            receiver_url: &receiver_url,
+            environment: &environment,
+        };
+
+        let html_body = self.build_receiver_recovery_html(&data);
+        let text_body = self.build_receiver_recovery_text(&data);
+
+        let email = Message::builder()
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
+            .subject(subject)
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(text_body),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_HTML)
+                            .body(html_body),
+                    ),
+            )?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
+
+    fn build_receiver_recovery_html(&self, data: &ReceiverRecoveryEmailData) -> String {
+        format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }}
+        .header {{ background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; padding: 24px; text-align: center; }}
+        .header h1 {{ margin: 0 0 8px 0; font-size: 24px; font-weight: 600; }}
+        .header .callsign {{ font-size: 20px; font-weight: 500; opacity: 0.95; font-family: monospace; }}
+        .content {{ padding: 24px; }}
+        .greeting {{ font-size: 16px; margin-bottom: 16px; }}
+        .recovery-message {{ background-color: #d4edda; border-left: 4px solid #28a745; padding: 16px; border-radius: 4px; margin-bottom: 24px; font-size: 16px; }}
+        .detail-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }}
+        .detail-row:last-child {{ border-bottom: none; }}
+        .detail-label {{ color: #666; }}
+        .detail-value {{ font-weight: 500; text-align: right; }}
+        .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px; }}
+        .footer {{ background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #666; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Resolved: {condition_label}</h1>
+            <div class="callsign">{callsign}</div>
+        </div>
+        <div class="content">
+            <p class="greeting">Hi {name},</p>
+            <div class="recovery-message">
+                <strong>The "{condition_label}" condition for {callsign} has cleared.</strong>
+            </div>
+            <div class="flight-details">
+                <div class="detail-row">
+                    <span class="detail-label">Receiver</span>
+                    <span class="detail-value">{callsign}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Resolved Condition</span>
+                    <span class="detail-value">{condition_label}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Notifications</span>
+                    <span class="detail-value">{alerts_sent}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Resolved At</span>
+                    <span class="detail-value">{resolved_at}</span>
+                </div>{started_row}{duration_row}
+            </div>
+            <a href="{receiver_url}" class="cta-button">View Receiver</a>
+        </div>
+        <div class="footer">
+            <p>You are receiving this email because you subscribed to alerts for this receiver on SOAR ({environment}).</p>
+        </div>
+    </div>
+</body>
+</html>"#,
+            condition_label = html_escape(data.condition_label),
+            callsign = html_escape(data.receiver_callsign),
+            name = html_escape(data.to_name),
+            alerts_sent = data.alerts_sent,
+            resolved_at = html_escape(data.resolved_at),
+            started_row = data
+                .first_alerted_at
+                .map(|t| format!(
+                    r#"
+                <div class="detail-row">
+                    <span class="detail-label">Started At</span>
+                    <span class="detail-value">{}</span>
+                </div>"#,
+                    html_escape(t)
+                ))
+                .unwrap_or_default(),
+            duration_row = data
+                .duration
+                .map(|d| format!(
+                    r#"
+                <div class="detail-row">
+                    <span class="detail-label">Active Duration</span>
+                    <span class="detail-value">{}</span>
+                </div>"#,
+                    html_escape(d)
+                ))
+                .unwrap_or_default(),
+            receiver_url = html_escape(data.receiver_url),
+            environment = html_escape(data.environment),
+        )
+    }
+
+    fn build_receiver_recovery_text(&self, data: &ReceiverRecoveryEmailData) -> String {
+        let mut text = format!(
+            r#"Hi {to_name},
+
+Resolved: {condition_label} - {callsign}
+
+The "{condition_label}" condition for {callsign} has cleared.
+
+Resolved at: {resolved_at}
+"#,
+            to_name = data.to_name,
+            condition_label = data.condition_label,
+            callsign = data.receiver_callsign,
+            resolved_at = data.resolved_at,
+        );
+        if let Some(t) = data.first_alerted_at {
+            text.push_str(&format!("Started at: {}\n", t));
+        }
+        if let Some(d) = data.duration {
+            text.push_str(&format!("Active duration: {}\n", d));
+        }
+        text.push_str(&format!(
+            r#"{alerts_sent} notification(s) were sent during this incident.
+
+View receiver: {receiver_url}
+
+Best regards,
+The SOAR Team"#,
+            alerts_sent = data.alerts_sent,
+            receiver_url = data.receiver_url,
+        ));
+        text
+    }
+}
+
+/// Data for building receiver recovery emails
+struct ReceiverRecoveryEmailData<'a> {
+    to_name: &'a str,
+    receiver_callsign: &'a str,
+    condition_label: &'a str,
+    alerts_sent: i32,
+    resolved_at: &'a str,
+    first_alerted_at: Option<&'a str>,
+    duration: Option<&'a str>,
+    receiver_url: &'a str,
+    environment: &'a str,
+}
+
+/// Map a receiver alert condition key to a human-readable label.
+fn condition_key_to_label(key: &str) -> &'static str {
+    match key {
+        "down" => "Receiver Offline",
+        "high_cpu" => "High CPU Load",
+        "high_temperature" => "High Temperature",
+        _ => "Alert",
     }
 }
 
@@ -1392,6 +1618,7 @@ struct ReceiverAlertEmailData<'a> {
     condition_description: &'a str,
     alert_type_label: &'a str,
     alert_number: i32,
+    detected_at: &'a str,
     receiver_url: &'a str,
     environment: &'a str,
 }

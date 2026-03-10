@@ -389,24 +389,24 @@ BASE_URL=http://localhost:4173
 ### Build Commands
 - `cargo build` - Debug build (fast, for development)
 - `cargo build --release` - Release build (slow, optimized)
-- `cd web && npm run build` - Frontend build
+- `cd web && bun run build` - Frontend build
 
 ### Test Commands
 - `cargo test` - Rust tests
 - `cargo nextest run` - Faster test runner
-- `cd web && npm test` - E2E tests
+- `cd web && bun run test` - E2E tests
 
 ### Quality Commands
 - `cargo fmt` - Format Rust code
 - `cargo clippy` - Rust linter
-- `cd web && npm run lint` - Frontend linter
+- `cd web && bun run lint` - Frontend linter
 - `pre-commit run --all-files` - All checks
 
 ### Development Commands
 - `cargo run -- web` - Start web server
 - `cargo run -- ingest-ogn` - Start OGN ingestion
 - `cargo run -- run` - Start message processor
-- `cd web && npm run dev` - Start SvelteKit dev server
+- `cd web && bun run dev` - Start SvelteKit dev server
 
 ## Additional Resources
 

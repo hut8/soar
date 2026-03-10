@@ -22,7 +22,7 @@ The following tests require baseline snapshots:
 
 1. **Database setup**: Ensure PostgreSQL is running with the test database
 2. **Build backend**: `cargo build --release` (from project root)
-3. **Build frontend**: `npm run build` (from web/ directory)
+3. **Build frontend**: `bun run build` (from web/ directory)
 4. **Seed test data**: `../target/release/soar seed-test-data`
 
 ### Generate Snapshots
@@ -31,7 +31,7 @@ Run Playwright tests with the update-snapshots flag:
 
 ```bash
 cd web
-npm test -- --update-snapshots
+bun run test -- --update-snapshots
 ```
 
 This will:
@@ -71,7 +71,7 @@ When UI changes intentionally modify the appearance of tested pages:
 
 ```bash
 cd web
-npm test -- --update-snapshots
+bun run test -- --update-snapshots
 git add web/e2e/**/*-snapshots/
 git commit -m "test: update snapshots after UI changes"
 ```

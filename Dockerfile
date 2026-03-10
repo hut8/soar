@@ -1,13 +1,13 @@
 # Multi-stage build for SOAR
-FROM node:20-alpine AS web-builder
+FROM oven/bun:1-alpine AS web-builder
 
 # Install dependencies and build the web frontend
 WORKDIR /app/web
-COPY web/package*.json ./
-RUN npm ci
+COPY web/package.json web/bun.lock ./
+RUN bun install --frozen-lockfile
 
 COPY web/ ./
-RUN npm run build
+RUN bun run build
 
 # Rust build stage
 FROM rust:1-slim-bookworm AS rust-builder
@@ -30,7 +30,7 @@ COPY static/ ./static/
 
 # Copy the built web assets from previous stage
 COPY --from=web-builder /app/web/build/ ./web/build/
-COPY --from=web-builder /app/web/package*.json ./web/
+COPY --from=web-builder /app/web/package.json ./web/
 
 # Build the Rust application in release mode
 # Set SKIP_WEB_BUILD because web is already built in the web-builder stage
