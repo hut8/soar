@@ -1,6 +1,6 @@
-# Ingest configuration for the radar Raspberry Pi
+# Ingest configuration for the "radar" host (ADS-B receiver / readsb server)
 #
-# This runs soar-ingest locally on the Pi, connecting to readsb on localhost.
+# This runs soar-ingest locally on radar, connecting to readsb on localhost.
 # Data is sent to soar-run on supervillain via TCP. The persistent queue
 # handles spooling to disk when the network link is down.
 #

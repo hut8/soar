@@ -3,7 +3,7 @@ Description=SOAR Ingest (Radar) - Local Beast ADS-B Ingestion
 Documentation=https://github.com/hut8/soar
 After=network-online.target readsb.service
 Wants=network-online.target readsb.service
-# Runs on the radar Raspberry Pi, connects to readsb on localhost
+# Runs on "radar" (the ADS-B receiver host), connects to readsb on localhost
 # and sends data to soar-run on supervillain via TCP.
 
 [Service]
