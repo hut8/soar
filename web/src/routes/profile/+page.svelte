@@ -8,28 +8,28 @@
 	import { X, Mail, Trash2, Bell, Loader2, ExternalLink } from '@lucide/svelte';
 	import type { ReceiverAlertView, DataListResponse } from '$lib/types';
 
-	let clubName: string | null = null;
-	let loadingClub = false;
-	let clubError: string | null = null;
-	let clearingClub = false;
+	let clubName = $state<string | null>(null);
+	let loadingClub = $state(false);
+	let clubError = $state<string | null>(null);
+	let clearingClub = $state(false);
 
 	// Change email modal state
-	let showChangeEmailModal = false;
-	let newEmail = '';
-	let confirmPassword = '';
-	let changingEmail = false;
-	let emailChangeError = '';
+	let showChangeEmailModal = $state(false);
+	let newEmail = $state('');
+	let confirmPassword = $state('');
+	let changingEmail = $state(false);
+	let emailChangeError = $state('');
 
 	// Receiver alerts state
-	let receiverAlerts: ReceiverAlertView[] = [];
-	let loadingAlerts = false;
+	let receiverAlerts = $state<ReceiverAlertView[]>([]);
+	let loadingAlerts = $state(false);
 
 	// Delete account modal state
-	let showDeleteAccountModal = false;
-	let deleteConfirmPassword = '';
-	let deleteConfirmText = '';
-	let deletingAccount = false;
-	let deleteAccountError = '';
+	let showDeleteAccountModal = $state(false);
+	let deleteConfirmPassword = $state('');
+	let deleteConfirmText = $state('');
+	let deletingAccount = $state(false);
+	let deleteAccountError = $state('');
 
 	// Redirect if not authenticated and load club name
 	onMount(() => {

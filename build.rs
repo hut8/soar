@@ -14,7 +14,7 @@ pub fn main() {
     println!("cargo:rerun-if-changed=migrations");
     println!("cargo:rerun-if-changed=web/src");
     println!("cargo:rerun-if-changed=web/package.json");
-    println!("cargo:rerun-if-changed=web/package-lock.json");
+    println!("cargo:rerun-if-changed=web/bun.lock");
 
     // Configure static linking for musl targets (used by cross for static builds)
     let target = env::var("TARGET").unwrap_or_default();
@@ -62,32 +62,32 @@ pub fn main() {
         panic!("Could not find web directory");
     };
 
-    // Run npm install to ensure dependencies are up to date
-    println!("Running npm install...");
-    let install_output = Command::new("npm")
-        .args(["install"])
+    // Run bun install to ensure dependencies are up to date
+    println!("Running bun install...");
+    let install_output = Command::new("bun")
+        .args(["install", "--frozen-lockfile"])
         .current_dir(web_dir)
         .output()
-        .expect("Failed to execute npm install");
+        .expect("Failed to execute bun install");
 
     if !install_output.status.success() {
         let stderr = String::from_utf8_lossy(&install_output.stderr);
         let stdout = String::from_utf8_lossy(&install_output.stdout);
-        panic!("npm install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        panic!("bun install failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
     }
 
-    // Run npm run build in the web directory
-    println!("Running npm run build...");
-    let output = Command::new("npm")
+    // Run bun run build in the web directory
+    println!("Running bun run build...");
+    let output = Command::new("bun")
         .args(["run", "build"])
         .current_dir(web_dir)
         .output()
-        .expect("Failed to execute npm run build");
+        .expect("Failed to execute bun run build");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        panic!("npm run build failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+        panic!("bun run build failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
     }
 }
 
