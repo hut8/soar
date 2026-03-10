@@ -23,14 +23,13 @@
     {
       "row": "Core System & Infrastructure"
     },
-    "version",
+    [{"panel": "process-status", "w": 4}, {"panel": "version", "w": 20}],
     "build-details",
     "message-routing-rates",
     "processing-lag",
     "processing-rate-ratio",
     "processing-catchup-eta",
     "process-uptime",
-    "process-status",
     "process-memory-usage",
     "packet-queue",
     "nats-fix-publishing-rate",
