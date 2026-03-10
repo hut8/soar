@@ -326,8 +326,8 @@ impl CoverageRepository {
                 latest_packet_at: Option<DateTime<Utc>>,
                 #[diesel(sql_type = sql_types::Bool)]
                 from_ogn_db: bool,
-                #[diesel(sql_type = sql_types::Nullable<diesel::sql_types::Array<sql_types::Text>>)]
-                protocols: Option<Vec<String>>,
+                #[diesel(sql_type = diesel::sql_types::Array<sql_types::Nullable<sql_types::Text>>)]
+                protocols: Vec<Option<String>>,
             }
 
             let rows: Vec<ReceiverRow> = diesel::sql_query(
@@ -374,7 +374,7 @@ impl CoverageRepository {
                     updated_at: r.updated_at,
                     latest_packet_at: r.latest_packet_at,
                     from_ogn_db: r.from_ogn_db,
-                    protocols: r.protocols,
+                    protocols: r.protocols.into_iter().flatten().collect(),
                 })
                 .collect();
 

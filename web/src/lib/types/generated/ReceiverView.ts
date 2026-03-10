@@ -21,5 +21,5 @@ export type ReceiverView = {
   updatedAt: string;
   latestPacketAt: string | null;
   fromOgnDb: boolean;
-  protocols: Array<string> | null;
+  protocols: Array<string>;
 };

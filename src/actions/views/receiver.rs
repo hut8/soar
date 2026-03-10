@@ -26,7 +26,7 @@ pub struct ReceiverView {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
     pub from_ogn_db: bool,
-    pub protocols: Option<Vec<String>>,
+    pub protocols: Vec<String>,
 }
 
 impl From<ReceiverModel> for ReceiverView {
@@ -49,7 +49,7 @@ impl From<ReceiverModel> for ReceiverView {
             updated_at: r.updated_at,
             latest_packet_at: r.latest_packet_at,
             from_ogn_db: r.from_ogn_db,
-            protocols: r.protocols,
+            protocols: r.protocols.into_iter().flatten().collect(),
         }
     }
 }

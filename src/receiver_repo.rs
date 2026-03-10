@@ -95,7 +95,7 @@ impl ReceiverRepository {
                         country: None,
                         postal_code: None,
                         geocoded: false,
-                        protocols: None,
+                        protocols: vec![],
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -224,7 +224,7 @@ impl ReceiverRepository {
                 country: None,
                 postal_code: None,
                 geocoded: false,
-                protocols: None,
+                protocols: vec![],
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -1044,8 +1044,8 @@ impl ReceiverRepository {
 
         #[derive(QueryableByName)]
         struct ProtocolsRow {
-            #[diesel(sql_type = sql_types::Array<sql_types::Text>)]
-            protocols: Vec<String>,
+            #[diesel(sql_type = sql_types::Array<sql_types::Nullable<sql_types::Text>>)]
+            protocols: Vec<Option<String>>,
         }
 
         tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
@@ -1058,12 +1058,11 @@ impl ReceiverRepository {
                 r#"
                 UPDATE receivers
                 SET protocols = CASE
-                    WHEN protocols IS NULL THEN ARRAY[$1]
                     WHEN array_position(protocols, $1) IS NULL THEN array_append(protocols, $1)
                     ELSE protocols
                 END,
                 updated_at = CASE
-                    WHEN protocols IS NULL OR array_position(protocols, $1) IS NULL THEN NOW()
+                    WHEN array_position(protocols, $1) IS NULL THEN NOW()
                     ELSE updated_at
                 END
                 WHERE id = $2
@@ -1074,7 +1073,7 @@ impl ReceiverRepository {
             .bind::<sql_types::Uuid, _>(receiver_id)
             .get_result(&mut conn)?;
 
-            Ok(row.protocols)
+            Ok(row.protocols.into_iter().flatten().collect())
         })
         .await?
     }
