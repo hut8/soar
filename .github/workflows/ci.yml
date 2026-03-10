@@ -888,33 +888,17 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H glider.flights >> ~/.ssh/known_hosts
+          ssh-keyscan -H radar.hut8.tools >> ~/.ssh/known_hosts
 
-      - name: Deploy to radar via supervillain
+      - name: Deploy to radar
         run: |
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          REMOTE_TMP="/tmp/soar-radar-deploy-${TIMESTAMP}"
+          echo "Uploading ARM64 binary and configs to radar..."
+          scp soar soar@radar.hut8.tools:/tmp/soar-new
+          scp infrastructure/ingest-radar.toml soar@radar.hut8.tools:/tmp/ingest-radar.toml
+          scp infrastructure/systemd/soar-ingest-radar.service soar@radar.hut8.tools:/tmp/soar-ingest-radar.service
 
-          echo "Uploading ARM64 binary and configs to supervillain..."
-          ssh soar@glider.flights "mkdir -p ${REMOTE_TMP}"
-          scp soar soar@glider.flights:${REMOTE_TMP}/soar
-          scp infrastructure/ingest-radar.toml soar@glider.flights:${REMOTE_TMP}/ingest-radar.toml
-          scp infrastructure/systemd/soar-ingest-radar.service soar@glider.flights:${REMOTE_TMP}/soar-ingest-radar.service
-
-          echo "Deploying from supervillain to radar..."
-          ssh soar@glider.flights bash -s -- "${REMOTE_TMP}" <<'DEPLOY_SCRIPT'
-          set -euo pipefail
-          REMOTE_TMP="$1"
-
-          # Copy files to radar
-          echo "Copying files to radar..."
-          scp ${REMOTE_TMP}/soar soar@radar:/tmp/soar-new
-          scp ${REMOTE_TMP}/ingest-radar.toml soar@radar:/tmp/ingest-radar.toml
-          scp ${REMOTE_TMP}/soar-ingest-radar.service soar@radar:/tmp/soar-ingest-radar.service
-
-          # Install on radar
           echo "Installing on radar..."
-          ssh soar@radar bash -s <<'RADAR_SCRIPT'
+          ssh soar@radar.hut8.tools bash -s <<'DEPLOY_SCRIPT'
           set -euo pipefail
 
           # Install binary
@@ -937,10 +921,6 @@ jobs:
           echo "Radar deployment complete"
           soar --version || echo "(version check failed)"
           systemctl is-active soar-ingest-radar.service || echo "(service not active)"
-          RADAR_SCRIPT
-
-          # Cleanup on supervillain
-          rm -rf ${REMOTE_TMP}
           DEPLOY_SCRIPT
 
           echo "Radar deployment finished successfully"
