@@ -113,6 +113,13 @@ impl SocketServer {
 ///
 /// This allows remote ingest instances (e.g., on a Raspberry Pi) to send data
 /// over TCP to the soar-run process.
+///
+/// # Trust boundary
+///
+/// This listener does not perform authentication — any client that can reach
+/// the bound address can send envelopes. In production, bind only to trusted
+/// interfaces (localhost, Tailscale) rather than public-facing addresses.
+/// Tailscale provides mutual authentication and encryption at the network layer.
 pub async fn start_tcp_listener(
     addr: SocketAddr,
     intake_tx: flume::Sender<Envelope>,

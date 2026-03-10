@@ -112,12 +112,15 @@ pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder};
 /// Target address for inter-process socket communication.
 ///
 /// Supports both Unix domain sockets (local) and TCP sockets (remote).
+/// The TCP variant stores a `host:port` string to support DNS hostnames;
+/// resolution happens at connect time via `tokio::net::TcpStream::connect`.
 #[derive(Debug, Clone)]
 pub enum SocketTarget {
     /// Unix domain socket (local IPC)
     Unix(std::path::PathBuf),
-    /// TCP socket (remote IPC, e.g., for remote ingest)
-    Tcp(std::net::SocketAddr),
+    /// TCP socket (remote IPC, e.g., for remote ingest).
+    /// Stores `host:port` string — supports both IP addresses and DNS hostnames.
+    Tcp(String),
 }
 
 impl std::fmt::Display for SocketTarget {

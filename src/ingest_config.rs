@@ -161,10 +161,13 @@ fn parse_socket_address(addr: &str) -> Result<SocketTarget> {
     if let Some(path) = addr.strip_prefix("unix://") {
         Ok(SocketTarget::Unix(PathBuf::from(path)))
     } else if let Some(host_port) = addr.strip_prefix("tcp://") {
-        let socket_addr: std::net::SocketAddr = host_port
-            .parse()
-            .with_context(|| format!("Invalid TCP socket address: {}", host_port))?;
-        Ok(SocketTarget::Tcp(socket_addr))
+        if host_port.is_empty() || !host_port.contains(':') {
+            anyhow::bail!(
+                "Invalid TCP socket address: '{}'. Expected 'tcp://host:port'",
+                addr
+            );
+        }
+        Ok(SocketTarget::Tcp(host_port.to_string()))
     } else {
         anyhow::bail!(
             "Invalid socket_address format: '{}'. Expected 'unix:///path' or 'tcp://host:port'",
@@ -296,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn test_socket_target_tcp() {
+    fn test_socket_target_tcp_ip() {
         let config = IngestConfigFile {
             retry_delay: 5,
             socket_address: Some("tcp://10.0.0.1:9384".to_string()),
@@ -305,7 +308,23 @@ mod tests {
         let target = config.socket_target().unwrap();
         match target {
             SocketTarget::Tcp(addr) => {
-                assert_eq!(addr.to_string(), "10.0.0.1:9384");
+                assert_eq!(addr, "10.0.0.1:9384");
+            }
+            _ => panic!("Expected TCP target"),
+        }
+    }
+
+    #[test]
+    fn test_socket_target_tcp_hostname() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("tcp://supervillain:9384".to_string()),
+            streams: vec![],
+        };
+        let target = config.socket_target().unwrap();
+        match target {
+            SocketTarget::Tcp(addr) => {
+                assert_eq!(addr, "supervillain:9384");
             }
             _ => panic!("Expected TCP target"),
         }
@@ -316,6 +335,16 @@ mod tests {
         let config = IngestConfigFile {
             retry_delay: 5,
             socket_address: Some("http://example.com".to_string()),
+            streams: vec![],
+        };
+        assert!(config.socket_target().is_err());
+    }
+
+    #[test]
+    fn test_socket_target_tcp_missing_port() {
+        let config = IngestConfigFile {
+            retry_delay: 5,
+            socket_address: Some("tcp://supervillain".to_string()),
             streams: vec![],
         };
         assert!(config.socket_target().is_err());
