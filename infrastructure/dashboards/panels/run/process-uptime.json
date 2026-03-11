@@ -70,7 +70,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "max(process_uptime_seconds{component=\"run\",environment=\"$environment\"}) by (component, environment) or on() vector(0)",
+      "expr": "max(process_uptime_seconds{component=\"run\",environment=\"$environment\"}) or vector(0)",
       "legendFormat": "__auto",
       "range": true,
       "refId": "A"
