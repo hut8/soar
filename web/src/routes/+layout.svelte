@@ -8,6 +8,9 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { getLogger } from '$lib/logging';
+
+	const logger = getLogger(['soar', 'layout']);
 	import TimezoneSelector from '$lib/components/TimezoneSelector.svelte';
 	import {
 		backendMode,
@@ -113,16 +116,23 @@
 		// Wrapped in IIFE to await without making onMount async (it returns a cleanup fn).
 		const token = localStorage.getItem('auth_token');
 		if (token) {
+			logger.info('Refreshing user data from /auth/me');
 			void (async () => {
 				try {
 					const user = await authApi.getCurrentUser(token);
 					if (localStorage.getItem('auth_token') === token) {
 						auth.updateUser(user);
+						logger.info('User data refreshed successfully');
+					} else {
+						logger.warn('Token changed during refresh — skipping update');
 					}
-				} catch {
-					// Silently ignore — stale localStorage is fine as fallback
+				} catch (err) {
+					logger.warn('Failed to refresh user from /auth/me: {error}', { error: err });
+					// Don't log out — stale localStorage is fine as fallback
 				}
 			})();
+		} else {
+			logger.info('No auth token in localStorage — skipping user refresh');
 		}
 
 		theme.init();
