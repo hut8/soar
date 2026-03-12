@@ -1,0 +1,24 @@
+# Ingest configuration for the "radar" host → PRODUCTION (tenerife)
+#
+# This runs soar-ingest locally on radar, connecting to readsb on localhost.
+# Data is sent to soar-run on tenerife (production) via TCP. The persistent
+# queue handles spooling to disk when the network link is down.
+#
+# Why: readsb drops Beast TCP connections when clients can't read fast enough.
+# Running ingest on localhost eliminates network-induced drops.
+
+instance_id = "radar-production"
+retry_delay = 5
+
+# Send data to soar-run on tenerife (production) over TCP
+socket_address = "tcp://tenerife:9384"
+
+[[streams]]
+id = "550e8400-e29b-41d4-a716-446655440002"
+name = "Local Beast Receiver"
+format = "adsb"
+host = "localhost"
+port = 30005
+enabled = true
+created_at = "2026-02-26T00:00:00Z"
+updated_at = "2026-02-26T00:00:00Z"

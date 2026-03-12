@@ -98,6 +98,10 @@ impl From<DataStream> for TomlDataStream {
 /// Top-level ingest configuration file structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IngestConfigFile {
+    /// Optional instance identifier for running multiple ingest instances on the same host.
+    /// Used to differentiate lock names and queue filenames.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
     #[serde(default = "default_retry_delay")]
     pub retry_delay: u64,
     /// Socket address for connecting to soar-run.
@@ -230,6 +234,7 @@ mod tests {
     #[test]
     fn test_config_roundtrip() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 10,
             socket_address: None,
             streams: vec![TomlDataStream {
@@ -261,6 +266,7 @@ mod tests {
         let path = dir.path().join("test-ingest.toml");
 
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: None,
             streams: vec![
@@ -304,6 +310,7 @@ mod tests {
     #[test]
     fn test_socket_target_default() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: None,
             streams: vec![],
@@ -315,6 +322,7 @@ mod tests {
     #[test]
     fn test_socket_target_unix() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("unix:///var/run/soar/run.sock".to_string()),
             streams: vec![],
@@ -331,6 +339,7 @@ mod tests {
     #[test]
     fn test_socket_target_tcp_ip() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("tcp://10.0.0.1:9384".to_string()),
             streams: vec![],
@@ -347,6 +356,7 @@ mod tests {
     #[test]
     fn test_socket_target_tcp_hostname() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("tcp://supervillain:9384".to_string()),
             streams: vec![],
@@ -363,6 +373,7 @@ mod tests {
     #[test]
     fn test_socket_target_invalid() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("http://example.com".to_string()),
             streams: vec![],
@@ -373,6 +384,7 @@ mod tests {
     #[test]
     fn test_socket_target_tcp_missing_port() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("tcp://supervillain".to_string()),
             streams: vec![],
@@ -383,6 +395,7 @@ mod tests {
     #[test]
     fn test_socket_target_tcp_empty_host() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("tcp://:9384".to_string()),
             streams: vec![],
@@ -393,6 +406,7 @@ mod tests {
     #[test]
     fn test_socket_target_tcp_invalid_port() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("tcp://host:notaport".to_string()),
             streams: vec![],
@@ -403,6 +417,7 @@ mod tests {
     #[test]
     fn test_socket_target_unix_empty_path() {
         let config = IngestConfigFile {
+            instance_id: None,
             retry_delay: 5,
             socket_address: Some("unix://".to_string()),
             streams: vec![],

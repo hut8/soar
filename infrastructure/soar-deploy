@@ -262,50 +262,76 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
-# Radar deployment: lightweight path (binary + config + single service)
+# Radar deployment: lightweight path (binary + dual ingest services)
 if [ "$ENVIRONMENT" = "radar" ]; then
-    log_info "Radar deployment: installing config and service..."
+    log_info "Radar deployment: installing configs and services..."
 
-    # Install ingest config
-    if [ -f "$DEPLOY_DIR/ingest-radar.toml" ]; then
-        log_info "Installing ingest-radar.toml to /etc/soar/..."
-        mkdir -p /etc/soar
-        cp "$DEPLOY_DIR/ingest-radar.toml" /etc/soar/ingest-radar.toml
-        chmod 644 /etc/soar/ingest-radar.toml
-        log_info "Ingest config installed"
-    else
-        log_warn "ingest-radar.toml not found in deployment directory"
+    mkdir -p /etc/soar
+
+    # Clean up the old single-service unit (migration from pre-dual setup)
+    LEGACY_UNIT="soar-ingest-radar.service"
+    LEGACY_UNIT_PATH="/etc/systemd/system/$LEGACY_UNIT"
+    if [ -f "$LEGACY_UNIT_PATH" ] || systemctl list-unit-files "$LEGACY_UNIT" >/dev/null 2>&1; then
+        log_info "Cleaning up legacy $LEGACY_UNIT..."
+        if systemctl is-active --quiet "$LEGACY_UNIT" 2>/dev/null; then
+            systemctl stop "$LEGACY_UNIT" || true
+        fi
+        if systemctl is-enabled --quiet "$LEGACY_UNIT" 2>/dev/null; then
+            systemctl disable "$LEGACY_UNIT" || true
+        fi
+        rm -f "$LEGACY_UNIT_PATH"
+        rm -f /etc/soar/ingest-radar.toml
     fi
 
-    # Install systemd service
-    if [ -f "$DEPLOY_DIR/soar-ingest-radar.service" ]; then
-        log_info "Installing soar-ingest-radar.service..."
-        cp "$DEPLOY_DIR/soar-ingest-radar.service" /etc/systemd/system/
-        chmod 644 /etc/systemd/system/soar-ingest-radar.service
-        log_info "Service file installed"
-    else
-        log_warn "soar-ingest-radar.service not found in deployment directory"
-    fi
+    # Install ingest configs (staging + production)
+    for ENV_SUFFIX in staging production; do
+        CONFIG_FILE="ingest-radar-${ENV_SUFFIX}.toml"
+        if [ -f "$DEPLOY_DIR/$CONFIG_FILE" ]; then
+            log_info "Installing $CONFIG_FILE to /etc/soar/..."
+            cp "$DEPLOY_DIR/$CONFIG_FILE" "/etc/soar/$CONFIG_FILE"
+            chmod 644 "/etc/soar/$CONFIG_FILE"
+        else
+            log_warn "$CONFIG_FILE not found in deployment directory"
+        fi
+    done
 
-    # Reload systemd and restart service
+    # Install systemd services (staging + production)
+    for ENV_SUFFIX in staging production; do
+        SERVICE_FILE="soar-ingest-radar-${ENV_SUFFIX}.service"
+        if [ -f "$DEPLOY_DIR/$SERVICE_FILE" ]; then
+            log_info "Installing $SERVICE_FILE..."
+            cp "$DEPLOY_DIR/$SERVICE_FILE" /etc/systemd/system/
+            chmod 644 "/etc/systemd/system/$SERVICE_FILE"
+        else
+            log_warn "$SERVICE_FILE not found in deployment directory"
+        fi
+    done
+
+    # Reload systemd and restart services
     log_info "Reloading systemd daemon..."
     systemctl daemon-reload
 
-    log_info "Enabling and restarting soar-ingest-radar.service..."
-    systemctl enable soar-ingest-radar.service || log_warn "Failed to enable service"
-    systemctl restart soar-ingest-radar.service || log_warn "Failed to restart service"
+    for ENV_SUFFIX in staging production; do
+        SERVICE="soar-ingest-radar-${ENV_SUFFIX}.service"
+        log_info "Enabling and restarting $SERVICE..."
+        systemctl enable "$SERVICE" || log_warn "Failed to enable $SERVICE"
+        systemctl restart "$SERVICE" || log_warn "Failed to restart $SERVICE"
+    done
 
-    # Wait for service to start
+    # Wait for services to start
     sleep 3
 
-    # Verify service is running
-    if systemctl is-active --quiet soar-ingest-radar.service; then
-        log_info "soar-ingest-radar.service: ${GREEN}ACTIVE${NC}"
-    else
-        log_error "soar-ingest-radar.service: ${RED}FAILED${NC}"
-        journalctl -u soar-ingest-radar.service --no-pager --lines=10 || true
-        ALL_HEALTHY=false
-    fi
+    # Verify services are running
+    for ENV_SUFFIX in staging production; do
+        SERVICE="soar-ingest-radar-${ENV_SUFFIX}.service"
+        if systemctl is-active --quiet "$SERVICE"; then
+            log_info "$SERVICE: ${GREEN}ACTIVE${NC}"
+        else
+            log_error "$SERVICE: ${RED}FAILED${NC}"
+            journalctl -u "$SERVICE" --no-pager --lines=10 || true
+            ALL_HEALTHY=false
+        fi
+    done
 
     # Show version
     soar --version || log_warn "(version check failed)"

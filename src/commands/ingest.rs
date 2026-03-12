@@ -107,13 +107,28 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         });
     }
 
+    // Validate instance_id if set (used in lock filenames and queue paths)
+    if let Some(ref id) = ingest_config.instance_id
+        && (id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    {
+        anyhow::bail!(
+            "Invalid instance_id {:?}: must be non-empty and contain only [A-Za-z0-9_-]",
+            id
+        );
+    }
+
     // Acquire instance lock to prevent multiple ingest instances from running
-    let lock_name = if is_production {
-        "ingest-production"
+    let lock_name = if let Some(ref id) = ingest_config.instance_id {
+        format!("ingest-{}", id)
+    } else if is_production {
+        "ingest-production".to_string()
     } else {
-        "ingest-dev"
+        "ingest-dev".to_string()
     };
-    let _lock = InstanceLock::new(lock_name)
+    let _lock = InstanceLock::new(&lock_name)
         .context("Failed to acquire instance lock - is another ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
@@ -122,7 +137,13 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     std::fs::create_dir_all(&queue_dir)
         .with_context(|| format!("Failed to create queue directory: {:?}", queue_dir))?;
 
-    let queue_path = queue_dir.join("ingest.queue");
+    let queue_filename = if let Some(ref id) = ingest_config.instance_id {
+        format!("{}.queue", id)
+    } else {
+        "ingest.queue".to_string()
+    };
+    let queue_path = queue_dir.join(queue_filename);
+    info!("Created unified ingest queue at {:?}", queue_path);
     let queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
             "ingest".to_string(),
@@ -131,8 +152,6 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
         )
         .expect("Failed to create unified ingest queue"),
     );
-
-    info!("Created unified ingest queue at {:?}", queue_dir);
 
     // Create shared counters for stats tracking (aggregate across all sources)
     let stats_messages_sent = Arc::new(std::sync::atomic::AtomicU64::new(0));

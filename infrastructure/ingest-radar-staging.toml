@@ -1,15 +1,16 @@
-# Ingest configuration for the "radar" host (ADS-B receiver / readsb server)
+# Ingest configuration for the "radar" host → STAGING (supervillain)
 #
 # This runs soar-ingest locally on radar, connecting to readsb on localhost.
-# Data is sent to soar-run on supervillain via TCP. The persistent queue
-# handles spooling to disk when the network link is down.
+# Data is sent to soar-run on supervillain (staging) via TCP. The persistent
+# queue handles spooling to disk when the network link is down.
 #
 # Why: readsb drops Beast TCP connections when clients can't read fast enough.
 # Running ingest on localhost eliminates network-induced drops.
 
+instance_id = "radar-staging"
 retry_delay = 5
 
-# Send data to soar-run on supervillain over TCP
+# Send data to soar-run on supervillain (staging) over TCP
 socket_address = "tcp://supervillain:9384"
 
 [[streams]]
