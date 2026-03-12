@@ -148,7 +148,7 @@ impl EmailService {
         let mailer = if smtp_port == 1025 {
             // Use builder for insecure local SMTP (Mailpit)
             // Mailpit doesn't support TLS, so we need to disable it completely
-            tracing::info!("Using insecure SMTP connection for port 1025 (Mailpit) without TLS");
+            tracing::debug!("Using insecure SMTP connection for port 1025 (Mailpit) without TLS");
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_server)
                 .port(smtp_port)
                 .tls(lettre::transport::smtp::client::Tls::None)
@@ -156,7 +156,7 @@ impl EmailService {
         } else if smtp_port == 465 {
             // Port 465 uses implicit TLS (TLS wrapper - SMTPS)
             // Connection starts with TLS immediately, no STARTTLS upgrade
-            tracing::info!("Using implicit TLS (SMTPS) for port 465");
+            tracing::debug!("Using implicit TLS (SMTPS) for port 465");
             let tls_params = TlsParametersBuilder::new(smtp_server.clone())
                 .dangerous_accept_invalid_certs(true)
                 .build()
@@ -169,7 +169,7 @@ impl EmailService {
         } else {
             // Port 587 and others use STARTTLS
             // Connection starts plain and upgrades to TLS
-            tracing::info!("Using STARTTLS for port {}", smtp_port);
+            tracing::debug!("Using STARTTLS for port {}", smtp_port);
             let tls_params = TlsParametersBuilder::new(smtp_server.clone())
                 .dangerous_accept_invalid_certs(true)
                 .build()
@@ -220,10 +220,11 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -260,10 +261,11 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -314,10 +316,11 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -384,7 +387,7 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .multipart(
                 MultiPart::mixed()
                     .multipart(
@@ -396,6 +399,7 @@ The SOAR Team"#,
                     .singlepart(igc_part),
             )?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -881,13 +885,14 @@ Environment: {environment}
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(to_email.parse()?)
-            .subject(subject)
+            .subject(subject.as_str())
             .multipart(
                 MultiPart::alternative()
                     .singlepart(SinglePart::plain(text_body))
                     .singlepart(SinglePart::html(html_body)),
             )?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -1000,13 +1005,14 @@ impl EmailService {
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .multipart(
                 MultiPart::alternative()
                     .singlepart(SinglePart::plain(text_body))
                     .singlepart(SinglePart::html(html_body)),
             )?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -1258,7 +1264,7 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
@@ -1273,6 +1279,7 @@ The SOAR Team"#,
                     ),
             )?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
@@ -1441,7 +1448,7 @@ The SOAR Team"#,
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject)
+            .subject(subject.as_str())
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
@@ -1456,6 +1463,7 @@ The SOAR Team"#,
                     ),
             )?;
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
