@@ -319,6 +319,11 @@ if [ "$ENVIRONMENT" = "radar" ]; then
     ls -t "$DEPLOY_LOG_DIR"/*.log 2>/dev/null | tail -n +11 | xargs rm -f || true
     ls -t "$DEPLOY_STATUS_DIR"/*.status 2>/dev/null | tail -n +11 | xargs rm -f || true
 
+    if [ "${ALL_HEALTHY:-true}" != "true" ]; then
+        log_error "${RED}Radar deployment completed with errors. Service failed to start.${NC}"
+        exit 1
+    fi
+
     log_info "${GREEN}Radar deployment completed successfully!${NC}"
     exit 0
 fi
