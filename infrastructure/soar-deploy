@@ -262,18 +262,24 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
-# Radar deployment: lightweight path (binary + config + single service)
+# Radar deployment: lightweight path (binary + dual ingest services)
 if [ "$ENVIRONMENT" = "radar" ]; then
     log_info "Radar deployment: installing configs and services..."
 
     mkdir -p /etc/soar
 
-    # Stop and disable the old single-service unit (migration from pre-dual setup)
-    if systemctl is-enabled --quiet soar-ingest-radar.service 2>/dev/null; then
-        log_info "Stopping and disabling old soar-ingest-radar.service..."
-        systemctl stop soar-ingest-radar.service || true
-        systemctl disable soar-ingest-radar.service || true
-        rm -f /etc/systemd/system/soar-ingest-radar.service
+    # Clean up the old single-service unit (migration from pre-dual setup)
+    LEGACY_UNIT="soar-ingest-radar.service"
+    LEGACY_UNIT_PATH="/etc/systemd/system/$LEGACY_UNIT"
+    if [ -f "$LEGACY_UNIT_PATH" ] || systemctl list-unit-files "$LEGACY_UNIT" >/dev/null 2>&1; then
+        log_info "Cleaning up legacy $LEGACY_UNIT..."
+        if systemctl is-active --quiet "$LEGACY_UNIT" 2>/dev/null; then
+            systemctl stop "$LEGACY_UNIT" || true
+        fi
+        if systemctl is-enabled --quiet "$LEGACY_UNIT" 2>/dev/null; then
+            systemctl disable "$LEGACY_UNIT" || true
+        fi
+        rm -f "$LEGACY_UNIT_PATH"
         rm -f /etc/soar/ingest-radar.toml
     fi
 
