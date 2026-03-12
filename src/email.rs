@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
@@ -217,15 +217,19 @@ The SOAR Team"#,
             to_name, reset_url
         );
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -258,15 +262,19 @@ The SOAR Team"#,
             to_name, verification_url
         );
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -313,15 +321,19 @@ The SOAR Team"#,
             to_name, registration_url
         );
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -384,10 +396,11 @@ The SOAR Team"#,
         let igc_part = Attachment::new(igc_filename.to_string())
             .body(igc_content, ContentType::parse("application/x-igc")?);
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .multipart(
                 MultiPart::mixed()
                     .multipart(
@@ -399,8 +412,11 @@ The SOAR Team"#,
                     .singlepart(igc_part),
             )?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -882,18 +898,22 @@ Environment: {environment}
             base_url = base_url,
         );
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(to_email.parse()?)
-            .subject(subject.as_str())
+            .subject(subject)
             .multipart(
                 MultiPart::alternative()
                     .singlepart(SinglePart::plain(text_body))
                     .singlepart(SinglePart::html(html_body)),
             )?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 }
@@ -1002,18 +1022,22 @@ impl EmailService {
             &aircraft_url,
         );
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .multipart(
                 MultiPart::alternative()
                     .singlepart(SinglePart::plain(text_body))
                     .singlepart(SinglePart::html(html_body)),
             )?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -1261,10 +1285,11 @@ The SOAR Team"#,
         let html_body = self.build_receiver_alert_html(&data);
         let text_body = self.build_receiver_alert_text(&data);
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
@@ -1279,8 +1304,11 @@ The SOAR Team"#,
                     ),
             )?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
@@ -1445,10 +1473,11 @@ The SOAR Team"#,
         let html_body = self.build_receiver_recovery_html(&data);
         let text_body = self.build_receiver_recovery_text(&data);
 
+        tracing::info!(to = %to_email, subject = %subject, "Sending email");
         let email = Message::builder()
             .from(create_mailbox(&self.from_name, &self.from_email)?)
             .to(create_mailbox(to_name, to_email)?)
-            .subject(subject.as_str())
+            .subject(subject)
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
@@ -1463,8 +1492,11 @@ The SOAR Team"#,
                     ),
             )?;
 
-        tracing::info!(to = %to_email, subject = %subject, "Sending email");
-        let response = self.mailer.send(email).await?;
+        let response = self
+            .mailer
+            .send(email)
+            .await
+            .context("Failed to send email")?;
         Ok(response)
     }
 
