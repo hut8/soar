@@ -6,7 +6,7 @@
 # It must be installed at /usr/local/bin/soar-deploy with permissions 755.
 #
 # Usage:
-#   sudo /usr/local/bin/soar-deploy [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS
+#   sudo /usr/local/bin/soar-deploy [production|staging|radar] /tmp/soar/deploy/YYYYMMDDHHMMSS
 #   sudo /usr/local/bin/soar-deploy /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)
 #
 # The deployment directory should contain:
@@ -64,8 +64,8 @@ else
 fi
 
 # Validate environment
-if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ]; then
-    log_error "Invalid environment: $ENVIRONMENT (must be 'production' or 'staging')"
+if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "radar" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'production', 'staging', or 'radar')"
     exit 1
 fi
 
@@ -130,7 +130,15 @@ else
 fi
 
 # Set environment-specific variables
-if [ "$ENVIRONMENT" = "staging" ]; then
+if [ "$ENVIRONMENT" = "radar" ]; then
+    # Radar is a lightweight deployment: single ingest service, no migrations,
+    # no observability stack, no Grafana. It runs on a dedicated ADS-B receiver host.
+    SERVICE_SUFFIX=""
+    ENV_FILE="/etc/soar/env"
+    BINARY_PATH="/usr/local/bin/soar"
+    BACKUP_DIR="/home/soar/backups/radar"
+    TARGET_FILE=""
+elif [ "$ENVIRONMENT" = "staging" ]; then
     SERVICE_SUFFIX="-staging"
     ENV_FILE="/etc/soar/env-staging"
     BINARY_PATH="/usr/local/bin/soar-staging"
@@ -253,6 +261,67 @@ log_info "Binary installed successfully at $BINARY_PATH"
 # Clean up temporary binary
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
+
+# Radar deployment: lightweight path (binary + config + single service)
+if [ "$ENVIRONMENT" = "radar" ]; then
+    log_info "Radar deployment: installing config and service..."
+
+    # Install ingest config
+    if [ -f "$DEPLOY_DIR/ingest-radar.toml" ]; then
+        log_info "Installing ingest-radar.toml to /etc/soar/..."
+        mkdir -p /etc/soar
+        cp "$DEPLOY_DIR/ingest-radar.toml" /etc/soar/ingest-radar.toml
+        chmod 644 /etc/soar/ingest-radar.toml
+        log_info "Ingest config installed"
+    else
+        log_warn "ingest-radar.toml not found in deployment directory"
+    fi
+
+    # Install systemd service
+    if [ -f "$DEPLOY_DIR/soar-ingest-radar.service" ]; then
+        log_info "Installing soar-ingest-radar.service..."
+        cp "$DEPLOY_DIR/soar-ingest-radar.service" /etc/systemd/system/
+        chmod 644 /etc/systemd/system/soar-ingest-radar.service
+        log_info "Service file installed"
+    else
+        log_warn "soar-ingest-radar.service not found in deployment directory"
+    fi
+
+    # Reload systemd and restart service
+    log_info "Reloading systemd daemon..."
+    systemctl daemon-reload
+
+    log_info "Enabling and restarting soar-ingest-radar.service..."
+    systemctl enable soar-ingest-radar.service || log_warn "Failed to enable service"
+    systemctl restart soar-ingest-radar.service || log_warn "Failed to restart service"
+
+    # Wait for service to start
+    sleep 3
+
+    # Verify service is running
+    if systemctl is-active --quiet soar-ingest-radar.service; then
+        log_info "soar-ingest-radar.service: ${GREEN}ACTIVE${NC}"
+    else
+        log_error "soar-ingest-radar.service: ${RED}FAILED${NC}"
+        journalctl -u soar-ingest-radar.service --no-pager --lines=10 || true
+        ALL_HEALTHY=false
+    fi
+
+    # Show version
+    soar --version || log_warn "(version check failed)"
+
+    # Clean up old deployment directories (keep last 3)
+    log_info "Cleaning up old deployment directories (keeping last 3)..."
+    ls -td /tmp/soar/deploy/* 2>/dev/null | tail -n +4 | xargs rm -rf || true
+
+    # Clean up old deployment logs and status files (keep last 10)
+    log_info "Cleaning up old deployment logs and status files (keeping last 10)..."
+    ls -t "$DEPLOY_LOG_DIR"/*.log 2>/dev/null | tail -n +11 | xargs rm -f || true
+    ls -t "$DEPLOY_STATUS_DIR"/*.status 2>/dev/null | tail -n +11 | xargs rm -f || true
+
+    log_info "${GREEN}Radar deployment completed successfully!${NC}"
+    exit 0
+fi
 
 # Update SENTRY_RELEASE in environment file from VERSION file
 if [ -f "$DEPLOY_DIR/VERSION" ]; then

@@ -894,40 +894,79 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H radar.hut8.tools >> ~/.ssh/known_hosts
 
-      - name: Deploy to radar
+      - name: Prepare deployment package
         run: |
-          echo "Uploading ARM64 binary and configs to radar..."
-          scp soar soar@radar.hut8.tools:/tmp/soar-new
-          scp infrastructure/ingest-radar.toml soar@radar.hut8.tools:/tmp/ingest-radar.toml
-          scp infrastructure/systemd/soar-ingest-radar.service soar@radar.hut8.tools:/tmp/soar-ingest-radar.service
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
 
-          echo "Installing on radar..."
-          ssh soar@radar.hut8.tools bash -s <<'DEPLOY_SCRIPT'
-          set -euo pipefail
+          mkdir -p deploy-pkg
+          cp soar deploy-pkg/
+          cp infrastructure/soar-deploy deploy-pkg/
+          cp infrastructure/ingest-radar.toml deploy-pkg/
+          cp infrastructure/systemd/soar-ingest-radar.service deploy-pkg/
 
-          # Install binary
-          sudo rm -f /usr/local/bin/soar
-          sudo install -m 755 -o root -g root /tmp/soar-new /usr/local/bin/soar
-          rm -f /tmp/soar-new
+          echo "Deployment package prepared for timestamp: $TIMESTAMP"
+          ls -lh deploy-pkg/
 
-          # Install config
-          sudo mkdir -p /etc/soar
-          sudo cp /tmp/ingest-radar.toml /etc/soar/ingest-radar.toml
-          rm -f /tmp/ingest-radar.toml
+      - name: Upload deployment package
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
 
-          # Install and enable systemd service
-          sudo cp /tmp/soar-ingest-radar.service /etc/systemd/system/soar-ingest-radar.service
-          rm -f /tmp/soar-ingest-radar.service
-          sudo systemctl daemon-reload
-          sudo systemctl enable soar-ingest-radar.service
-          sudo systemctl restart soar-ingest-radar.service
+          echo "Creating deployment directory on radar: $DEPLOY_DIR"
+          ssh soar@radar.hut8.tools "mkdir -p $DEPLOY_DIR"
 
-          echo "Radar deployment complete"
-          soar --version || echo "(version check failed)"
-          systemctl is-active soar-ingest-radar.service || echo "(service not active)"
-          DEPLOY_SCRIPT
+          echo "Uploading deployment package..."
+          rsync -az --info=progress2 deploy-pkg/ soar@radar.hut8.tools:$DEPLOY_DIR/
 
-          echo "Radar deployment finished successfully"
+          echo "Deployment package uploaded successfully"
+
+      - name: Execute deployment to radar
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+          DEPLOY_ID="radar-${{ env.DEPLOY_TIMESTAMP }}"
+          LOG_FILE="/var/lib/soar/deploy/logs/${DEPLOY_ID}.log"
+          STATUS_FILE="/var/lib/soar/deploy/status/${DEPLOY_ID}.status"
+
+          echo "Executing deployment script for radar..."
+          echo "Deployment ID: $DEPLOY_ID"
+
+          ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar $DEPLOY_DIR &"
+
+          sleep 3
+
+          echo "Deployment started in background, polling for completion..."
+
+          MAX_WAIT=300
+          ELAPSED=0
+          POLL_INTERVAL=5
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            if ssh soar@radar.hut8.tools "test -f $STATUS_FILE" 2>/dev/null; then
+              echo "Deployment completed, fetching results..."
+
+              EXIT_CODE=$(ssh soar@radar.hut8.tools "cat $STATUS_FILE")
+              echo "Deployment exit code: $EXIT_CODE"
+
+              echo ""
+              echo "=== Deployment Log ==="
+              ssh soar@radar.hut8.tools "cat $LOG_FILE" || echo "(Failed to retrieve log)"
+              echo "=== End Deployment Log ==="
+              echo ""
+
+              exit $EXIT_CODE
+            fi
+
+            if [ $((ELAPSED % 30)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
+              echo "Still waiting for deployment... (${ELAPSED}s elapsed)"
+              ssh soar@radar.hut8.tools "tail -5 $LOG_FILE 2>/dev/null" || true
+            fi
+
+            sleep $POLL_INTERVAL
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          echo "Deployment timed out after ${MAX_WAIT} seconds"
+          exit 1
 
       - name: Cleanup SSH
         if: always()
