@@ -108,12 +108,14 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     }
 
     // Acquire instance lock to prevent multiple ingest instances from running
-    let lock_name = if is_production {
-        "ingest-production"
+    let lock_name = if let Some(ref id) = ingest_config.instance_id {
+        format!("ingest-{}", id)
+    } else if is_production {
+        "ingest-production".to_string()
     } else {
-        "ingest-dev"
+        "ingest-dev".to_string()
     };
-    let _lock = InstanceLock::new(lock_name)
+    let _lock = InstanceLock::new(&lock_name)
         .context("Failed to acquire instance lock - is another ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
@@ -122,7 +124,12 @@ pub async fn handle_ingest(config: IngestConfig) -> Result<()> {
     std::fs::create_dir_all(&queue_dir)
         .with_context(|| format!("Failed to create queue directory: {:?}", queue_dir))?;
 
-    let queue_path = queue_dir.join("ingest.queue");
+    let queue_filename = if let Some(ref id) = ingest_config.instance_id {
+        format!("{}.queue", id)
+    } else {
+        "ingest.queue".to_string()
+    };
+    let queue_path = queue_dir.join(queue_filename);
     let queue = Arc::new(
         soar::persistent_queue::PersistentQueue::<Vec<u8>>::new(
             "ingest".to_string(),

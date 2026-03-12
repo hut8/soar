@@ -902,8 +902,10 @@ jobs:
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
-          cp infrastructure/ingest-radar.toml deploy-pkg/
-          cp infrastructure/systemd/soar-ingest-radar.service deploy-pkg/
+          cp infrastructure/ingest-radar-staging.toml deploy-pkg/
+          cp infrastructure/ingest-radar-production.toml deploy-pkg/
+          cp infrastructure/systemd/soar-ingest-radar-staging.service deploy-pkg/
+          cp infrastructure/systemd/soar-ingest-radar-production.service deploy-pkg/
 
           echo "Deployment package prepared for timestamp: $TIMESTAMP"
           ls -lh deploy-pkg/
