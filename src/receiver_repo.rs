@@ -625,6 +625,22 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get the most recent `latest_packet_at` across all receivers.
+    /// Used as a global data-freshness check before evaluating individual alerts.
+    pub async fn get_max_latest_packet_at(&self) -> Result<Option<DateTime<Utc>>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<DateTime<Utc>>> {
+            let mut conn = pool.get()?;
+            let max_ts: Option<DateTime<Utc>> = receivers::table
+                .select(diesel::dsl::max(receivers::latest_packet_at))
+                .first(&mut conn)?;
+
+            Ok(max_ts)
+        })
+        .await?
+    }
+
     /// Get a receiver by ID
     pub async fn get_receiver_by_id(&self, id: Uuid) -> Result<Option<ReceiverModel>> {
         let pool = self.pool.clone();

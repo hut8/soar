@@ -99,6 +99,29 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
     let status_repo = ReceiverStatusRepository::new(pool.clone());
     let users_repo = UsersRepository::new(pool.clone());
 
+    // Global data freshness check: if the most recent packet across ALL receivers
+    // is older than 5 minutes, the ingestion pipeline is likely down. Skip alerts
+    // to avoid false "Receiver Down" notifications for every subscription.
+    let max_packet_at = receiver_repo.get_max_latest_packet_at().await?;
+    let now = Utc::now();
+    match max_packet_at {
+        Some(ts) if (now - ts).num_minutes() >= 5 => {
+            warn!(
+                max_latest_packet_at = %ts,
+                minutes_stale = (now - ts).num_minutes(),
+                "Global data freshness check failed — ingestion may be down. Skipping alert cycle."
+            );
+            metrics::counter!("receiver_alerts.skipped_stale_data").increment(1);
+            return Ok(());
+        }
+        None => {
+            warn!("No receivers have any packet data. Skipping alert cycle.");
+            metrics::counter!("receiver_alerts.skipped_stale_data").increment(1);
+            return Ok(());
+        }
+        _ => {}
+    }
+
     // Get all active email alert subscriptions
     let alerts = alerts_repo.get_all_active_email_alerts().await?;
     if alerts.is_empty() {
@@ -137,7 +160,6 @@ async fn run_alert_check(pool: &PgPool) -> Result<()> {
         }
     };
 
-    let now = Utc::now();
     let mut alerts_sent = 0u64;
     let mut alerts_cleared = 0u64;
     let mut recovery_sent = 0u64;

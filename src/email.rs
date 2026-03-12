@@ -1305,10 +1305,6 @@ The SOAR Team"#,
         .content {{ padding: 24px; }}
         .greeting {{ font-size: 16px; margin-bottom: 16px; }}
         .alert-message {{ background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; border-radius: 4px; margin-bottom: 24px; font-size: 16px; }}
-        .detail-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }}
-        .detail-row:last-child {{ border-bottom: none; }}
-        .detail-label {{ color: #666; }}
-        .detail-value {{ font-weight: 500; text-align: right; }}
         .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px; }}
         .footer {{ background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #666; }}
     </style>
@@ -1324,25 +1320,25 @@ The SOAR Team"#,
             <div class="alert-message">
                 <strong>{condition}</strong>
             </div>
-            <div class="flight-details">
-                <div class="detail-row">
-                    <span class="detail-label">Receiver</span>
-                    <span class="detail-value">{callsign}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Alert Type</span>
-                    <span class="detail-value">{alert_type}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Alert #</span>
-                    <span class="detail-value">{ordinal} notification</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Detected At</span>
-                    <span class="detail-value">{detected_at}</span>
-                </div>
-            </div>
-            <a href="{receiver_url}" class="cta-button">View Receiver</a>
+            <table style="width: 100%; border-collapse: collapse;" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Receiver</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{callsign}</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Alert Type</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{alert_type}</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Alert #</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{ordinal} notification</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0;">Detected At</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0;">{detected_at}</td>
+                </tr>
+            </table>
+            <a href="{receiver_url}" class="cta-button" style="display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px;">View Receiver</a>
         </div>
         <div class="footer">
             <p>You are receiving this email because you subscribed to alerts for this receiver on SOAR ({environment}).</p>
@@ -1476,10 +1472,6 @@ The SOAR Team"#,
         .content {{ padding: 24px; }}
         .greeting {{ font-size: 16px; margin-bottom: 16px; }}
         .recovery-message {{ background-color: #d4edda; border-left: 4px solid #28a745; padding: 16px; border-radius: 4px; margin-bottom: 24px; font-size: 16px; }}
-        .detail-row {{ display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }}
-        .detail-row:last-child {{ border-bottom: none; }}
-        .detail-label {{ color: #666; }}
-        .detail-value {{ font-weight: 500; text-align: right; }}
         .cta-button {{ display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px; }}
         .footer {{ background-color: #f8f9fa; padding: 16px 24px; text-align: center; font-size: 12px; color: #666; }}
     </style>
@@ -1495,25 +1487,25 @@ The SOAR Team"#,
             <div class="recovery-message">
                 <strong>The "{condition_label}" condition for {callsign} has cleared.</strong>
             </div>
-            <div class="flight-details">
-                <div class="detail-row">
-                    <span class="detail-label">Receiver</span>
-                    <span class="detail-value">{callsign}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Resolved Condition</span>
-                    <span class="detail-value">{condition_label}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Notifications</span>
-                    <span class="detail-value">{alerts_sent}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Resolved At</span>
-                    <span class="detail-value">{resolved_at}</span>
-                </div>{started_row}{duration_row}
-            </div>
-            <a href="{receiver_url}" class="cta-button">View Receiver</a>
+            <table style="width: 100%; border-collapse: collapse;" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Receiver</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{callsign}</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Resolved Condition</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{condition_label}</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Notifications</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{alerts_sent}</td>
+                </tr>
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Resolved At</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{resolved_at}</td>
+                </tr>{started_row}{duration_row}
+            </table>
+            <a href="{receiver_url}" class="cta-button" style="display: inline-block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%); color: #ffffff !important; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; margin-top: 16px;">View Receiver</a>
         </div>
         <div class="footer">
             <p>You are receiving this email because you subscribed to alerts for this receiver on SOAR ({environment}).</p>
@@ -1530,10 +1522,10 @@ The SOAR Team"#,
                 .first_alerted_at
                 .map(|t| format!(
                     r#"
-                <div class="detail-row">
-                    <span class="detail-label">Started At</span>
-                    <span class="detail-value">{}</span>
-                </div>"#,
+                <tr>
+                    <td style="color: #666; padding: 12px 0; border-bottom: 1px solid #eee;">Started At</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0; border-bottom: 1px solid #eee;">{}</td>
+                </tr>"#,
                     html_escape(t)
                 ))
                 .unwrap_or_default(),
@@ -1541,10 +1533,10 @@ The SOAR Team"#,
                 .duration
                 .map(|d| format!(
                     r#"
-                <div class="detail-row">
-                    <span class="detail-label">Active Duration</span>
-                    <span class="detail-value">{}</span>
-                </div>"#,
+                <tr>
+                    <td style="color: #666; padding: 12px 0;">Active Duration</td>
+                    <td style="font-weight: 500; text-align: right; padding: 12px 0;">{}</td>
+                </tr>"#,
                     html_escape(d)
                 ))
                 .unwrap_or_default(),
