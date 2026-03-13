@@ -33,10 +33,12 @@ export async function hasOrientationSensor(): Promise<boolean> {
 	// Listen for an actual event; timeout if nothing fires
 	return new Promise((resolve) => {
 		let resolved = false;
+		let timerId: ReturnType<typeof setTimeout> | null = null;
 
 		const finish = (result: boolean) => {
 			if (resolved) return;
 			resolved = true;
+			if (timerId !== null) clearTimeout(timerId);
 			window.removeEventListener('deviceorientation', handler);
 			if (hasDeviceOrientationAbsolute()) {
 				window.removeEventListener(
@@ -62,7 +64,7 @@ export async function hasOrientationSensor(): Promise<boolean> {
 		}
 
 		// If no real event fires within 1.5 s, assume no sensor
-		setTimeout(() => finish(false), 1500);
+		timerId = setTimeout(() => finish(false), 1500);
 	});
 }
 
