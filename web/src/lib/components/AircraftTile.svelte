@@ -12,9 +12,18 @@
 
 	let { aircraft }: { aircraft: Aircraft } = $props();
 
+	// Consider the aircraft actively flying only if we received a fix within the last 10 minutes
+	// (matches the backend's threshold for Active vs Stale flight state)
+	const STALE_THRESHOLD_MS = 10 * 60 * 1000;
+	let isRecentlyActive = $derived(
+		aircraft.lastFixAt
+			? Date.now() - new Date(aircraft.lastFixAt).getTime() < STALE_THRESHOLD_MS
+			: false
+	);
+
 	// Build the live map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		aircraft.latitude && aircraft.longitude
+		isRecentlyActive && aircraft.latitude && aircraft.longitude
 			? `/live?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
 			: null
 	);
@@ -22,6 +31,7 @@
 	// Build the flight detail URL from current fix flight ID
 	// currentFix is JsonValue, so we need to check if it's an object with flightId
 	let flightUrl = $derived.by(() => {
+		if (!isRecentlyActive) return null;
 		if (
 			!aircraft.currentFix ||
 			typeof aircraft.currentFix !== 'object' ||
