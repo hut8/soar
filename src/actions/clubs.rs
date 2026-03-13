@@ -460,3 +460,117 @@ pub async fn reject_club(
         }
     }
 }
+
+// --- Club editing ---
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateClubRequest {
+    pub name: Option<String>,
+    pub home_base_airport_id: Option<i32>,
+    pub is_soaring: Option<bool>,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub country_code: Option<String>,
+}
+
+/// Update a club (club admins of that club or system admins)
+pub async fn update_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateClubRequest>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Authorization: club admin of this club or system admin
+    let is_club_admin = user.is_club_admin && user.club_id == Some(id);
+    if !user.is_admin && !is_club_admin {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a club admin to edit this club",
+        )
+        .into_response();
+    }
+
+    // Validate name if provided
+    if let Some(ref name) = payload.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return json_error(StatusCode::BAD_REQUEST, "Club name cannot be empty")
+                .into_response();
+        }
+
+        // Check for duplicate name (different club)
+        let clubs_repo = ClubsRepository::new(state.pool.clone());
+        match clubs_repo.find_by_name(trimmed).await {
+            Ok(Some(existing)) if existing.id != id => {
+                return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                    .into_response();
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to check club name");
+                return json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to check club name",
+                )
+                .into_response();
+            }
+            _ => {}
+        }
+    }
+
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Build location params if any address fields provided
+    let location_params = {
+        let has_address = payload.street1.is_some()
+            || payload.street2.is_some()
+            || payload.city.is_some()
+            || payload.state.is_some()
+            || payload.zip_code.is_some()
+            || payload.country_code.is_some();
+
+        if has_address {
+            Some(LocationParams {
+                street1: payload.street1,
+                street2: payload.street2,
+                city: payload.city,
+                state: payload.state,
+                zip_code: payload.zip_code,
+                country_code: payload.country_code,
+                geolocation: None,
+            })
+        } else {
+            None
+        }
+    };
+
+    match clubs_repo
+        .update_club(
+            id,
+            payload.name.as_deref().map(|n| n.trim()),
+            payload.home_base_airport_id,
+            payload.is_soaring,
+            location_params,
+        )
+        .await
+    {
+        Ok(Some(club)) => {
+            info!(club_id = %id, "Club updated");
+            Json(DataResponse {
+                data: ClubView::from(club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to update club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update club").into_response()
+        }
+    }
+}

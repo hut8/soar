@@ -41,8 +41,9 @@ import type { StripeOnboardingResponse } from './generated/StripeOnboardingRespo
 import type { StripeConnectStatusView } from './generated/StripeConnectStatusView';
 import type { StripeDashboardLinkResponse } from './generated/StripeDashboardLinkResponse';
 
-// Import auto-generated club creation types from Rust
+// Import auto-generated club types from Rust
 import type { CreateClubRequest } from './generated/CreateClubRequest';
+import type { UpdateClubRequest } from './generated/UpdateClubRequest';
 
 // Import auto-generated auth types from Rust
 import type { LoginResponse } from './generated/LoginResponse';
@@ -130,6 +131,7 @@ export type {
 	StripeDashboardLinkResponse,
 	ClubJoinRequestView,
 	CreateClubRequest,
+	UpdateClubRequest,
 	// Auth types
 	LoginResponse,
 	// Flight gap type

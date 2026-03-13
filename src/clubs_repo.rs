@@ -798,6 +798,80 @@ impl ClubsRepository {
         Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
+    /// Update a club's details
+    pub async fn update_club(
+        &self,
+        club_id: Uuid,
+        new_name: Option<&str>,
+        new_airport_id: Option<i32>,
+        new_is_soaring: Option<bool>,
+        location_params: Option<LocationParams>,
+    ) -> Result<Option<Club>> {
+        use crate::schema::clubs::dsl::*;
+
+        // Create location if address data provided
+        let new_location_id = if let Some(params) = location_params {
+            let location = self.locations_repo.find_or_create(params).await?;
+            Some(Some(location.id))
+        } else {
+            None
+        };
+
+        let pool = self.pool.clone();
+        let new_name = new_name.map(|n| n.to_string());
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build dynamic update - always update updated_at
+            // We need to handle each optional field
+            let target = clubs.filter(id.eq(club_id));
+
+            if let Some(ref n) = new_name {
+                diesel::update(target).set(name.eq(n)).execute(&mut conn)?;
+            }
+
+            if let Some(airport_id) = new_airport_id {
+                diesel::update(clubs.filter(id.eq(club_id)))
+                    .set(home_base_airport_id.eq(Some(airport_id)))
+                    .execute(&mut conn)?;
+            }
+
+            if let Some(soaring) = new_is_soaring {
+                diesel::update(clubs.filter(id.eq(club_id)))
+                    .set(is_soaring.eq(Some(soaring)))
+                    .execute(&mut conn)?;
+            }
+
+            if let Some(loc_id) = new_location_id {
+                diesel::update(clubs.filter(id.eq(club_id)))
+                    .set(location_id.eq(loc_id))
+                    .execute(&mut conn)?;
+            }
+
+            // Always touch updated_at
+            diesel::update(clubs.filter(id.eq(club_id)))
+                .set(updated_at.eq(diesel::dsl::now))
+                .execute(&mut conn)?;
+
+            // Fetch the updated record
+            let updated: Option<ClubModel> = clubs
+                .filter(id.eq(club_id))
+                .first::<ClubModel>(&mut conn)
+                .optional()?;
+
+            Ok::<Option<ClubModel>, anyhow::Error>(updated)
+        })
+        .await??;
+
+        // If we got a result, re-fetch with full joins for location data
+        if result.is_some() {
+            self.get_by_id(club_id).await.map(Some).map(|r| r.flatten())
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
         use crate::schema::clubs::dsl::*;
