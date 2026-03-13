@@ -962,6 +962,42 @@ sudo cp infrastructure/pgdog-users.toml /etc/pgdog/users.toml
 sudo chmod 644 /etc/pgdog/pgdog.toml
 sudo chmod 600 /etc/pgdog/users.toml
 
+# Create systemd service for PgDog
+cat > /etc/systemd/system/pgdog.service <<UNIT
+[Unit]
+Description=PgDog PostgreSQL Connection Pooler
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
+ExecReload=/bin/kill -HUP \$MAINPID
+KillSignal=SIGINT
+KillMode=mixed
+
+Restart=on-failure
+RestartSec=5s
+
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pgdog
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/pgdog
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+
 # Enable and start PgDog
 sudo systemctl enable pgdog
 if ! systemctl is-active --quiet pgdog; then

@@ -122,7 +122,7 @@ port = $PGDOG_PORT
 default_pool_size = 50
 min_pool_size = 10
 pooler_mode = "transaction"
-auth_type = "md5"
+auth_type = "trust"
 connect_timeout = 15000
 idle_timeout = 600000
 server_lifetime = 3600000
@@ -169,6 +169,7 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
+DynamicUser=yes
 ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
 ExecReload=/bin/kill -HUP \$MAINPID
 KillSignal=SIGINT
@@ -189,6 +190,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ReadOnlyPaths=/etc/pgdog
 
 [Install]
 WantedBy=multi-user.target
