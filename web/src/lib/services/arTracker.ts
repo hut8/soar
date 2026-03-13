@@ -15,6 +15,57 @@ function hasDeviceOrientationAbsolute(): boolean {
 
 const logger = getLogger(['soar', 'ARTracker']);
 
+/**
+ * Probe whether the device has orientation sensors (gyroscope/compass).
+ * On mobile devices, deviceorientation events fire immediately.
+ * On desktop, the event exists but never fires.
+ * iOS 13+ requires explicit permission, so its existence implies a capable device.
+ */
+export async function hasOrientationSensor(): Promise<boolean> {
+	if (typeof window === 'undefined') return false;
+
+	// iOS 13+ has requestPermission — only mobile Safari exposes this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+		return true;
+	}
+
+	// Listen for an actual event; timeout if nothing fires
+	return new Promise((resolve) => {
+		let resolved = false;
+
+		const finish = (result: boolean) => {
+			if (resolved) return;
+			resolved = true;
+			window.removeEventListener('deviceorientation', handler);
+			if (hasDeviceOrientationAbsolute()) {
+				window.removeEventListener(
+					'deviceorientationabsolute' as keyof WindowEventMap,
+					handler as EventListener
+				);
+			}
+			resolve(result);
+		};
+
+		const handler = (e: DeviceOrientationEvent) => {
+			// Some desktop browsers fire the event once with all-null values
+			if (e.alpha === null && e.beta === null && e.gamma === null) return;
+			finish(true);
+		};
+
+		window.addEventListener('deviceorientation', handler);
+		if (hasDeviceOrientationAbsolute()) {
+			window.addEventListener(
+				'deviceorientationabsolute' as keyof WindowEventMap,
+				handler as EventListener
+			);
+		}
+
+		// If no real event fires within 1.5 s, assume no sensor
+		setTimeout(() => finish(false), 1500);
+	});
+}
+
 export type ARTrackerEvent =
 	| { type: 'position_updated'; position: ARUserPosition }
 	| { type: 'orientation_updated'; orientation: ARDeviceOrientation }
