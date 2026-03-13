@@ -12,7 +12,7 @@ resolver = "2"
 bundled-postgres = ["pq-sys/bundled", "dep:openssl", "openssl/vendored"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+mimalloc = "0.1"
 
 [dependencies]
 anyhow = "1.0"

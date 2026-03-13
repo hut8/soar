@@ -35,17 +35,7 @@ pre-build = [
 [target.aarch64-unknown-linux-musl]
 # Musl build for aarch64 - fully static binary
 # We use pq-sys bundled feature to compile libpq from source, which includes all static libs
-pre-build = [
-    "dpkg --add-architecture arm64",
-    "apt-get update",
-    # Build dependencies for compiling PostgreSQL and OpenSSL from source
-    # build-essential: gcc, g++, make for compiling C code
-    # crossbuild-essential-arm64: cross-compilation toolchain
-    # pkg-config: for finding libraries
-    # perl: required for building OpenSSL from source
-    # clang: needed by some build scripts
-    # zlib1g-dev:arm64: ARM64 compression library
-    # protobuf-compiler: for compiling .proto files
-    # Use DEBIAN_FRONTEND=noninteractive to prevent tzdata prompts during install
-    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential crossbuild-essential-arm64 pkg-config perl clang zlib1g-dev:arm64 protobuf-compiler",
-]
+# Build dependencies (crossbuild-essential-arm64, protobuf-compiler, etc.) are baked into
+# the custom image to avoid ~1-2 min of apt-get on every build.
+# See .github/cross-arm64-musl.Dockerfile for what's pre-installed.
+image = "ghcr.io/hut8/cross-arm64-musl:latest"
