@@ -253,15 +253,16 @@ async fn fetch_adsb_exchange(
 
     // Parse NDJSON (newline-delimited JSON) in parallel using rayon
     let lines: Vec<&str> = json_content.lines().collect();
+    let total_lines = lines.len();
     info!(
         "Parsing {} lines from ADS-B Exchange database in parallel...",
-        lines.len()
+        total_lines
     );
 
-    // Each line is parsed and converted in parallel
-    let results: Vec<Option<Aircraft>> = lines
+    // Each line is parsed and converted in parallel, filtering invalid records directly
+    let aircraft: Vec<Aircraft> = lines
         .par_iter()
-        .map(|line| {
+        .filter_map(|line| {
             let line = line.trim();
             if line.is_empty() {
                 return None;
@@ -276,14 +277,10 @@ async fn fetch_adsb_exchange(
         })
         .collect();
 
-    let total_lines = results.len();
-    let aircraft: Vec<Aircraft> = results.into_iter().flatten().collect();
-    let failed = total_lines - aircraft.len();
-
     info!(
         "Parsed {} aircraft from ADS-B Exchange ({} lines skipped/failed)",
         aircraft.len(),
-        failed
+        total_lines - aircraft.len()
     );
 
     Ok(aircraft)
@@ -354,13 +351,11 @@ pub async fn handle_dump_aircraft_dbs(
     flarmnet_source: Option<String>,
     adsb_source: Option<String>,
 ) -> Result<()> {
-    // Fetch both data sources concurrently
-    let (flarmnet_result, adsb_result) = tokio::join!(
+    // Fetch both data sources concurrently, cancelling the other on failure
+    let (flarmnet_aircraft, adsb_aircraft) = tokio::try_join!(
         fetch_flarmnet(flarmnet_source, &output_path),
         fetch_adsb_exchange(adsb_source, &output_path),
-    );
-    let flarmnet_aircraft = flarmnet_result?;
-    let adsb_aircraft = adsb_result?;
+    )?;
 
     let total_count = flarmnet_aircraft.len() + adsb_aircraft.len();
     info!(
@@ -370,34 +365,40 @@ pub async fn handle_dump_aircraft_dbs(
         adsb_aircraft.len()
     );
 
-    // Serialize all aircraft to JSON lines in parallel using rayon
+    // Serialize and write aircraft to JSONL in chunks to bound memory usage
     info!(
-        "Serializing {} aircraft to JSON in parallel...",
-        total_count
-    );
-    let all_aircraft: Vec<&Aircraft> = flarmnet_aircraft
-        .iter()
-        .chain(adsb_aircraft.iter())
-        .collect();
-
-    let json_lines: Vec<String> = all_aircraft
-        .par_iter()
-        .map(|device| serde_json::to_string(device).expect("Failed to serialize aircraft"))
-        .collect();
-
-    // Write pre-serialized lines to JSONL file with buffered I/O
-    info!(
-        "Writing {} lines to JSONL file: {}",
+        "Writing {} aircraft to JSONL file: {}",
         total_count, output_path
     );
     let output_file = File::create(&output_path)?;
     let mut writer = BufWriter::new(output_file);
 
-    for (i, json_line) in json_lines.iter().enumerate() {
-        writeln!(writer, "{}", json_line)?;
+    let all_aircraft: Vec<&Aircraft> = flarmnet_aircraft
+        .iter()
+        .chain(adsb_aircraft.iter())
+        .collect();
 
-        if (i + 1) % PROGRESS_LOG_INTERVAL == 0 {
-            info!("Written {} / {} aircraft", i + 1, total_count);
+    const CHUNK_SIZE: usize = 10000;
+    let mut written = 0;
+
+    for chunk in all_aircraft.chunks(CHUNK_SIZE) {
+        // Serialize this chunk in parallel
+        let json_lines: Vec<String> = chunk
+            .par_iter()
+            .map(|device| {
+                serde_json::to_string(device)
+                    .expect("Failed to serialize Aircraft to JSON — this is a bug")
+            })
+            .collect();
+
+        // Write serialized lines sequentially
+        for json_line in &json_lines {
+            writeln!(writer, "{}", json_line)?;
+            written += 1;
+        }
+
+        if written % PROGRESS_LOG_INTERVAL == 0 {
+            info!("Written {} / {} aircraft", written, total_count);
         }
     }
     writer.flush()?;
