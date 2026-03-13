@@ -960,7 +960,7 @@ sudo cp infrastructure/pgdog-users.toml /etc/pgdog/users.toml
 
 # Set permissions
 sudo chmod 644 /etc/pgdog/pgdog.toml
-sudo chmod 600 /etc/pgdog/users.toml
+sudo chmod 644 /etc/pgdog/users.toml
 
 # Create systemd service for PgDog
 cat > /etc/systemd/system/pgdog.service <<UNIT

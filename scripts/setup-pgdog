@@ -12,9 +12,9 @@ set -euo pipefail
 # What this does:
 # - Downloads PgDog binary from GitHub releases
 # - Creates configuration optimized for SOAR workload
-# - Sets up systemd service
-# - Configures authentication with PostgreSQL
-# - Creates separate pools for production and staging databases
+# - Sets up systemd service (pgdog.service)
+# - Configures trust authentication (localhost only, no passwords)
+# - Creates pool for the environment's database
 
 ENVIRONMENT="${1:-production}"
 
@@ -90,17 +90,23 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
     exit 1
 fi
 
-# Parse DATABASE_URL (format: postgresql://user:password@host:port/database)
-if [[ "$DATABASE_URL" =~ postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+) ]]; then
-    DB_USER="${BASH_REMATCH[1]}"
-    DB_PASSWORD="${BASH_REMATCH[2]}"
-    DB_HOST="${BASH_REMATCH[3]}"
-    DB_PORT="${BASH_REMATCH[4]}"
-    DB_NAME_FROM_URL="${BASH_REMATCH[5]}"
-else
+# Parse DATABASE_URL using Python for robustness
+# Supports both postgres:// and postgresql:// schemes, optional password/port
+read -r DB_USER DB_HOST DB_PORT DB_NAME_FROM_URL < <(
+    python3 -c "
+from urllib.parse import urlparse
+import sys
+url = urlparse('$DATABASE_URL')
+user = url.username or 'soar'
+host = url.hostname or '127.0.0.1'
+port = url.port or 5432
+db = url.path.lstrip('/')
+print(f'{user} {host} {port} {db}')
+" 2>/dev/null
+) || {
     echo "Error: Could not parse DATABASE_URL"
     exit 1
-fi
+}
 
 echo "Database configuration:"
 echo "  Host: $DB_HOST"
@@ -119,7 +125,7 @@ cat > /etc/pgdog/pgdog.toml <<EOF
 [general]
 host = "127.0.0.1"
 port = $PGDOG_PORT
-default_pool_size = 50
+default_pool_size = 100
 min_pool_size = 10
 pooler_mode = "transaction"
 auth_type = "trust"
@@ -145,25 +151,26 @@ EOF
 
 chmod 644 /etc/pgdog/pgdog.toml
 
-# Create users.toml
+# Create users.toml (trust auth — no passwords needed on localhost)
 echo "Creating users.toml authentication file..."
 cat > /etc/pgdog/users.toml <<EOF
 # SOAR PgDog Users - $ENVIRONMENT
 # Generated: $(date)
+# Using trust auth on localhost — passwords are not checked
 
 [[users]]
 name = "$DB_USER"
 database = "$DB_NAME_FROM_URL"
-password = "$DB_PASSWORD"
+password = ""
 EOF
 
-chmod 600 /etc/pgdog/users.toml
+chmod 644 /etc/pgdog/users.toml
 
 # Create systemd service file
 echo "Creating systemd service..."
-cat > /etc/systemd/system/pgdog-$ENVIRONMENT.service <<EOF
+cat > /etc/systemd/system/pgdog.service <<EOF
 [Unit]
-Description=PgDog PostgreSQL Connection Pooler ($ENVIRONMENT)
+Description=PgDog PostgreSQL Connection Pooler
 After=network.target postgresql.service
 Wants=postgresql.service
 
@@ -183,7 +190,7 @@ LimitNOFILE=65536
 # Logging (PgDog logs to stdout/stderr)
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=pgdog-$ENVIRONMENT
+SyslogIdentifier=pgdog
 
 # Security hardening
 NoNewPrivileges=true
@@ -197,16 +204,16 @@ WantedBy=multi-user.target
 EOF
 
 # Enable and start service
-echo "Enabling and starting pgdog-$ENVIRONMENT service..."
+echo "Enabling and starting pgdog service..."
 systemctl daemon-reload
-systemctl enable pgdog-$ENVIRONMENT
-systemctl start pgdog-$ENVIRONMENT
+systemctl enable pgdog
+systemctl start pgdog
 
 # Wait a moment for service to start
 sleep 2
 
 # Check status
-if systemctl is-active --quiet pgdog-$ENVIRONMENT; then
+if systemctl is-active --quiet pgdog; then
     echo
     echo "========================================="
     echo "PgDog installed and running!"
@@ -216,22 +223,22 @@ if systemctl is-active --quiet pgdog-$ENVIRONMENT; then
     echo "  Listen address: 127.0.0.1:$PGDOG_PORT"
     echo "  Database: $DB_NAME_FROM_URL"
     echo "  Pooling mode: transaction"
-    echo "  Pool size: 50 (default)"
+    echo "  Pool size: 100 (default)"
     echo
     echo "To connect via PgDog:"
-    echo "  postgresql://$DB_USER:PASSWORD@localhost:$PGDOG_PORT/$DB_NAME_FROM_URL"
+    echo "  psql -h 127.0.0.1 -p $PGDOG_PORT -U $DB_USER -d $DB_NAME_FROM_URL"
     echo
     echo "Management commands:"
-    echo "  systemctl status pgdog-$ENVIRONMENT"
-    echo "  systemctl restart pgdog-$ENVIRONMENT"
-    echo "  systemctl stop pgdog-$ENVIRONMENT"
-    echo "  journalctl -u pgdog-$ENVIRONMENT -f"
+    echo "  systemctl status pgdog"
+    echo "  systemctl restart pgdog"
+    echo "  systemctl stop pgdog"
+    echo "  journalctl -u pgdog -f"
     echo
     echo "========================================="
     echo "Next steps:"
     echo "========================================="
     echo "1. Update DATABASE_URL in $ENV_FILE to use PgDog:"
-    echo "   DATABASE_URL=postgresql://$DB_USER:PASSWORD@localhost:$PGDOG_PORT/$DB_NAME_FROM_URL"
+    echo "   DATABASE_URL=postgresql://$DB_USER@localhost:$PGDOG_PORT/$DB_NAME_FROM_URL"
     echo
     echo "2. Restart SOAR services to use new connection:"
     echo "   sudo systemctl restart soar-run-$ENVIRONMENT"
@@ -243,6 +250,6 @@ else
     echo "========================================="
     echo
     echo "Check logs:"
-    echo "  journalctl -u pgdog-$ENVIRONMENT -n 50"
+    echo "  journalctl -u pgdog -n 50"
     exit 1
 fi

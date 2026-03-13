@@ -1277,11 +1277,7 @@ for pgdog_file in pgdog.toml pgdog-users.toml; do
             log_info "Installing PgDog configuration: $pgdog_file -> $INSTALL_NAME"
             sudo mkdir -p /etc/pgdog
             sudo cp "$DEPLOY_DIR/$pgdog_file" "/etc/pgdog/$INSTALL_NAME"
-            if [ "$INSTALL_NAME" = "users.toml" ]; then
-                sudo chmod 600 "/etc/pgdog/$INSTALL_NAME"
-            else
-                sudo chmod 644 "/etc/pgdog/$INSTALL_NAME"
-            fi
+            sudo chmod 644 "/etc/pgdog/$INSTALL_NAME"
             PGDOG_CHANGED=true
         else
             log_info "PgDog configuration unchanged: $pgdog_file"

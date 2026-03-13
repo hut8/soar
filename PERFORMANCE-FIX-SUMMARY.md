@@ -30,8 +30,8 @@ During high traffic periods, the PacketRouter internal queue was filling up (100
 - **File**: `scripts/setup-pgdog`
 - **Features**:
   - Transaction-level pooling mode
-  - 50 default pool size, 10 min pool, multi-threaded (4 workers)
-  - Separate systemd service per environment
+  - 100 default pool size, 10 min pool, multi-threaded (4 workers)
+  - Single `pgdog.service` systemd unit
   - Auto-configuration from `/etc/soar/env`
   - Production port: 6432, Staging port: 6433
 
