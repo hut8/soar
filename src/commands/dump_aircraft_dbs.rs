@@ -192,22 +192,25 @@ async fn fetch_adsb_exchange(
     let json_content = match source_path {
         Some(local_path) => {
             info!("Using local ADS-B Exchange database from: {}", local_path);
-            if !std::path::Path::new(&local_path).exists() {
-                return Err(anyhow::anyhow!(
-                    "Local ADS-B Exchange file does not exist: {}",
-                    local_path
-                ));
-            }
-            // Check if it's gzipped
-            if local_path.ends_with(".gz") {
-                let file = File::open(&local_path)?;
-                let mut decoder = GzDecoder::new(file);
-                let mut content = String::new();
-                decoder.read_to_string(&mut content)?;
-                content
-            } else {
-                std::fs::read_to_string(&local_path)?
-            }
+            tokio::task::spawn_blocking(move || -> Result<String> {
+                if !std::path::Path::new(&local_path).exists() {
+                    return Err(anyhow::anyhow!(
+                        "Local ADS-B Exchange file does not exist: {}",
+                        local_path
+                    ));
+                }
+                // Check if it's gzipped
+                if local_path.ends_with(".gz") {
+                    let file = File::open(&local_path)?;
+                    let mut decoder = GzDecoder::new(file);
+                    let mut content = String::new();
+                    decoder.read_to_string(&mut content)?;
+                    Ok(content)
+                } else {
+                    Ok(std::fs::read_to_string(&local_path)?)
+                }
+            })
+            .await??
         }
         None => {
             info!(
@@ -230,18 +233,18 @@ async fn fetch_adsb_exchange(
                 bytes.len()
             );
 
-            // Save compressed file temporarily
+            // Decompress in a blocking task to avoid blocking the tokio runtime
             let gz_path = format!("{}.tmp.json.gz", output_path);
-            std::fs::write(&gz_path, &bytes)?;
-
-            // Decompress
-            let file = File::open(&gz_path)?;
-            let mut decoder = GzDecoder::new(file);
-            let mut content = String::new();
-            decoder.read_to_string(&mut content)?;
-
-            // Clean up compressed file
-            std::fs::remove_file(&gz_path)?;
+            let content = tokio::task::spawn_blocking(move || -> Result<String> {
+                std::fs::write(&gz_path, &bytes)?;
+                let file = File::open(&gz_path)?;
+                let mut decoder = GzDecoder::new(file);
+                let mut content = String::new();
+                decoder.read_to_string(&mut content)?;
+                std::fs::remove_file(&gz_path)?;
+                Ok(content)
+            })
+            .await??;
 
             info!(
                 "Decompressed ADS-B Exchange database ({} bytes)",
@@ -262,7 +265,8 @@ async fn fetch_adsb_exchange(
     // Each line is parsed and converted in parallel, filtering invalid records directly
     let aircraft: Vec<Aircraft> = lines
         .par_iter()
-        .filter_map(|line| {
+        .enumerate()
+        .filter_map(|(line_num, line)| {
             let line = line.trim();
             if line.is_empty() {
                 return None;
@@ -270,7 +274,11 @@ async fn fetch_adsb_exchange(
             match serde_json::from_str::<AdsbExchangeRecord>(line) {
                 Ok(record) => adsb_record_to_aircraft(&record),
                 Err(e) => {
-                    debug!("Failed to parse line from ADS-B Exchange: {}", e);
+                    debug!(
+                        "Failed to parse line {} from ADS-B Exchange: {}",
+                        line_num + 1,
+                        e
+                    );
                     None
                 }
             }
@@ -320,18 +328,24 @@ async fn fetch_flarmnet(source_path: Option<String>, output_path: &str) -> Resul
                 content.len()
             );
 
-            // Save to temporary file for parsing
+            // Save to temporary file for parsing (blocking I/O)
             let temp_path = format!("{}.tmp.fln", output_path);
-            std::fs::write(&temp_path, &content)?;
+            let tp = temp_path.clone();
+            tokio::task::spawn_blocking(move || std::fs::write(&tp, &content))
+                .await?
+                .context("Failed to write FlarmNet temp file")?;
             info!("Saved to temporary file: {}", temp_path);
 
             (temp_path, true)
         }
     };
 
-    // Parse the FlarmNet file
+    // Parse the FlarmNet file in a blocking task (file I/O + rayon parallel parsing)
     info!("Parsing unified FlarmNet database...");
-    let devices = read_flarmnet_file(&temp_path)?;
+    let tp = temp_path.clone();
+    let devices = tokio::task::spawn_blocking(move || read_flarmnet_file(&tp))
+        .await?
+        .context("Failed to parse FlarmNet database")?;
     info!(
         "Successfully parsed {} devices from FlarmNet",
         devices.len()
@@ -339,7 +353,10 @@ async fn fetch_flarmnet(source_path: Option<String>, output_path: &str) -> Resul
 
     // Clean up temp file only if we downloaded it
     if cleanup_temp {
-        std::fs::remove_file(&temp_path)?;
+        let tp = temp_path;
+        tokio::task::spawn_blocking(move || std::fs::remove_file(&tp))
+            .await?
+            .context("Failed to remove FlarmNet temp file")?;
     }
 
     Ok(devices)
@@ -373,32 +390,30 @@ pub async fn handle_dump_aircraft_dbs(
     let output_file = File::create(&output_path)?;
     let mut writer = BufWriter::new(output_file);
 
-    let all_aircraft: Vec<&Aircraft> = flarmnet_aircraft
-        .iter()
-        .chain(adsb_aircraft.iter())
-        .collect();
-
     const CHUNK_SIZE: usize = 10000;
     let mut written = 0;
 
-    for chunk in all_aircraft.chunks(CHUNK_SIZE) {
-        // Serialize this chunk in parallel
-        let json_lines: Vec<String> = chunk
-            .par_iter()
-            .map(|device| {
-                serde_json::to_string(device)
-                    .expect("Failed to serialize Aircraft to JSON — this is a bug")
-            })
-            .collect();
+    // Write each source directly in chunks, avoiding an extra Vec<&Aircraft> allocation
+    for source in [&flarmnet_aircraft, &adsb_aircraft] {
+        for chunk in source.chunks(CHUNK_SIZE) {
+            // Serialize this chunk in parallel
+            let json_lines: Vec<String> = chunk
+                .par_iter()
+                .map(|device| {
+                    serde_json::to_string(device)
+                        .expect("Failed to serialize Aircraft to JSON — this is a bug")
+                })
+                .collect();
 
-        // Write serialized lines sequentially
-        for json_line in &json_lines {
-            writeln!(writer, "{}", json_line)?;
-            written += 1;
-        }
+            // Write serialized lines sequentially
+            for json_line in &json_lines {
+                writeln!(writer, "{}", json_line)?;
+                written += 1;
+            }
 
-        if written % PROGRESS_LOG_INTERVAL == 0 {
-            info!("Written {} / {} aircraft", written, total_count);
+            if written % PROGRESS_LOG_INTERVAL == 0 {
+                info!("Written {} / {} aircraft", written, total_count);
+            }
         }
     }
     writer.flush()?;
