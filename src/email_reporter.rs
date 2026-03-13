@@ -6,6 +6,15 @@ use lettre::{Message, SmtpTransport, Transport};
 use std::time::Duration;
 use tracing::{info, warn};
 
+/// Escape HTML special characters to prevent injection in email bodies.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 /// Get the environment name for display purposes
 /// Returns "Production", "Staging", or "Development"
 fn get_environment_name() -> String {
@@ -343,7 +352,7 @@ impl DataLoadReport {
             if !merge.errors.is_empty() {
                 html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
                 for err in &merge.errors {
-                    html.push_str(&format!("<li>{}</li>", err));
+                    html.push_str(&format!("<li>{}</li>", html_escape(err)));
                 }
                 html.push_str("</ul></div>");
             }
@@ -375,7 +384,7 @@ impl DataLoadReport {
             if !merge.errors.is_empty() {
                 html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
                 for err in &merge.errors {
-                    html.push_str(&format!("<li>{}</li>", err));
+                    html.push_str(&format!("<li>{}</li>", html_escape(err)));
                 }
                 html.push_str("</ul></div>");
             }

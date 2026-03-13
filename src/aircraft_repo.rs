@@ -497,12 +497,12 @@ impl AircraftRepository {
 
             // Cross-merge FLARM↔OGN: the same 24-bit hardware ID may be classified as
             // FLARM by the OGN DDB but self-reported as OGN Tracker in live packets.
-            // Check the sibling column before creating a duplicate.
-            if matches!(address_type, AddressType::Flarm | AddressType::Ogn)
-                && let Some(model) =
-                    Self::merge_by_flarm_ogn_address(address, address_type, &mut conn)?
-            {
-                return Ok(model);
+            // Check the sibling column and set the address on the existing record.
+            // Don't return early — fall through to the INSERT ON CONFLICT path below
+            // so that packet-derived metadata (category, model, tracker type, etc.)
+            // is applied to the merged record via the normal DO UPDATE clause.
+            if matches!(address_type, AddressType::Flarm | AddressType::Ogn) {
+                let _ = Self::merge_by_flarm_ogn_address(address, address_type, &mut conn)?;
             }
 
             // If we have a registration, try to merge into an existing aircraft that
@@ -1172,7 +1172,9 @@ impl AircraftRepository {
                 .get()
                 .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
-            // Phase 1: Find duplicate pairs.
+            // Phase 1: Find duplicate pairs using bulk lookups (2 queries per
+            // direction instead of N+1).
+            //
             // An OGN-only record (ogn_address set, flarm_address NULL) is a duplicate if
             // another aircraft has flarm_address equal to the ogn_address value.
             let ogn_only_addrs: Vec<(Uuid, Option<i32>)> = aircraft::table
@@ -1181,9 +1183,25 @@ impl AircraftRepository {
                 .select((aircraft::id, aircraft::ogn_address))
                 .load(&mut conn)?;
 
+            // Collect OGN addresses for bulk lookup
+            let ogn_addr_values: Vec<i32> = ogn_only_addrs.iter().filter_map(|(_, a)| *a).collect();
+
+            // Bulk-fetch all FLARM records whose flarm_address matches any OGN address
+            let matching_flarm: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::flarm_address.eq_any(&ogn_addr_values))
+                .select((aircraft::id, aircraft::flarm_address))
+                .load(&mut conn)?;
+
+            // Build a HashMap for O(1) lookups: flarm_address → aircraft id
+            let flarm_by_addr: std::collections::HashMap<i32, Uuid> = matching_flarm
+                .into_iter()
+                .filter_map(|(id, addr)| addr.map(|a| (a, id)))
+                .collect();
+
             info!(
-                "Checking {} OGN-only aircraft for FLARM duplicates",
-                ogn_only_addrs.len()
+                "Checking {} OGN-only aircraft against {} FLARM matches",
+                ogn_only_addrs.len(),
+                flarm_by_addr.len()
             );
 
             let mut pairs: Vec<(Uuid, Uuid)> = Vec::new();
@@ -1194,12 +1212,8 @@ impl AircraftRepository {
                     Some(a) => *a,
                     None => continue,
                 };
-                if let Some(match_id) = aircraft::table
-                    .filter(aircraft::flarm_address.eq(addr))
-                    .filter(aircraft::id.ne(*candidate_id))
-                    .select(aircraft::id)
-                    .first::<Uuid>(&mut conn)
-                    .optional()?
+                if let Some(&match_id) = flarm_by_addr.get(&addr)
+                    && match_id != *candidate_id
                     && seen.insert(*candidate_id)
                 {
                     seen.insert(match_id);
@@ -1214,9 +1228,23 @@ impl AircraftRepository {
                 .select((aircraft::id, aircraft::flarm_address))
                 .load(&mut conn)?;
 
+            let flarm_addr_values: Vec<i32> =
+                flarm_only_addrs.iter().filter_map(|(_, a)| *a).collect();
+
+            let matching_ogn: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::ogn_address.eq_any(&flarm_addr_values))
+                .select((aircraft::id, aircraft::ogn_address))
+                .load(&mut conn)?;
+
+            let ogn_by_addr: std::collections::HashMap<i32, Uuid> = matching_ogn
+                .into_iter()
+                .filter_map(|(id, addr)| addr.map(|a| (a, id)))
+                .collect();
+
             info!(
-                "Checking {} FLARM-only aircraft for OGN duplicates",
-                flarm_only_addrs.len()
+                "Checking {} FLARM-only aircraft against {} OGN matches",
+                flarm_only_addrs.len(),
+                ogn_by_addr.len()
             );
 
             for (candidate_id, flarm_addr_opt) in &flarm_only_addrs {
@@ -1227,12 +1255,8 @@ impl AircraftRepository {
                     Some(a) => *a,
                     None => continue,
                 };
-                if let Some(match_id) = aircraft::table
-                    .filter(aircraft::ogn_address.eq(addr))
-                    .filter(aircraft::id.ne(*candidate_id))
-                    .select(aircraft::id)
-                    .first::<Uuid>(&mut conn)
-                    .optional()?
+                if let Some(&match_id) = ogn_by_addr.get(&addr)
+                    && match_id != *candidate_id
                     && !seen.contains(&match_id)
                 {
                     seen.insert(*candidate_id);
