@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
 	import { Plane, Antenna, Check, Activity, Map, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import {
@@ -15,15 +16,24 @@
 	// Consider the aircraft actively flying only if we received a fix within the last 10 minutes
 	// (matches the backend's threshold for Active vs Stale flight state)
 	const STALE_THRESHOLD_MS = 10 * 60 * 1000;
+	let now = $state(Date.now());
+	let timer: ReturnType<typeof setInterval> | null = null;
+
+	onMount(() => {
+		timer = setInterval(() => (now = Date.now()), 60_000);
+	});
+
+	onDestroy(() => {
+		if (timer) clearInterval(timer);
+	});
+
 	let isRecentlyActive = $derived(
-		aircraft.lastFixAt
-			? Date.now() - new Date(aircraft.lastFixAt).getTime() < STALE_THRESHOLD_MS
-			: false
+		aircraft.lastFixAt ? now - new Date(aircraft.lastFixAt).getTime() <= STALE_THRESHOLD_MS : false
 	);
 
 	// Build the live map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		isRecentlyActive && aircraft.latitude && aircraft.longitude
+		isRecentlyActive && aircraft.latitude != null && aircraft.longitude != null
 			? `/live?lat=${aircraft.latitude}&lng=${aircraft.longitude}&zoom=13`
 			: null
 	);
