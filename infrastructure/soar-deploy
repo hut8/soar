@@ -6,7 +6,7 @@
 # It must be installed at /usr/local/bin/soar-deploy with permissions 755.
 #
 # Usage:
-#   sudo /usr/local/bin/soar-deploy [production|staging|radar] /tmp/soar/deploy/YYYYMMDDHHMMSS
+#   sudo /usr/local/bin/soar-deploy [production|staging|radar-staging|radar-production] /tmp/soar/deploy/YYYYMMDDHHMMSS
 #   sudo /usr/local/bin/soar-deploy /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)
 #
 # The deployment directory should contain:
@@ -58,14 +58,15 @@ elif [ $# -eq 1 ]; then
     ENVIRONMENT="production"
     DEPLOY_DIR="$1"
 else
-    log_error "Usage: $0 [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS"
+    log_error "Usage: $0 [production|staging|radar-staging|radar-production] /tmp/soar/deploy/YYYYMMDDHHMMSS"
     log_error "   or: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)"
     exit 1
 fi
 
 # Validate environment
-if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "radar" ]; then
-    log_error "Invalid environment: $ENVIRONMENT (must be 'production', 'staging', or 'radar')"
+VALID_ENVS="production staging radar-staging radar-production"
+if ! echo "$VALID_ENVS" | grep -qw "$ENVIRONMENT"; then
+    log_error "Invalid environment: $ENVIRONMENT (must be one of: $VALID_ENVS)"
     exit 1
 fi
 
@@ -130,13 +131,21 @@ else
 fi
 
 # Set environment-specific variables
-if [ "$ENVIRONMENT" = "radar" ]; then
-    # Radar is a lightweight deployment: single ingest service, no migrations,
-    # no observability stack, no Grafana. It runs on a dedicated ADS-B receiver host.
+if [ "$ENVIRONMENT" = "radar-staging" ]; then
+    # Radar staging: lightweight deployment of the staging ingest service only.
+    # Runs on a dedicated ADS-B receiver host, sends data to supervillain.
+    SERVICE_SUFFIX=""
+    ENV_FILE="/etc/soar/env"
+    BINARY_PATH="/usr/local/bin/soar-staging"
+    BACKUP_DIR="/home/soar/backups/radar-staging"
+    TARGET_FILE=""
+elif [ "$ENVIRONMENT" = "radar-production" ]; then
+    # Radar production: lightweight deployment of the production ingest service only.
+    # Runs on a dedicated ADS-B receiver host, sends data to tenerife.
     SERVICE_SUFFIX=""
     ENV_FILE="/etc/soar/env"
     BINARY_PATH="/usr/local/bin/soar"
-    BACKUP_DIR="/home/soar/backups/radar"
+    BACKUP_DIR="/home/soar/backups/radar-production"
     TARGET_FILE=""
 elif [ "$ENVIRONMENT" = "staging" ]; then
     SERVICE_SUFFIX="-staging"
@@ -262,9 +271,20 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
-# Radar deployment: lightweight path (binary + dual ingest services)
-if [ "$ENVIRONMENT" = "radar" ]; then
-    log_info "Radar deployment: installing configs and services..."
+# Radar deployment: lightweight path (binary + single ingest service per environment)
+# radar-staging deploys the staging binary and service only
+# radar-production deploys the production binary and service only
+if [ "$ENVIRONMENT" = "radar-staging" ] || [ "$ENVIRONMENT" = "radar-production" ]; then
+    # Determine which service this deployment targets
+    if [ "$ENVIRONMENT" = "radar-staging" ]; then
+        RADAR_ENV_SUFFIX="staging"
+    else
+        RADAR_ENV_SUFFIX="production"
+    fi
+    SERVICE="soar-ingest-radar-${RADAR_ENV_SUFFIX}.service"
+    CONFIG_FILE="ingest-radar-${RADAR_ENV_SUFFIX}.toml"
+
+    log_info "Radar $RADAR_ENV_SUFFIX deployment: installing binary, config, and service..."
 
     mkdir -p /etc/soar
 
@@ -283,58 +303,47 @@ if [ "$ENVIRONMENT" = "radar" ]; then
         rm -f /etc/soar/ingest-radar.toml
     fi
 
-    # Install ingest configs (staging + production)
-    for ENV_SUFFIX in staging production; do
-        CONFIG_FILE="ingest-radar-${ENV_SUFFIX}.toml"
-        if [ -f "$DEPLOY_DIR/$CONFIG_FILE" ]; then
-            log_info "Installing $CONFIG_FILE to /etc/soar/..."
-            cp "$DEPLOY_DIR/$CONFIG_FILE" "/etc/soar/$CONFIG_FILE"
-            chmod 644 "/etc/soar/$CONFIG_FILE"
-        else
-            log_warn "$CONFIG_FILE not found in deployment directory"
-        fi
-    done
+    # Install ingest config
+    if [ -f "$DEPLOY_DIR/$CONFIG_FILE" ]; then
+        log_info "Installing $CONFIG_FILE to /etc/soar/..."
+        cp "$DEPLOY_DIR/$CONFIG_FILE" "/etc/soar/$CONFIG_FILE"
+        chmod 644 "/etc/soar/$CONFIG_FILE"
+    else
+        log_warn "$CONFIG_FILE not found in deployment directory"
+    fi
 
-    # Install systemd services (staging + production)
-    for ENV_SUFFIX in staging production; do
-        SERVICE_FILE="soar-ingest-radar-${ENV_SUFFIX}.service"
-        if [ -f "$DEPLOY_DIR/$SERVICE_FILE" ]; then
-            log_info "Installing $SERVICE_FILE..."
-            cp "$DEPLOY_DIR/$SERVICE_FILE" /etc/systemd/system/
-            chmod 644 "/etc/systemd/system/$SERVICE_FILE"
-        else
-            log_warn "$SERVICE_FILE not found in deployment directory"
-        fi
-    done
+    # Install systemd service
+    SERVICE_FILE="$SERVICE"
+    if [ -f "$DEPLOY_DIR/$SERVICE_FILE" ]; then
+        log_info "Installing $SERVICE_FILE..."
+        cp "$DEPLOY_DIR/$SERVICE_FILE" /etc/systemd/system/
+        chmod 644 "/etc/systemd/system/$SERVICE_FILE"
+    else
+        log_warn "$SERVICE_FILE not found in deployment directory"
+    fi
 
-    # Reload systemd and restart services
+    # Reload systemd and restart the service
     log_info "Reloading systemd daemon..."
     systemctl daemon-reload
 
-    for ENV_SUFFIX in staging production; do
-        SERVICE="soar-ingest-radar-${ENV_SUFFIX}.service"
-        log_info "Enabling and restarting $SERVICE..."
-        systemctl enable "$SERVICE" || log_warn "Failed to enable $SERVICE"
-        systemctl restart "$SERVICE" || log_warn "Failed to restart $SERVICE"
-    done
+    log_info "Enabling and restarting $SERVICE..."
+    systemctl enable "$SERVICE" || log_warn "Failed to enable $SERVICE"
+    systemctl restart "$SERVICE" || log_warn "Failed to restart $SERVICE"
 
-    # Wait for services to start
+    # Wait for service to start
     sleep 3
 
-    # Verify services are running
-    for ENV_SUFFIX in staging production; do
-        SERVICE="soar-ingest-radar-${ENV_SUFFIX}.service"
-        if systemctl is-active --quiet "$SERVICE"; then
-            log_info "$SERVICE: ${GREEN}ACTIVE${NC}"
-        else
-            log_error "$SERVICE: ${RED}FAILED${NC}"
-            journalctl -u "$SERVICE" --no-pager --lines=10 || true
-            ALL_HEALTHY=false
-        fi
-    done
+    # Verify service is running
+    if systemctl is-active --quiet "$SERVICE"; then
+        log_info "$SERVICE: ${GREEN}ACTIVE${NC}"
+    else
+        log_error "$SERVICE: ${RED}FAILED${NC}"
+        journalctl -u "$SERVICE" --no-pager --lines=10 || true
+        ALL_HEALTHY=false
+    fi
 
     # Show version
-    soar --version || log_warn "(version check failed)"
+    "$BINARY_PATH" --version || log_warn "(version check failed)"
 
     # Clean up old deployment directories (keep last 3)
     log_info "Cleaning up old deployment directories (keeping last 3)..."
@@ -346,11 +355,11 @@ if [ "$ENVIRONMENT" = "radar" ]; then
     ls -t "$DEPLOY_STATUS_DIR"/*.status 2>/dev/null | tail -n +11 | xargs rm -f || true
 
     if [ "${ALL_HEALTHY:-true}" != "true" ]; then
-        log_error "${RED}Radar deployment completed with errors. Service failed to start.${NC}"
+        log_error "${RED}Radar $RADAR_ENV_SUFFIX deployment completed with errors. Service failed to start.${NC}"
         exit 1
     fi
 
-    log_info "${GREEN}Radar deployment completed successfully!${NC}"
+    log_info "${GREEN}Radar $RADAR_ENV_SUFFIX deployment completed successfully!${NC}"
     exit 0
 fi
 
@@ -1228,12 +1237,34 @@ if [ -f "$DEPLOY_DIR/alloy-config.alloy.template" ]; then
         STRIP_ENV="staging"
     fi
 
+    # Resolve Tailscale IP for remote OTLP receiver
+    TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "")
+    if [ -n "$TAILSCALE_IP" ]; then
+        log_info "Tailscale IP detected: $TAILSCALE_IP - enabling remote OTLP receiver"
+    else
+        log_warn "Tailscale not available - OTLP receiver will only accept localhost connections"
+    fi
+
     # Process template: replace placeholders and strip blocks for the other environment.
     # Lines between "// BEGIN:<other-env>" and "// END:<other-env>" (inclusive) are removed.
-    sed -e "s|{{GIT_COMMIT}}|$GIT_COMMIT|g" \
-        -e "/^\/\/ BEGIN:${STRIP_ENV}$/,/^\/\/ END:${STRIP_ENV}$/d" \
-        -e "/^\/\/ BEGIN:${ENVIRONMENT}$/d" \
-        -e "/^\/\/ END:${ENVIRONMENT}$/d" \
+    SED_ARGS=(
+        -e "s|{{GIT_COMMIT}}|$GIT_COMMIT|g"
+        -e "/^\/\/ BEGIN:${STRIP_ENV}$/,/^\/\/ END:${STRIP_ENV}$/d"
+        -e "/^\/\/ BEGIN:${ENVIRONMENT}$/d"
+        -e "/^\/\/ END:${ENVIRONMENT}$/d"
+    )
+
+    if [ -n "$TAILSCALE_IP" ]; then
+        SED_ARGS+=(
+            -e "s|{{TAILSCALE_IP}}|$TAILSCALE_IP|g"
+            -e "/^\/\/ BEGIN:tailscale$/d"
+            -e "/^\/\/ END:tailscale$/d"
+        )
+    else
+        SED_ARGS+=(-e "/^\/\/ BEGIN:tailscale$/,/^\/\/ END:tailscale$/d")
+    fi
+
+    sed "${SED_ARGS[@]}" \
         "$DEPLOY_DIR/alloy-config.alloy.template" \
         > /etc/alloy/config.alloy
     log_info "Stripped $STRIP_ENV-only blocks, kept $ENVIRONMENT blocks"

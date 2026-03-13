@@ -21,6 +21,23 @@ otelcol.receiver.otlp "ingest" {
   }
 }
 
+// BEGIN:tailscale
+// Receive OTLP from remote services via Tailscale (e.g., radar ingest)
+otelcol.receiver.otlp "tailscale" {
+  grpc {
+    endpoint = "{{TAILSCALE_IP}}:4317"
+  }
+  http {
+    endpoint = "{{TAILSCALE_IP}}:4318"
+  }
+
+  output {
+    logs   = [otelcol.processor.batch.pipeline.input]
+    traces = [otelcol.processor.batch.pipeline.input]
+  }
+}
+// END:tailscale
+
 // Batch for efficiency
 otelcol.processor.batch "pipeline" {
   output {
