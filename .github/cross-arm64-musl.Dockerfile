@@ -3,7 +3,7 @@
 # Based on the official cross-rs image for this target.
 #
 # Build and publish via: .github/workflows/build-cross-arm64-image.yml
-# Used by Cross.toml: [target.aarch64-unknown-linux-musl] image = "ghcr.io/hut8/cross-arm64-musl:latest"
+# Referenced by Cross.toml in PR #1216: [target.aarch64-unknown-linux-musl] image = "..."
 
 FROM ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5
 

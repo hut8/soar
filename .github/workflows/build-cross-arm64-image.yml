@@ -45,15 +45,17 @@ jobs:
             type=sha,prefix=
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: .github
           file: .github/cross-arm64-musl.Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Output image digest
+      - name: Output image info
         run: |
           echo "Image pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Digest: ${{ steps.build.outputs.digest }}"
