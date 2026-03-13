@@ -12,12 +12,14 @@ User=soar
 Group=soar
 WorkingDirectory=/var/lib/soar
 SyslogIdentifier=soar-ingest-radar-staging
-ExecStart=/usr/local/bin/soar ingest --config /etc/soar/ingest-radar-staging.toml
+ExecStart=/usr/local/bin/soar-staging ingest --config /etc/soar/ingest-radar-staging.toml
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
 EnvironmentFile=/etc/soar/env
 Environment=METRICS_PORT=9197
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://supervillain:4318
+Environment=SOAR_ENV=staging
 
 # Security settings
 NoNewPrivileges=yes

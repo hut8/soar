@@ -869,12 +869,12 @@ jobs:
           ls -lh target/aarch64-unknown-linux-musl/release/soar
           file target/aarch64-unknown-linux-musl/release/soar
 
-  deploy-radar:
-    name: Deploy to Radar
+  deploy-radar-staging:
+    name: Deploy Radar (Staging)
     runs-on: ubuntu-latest
     needs: [build-release-arm64]
-    # Deploy to radar on main push (like staging) and on release (like production)
-    if: github.ref == 'refs/heads/main' || (github.event_name == 'release' && github.event.action == 'published')
+    # Deploy staging binary to radar on main push (same trigger as deploy-staging)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -907,8 +907,114 @@ jobs:
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
           cp infrastructure/ingest-radar-staging.toml deploy-pkg/
-          cp infrastructure/ingest-radar-production.toml deploy-pkg/
           cp infrastructure/systemd/soar-ingest-radar-staging.service deploy-pkg/
+
+          echo "Deployment package prepared for timestamp: $TIMESTAMP"
+          ls -lh deploy-pkg/
+
+      - name: Upload deployment package
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+          echo "Creating deployment directory on radar: $DEPLOY_DIR"
+          ssh soar@radar.hut8.tools "mkdir -p $DEPLOY_DIR"
+
+          echo "Uploading deployment package..."
+          rsync -az --info=progress2 deploy-pkg/ soar@radar.hut8.tools:$DEPLOY_DIR/
+
+          echo "Deployment package uploaded successfully"
+
+      - name: Execute deployment to radar
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+          DEPLOY_ID="radar-staging-${{ env.DEPLOY_TIMESTAMP }}"
+          LOG_FILE="/var/lib/soar/deploy/logs/${DEPLOY_ID}.log"
+          STATUS_FILE="/var/lib/soar/deploy/status/${DEPLOY_ID}.status"
+
+          echo "Executing deployment script for radar-staging..."
+          echo "Deployment ID: $DEPLOY_ID"
+
+          ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar-staging $DEPLOY_DIR &"
+
+          sleep 3
+
+          echo "Deployment started in background, polling for completion..."
+
+          MAX_WAIT=300
+          ELAPSED=0
+          POLL_INTERVAL=5
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            if ssh soar@radar.hut8.tools "test -f $STATUS_FILE" 2>/dev/null; then
+              echo "Deployment completed, fetching results..."
+
+              EXIT_CODE=$(ssh soar@radar.hut8.tools "cat $STATUS_FILE")
+              echo "Deployment exit code: $EXIT_CODE"
+
+              echo ""
+              echo "=== Deployment Log ==="
+              ssh soar@radar.hut8.tools "cat $LOG_FILE" || echo "(Failed to retrieve log)"
+              echo "=== End Deployment Log ==="
+              echo ""
+
+              exit $EXIT_CODE
+            fi
+
+            if [ $((ELAPSED % 30)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
+              echo "Still waiting for deployment... (${ELAPSED}s elapsed)"
+              ssh soar@radar.hut8.tools "tail -5 $LOG_FILE 2>/dev/null" || true
+            fi
+
+            sleep $POLL_INTERVAL
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          echo "Deployment timed out after ${MAX_WAIT} seconds"
+          exit 1
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+
+  deploy-radar-production:
+    name: Deploy Radar (Production)
+    runs-on: ubuntu-latest
+    needs: [build-release-arm64]
+    # Deploy production binary to radar on release (same trigger as deploy-production)
+    if: github.event_name == 'release' && github.event.action == 'published'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download ARM64 release binary
+        uses: actions/download-artifact@v8
+        with:
+          name: soar-linux-arm64
+          path: ./
+
+      - name: Extract binary
+        run: |
+          tar -xzf soar-linux-arm64.tar.gz
+          chmod +x soar
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.RADAR_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H radar.hut8.tools >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment package
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
+          mkdir -p deploy-pkg
+          cp soar deploy-pkg/
+          cp infrastructure/soar-deploy deploy-pkg/
+          cp infrastructure/ingest-radar-production.toml deploy-pkg/
           cp infrastructure/systemd/soar-ingest-radar-production.service deploy-pkg/
 
           echo "Deployment package prepared for timestamp: $TIMESTAMP"
@@ -929,14 +1035,14 @@ jobs:
       - name: Execute deployment to radar
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
-          DEPLOY_ID="radar-${{ env.DEPLOY_TIMESTAMP }}"
+          DEPLOY_ID="radar-production-${{ env.DEPLOY_TIMESTAMP }}"
           LOG_FILE="/var/lib/soar/deploy/logs/${DEPLOY_ID}.log"
           STATUS_FILE="/var/lib/soar/deploy/status/${DEPLOY_ID}.status"
 
-          echo "Executing deployment script for radar..."
+          echo "Executing deployment script for radar-production..."
           echo "Deployment ID: $DEPLOY_ID"
 
-          ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar $DEPLOY_DIR &"
+          ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar-production $DEPLOY_DIR &"
 
           sleep 3
 

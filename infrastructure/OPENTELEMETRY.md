@@ -11,17 +11,23 @@ SOAR uses OpenTelemetry for distributed tracing and observability, with traces e
 ## Architecture
 
 ```
-┌─────────────┐   OTLP/HTTP        ┌─────────────┐
-│ SOAR        │────────────────────>│ Tempo       │
-│ (Rust app)  │   port 4318        │ (Traces)    │
-└─────────────┘   HTTP/protobuf    └─────────────┘
-       │                                   │
-       │                                   │
-       │         Prometheus                │
-       └────────────────────>┌─────────────▼────────┐
-              port 9090      │ Grafana              │
-                             │ (Visualization)      │
-                             └──────────────────────┘
+                            ┌─────────────┐
+                            │ Tempo       │
+                            │ (Traces)    │
+                            └──────▲──────┘
+                                   │
+┌─────────────┐   OTLP/HTTP  ┌────┴────────┐
+│ SOAR        │──────────────>│ Alloy       │───> Loki (Logs)
+│ (local)     │  localhost    │ (Pipeline)  │
+└─────────────┘   :4318      └──────▲──────┘
+                                    │
+┌─────────────┐   OTLP/HTTP        │
+│ SOAR        │─────────────────────┘
+│ (radar)     │  Tailscale IP:4318
+└─────────────┘
+
+       SOAR ──── Prometheus ──── Grafana
+              port 9090      (Visualization)
 ```
 
 ### Components
@@ -411,12 +417,39 @@ curl -G http://localhost:3200/api/search \
 curl http://localhost:3200/api/traces/<trace-id>
 ```
 
+## Remote Service OTLP Export (Radar)
+
+The radar host runs two ingest services (`soar-ingest-radar-staging` and `soar-ingest-radar-production`) that export OTLP telemetry to their respective servers over Tailscale.
+
+### How It Works
+
+The radar host has no local observability stack. Instead, each service's systemd unit sets a per-service `OTEL_EXPORTER_OTLP_ENDPOINT` that overrides the default from `/etc/soar/env`:
+
+| Service | Target Server | Endpoint |
+|---------|--------------|----------|
+| `soar-ingest-radar-staging` | supervillain | `http://supervillain:4318` |
+| `soar-ingest-radar-production` | tenerife | `http://tenerife:4318` |
+
+Each service also sets `SOAR_ENV` to ensure the correct trace sampling rate (staging=10%, production=1%).
+
+### Alloy Tailscale Receiver
+
+Alloy on supervillain and tenerife listens for OTLP on both localhost (for local services) and the Tailscale IP (for remote services like radar):
+
+- `otelcol.receiver.otlp "ingest"` - binds to `127.0.0.1:4317`/`4318` (local)
+- `otelcol.receiver.otlp "tailscale"` - binds to `<tailscale-ip>:4317`/`4318` (remote)
+
+Both receivers feed into the same batch processor pipeline. The Tailscale receiver is conditionally included by `soar-deploy` - if `tailscale ip -4` fails, the block is stripped from the config.
+
+Tailscale provides mutual authentication via WireGuard, so no additional TLS configuration is needed.
+
 ## Security Considerations
 
 ### Network Exposure
 
 - **Tempo**: Bind OTLP receivers to localhost or internal network only
 - **Loki**: Same as Tempo
+- **Alloy**: OTLP receivers bound to localhost and Tailscale IP only (not public interfaces)
 - **Grafana**: Use authentication and HTTPS for public access
 
 ### Sensitive Data in Traces
