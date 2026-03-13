@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use rayon::prelude::*;
 use serde::Deserialize;
+use std::cell::RefCell;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use tracing::{debug, info};
 
 use soar::aircraft::read_flarmnet_file;
@@ -70,13 +72,19 @@ fn parse_icao_address(icao_hex: &str) -> Result<(u32, AddressType)> {
     Ok((address, address_type))
 }
 
-/// Canonicalize registration using flydent
+// Thread-local parser for flydent - one per thread, reused across all records
+thread_local! {
+    static FLYDENT_PARSER: RefCell<flydent::Parser> = RefCell::new(flydent::Parser::new());
+}
+
+/// Canonicalize registration using flydent (uses thread-local parser)
 fn canonicalize_registration(registration: &str) -> String {
-    let parser = flydent::Parser::new();
-    match parser.parse(registration, false, false) {
-        Some(r) => r.canonical_callsign().to_string(),
-        None => registration.to_string(),
-    }
+    FLYDENT_PARSER.with(
+        |parser| match parser.borrow().parse(registration, false, false) {
+            Some(r) => r.canonical_callsign().to_string(),
+            None => registration.to_string(),
+        },
+    )
 }
 
 /// Build aircraft model string from manufacturer and model
@@ -243,41 +251,39 @@ async fn fetch_adsb_exchange(
         }
     };
 
-    // Parse NDJSON (newline-delimited JSON)
-    let mut aircraft = Vec::new();
-    let mut parse_errors = 0;
-    let mut skipped_invalid = 0;
+    // Parse NDJSON (newline-delimited JSON) in parallel using rayon
+    let lines: Vec<&str> = json_content.lines().collect();
+    info!(
+        "Parsing {} lines from ADS-B Exchange database in parallel...",
+        lines.len()
+    );
 
-    for (line_num, line) in json_content.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        match serde_json::from_str::<AdsbExchangeRecord>(line) {
-            Ok(record) => {
-                if let Some(a) = adsb_record_to_aircraft(&record) {
-                    aircraft.push(a);
-                } else {
-                    skipped_invalid += 1;
+    // Each line is parsed and converted in parallel
+    let results: Vec<Option<Aircraft>> = lines
+        .par_iter()
+        .map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return None;
+            }
+            match serde_json::from_str::<AdsbExchangeRecord>(line) {
+                Ok(record) => adsb_record_to_aircraft(&record),
+                Err(e) => {
+                    debug!("Failed to parse line from ADS-B Exchange: {}", e);
+                    None
                 }
             }
-            Err(e) => {
-                debug!(
-                    "Failed to parse line {} from ADS-B Exchange: {}",
-                    line_num + 1,
-                    e
-                );
-                parse_errors += 1;
-            }
-        }
-    }
+        })
+        .collect();
+
+    let total_lines = results.len();
+    let aircraft: Vec<Aircraft> = results.into_iter().flatten().collect();
+    let failed = total_lines - aircraft.len();
 
     info!(
-        "Parsed {} aircraft from ADS-B Exchange ({} parse errors, {} skipped invalid)",
+        "Parsed {} aircraft from ADS-B Exchange ({} lines skipped/failed)",
         aircraft.len(),
-        parse_errors,
-        skipped_invalid
+        failed
     );
 
     Ok(aircraft)
@@ -348,9 +354,13 @@ pub async fn handle_dump_aircraft_dbs(
     flarmnet_source: Option<String>,
     adsb_source: Option<String>,
 ) -> Result<()> {
-    // Fetch both data sources
-    let flarmnet_aircraft = fetch_flarmnet(flarmnet_source, &output_path).await?;
-    let adsb_aircraft = fetch_adsb_exchange(adsb_source, &output_path).await?;
+    // Fetch both data sources concurrently
+    let (flarmnet_result, adsb_result) = tokio::join!(
+        fetch_flarmnet(flarmnet_source, &output_path),
+        fetch_adsb_exchange(adsb_source, &output_path),
+    );
+    let flarmnet_aircraft = flarmnet_result?;
+    let adsb_aircraft = adsb_result?;
 
     let total_count = flarmnet_aircraft.len() + adsb_aircraft.len();
     info!(
@@ -360,35 +370,37 @@ pub async fn handle_dump_aircraft_dbs(
         adsb_aircraft.len()
     );
 
-    // Write all aircraft to JSONL file (one JSON object per line)
+    // Serialize all aircraft to JSON lines in parallel using rayon
     info!(
-        "Writing {} aircraft to JSONL file: {}",
+        "Serializing {} aircraft to JSON in parallel...",
+        total_count
+    );
+    let all_aircraft: Vec<&Aircraft> = flarmnet_aircraft
+        .iter()
+        .chain(adsb_aircraft.iter())
+        .collect();
+
+    let json_lines: Vec<String> = all_aircraft
+        .par_iter()
+        .map(|device| serde_json::to_string(device).expect("Failed to serialize aircraft"))
+        .collect();
+
+    // Write pre-serialized lines to JSONL file with buffered I/O
+    info!(
+        "Writing {} lines to JSONL file: {}",
         total_count, output_path
     );
-    let mut output_file = File::create(&output_path)?;
-    let mut written = 0;
+    let output_file = File::create(&output_path)?;
+    let mut writer = BufWriter::new(output_file);
 
-    // Write FlarmNet aircraft first
-    for device in &flarmnet_aircraft {
-        let json_line = serde_json::to_string(device)?;
-        writeln!(output_file, "{}", json_line)?;
-        written += 1;
+    for (i, json_line) in json_lines.iter().enumerate() {
+        writeln!(writer, "{}", json_line)?;
 
-        if written % PROGRESS_LOG_INTERVAL == 0 {
-            info!("Written {} / {} aircraft", written, total_count);
+        if (i + 1) % PROGRESS_LOG_INTERVAL == 0 {
+            info!("Written {} / {} aircraft", i + 1, total_count);
         }
     }
-
-    // Write ADS-B Exchange aircraft
-    for device in &adsb_aircraft {
-        let json_line = serde_json::to_string(device)?;
-        writeln!(output_file, "{}", json_line)?;
-        written += 1;
-
-        if written % PROGRESS_LOG_INTERVAL == 0 {
-            info!("Written {} / {} aircraft", written, total_count);
-        }
-    }
+    writer.flush()?;
 
     info!(
         "Successfully wrote {} aircraft to {}",
