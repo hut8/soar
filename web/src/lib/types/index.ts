@@ -41,6 +41,9 @@ import type { StripeOnboardingResponse } from './generated/StripeOnboardingRespo
 import type { StripeConnectStatusView } from './generated/StripeConnectStatusView';
 import type { StripeDashboardLinkResponse } from './generated/StripeDashboardLinkResponse';
 
+// Import auto-generated club creation types from Rust
+import type { CreateClubRequest } from './generated/CreateClubRequest';
+
 // Import auto-generated auth types from Rust
 import type { LoginResponse } from './generated/LoginResponse';
 
@@ -126,6 +129,7 @@ export type {
 	StripeConnectStatusView,
 	StripeDashboardLinkResponse,
 	ClubJoinRequestView,
+	CreateClubRequest,
 	// Auth types
 	LoginResponse,
 	// Flight gap type
@@ -215,6 +219,8 @@ export interface Club {
 	updatedAt: string;
 	similarityScore?: number;
 	distanceMeters?: number;
+	status: string;
+	createdBy?: string;
 }
 
 // For backward compatibility, extend Club with isSoaring for club selector

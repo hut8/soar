@@ -45,6 +45,10 @@ struct ClubWithLocation {
     created_at: DateTime<Utc>,
     #[diesel(sql_type = diesel::sql_types::Timestamptz)]
     updated_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    status: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    created_by: Option<Uuid>,
 }
 
 #[derive(QueryableByName, Debug)]
@@ -82,6 +86,10 @@ pub struct ClubWithLocationAndSimilarity {
     pub created_at: DateTime<Utc>,
     #[diesel(sql_type = diesel::sql_types::Timestamptz)]
     pub updated_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub status: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    pub created_by: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
     pub similarity_score: Option<f32>,
 }
@@ -121,6 +129,10 @@ pub struct ClubWithLocationAndDistance {
     pub created_at: DateTime<Utc>,
     #[diesel(sql_type = diesel::sql_types::Timestamptz)]
     pub updated_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub status: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    pub created_by: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
     pub distance_meters: Option<f64>,
 }
@@ -131,7 +143,7 @@ fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
 }
 
 /// Helper function to determine if a club name indicates it's a soaring club
-fn is_soaring_club(club_name: &str) -> bool {
+pub fn is_soaring_club(club_name: &str) -> bool {
     let name_lower = club_name.to_lowercase();
     name_lower.contains("soar") || name_lower.contains("glider")
 }
@@ -166,6 +178,8 @@ impl From<ClubWithLocationAndDistance> for Club {
             base_location,
             created_at: cwld.created_at,
             updated_at: cwld.updated_at,
+            status: cwld.status,
+            created_by: cwld.created_by,
         }
     }
 }
@@ -200,6 +214,8 @@ impl From<ClubWithLocationAndSimilarity> for Club {
             base_location,
             created_at: cwls.created_at,
             updated_at: cwls.updated_at,
+            status: cwls.status,
+            created_by: cwls.created_by,
         }
     }
 }
@@ -234,6 +250,8 @@ impl From<ClubWithLocation> for Club {
             base_location,
             created_at: cwl.created_at,
             updated_at: cwl.updated_at,
+            status: cwl.status,
+            created_by: cwl.created_by,
         }
     }
 }
@@ -273,7 +291,7 @@ impl ClubsRepository {
                            WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
                        END as latitude,
-                       c.created_at, c.updated_at
+                       c.created_at, c.updated_at, c.status, c.created_by
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
                 LEFT JOIN airports a ON c.home_base_airport_id = a.id
@@ -312,7 +330,7 @@ impl ClubsRepository {
                            WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
                        END as latitude,
-                       c.created_at, c.updated_at
+                       c.created_at, c.updated_at, c.status, c.created_by
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
                 LEFT JOIN airports a ON c.home_base_airport_id = a.id
@@ -350,7 +368,7 @@ impl ClubsRepository {
                            WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
                        END as latitude,
-                       c.created_at, c.updated_at
+                       c.created_at, c.updated_at, c.status, c.created_by
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
                 LEFT JOIN airports a ON c.home_base_airport_id = a.id
@@ -390,7 +408,7 @@ impl ClubsRepository {
                            WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
                            ELSE NULL::NUMERIC
                        END as latitude,
-                       c.created_at, c.updated_at,
+                       c.created_at, c.updated_at, c.status, c.created_by,
                        SIMILARITY(UPPER(c.name), $1) as similarity_score
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
@@ -441,7 +459,7 @@ impl ClubsRepository {
                        l.street1, l.street2, l.city, l.state, l.zip_code,
                        l.country_code,
                        NULL::float8 as longitude, NULL::float8 as latitude,
-                       c.created_at, c.updated_at,
+                       c.created_at, c.updated_at, c.status, c.created_by,
                        ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
                 FROM clubs c
                 INNER JOIN locations l ON c.location_id = l.id
@@ -478,7 +496,7 @@ impl ClubsRepository {
                        l.country_code,
                        (l.geolocation)[0]::numeric as longitude,
                        (l.geolocation)[1]::numeric as latitude,
-                       c.created_at, c.updated_at
+                       c.created_at, c.updated_at, c.status, c.created_by
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
                 LEFT JOIN airports a ON c.home_base_airport_id = a.id
@@ -593,6 +611,8 @@ impl ClubsRepository {
             is_soaring: Some(is_soaring_club(club_name)),
             home_base_airport_id: None,
             location_id: None, // Will be populated later if needed
+            status: crate::clubs::CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
         };
 
         let pool = self.pool.clone();
@@ -630,6 +650,8 @@ impl ClubsRepository {
             is_soaring: Some(is_soaring_club(club_name)),
             home_base_airport_id: None,
             location_id: Some(location.id),
+            status: crate::clubs::CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
         };
 
         let pool = self.pool.clone();
@@ -665,6 +687,117 @@ impl ClubsRepository {
         }
     }
 
+    /// Create a club manually (user-initiated)
+    pub async fn create_club_manual(
+        &self,
+        name: &str,
+        is_soaring: Option<bool>,
+        home_base_airport_id: Option<i32>,
+        location_params: Option<LocationParams>,
+        status: &str,
+        created_by: Uuid,
+    ) -> Result<Club> {
+        use crate::schema::clubs::dsl;
+
+        // Create location if address data is provided
+        let location_id = if let Some(params) = location_params {
+            let location = self.locations_repo.find_or_create(params).await?;
+            Some(location.id)
+        } else {
+            None
+        };
+
+        let club_id = Uuid::now_v7();
+        let new_club = NewClubModel {
+            id: club_id,
+            name: name.to_string(),
+            is_soaring,
+            home_base_airport_id,
+            location_id,
+            status: status.to_string(),
+            created_by: Some(created_by),
+        };
+
+        let pool = self.pool.clone();
+        let created_club = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let inserted_club: ClubModel = diesel::insert_into(dsl::clubs)
+                .values(&new_club)
+                .get_result(&mut conn)?;
+
+            Ok::<Club, anyhow::Error>(inserted_club.into())
+        })
+        .await??;
+
+        Ok(created_club)
+    }
+
+    /// Update the status of a club (for admin approval/rejection)
+    pub async fn update_club_status(
+        &self,
+        club_id: Uuid,
+        new_status: &str,
+    ) -> Result<Option<Club>> {
+        use crate::schema::clubs::dsl::*;
+
+        let pool = self.pool.clone();
+        let new_status = new_status.to_string();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let updated: Option<ClubModel> = diesel::update(clubs.filter(id.eq(club_id)))
+                .set((status.eq(&new_status), updated_at.eq(diesel::dsl::now)))
+                .get_result(&mut conn)
+                .optional()?;
+
+            Ok::<Option<ClubModel>, anyhow::Error>(updated)
+        })
+        .await??;
+
+        Ok(result.map(|cm| cm.into()))
+    }
+
+    /// Get all clubs with a specific status
+    pub async fn get_by_status(&self, club_status: &str) -> Result<Vec<Club>> {
+        let pool = self.pool.clone();
+        let club_status = club_status.to_string();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
+                       CASE
+                           WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
+                           ELSE NULL::NUMERIC
+                       END as longitude,
+                       CASE
+                           WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
+                           ELSE NULL::NUMERIC
+                       END as latitude,
+                       c.created_at, c.updated_at, c.status, c.created_by
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
+                WHERE c.status = $1
+                ORDER BY c.created_at DESC
+            "#;
+
+            let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Text, _>(&club_status)
+                .load::<ClubWithLocation>(&mut conn)?;
+
+            Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
+        })
+        .await??;
+
+        Ok(result.into_iter().map(|cwl| cwl.into()).collect())
+    }
+
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
         use crate::schema::clubs::dsl::*;
@@ -686,6 +819,8 @@ impl ClubsRepository {
             is_soaring: club.is_soaring,
             home_base_airport_id: club.home_base_airport_id,
             location_id: Some(final_location_id),
+            status: club.status.clone(),
+            created_by: club.created_by,
         };
 
         let pool = self.pool.clone();
@@ -730,6 +865,8 @@ mod tests {
             base_location: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            status: crate::clubs::CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
         }
     }
 

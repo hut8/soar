@@ -4,12 +4,19 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
-use tracing::error;
+use tracing::{error, info};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::aircraft_repo::AircraftRepository;
-use crate::clubs_repo::ClubsRepository;
+use crate::auth::{AdminUser, AuthUser};
+use crate::clubs::{CLUB_STATUS_APPROVED, CLUB_STATUS_PENDING, CLUB_STATUS_REJECTED};
+use crate::clubs_repo::{ClubsRepository, is_soaring_club};
 use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationParams;
+use crate::notifications;
+use crate::users::UpdateUserRequest;
+use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 use super::{
@@ -214,6 +221,242 @@ pub async fn get_club_flights(
                 "Failed to get club flights",
             )
             .into_response()
+        }
+    }
+}
+
+// --- Manual club creation ---
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateClubRequest {
+    pub name: String,
+    pub home_base_airport_id: Option<i32>,
+    pub is_soaring: Option<bool>,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub country_code: Option<String>,
+}
+
+/// Create a new club (any authenticated user)
+pub async fn create_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateClubRequest>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Validate name
+    let name = payload.name.trim().to_string();
+    if name.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Club name is required").into_response();
+    }
+
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Check for duplicate name
+    match clubs_repo.find_by_name(&name).await {
+        Ok(Some(_)) => {
+            return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                .into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to check club name");
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to check club name",
+            )
+            .into_response();
+        }
+        Ok(None) => {}
+    }
+
+    // Determine is_soaring
+    let club_is_soaring = Some(payload.is_soaring.unwrap_or_else(|| is_soaring_club(&name)));
+
+    // Build LocationParams if any address fields provided
+    let location_params = {
+        let has_address = payload.street1.is_some()
+            || payload.street2.is_some()
+            || payload.city.is_some()
+            || payload.state.is_some()
+            || payload.zip_code.is_some()
+            || payload.country_code.is_some();
+
+        if has_address {
+            Some(LocationParams {
+                street1: payload.street1,
+                street2: payload.street2,
+                city: payload.city,
+                state: payload.state,
+                zip_code: payload.zip_code,
+                country_code: payload.country_code,
+                geolocation: None,
+            })
+        } else {
+            None
+        }
+    };
+
+    // Create the club with pending status
+    let club = match clubs_repo
+        .create_club_manual(
+            &name,
+            club_is_soaring,
+            payload.home_base_airport_id,
+            location_params,
+            CLUB_STATUS_PENDING,
+            user.id,
+        )
+        .await
+    {
+        Ok(club) => club,
+        Err(e) => {
+            error!(error = %e, "Failed to create club");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create club")
+                .into_response();
+        }
+    };
+
+    // Auto-join: set user's club_id and make them club admin
+    let users_repo = UsersRepository::new(state.pool.clone());
+    let update_request = UpdateUserRequest {
+        first_name: None,
+        last_name: None,
+        email: None,
+        is_admin: None,
+        is_club_admin: Some(true),
+        club_id: Some(club.id),
+        email_verified: None,
+    };
+    if let Err(e) = users_repo.update_user(user.id, &update_request).await {
+        error!(error = %e, user_id = %user.id, "Failed to auto-join user to new club");
+    }
+
+    // Send admin notification email in the background
+    let pool = state.pool.clone();
+    let club_name = club.name.clone();
+    let creator_name = user.full_name();
+    tokio::spawn(async move {
+        if let Err(e) =
+            notifications::send_club_creation_notification(&pool, &club_name, &creator_name).await
+        {
+            error!(error = %e, "Failed to send club creation notification");
+        }
+    });
+
+    info!(club_id = %club.id, club_name = %club.name, created_by = %user.id, "New club created (pending approval)");
+
+    (
+        StatusCode::CREATED,
+        Json(DataResponse {
+            data: ClubView::from(club),
+        }),
+    )
+        .into_response()
+}
+
+/// Get pending clubs (admin only)
+pub async fn get_pending_clubs(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+
+    match clubs_repo.get_by_status(CLUB_STATUS_PENDING).await {
+        Ok(clubs) => {
+            let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
+            Json(DataListResponse { data: club_views }).into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to get pending clubs");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get pending clubs",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Approve a pending club (admin only)
+pub async fn approve_club(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+
+    match clubs_repo
+        .update_club_status(id, CLUB_STATUS_APPROVED)
+        .await
+    {
+        Ok(Some(club)) => {
+            info!(club_id = %id, "Club approved");
+            Json(DataResponse {
+                data: ClubView::from(club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to approve club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to approve club").into_response()
+        }
+    }
+}
+
+/// Reject a pending club (admin only)
+pub async fn reject_club(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Get the club first to check status
+    let club = match clubs_repo.get_by_id(id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Club not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to get club");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get club")
+                .into_response();
+        }
+    };
+
+    if club.status != CLUB_STATUS_PENDING {
+        return json_error(StatusCode::BAD_REQUEST, "Club is not pending").into_response();
+    }
+
+    // Update status to rejected
+    match clubs_repo
+        .update_club_status(id, CLUB_STATUS_REJECTED)
+        .await
+    {
+        Ok(Some(updated_club)) => {
+            // Unset club_id for members of this club
+            let users_repo = UsersRepository::new(state.pool.clone());
+            if let Err(e) = users_repo.remove_all_members_from_club(id).await {
+                error!(error = %e, club_id = %id, "Failed to remove members from rejected club");
+            }
+
+            info!(club_id = %id, "Club rejected");
+            Json(DataResponse {
+                data: ClubView::from(updated_club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to reject club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to reject club").into_response()
         }
     }
 }

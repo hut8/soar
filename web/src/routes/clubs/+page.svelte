@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
+	import { Users, Search, MapPinHouse, ExternalLink, Plane, Plus, Clock } from '@lucide/svelte';
+	import { auth } from '$lib/stores/auth';
 	import { Progress, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -251,11 +252,25 @@
 </svelte:head>
 
 <div class="container mx-auto space-y-8 p-4">
-	<header class="space-y-2 text-center">
+	<header class="space-y-4 text-center">
 		<h1 class="flex items-center justify-center gap-2 h1">
 			<Users class="h-8 w-8" />
 			Soaring Clubs
 		</h1>
+		<div class="flex flex-wrap items-center justify-center gap-3">
+			{#if $auth.isAuthenticated}
+				<a href={resolve('/clubs/new')} class="btn preset-filled-primary-500">
+					<Plus class="mr-1 h-4 w-4" />
+					Create Club
+				</a>
+			{/if}
+			{#if $auth.user?.isAdmin}
+				<a href={resolve('/clubs/pending')} class="preset-tonal-surface-500 btn">
+					<Clock class="mr-1 h-4 w-4" />
+					Pending Clubs
+				</a>
+			{/if}
+		</div>
 	</header>
 
 	<!-- Search Section -->
@@ -522,6 +537,12 @@
 									>
 										{club.name}
 									</a>
+									{#if club.status === 'pending'}
+										<span
+											class="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+											>Pending</span
+										>
+									{/if}
 								</td>
 								<td>
 									<div class="flex items-start gap-2">
@@ -583,12 +604,20 @@
 					<div
 						class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
 					>
-						<a
-							href={resolve(`/clubs/${club.id}`)}
-							class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
-						>
-							{club.name}
-						</a>
+						<div class="flex items-center gap-2">
+							<a
+								href={resolve(`/clubs/${club.id}`)}
+								class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+							>
+								{club.name}
+							</a>
+							{#if club.status === 'pending'}
+								<span
+									class="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+									>Pending</span
+								>
+							{/if}
+						</div>
 						<a
 							href={resolve(`/clubs/${club.id}`)}
 							class="relative z-10 flex-shrink-0"

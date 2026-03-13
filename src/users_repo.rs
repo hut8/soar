@@ -494,6 +494,25 @@ impl UsersRepository {
         .await?
     }
 
+    /// Remove all members from a club (set club_id = NULL, is_club_admin = false)
+    pub async fn remove_all_members_from_club(&self, club_id: Uuid) -> Result<usize> {
+        let pool = self.pool.clone();
+        let now = Utc::now();
+
+        tokio::task::spawn_blocking(move || -> Result<usize> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::club_id.eq(club_id)))
+                .set((
+                    users::club_id.eq(None::<Uuid>),
+                    users::is_club_admin.eq(false),
+                    users::updated_at.eq(now),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows_affected)
+        })
+        .await?
+    }
+
     // === NEW METHODS FOR PILOT MANAGEMENT ===
 
     /// Create a pilot without login capability (no email/password)
