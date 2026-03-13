@@ -121,6 +121,7 @@ pub struct DataLoadReport {
     pub entities: Vec<EntityMetrics>,
     pub overall_success: bool,
     pub merge_report: Option<MergeReport>,
+    pub flarm_ogn_merge_report: Option<MergeReport>,
 }
 
 impl Default for DataLoadReport {
@@ -136,6 +137,7 @@ impl DataLoadReport {
             entities: Vec::new(),
             overall_success: true,
             merge_report: None,
+            flarm_ogn_merge_report: None,
         }
     }
 
@@ -336,6 +338,38 @@ impl DataLoadReport {
                 merge.fixes_reassigned,
                 merge.flights_reassigned,
                 merge.registrations_claimed,
+            ));
+
+            if !merge.errors.is_empty() {
+                html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
+                for err in &merge.errors {
+                    html.push_str(&format!("<li>{}</li>", err));
+                }
+                html.push_str("</ul></div>");
+            }
+        }
+
+        // Render FLARM/OGN merge report section if present
+        if let Some(ref merge) = self.flarm_ogn_merge_report
+            && (merge.duplicates_found > 0 || !merge.errors.is_empty())
+        {
+            html.push_str(&format!(
+                r#"
+        <h2 style="margin-top: 30px; color: #333;">FLARM/OGN Duplicate Merge</h2>
+        <div class="summary">
+            <strong>Duration:</strong> {}<br>
+            <strong>Duplicates Found:</strong> {}<br>
+            <strong>Aircraft Merged:</strong> {}<br>
+            <strong>Aircraft Deleted:</strong> {}<br>
+            <strong>Fixes Reassigned:</strong> {}<br>
+            <strong>Flights Reassigned:</strong> {}
+        </div>"#,
+                Self::format_duration(merge.duration_secs),
+                merge.duplicates_found,
+                merge.aircraft_merged,
+                merge.aircraft_deleted,
+                merge.fixes_reassigned,
+                merge.flights_reassigned,
             ));
 
             if !merge.errors.is_empty() {
