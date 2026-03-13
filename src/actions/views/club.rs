@@ -7,7 +7,9 @@ use uuid::Uuid;
 
 use crate::{
     clubs::Club,
-    clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity},
+    clubs_repo::{
+        ClubWithLocationAndActivity, ClubWithLocationAndDistance, ClubWithLocationAndSimilarity,
+    },
     faa::aircraft_model_repo::AircraftModelRecord,
     faa::aircraft_models::{
         AircraftCategory, AircraftType, BuilderCertification, EngineType, WeightClass,
@@ -147,6 +149,10 @@ pub struct ClubView {
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_meters: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recent_flights_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_flight_at: Option<DateTime<Utc>>,
 }
 
 impl From<Club> for ClubView {
@@ -175,6 +181,8 @@ impl From<Club> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            recent_flights_count: None,
+            last_flight_at: None,
         }
     }
 }
@@ -205,6 +213,8 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: club.distance_meters,
+            recent_flights_count: None,
+            last_flight_at: None,
         }
     }
 }
@@ -235,6 +245,40 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
+            recent_flights_count: None,
+            last_flight_at: None,
+        }
+    }
+}
+
+impl From<ClubWithLocationAndActivity> for ClubView {
+    fn from(club: ClubWithLocationAndActivity) -> Self {
+        let location = create_location_from_fields(
+            club.location_id,
+            club.street1,
+            club.street2,
+            club.city,
+            club.state,
+            club.zip_code,
+            club.country_code,
+            bigdecimal_to_f64(club.latitude),
+            bigdecimal_to_f64(club.longitude),
+            club.created_at,
+            club.updated_at,
+        );
+
+        Self {
+            id: club.id,
+            name: club.name,
+            home_base_airport_id: club.home_base_airport_id,
+            home_base_airport_ident: club.home_base_airport_ident,
+            location,
+            created_at: club.created_at,
+            updated_at: club.updated_at,
+            similarity_score: None,
+            distance_meters: None,
+            recent_flights_count: Some(club.recent_flights_count),
+            last_flight_at: club.last_flight_at,
         }
     }
 }
