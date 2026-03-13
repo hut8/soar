@@ -1,0 +1,42 @@
+# PgDog configuration for SOAR
+# See: https://pgdog.dev/docs/configuration
+
+[general]
+host = "127.0.0.1"
+port = 6432
+default_pool_size = 100
+min_pool_size = 10
+pooler_mode = "transaction"
+auth_type = "trust"              # safe because we only listen on localhost
+connect_timeout = 15000          # ms (pgbouncer: server_connect_timeout = 15s)
+idle_timeout = 600000            # ms (pgbouncer: server_idle_timeout = 600s)
+server_lifetime = 3600000        # ms (pgbouncer: server_lifetime = 3600s)
+client_idle_timeout = 0          # disabled (pgbouncer: client_idle_timeout = 0)
+client_login_timeout = 60000     # ms (pgbouncer: client_login_timeout = 60s)
+query_timeout = 0                # disabled (pgbouncer: query_timeout = 0)
+checkout_timeout = 120000        # ms (pgbouncer: query_wait_timeout = 120s)
+stats_period = 60000             # ms (pgbouncer: stats_period = 60s)
+log_connections = false
+log_disconnections = false
+workers = 4                      # pgdog is multi-threaded
+
+[[databases]]
+name = "soar"
+host = "127.0.0.1"
+port = 5432
+database_name = "soar"
+user = "soar"
+
+[[databases]]
+name = "soar_staging"
+host = "127.0.0.1"
+port = 5432
+database_name = "soar_staging"
+user = "soar"
+
+[[databases]]
+name = "soar_dev"
+host = "127.0.0.1"
+port = 5432
+database_name = "soar_dev"
+user = "soar"

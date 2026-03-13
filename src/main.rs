@@ -486,13 +486,11 @@ async fn setup_diesel_database(
     // Clone for schema dump later (database_url will be moved into ConnectionManager)
     let database_url_for_dump = database_url.clone();
 
-    // Create a Diesel connection pool - sized for pgbouncer in front
-    // pgbouncer handles actual PostgreSQL connection pooling:
-    // - pgbouncer max_client_conn: 1000 (client connections from all processes)
-    // - pgbouncer default_pool_size: 100 (actual PG connections per db/user pair)
-    // - pgbouncer max_db_connections: 120
-    // In transaction mode, pgbouncer multiplexes: r2d2 connections are just client
-    // connections to pgbouncer, and actual PG connections are only held during
+    // Create a Diesel connection pool - sized for pgdog in front
+    // pgdog handles actual PostgreSQL connection pooling:
+    // - pgdog default_pool_size: 100 (actual PG connections per db/user pair)
+    // In transaction mode, pgdog multiplexes: r2d2 connections are just client
+    // connections to pgdog, and actual PG connections are only held during
     // transactions. Multiple processes (run, web, archive, pull-data) each create
     // their own pool, but periodic jobs only use a handful of connections in practice
     // since r2d2 creates connections on demand. The 75 limit mainly matters for
@@ -507,7 +505,7 @@ async fn setup_diesel_database(
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 75, via pgbouncer)");
+    info!("Successfully created Diesel connection pool (max connections: 75, via pgdog)");
 
     // Skip migrations if not requested (staging/production services should use `soar migrate`)
     if !run_migrations {

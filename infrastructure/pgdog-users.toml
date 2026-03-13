@@ -1,0 +1,33 @@
+# PgDog user authentication for SOAR
+# Since we use auth_type = trust, passwords are not checked
+# but users must be listed here
+
+[[users]]
+name = "soar"
+database = "soar"
+password = ""
+
+[[users]]
+name = "soar"
+database = "soar_staging"
+password = ""
+
+[[users]]
+name = "soar"
+database = "soar_dev"
+password = ""
+
+[[users]]
+name = "postgres"
+database = "soar"
+password = ""
+
+[[users]]
+name = "postgres"
+database = "soar_staging"
+password = ""
+
+[[users]]
+name = "postgres"
+database = "soar_dev"
+password = ""

@@ -6,7 +6,7 @@
 #   {{POSTGRES_DATASOURCE_UID}} - Datasource UID (soar-postgres-production or soar-postgres-staging)
 #   {{POSTGRES_DATASOURCE_NAME}} - Datasource name (soar-postgres-production or soar-postgres-staging)
 #
-# Connection goes through PgBouncer on port 6432 with auth_type=any (no password needed)
+# Connection goes through PgDog on port 6432 with auth_type=trust (no password needed)
 
 apiVersion: 1
 
