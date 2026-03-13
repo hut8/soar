@@ -238,6 +238,47 @@ impl From<ClubWithLocation> for Club {
     }
 }
 
+#[derive(QueryableByName, Debug)]
+pub struct ClubWithLocationAndActivity {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    pub id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    pub name: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    pub is_soaring: Option<bool>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    pub home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub home_base_airport_ident: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    pub location_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub street1: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub street2: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub city: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub state: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub zip_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub country_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+    pub longitude: Option<BigDecimal>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+    pub latitude: Option<BigDecimal>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub created_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub updated_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    pub recent_flights_count: i64,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    pub last_flight_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Clone)]
 pub struct ClubsRepository {
     pool: PgPool,
@@ -464,6 +505,59 @@ impl ClubsRepository {
         }).await??;
 
         Ok(result.into_iter().map(|cwld| cwld.into()).collect())
+    }
+
+    /// Get soaring clubs with recent flight activity
+    /// Returns clubs that have had flights within the specified number of days, ordered by most recent flight
+    pub async fn get_recently_active(
+        &self,
+        days: i32,
+        limit: Option<i64>,
+    ) -> Result<Vec<ClubWithLocationAndActivity>> {
+        let search_limit = limit.unwrap_or(20);
+
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code,
+                       l.country_code,
+                       CASE
+                           WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry)::NUMERIC
+                           ELSE NULL::NUMERIC
+                       END as longitude,
+                       CASE
+                           WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry)::NUMERIC
+                           ELSE NULL::NUMERIC
+                       END as latitude,
+                       c.created_at, c.updated_at,
+                       COUNT(f.id) as recent_flights_count,
+                       MAX(f.takeoff_time) as last_flight_at
+                FROM clubs c
+                INNER JOIN flights f ON f.club_id = c.id
+                LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
+                WHERE c.is_soaring = true
+                AND f.takeoff_time >= NOW() - make_interval(days => $1)
+                GROUP BY c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident, c.location_id,
+                         l.street1, l.street2, l.city, l.state, l.zip_code, l.country_code,
+                         l.geolocation, c.created_at, c.updated_at
+                ORDER BY last_flight_at DESC
+                LIMIT $2
+            "#;
+
+            let clubs: Vec<ClubWithLocationAndActivity> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Integer, _>(days)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<ClubWithLocationAndActivity>(&mut conn)?;
+
+            Ok::<Vec<ClubWithLocationAndActivity>, anyhow::Error>(clubs)
+        })
+        .await??;
+
+        Ok(result)
     }
 
     /// Get soaring clubs that don't have a home base airport ID set
