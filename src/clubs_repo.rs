@@ -263,7 +263,6 @@ pub struct ClubWithLocationAndActivity {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     pub zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     pub country_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
     pub longitude: Option<BigDecimal>,

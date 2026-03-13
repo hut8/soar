@@ -296,6 +296,7 @@
 							(event.value === 'name' || event.value === 'location' || event.value === 'active')
 						) {
 							searchType = event.value;
+							clubs = [];
 							error = '';
 						}
 					}}
