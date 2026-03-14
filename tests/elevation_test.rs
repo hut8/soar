@@ -7,7 +7,6 @@ async fn create_test_elevation_db() -> ElevationDB {
     let test_data_path = PathBuf::from("tests/data/elevation");
     if test_data_path.exists() {
         ElevationDB::with_path(test_data_path)
-            .await
             .expect("Failed to initialize ElevationDB with test data")
     } else {
         ElevationDB::new().expect("Failed to initialize ElevationDB")

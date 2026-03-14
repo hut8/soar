@@ -22,3 +22,5 @@ soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy /tmp/soar/deploy/*
 soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy staging /tmp/soar/deploy/*
 soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy production /tmp/soar/deploy/*
 soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy radar /tmp/soar/deploy/*
+soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy radar-staging /tmp/soar/deploy/*
+soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy radar-production /tmp/soar/deploy/*
