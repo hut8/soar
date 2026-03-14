@@ -798,7 +798,7 @@ impl ClubsRepository {
         Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
-    /// Update a club's details
+    /// Update a club's details in a single atomic UPDATE
     pub async fn update_club(
         &self,
         club_id: Uuid,
@@ -812,7 +812,7 @@ impl ClubsRepository {
         // Create location if address data provided
         let new_location_id = if let Some(params) = location_params {
             let location = self.locations_repo.find_or_create(params).await?;
-            Some(Some(location.id))
+            Some(location.id)
         } else {
             None
         };
@@ -823,50 +823,27 @@ impl ClubsRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build dynamic update - always update updated_at
-            // We need to handle each optional field
-            let target = clubs.filter(id.eq(club_id));
-
-            if let Some(ref n) = new_name {
-                diesel::update(target).set(name.eq(n)).execute(&mut conn)?;
-            }
-
-            if let Some(airport_id) = new_airport_id {
-                diesel::update(clubs.filter(id.eq(club_id)))
-                    .set(home_base_airport_id.eq(Some(airport_id)))
-                    .execute(&mut conn)?;
-            }
-
-            if let Some(soaring) = new_is_soaring {
-                diesel::update(clubs.filter(id.eq(club_id)))
-                    .set(is_soaring.eq(Some(soaring)))
-                    .execute(&mut conn)?;
-            }
-
-            if let Some(loc_id) = new_location_id {
-                diesel::update(clubs.filter(id.eq(club_id)))
-                    .set(location_id.eq(loc_id))
-                    .execute(&mut conn)?;
-            }
-
-            // Always touch updated_at
-            diesel::update(clubs.filter(id.eq(club_id)))
-                .set(updated_at.eq(diesel::dsl::now))
+            // Single atomic update with all changed fields
+            let rows = diesel::update(clubs.filter(id.eq(club_id)))
+                .set((
+                    new_name.as_deref().map(|n| name.eq(n.to_string())),
+                    new_airport_id.map(|a| home_base_airport_id.eq(Some(a))),
+                    new_is_soaring.map(|s| is_soaring.eq(Some(s))),
+                    new_location_id.map(|l| location_id.eq(Some(l))),
+                    updated_at.eq(diesel::dsl::now),
+                ))
                 .execute(&mut conn)?;
 
-            // Fetch the updated record
-            let updated: Option<ClubModel> = clubs
-                .filter(id.eq(club_id))
-                .first::<ClubModel>(&mut conn)
-                .optional()?;
-
-            Ok::<Option<ClubModel>, anyhow::Error>(updated)
+            if rows == 0 {
+                return Ok::<Option<()>, anyhow::Error>(None);
+            }
+            Ok(Some(()))
         })
         .await??;
 
-        // If we got a result, re-fetch with full joins for location data
+        // Re-fetch with full joins for location/airport data
         if result.is_some() {
-            self.get_by_id(club_id).await.map(Some).map(|r| r.flatten())
+            self.get_by_id(club_id).await
         } else {
             Ok(None)
         }

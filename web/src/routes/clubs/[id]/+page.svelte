@@ -317,7 +317,11 @@
 			<div class="space-y-4 card p-6">
 				<div class="flex items-center justify-between">
 					<h2 class="h2">Edit Club</h2>
-					<button class="btn preset-tonal btn-sm" onclick={cancelEditing}>
+					<button
+						class="btn preset-tonal btn-sm"
+						onclick={cancelEditing}
+						aria-label="Cancel editing"
+					>
 						<X class="h-4 w-4" />
 					</button>
 				</div>

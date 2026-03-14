@@ -155,7 +155,7 @@
 				loadFixes(),
 				loadFlights(),
 				loadImages(),
-				...(canAssignClub ? [loadClubs()] : [])
+				...(isAdmin ? [loadClubs()] : [])
 			]);
 		}
 	});

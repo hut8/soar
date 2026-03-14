@@ -26,7 +26,8 @@
 		homeBaseAirportId = airport ? airport.id : null;
 	}
 
-	async function handleSubmit() {
+	async function handleSubmit(event: Event) {
+		event.preventDefault();
 		error = '';
 
 		if (!name.trim()) {
@@ -225,7 +226,6 @@
 				type="submit"
 				class="btn w-full preset-filled-primary-500"
 				disabled={submitting || !name.trim()}
-				onclick={handleSubmit}
 			>
 				{#if submitting}
 					<Progress class="mr-2 h-4 w-4" />
