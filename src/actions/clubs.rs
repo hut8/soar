@@ -337,6 +337,14 @@ pub async fn create_club(
     {
         Ok(club) => club,
         Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("unique")
+                || msg.contains("duplicate")
+                || msg.contains("idx_clubs_name_unique")
+            {
+                return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                    .into_response();
+            }
             error!(error = %e, "Failed to create club");
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create club")
                 .into_response();

@@ -221,8 +221,8 @@ export interface Club {
 	updatedAt: string;
 	similarityScore?: number;
 	distanceMeters?: number;
-	status: string;
-	createdBy?: string;
+	status: 'pending' | 'approved' | 'rejected';
+	createdBy: string | null;
 	recentFlightsCount?: number;
 	lastFlightAt?: string;
 }
