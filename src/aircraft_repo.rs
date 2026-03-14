@@ -1839,26 +1839,7 @@ impl AircraftCache {
         let count = models.len();
         for model in models {
             let a: Aircraft = model.into();
-            let id = a.id.expect("aircraft from DB must have id");
-            // Insert under all populated address keys so lookups by any address type
-            // hit the cache (e.g., an aircraft with both flarm and ogn addresses).
-            if let Some(icao) = a.icao_address {
-                self.by_address
-                    .insert((AddressType::Icao, icao as i32), a.clone());
-            }
-            if let Some(flarm) = a.flarm_address {
-                self.by_address
-                    .insert((AddressType::Flarm, flarm as i32), a.clone());
-            }
-            if let Some(ogn) = a.ogn_address {
-                self.by_address
-                    .insert((AddressType::Ogn, ogn as i32), a.clone());
-            }
-            if let Some(other) = a.other_address {
-                self.by_address
-                    .insert((AddressType::Unknown, other as i32), a.clone());
-            }
-            self.by_id.insert(id, a);
+            self.insert_into_cache(&a);
         }
 
         let elapsed_ms = start.elapsed().as_millis();
@@ -1991,13 +1972,20 @@ impl AircraftCache {
                     _ => {}
                 }
 
-                // Cache under both the incoming key and update the sibling + by_id entries
-                self.by_address.insert(key, aircraft.clone());
-                self.by_address
-                    .insert((sibling_type, address), aircraft.clone());
-                if let Some(id) = aircraft.id {
-                    self.by_id.insert(id, aircraft.clone());
+                // Recompute legacy address_type/address to match the priority
+                // order used by From<AircraftModel> (icao > flarm > ogn > other).
+                if let Some(a) = aircraft.icao_address {
+                    aircraft.address_type = AddressType::Icao;
+                    aircraft.address = a;
+                } else if let Some(a) = aircraft.flarm_address {
+                    aircraft.address_type = AddressType::Flarm;
+                    aircraft.address = a;
+                } else if let Some(a) = aircraft.ogn_address {
+                    aircraft.address_type = AddressType::Ogn;
+                    aircraft.address = a;
                 }
+
+                self.insert_into_cache(&aircraft);
 
                 // Fire-and-forget DB call to add the missing address column
                 let repo = self.repo.clone();
@@ -2019,27 +2007,8 @@ impl AircraftCache {
             .aircraft_for_fix(address, address_type, packet_fields)
             .await?;
         let aircraft: Aircraft = model.into();
-        let id = aircraft.id.expect("aircraft from DB must have id");
 
-        // Insert under all populated address keys for cross-type lookups
-        if let Some(icao) = aircraft.icao_address {
-            self.by_address
-                .insert((AddressType::Icao, icao as i32), aircraft.clone());
-        }
-        if let Some(flarm) = aircraft.flarm_address {
-            self.by_address
-                .insert((AddressType::Flarm, flarm as i32), aircraft.clone());
-        }
-        if let Some(ogn) = aircraft.ogn_address {
-            self.by_address
-                .insert((AddressType::Ogn, ogn as i32), aircraft.clone());
-        }
-        if let Some(other) = aircraft.other_address {
-            self.by_address
-                .insert((AddressType::Unknown, other as i32), aircraft.clone());
-        }
-        self.by_id.insert(id, aircraft.clone());
-
+        self.insert_into_cache(&aircraft);
         self.update_size_gauge();
 
         Ok(aircraft)
@@ -2056,25 +2025,7 @@ impl AircraftCache {
 
         let result = self.repo.get_aircraft_by_id(aircraft_id).await?;
         if let Some(ref aircraft) = result {
-            let id = aircraft.id.expect("aircraft from DB must have id");
-            self.by_id.insert(id, aircraft.clone());
-            // Insert under all populated address keys for cross-type lookups
-            if let Some(icao) = aircraft.icao_address {
-                self.by_address
-                    .insert((AddressType::Icao, icao as i32), aircraft.clone());
-            }
-            if let Some(flarm) = aircraft.flarm_address {
-                self.by_address
-                    .insert((AddressType::Flarm, flarm as i32), aircraft.clone());
-            }
-            if let Some(ogn) = aircraft.ogn_address {
-                self.by_address
-                    .insert((AddressType::Ogn, ogn as i32), aircraft.clone());
-            }
-            if let Some(other) = aircraft.other_address {
-                self.by_address
-                    .insert((AddressType::Unknown, other as i32), aircraft.clone());
-            }
+            self.insert_into_cache(aircraft);
             self.update_size_gauge();
         }
 
@@ -2114,6 +2065,31 @@ impl AircraftCache {
                 }
             }
             self.update_size_gauge();
+        }
+    }
+
+    /// Insert an aircraft into both the by_id and by_address maps, keyed under
+    /// all populated typed address fields. Centralizes the multi-key insertion
+    /// logic so preload, get_or_upsert, and get_by_id stay in sync.
+    fn insert_into_cache(&self, aircraft: &Aircraft) {
+        if let Some(id) = aircraft.id {
+            self.by_id.insert(id, aircraft.clone());
+        }
+        if let Some(icao) = aircraft.icao_address {
+            self.by_address
+                .insert((AddressType::Icao, icao as i32), aircraft.clone());
+        }
+        if let Some(flarm) = aircraft.flarm_address {
+            self.by_address
+                .insert((AddressType::Flarm, flarm as i32), aircraft.clone());
+        }
+        if let Some(ogn) = aircraft.ogn_address {
+            self.by_address
+                .insert((AddressType::Ogn, ogn as i32), aircraft.clone());
+        }
+        if let Some(other) = aircraft.other_address {
+            self.by_address
+                .insert((AddressType::Unknown, other as i32), aircraft.clone());
         }
     }
 
@@ -2251,5 +2227,71 @@ mod tests {
         cache.evict_by_id(Uuid::now_v7());
         assert_eq!(cache.by_id.len(), 0);
         assert_eq!(cache.by_address.len(), 0);
+    }
+
+    #[test]
+    fn test_insert_into_cache_multi_key() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+        let id = Uuid::now_v7();
+
+        // Aircraft with both flarm and ogn addresses (post-merge state)
+        let mut aircraft = make_test_aircraft(id, 12345, AddressType::Flarm);
+        aircraft.ogn_address = Some(12345);
+
+        cache.insert_into_cache(&aircraft);
+
+        // Should be reachable via both address keys
+        assert!(cache.by_id.contains_key(&id));
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
+    }
+
+    #[test]
+    fn test_evict_removes_all_address_keys() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+        let id = Uuid::now_v7();
+
+        // Aircraft with both flarm and ogn addresses
+        let mut aircraft = make_test_aircraft(id, 12345, AddressType::Flarm);
+        aircraft.ogn_address = Some(12345);
+
+        cache.insert_into_cache(&aircraft);
+
+        // Verify both keys exist before eviction
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
+
+        cache.evict_by_id(id);
+
+        // Both address keys and by_id should be gone
+        assert!(!cache.by_id.contains_key(&id));
+        assert!(
+            !cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            !cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
     }
 }

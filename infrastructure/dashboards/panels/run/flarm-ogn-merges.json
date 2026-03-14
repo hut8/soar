@@ -81,7 +81,7 @@
         "uid": "prometheus"
       },
       "editorMode": "code",
-      "expr": "rate(aircraft_flarm_ogn_merge_total{component=\"run\",environment=~\"$environment\"}[5m]) * 60",
+      "expr": "rate(aircraft_flarm_ogn_merge_total{component=\"run\",environment=\"$environment\"}[5m]) * 60",
       "legendFormat": "FLARM/OGN Merges",
       "range": true,
       "refId": "A"
