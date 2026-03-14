@@ -39,6 +39,15 @@ pub mod coverage_repo;
 pub mod elevation;
 pub mod email;
 pub mod email_reporter;
+
+/// Escape HTML special characters to prevent injection in email bodies.
+pub fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
 pub mod faa;
 pub mod faa_nasr;
 pub mod fetch_receivers;

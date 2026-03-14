@@ -8,15 +8,9 @@ use uuid::Uuid;
 
 use crate::schema::{clubs, users};
 
-type PgPool = Pool<ConnectionManager<PgConnection>>;
+use crate::html_escape;
 
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
+type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 #[derive(Debug, Clone)]
 pub struct SmtpConfig {

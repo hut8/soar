@@ -495,6 +495,16 @@ impl AircraftRepository {
                 AddressType::Unknown => (None, None, None, Some(address)),
             };
 
+            // Cross-merge FLARM↔OGN: the same 24-bit hardware ID may be classified as
+            // FLARM by the OGN DDB but self-reported as OGN Tracker in live packets.
+            // Check the sibling column and set the address on the existing record.
+            // Don't return early — fall through to the INSERT ON CONFLICT path below
+            // so that packet-derived metadata (category, model, tracker type, etc.)
+            // is applied to the merged record via the normal DO UPDATE clause.
+            if matches!(address_type, AddressType::Flarm | AddressType::Ogn) {
+                let _ = Self::merge_by_flarm_ogn_address(address, address_type, &mut conn)?;
+            }
+
             // If we have a registration, try to merge into an existing aircraft that
             // already has this registration but is missing our address type.
             // This handles the case where an aircraft was created from OGN DDB (with
@@ -803,6 +813,92 @@ impl AircraftRepository {
         Ok(Some(model))
     }
 
+    /// Try to merge a new address into an existing aircraft by cross-referencing
+    /// FLARM and OGN addresses. These share the same 24-bit address space: the OGN DDB
+    /// classifies a device as FLARM (storing its hardware ID in `flarm_address`), but
+    /// live APRS packets from the same device may self-report as OGN Tracker, routing
+    /// the same ID to `ogn_address`. This creates phantom duplicates.
+    ///
+    /// When we see an OGN address, we check if any aircraft has the same value as its
+    /// `flarm_address` (and vice versa). If found and the target's incoming column is
+    /// NULL, we set it and return the unified record.
+    ///
+    /// Returns `Some(model)` if merge succeeded, `None` if no match or the target
+    /// already has the incoming address type populated.
+    fn merge_by_flarm_ogn_address(
+        address: i32,
+        address_type: AddressType,
+        conn: &mut PgConnection,
+    ) -> Result<Option<AircraftModel>> {
+        // Find the sibling: incoming OGN → look up flarm_address, incoming FLARM → look up ogn_address
+        let target = match address_type {
+            AddressType::Ogn => aircraft::table
+                .filter(aircraft::flarm_address.eq(address))
+                .filter(aircraft::ogn_address.is_null())
+                .select(AircraftModel::as_select())
+                .first(conn)
+                .optional()?,
+            AddressType::Flarm => aircraft::table
+                .filter(aircraft::ogn_address.eq(address))
+                .filter(aircraft::flarm_address.is_null())
+                .select(AircraftModel::as_select())
+                .first(conn)
+                .optional()?,
+            _ => return Ok(None),
+        };
+
+        let target = match target {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        // Set the incoming address on the target
+        let model = match address_type {
+            AddressType::Ogn => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                .set(aircraft::ogn_address.eq(address))
+                .returning(AircraftModel::as_returning())
+                .get_result(conn),
+            AddressType::Flarm => {
+                diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
+                    .set(aircraft::flarm_address.eq(address))
+                    .returning(AircraftModel::as_returning())
+                    .get_result(conn)
+            }
+            _ => unreachable!(),
+        };
+
+        match model {
+            Ok(m) => {
+                metrics::counter!("aircraft.flarm_ogn_merge_total").increment(1);
+                let sibling_type = if address_type == AddressType::Ogn {
+                    AddressType::Flarm
+                } else {
+                    AddressType::Ogn
+                };
+                info!(
+                    "Cross-merged {:?} address {:06X} into existing aircraft {} \
+                     (had sibling {:?} address)",
+                    address_type, address as u32, m.id, sibling_type
+                );
+                Ok(Some(m))
+            }
+            Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+                warn!(
+                    "Race condition in merge_by_flarm_ogn_address: {:?} address {:06X} was \
+                     inserted by another thread. Falling back to normal path.",
+                    address_type, address as u32
+                );
+                Ok(None)
+            }
+            Err(e) => Err(e).with_context(|| {
+                format!(
+                    "Failed to cross-merge {:?} address {:06X} into aircraft {}",
+                    address_type, address as u32, target.id
+                )
+            }),
+        }
+    }
+
     /// Merge duplicate aircraft that have a pending_registration set.
     ///
     /// For each aircraft with `pending_registration IS NOT NULL`:
@@ -1036,6 +1132,340 @@ impl AircraftRepository {
 
             info!(
                 "Completed pending registration merge: {}/{} aircraft merged, \
+                 {} fixes reassigned, {} flights reassigned, {} deleted, {} errors",
+                stats.aircraft_merged,
+                stats.duplicates_found,
+                stats.fixes_reassigned,
+                stats.flights_reassigned,
+                stats.aircraft_deleted,
+                stats.errors.len()
+            );
+
+            Ok(stats)
+        })
+        .await?
+    }
+
+    /// Merge duplicate aircraft created by FLARM/OGN address confusion.
+    ///
+    /// The OGN DDB classifies devices as FLARM (storing their 24-bit hardware ID in
+    /// `flarm_address`), while live APRS packets from the same device may self-report
+    /// as OGN Tracker, routing the same ID to `ogn_address`. This creates duplicate
+    /// aircraft records with the same physical address in different columns.
+    ///
+    /// For each duplicate pair:
+    /// 1. The "keeper" is the record with richer data (registration, model, club)
+    /// 2. Fixes and flights are reassigned from the duplicate to the keeper
+    /// 3. The duplicate is deleted (cascading geofences, watchlist, etc.)
+    /// 4. The duplicate's addresses are copied to the keeper
+    pub async fn merge_flarm_ogn_duplicates(&self) -> Result<MergeStats> {
+        use crate::schema::fixes;
+        use crate::schema::flights;
+        use crate::schema::spurious_flights;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            use diesel::Connection;
+
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
+
+            // Phase 1: Find duplicate pairs using bulk lookups (2 queries per
+            // direction instead of N+1).
+            //
+            // An OGN-only record (ogn_address set, flarm_address NULL) is a duplicate if
+            // another aircraft has flarm_address equal to the ogn_address value.
+            let ogn_only_addrs: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::ogn_address.is_not_null())
+                .filter(aircraft::flarm_address.is_null())
+                .select((aircraft::id, aircraft::ogn_address))
+                .load(&mut conn)?;
+
+            // Collect OGN addresses for bulk lookup
+            let ogn_addr_values: Vec<i32> = ogn_only_addrs.iter().filter_map(|(_, a)| *a).collect();
+
+            // Bulk-fetch all FLARM records whose flarm_address matches any OGN address
+            let matching_flarm: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::flarm_address.eq_any(&ogn_addr_values))
+                .select((aircraft::id, aircraft::flarm_address))
+                .load(&mut conn)?;
+
+            // Build a HashMap for O(1) lookups: flarm_address → aircraft id
+            let flarm_by_addr: std::collections::HashMap<i32, Uuid> = matching_flarm
+                .into_iter()
+                .filter_map(|(id, addr)| addr.map(|a| (a, id)))
+                .collect();
+
+            info!(
+                "Checking {} OGN-only aircraft against {} FLARM matches",
+                ogn_only_addrs.len(),
+                flarm_by_addr.len()
+            );
+
+            let mut pairs: Vec<(Uuid, Uuid)> = Vec::new();
+            let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+
+            for (candidate_id, ogn_addr_opt) in &ogn_only_addrs {
+                let addr = match ogn_addr_opt {
+                    Some(a) => *a,
+                    None => continue,
+                };
+                if let Some(&match_id) = flarm_by_addr.get(&addr)
+                    && match_id != *candidate_id
+                    && seen.insert(*candidate_id)
+                {
+                    seen.insert(match_id);
+                    pairs.push((*candidate_id, match_id));
+                }
+            }
+
+            // Also check reverse: FLARM-only records matching OGN records
+            let flarm_only_addrs: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::flarm_address.is_not_null())
+                .filter(aircraft::ogn_address.is_null())
+                .select((aircraft::id, aircraft::flarm_address))
+                .load(&mut conn)?;
+
+            let flarm_addr_values: Vec<i32> =
+                flarm_only_addrs.iter().filter_map(|(_, a)| *a).collect();
+
+            let matching_ogn: Vec<(Uuid, Option<i32>)> = aircraft::table
+                .filter(aircraft::ogn_address.eq_any(&flarm_addr_values))
+                .select((aircraft::id, aircraft::ogn_address))
+                .load(&mut conn)?;
+
+            let ogn_by_addr: std::collections::HashMap<i32, Uuid> = matching_ogn
+                .into_iter()
+                .filter_map(|(id, addr)| addr.map(|a| (a, id)))
+                .collect();
+
+            info!(
+                "Checking {} FLARM-only aircraft against {} OGN matches",
+                flarm_only_addrs.len(),
+                ogn_by_addr.len()
+            );
+
+            for (candidate_id, flarm_addr_opt) in &flarm_only_addrs {
+                if seen.contains(candidate_id) {
+                    continue;
+                }
+                let addr = match flarm_addr_opt {
+                    Some(a) => *a,
+                    None => continue,
+                };
+                if let Some(&match_id) = ogn_by_addr.get(&addr)
+                    && match_id != *candidate_id
+                    && !seen.contains(&match_id)
+                {
+                    seen.insert(*candidate_id);
+                    seen.insert(match_id);
+                    pairs.push((*candidate_id, match_id));
+                }
+            }
+
+            let mut stats = MergeStats {
+                duplicates_found: pairs.len(),
+                ..MergeStats::default()
+            };
+
+            if stats.duplicates_found == 0 {
+                info!("No FLARM/OGN duplicate pairs found");
+                return Ok(stats);
+            }
+
+            info!(
+                "Found {} FLARM/OGN duplicate pairs to merge",
+                stats.duplicates_found
+            );
+
+            // Phase 2: Merge each pair in a transaction with retries.
+            for (id_a, id_b) in pairs {
+                const MAX_MERGE_ATTEMPTS: usize = 3;
+                let mut result: Result<Option<(usize, usize)>, anyhow::Error> =
+                    Err(anyhow::anyhow!("not yet attempted"));
+
+                for attempt in 1..=MAX_MERGE_ATTEMPTS {
+                    result = conn.transaction(|conn| {
+                        let record_a = aircraft::table
+                            .filter(aircraft::id.eq(id_a))
+                            .select(AircraftModel::as_select())
+                            .first(conn)
+                            .optional()?;
+                        let record_b = aircraft::table
+                            .filter(aircraft::id.eq(id_b))
+                            .select(AircraftModel::as_select())
+                            .first(conn)
+                            .optional()?;
+
+                        let (record_a, record_b) = match (record_a, record_b) {
+                            (Some(a), Some(b)) => (a, b),
+                            _ => {
+                                // One or both already deleted (e.g., by a previous merge)
+                                return Ok(None);
+                            }
+                        };
+
+                        // Determine keeper: prefer the record with richer data
+                        fn richness_score(m: &AircraftModel) -> u8 {
+                            let mut score = 0;
+                            if m.registration.as_ref().is_some_and(|r| !r.is_empty()) {
+                                score += 4;
+                            }
+                            if !m.aircraft_model.is_empty() {
+                                score += 2;
+                            }
+                            if m.club_id.is_some() {
+                                score += 1;
+                            }
+                            score
+                        }
+
+                        let (keeper, dup) =
+                            if richness_score(&record_a) >= richness_score(&record_b) {
+                                (record_a, record_b)
+                            } else {
+                                (record_b, record_a)
+                            };
+
+                        // Reassign fixes from the duplicate to the keeper
+                        let fixes_updated =
+                            diesel::update(fixes::table.filter(fixes::aircraft_id.eq(dup.id)))
+                                .set(fixes::aircraft_id.eq(keeper.id))
+                                .execute(conn)
+                                .context("reassigning fixes")?;
+
+                        // Reassign flights from the duplicate to the keeper
+                        let flights_updated =
+                            diesel::update(flights::table.filter(flights::aircraft_id.eq(dup.id)))
+                                .set(flights::aircraft_id.eq(keeper.id))
+                                .execute(conn)
+                                .context("reassigning flights")?;
+
+                        // Reassign tow-plane references
+                        diesel::update(
+                            flights::table.filter(flights::towed_by_aircraft_id.eq(dup.id)),
+                        )
+                        .set(flights::towed_by_aircraft_id.eq(keeper.id))
+                        .execute(conn)
+                        .context("reassigning towed-by flights")?;
+
+                        // Reassign spurious flights
+                        diesel::update(
+                            spurious_flights::table
+                                .filter(spurious_flights::aircraft_id.eq(dup.id)),
+                        )
+                        .set(spurious_flights::aircraft_id.eq(keeper.id))
+                        .execute(conn)
+                        .context("reassigning spurious flights")?;
+
+                        // Reassign tow-plane references in spurious flights
+                        diesel::update(
+                            spurious_flights::table
+                                .filter(spurious_flights::towed_by_aircraft_id.eq(dup.id)),
+                        )
+                        .set(spurious_flights::towed_by_aircraft_id.eq(keeper.id))
+                        .execute(conn)
+                        .context("reassigning spurious towed-by flights")?;
+
+                        // Delete the duplicate first, then copy its addresses to the keeper.
+                        // Same pattern as merge_pending_registrations: delete removes
+                        // from unique indexes, cascade handles geofences/watchlist.
+                        let deleted =
+                            diesel::delete(aircraft::table.filter(aircraft::id.eq(dup.id)))
+                                .execute(conn)
+                                .context("deleting duplicate aircraft")?;
+                        anyhow::ensure!(
+                            deleted == 1,
+                            "expected to delete 1 duplicate aircraft row, but deleted {}",
+                            deleted
+                        );
+
+                        // Copy addresses from the duplicate to the keeper
+                        let new_icao =
+                            if dup.icao_address.is_some() && keeper.icao_address.is_none() {
+                                dup.icao_address
+                            } else {
+                                keeper.icao_address
+                            };
+                        let new_flarm =
+                            if dup.flarm_address.is_some() && keeper.flarm_address.is_none() {
+                                dup.flarm_address
+                            } else {
+                                keeper.flarm_address
+                            };
+                        let new_ogn = if dup.ogn_address.is_some() && keeper.ogn_address.is_none() {
+                            dup.ogn_address
+                        } else {
+                            keeper.ogn_address
+                        };
+                        let new_other =
+                            if dup.other_address.is_some() && keeper.other_address.is_none() {
+                                dup.other_address
+                            } else {
+                                keeper.other_address
+                            };
+                        diesel::update(aircraft::table.filter(aircraft::id.eq(keeper.id)))
+                            .set((
+                                aircraft::icao_address.eq(new_icao),
+                                aircraft::flarm_address.eq(new_flarm),
+                                aircraft::ogn_address.eq(new_ogn),
+                                aircraft::other_address.eq(new_other),
+                            ))
+                            .execute(conn)
+                            .context("transferring addresses to keeper")?;
+
+                        info!(
+                            "Merged FLARM/OGN duplicate {} into keeper {} \
+                             (registration={:?}): reassigned {} fixes, {} flights",
+                            dup.id,
+                            keeper.id,
+                            keeper.registration.as_deref().unwrap_or("<none>"),
+                            fixes_updated,
+                            flights_updated
+                        );
+
+                        Ok(Some((fixes_updated, flights_updated)))
+                    });
+
+                    if result.is_ok() || attempt == MAX_MERGE_ATTEMPTS {
+                        break;
+                    }
+                    warn!(
+                        "FLARM/OGN merge attempt {}/{} failed for pair ({}, {}), retrying: {:#}",
+                        attempt,
+                        MAX_MERGE_ATTEMPTS,
+                        id_a,
+                        id_b,
+                        result.as_ref().unwrap_err()
+                    );
+                }
+
+                match result {
+                    Ok(None) => {
+                        // One or both records already gone — skip
+                    }
+                    Ok(Some((fixes_updated, flights_updated))) => {
+                        stats.fixes_reassigned += fixes_updated;
+                        stats.flights_reassigned += flights_updated;
+                        stats.aircraft_deleted += 1;
+                        stats.aircraft_merged += 1;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to merge FLARM/OGN duplicate pair ({}, {}): {:#}",
+                            id_a, id_b, e
+                        );
+                        stats
+                            .errors
+                            .push(format!("FLARM/OGN pair ({}, {}): {:#}", id_a, id_b, e));
+                    }
+                }
+            }
+
+            info!(
+                "Completed FLARM/OGN duplicate merge: {}/{} pairs merged, \
                  {} fixes reassigned, {} flights reassigned, {} deleted, {} errors",
                 stats.aircraft_merged,
                 stats.duplicates_found,
@@ -1409,10 +1839,7 @@ impl AircraftCache {
         let count = models.len();
         for model in models {
             let a: Aircraft = model.into();
-            let id = a.id.expect("aircraft from DB must have id");
-            self.by_address
-                .insert((a.address_type, a.address as i32), a.clone());
-            self.by_id.insert(id, a);
+            self.insert_into_cache(&a);
         }
 
         let elapsed_ms = start.elapsed().as_millis();
@@ -1521,16 +1948,67 @@ impl AircraftCache {
         // Slow path: cache miss — fall through to DB upsert
         metrics::counter!("aircraft_cache.miss_total", "lookup" => "by_address").increment(1);
 
+        // Cross-check FLARM↔OGN: the same physical address may be cached under the
+        // sibling type. If found, return it and fire-and-forget a DB call to add the
+        // missing address column to the record.
+        if matches!(address_type, AddressType::Flarm | AddressType::Ogn) {
+            let sibling_type = if address_type == AddressType::Ogn {
+                AddressType::Flarm
+            } else {
+                AddressType::Ogn
+            };
+            if let Some(entry) = self.by_address.get(&(sibling_type, address)) {
+                metrics::counter!("aircraft_cache.hit_total", "lookup" => "by_address_sibling")
+                    .increment(1);
+                let mut aircraft = entry.value().clone();
+                drop(entry);
+
+                // Set the incoming typed address field on the cached Aircraft so
+                // evict_by_id() can derive all keys to remove. Without this, the
+                // sibling-inserted by_address entry would be orphaned on eviction.
+                match address_type {
+                    AddressType::Flarm => aircraft.flarm_address = Some(address as u32),
+                    AddressType::Ogn => aircraft.ogn_address = Some(address as u32),
+                    _ => {}
+                }
+
+                // Recompute legacy address_type/address to match the priority
+                // order used by From<AircraftModel> (icao > flarm > ogn > other).
+                if let Some(a) = aircraft.icao_address {
+                    aircraft.address_type = AddressType::Icao;
+                    aircraft.address = a;
+                } else if let Some(a) = aircraft.flarm_address {
+                    aircraft.address_type = AddressType::Flarm;
+                    aircraft.address = a;
+                } else if let Some(a) = aircraft.ogn_address {
+                    aircraft.address_type = AddressType::Ogn;
+                    aircraft.address = a;
+                }
+
+                self.insert_into_cache(&aircraft);
+
+                // Fire-and-forget DB call to add the missing address column
+                let repo = self.repo.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = repo
+                        .aircraft_for_fix(address, address_type, packet_fields)
+                        .await
+                    {
+                        warn!("Failed to add sibling address to aircraft: {:#}", e);
+                    }
+                });
+
+                return Ok(aircraft);
+            }
+        }
+
         let model = self
             .repo
             .aircraft_for_fix(address, address_type, packet_fields)
             .await?;
         let aircraft: Aircraft = model.into();
-        let id = aircraft.id.expect("aircraft from DB must have id");
 
-        self.by_address.insert(key, aircraft.clone());
-        self.by_id.insert(id, aircraft.clone());
-
+        self.insert_into_cache(&aircraft);
         self.update_size_gauge();
 
         Ok(aircraft)
@@ -1547,12 +2025,7 @@ impl AircraftCache {
 
         let result = self.repo.get_aircraft_by_id(aircraft_id).await?;
         if let Some(ref aircraft) = result {
-            let id = aircraft.id.expect("aircraft from DB must have id");
-            self.by_id.insert(id, aircraft.clone());
-            self.by_address.insert(
-                (aircraft.address_type, aircraft.address as i32),
-                aircraft.clone(),
-            );
+            self.insert_into_cache(aircraft);
             self.update_size_gauge();
         }
 
@@ -1564,19 +2037,59 @@ impl AircraftCache {
     /// stale cache entries from causing repeated FK violations.
     pub fn evict_by_id(&self, aircraft_id: Uuid) {
         if let Some((_, aircraft)) = self.by_id.remove(&aircraft_id) {
-            let key = (aircraft.address_type, aircraft.address as i32);
-            // Only remove the by_address entry if it still points at the same aircraft.
-            // A concurrent upsert may have already replaced it with a new aircraft record.
-            // We must check-then-drop-then-remove to avoid holding the DashMap read guard
-            // while calling remove (which needs a write guard).
-            let should_remove = self
-                .by_address
-                .get(&key)
-                .is_some_and(|entry| entry.id == aircraft.id);
-            if should_remove {
-                self.by_address.remove(&key);
+            // Remove all address keys for this aircraft. An aircraft may be cached
+            // under multiple keys (e.g., both flarm and ogn for the same device).
+            let address_keys: Vec<(AddressType, i32)> = [
+                aircraft.icao_address.map(|a| (AddressType::Icao, a as i32)),
+                aircraft
+                    .flarm_address
+                    .map(|a| (AddressType::Flarm, a as i32)),
+                aircraft.ogn_address.map(|a| (AddressType::Ogn, a as i32)),
+                aircraft
+                    .other_address
+                    .map(|a| (AddressType::Unknown, a as i32)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+
+            for key in address_keys {
+                // Only remove if it still points at the same aircraft.
+                // A concurrent upsert may have already replaced it.
+                let should_remove = self
+                    .by_address
+                    .get(&key)
+                    .is_some_and(|entry| entry.id == aircraft.id);
+                if should_remove {
+                    self.by_address.remove(&key);
+                }
             }
             self.update_size_gauge();
+        }
+    }
+
+    /// Insert an aircraft into both the by_id and by_address maps, keyed under
+    /// all populated typed address fields. Centralizes the multi-key insertion
+    /// logic so preload, get_or_upsert, and get_by_id stay in sync.
+    fn insert_into_cache(&self, aircraft: &Aircraft) {
+        if let Some(id) = aircraft.id {
+            self.by_id.insert(id, aircraft.clone());
+        }
+        if let Some(icao) = aircraft.icao_address {
+            self.by_address
+                .insert((AddressType::Icao, icao as i32), aircraft.clone());
+        }
+        if let Some(flarm) = aircraft.flarm_address {
+            self.by_address
+                .insert((AddressType::Flarm, flarm as i32), aircraft.clone());
+        }
+        if let Some(ogn) = aircraft.ogn_address {
+            self.by_address
+                .insert((AddressType::Ogn, ogn as i32), aircraft.clone());
+        }
+        if let Some(other) = aircraft.other_address {
+            self.by_address
+                .insert((AddressType::Unknown, other as i32), aircraft.clone());
         }
     }
 
@@ -1613,14 +2126,22 @@ mod tests {
 
     /// Helper to create a minimal Aircraft for cache tests
     fn make_test_aircraft(id: Uuid, address: u32, address_type: AddressType) -> Aircraft {
+        // Set the typed address field matching the address_type, mirroring
+        // how From<AircraftModel> populates these fields from the database.
+        let (icao_address, flarm_address, ogn_address, other_address) = match address_type {
+            AddressType::Icao => (Some(address), None, None, None),
+            AddressType::Flarm => (None, Some(address), None, None),
+            AddressType::Ogn => (None, None, Some(address), None),
+            AddressType::Unknown => (None, None, None, Some(address)),
+        };
         Aircraft {
             id: Some(id),
             address_type,
             address,
-            icao_address: None,
-            flarm_address: None,
-            ogn_address: None,
-            other_address: None,
+            icao_address,
+            flarm_address,
+            ogn_address,
+            other_address,
             aircraft_model: String::new(),
             registration: None,
             competition_number: String::new(),
@@ -1706,5 +2227,71 @@ mod tests {
         cache.evict_by_id(Uuid::now_v7());
         assert_eq!(cache.by_id.len(), 0);
         assert_eq!(cache.by_address.len(), 0);
+    }
+
+    #[test]
+    fn test_insert_into_cache_multi_key() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+        let id = Uuid::now_v7();
+
+        // Aircraft with both flarm and ogn addresses (post-merge state)
+        let mut aircraft = make_test_aircraft(id, 12345, AddressType::Flarm);
+        aircraft.ogn_address = Some(12345);
+
+        cache.insert_into_cache(&aircraft);
+
+        // Should be reachable via both address keys
+        assert!(cache.by_id.contains_key(&id));
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
+    }
+
+    #[test]
+    fn test_evict_removes_all_address_keys() {
+        let pool = create_test_pool().expect("need test pool");
+        let cache = AircraftCache::new(pool);
+        let id = Uuid::now_v7();
+
+        // Aircraft with both flarm and ogn addresses
+        let mut aircraft = make_test_aircraft(id, 12345, AddressType::Flarm);
+        aircraft.ogn_address = Some(12345);
+
+        cache.insert_into_cache(&aircraft);
+
+        // Verify both keys exist before eviction
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
+
+        cache.evict_by_id(id);
+
+        // Both address keys and by_id should be gone
+        assert!(!cache.by_id.contains_key(&id));
+        assert!(
+            !cache
+                .by_address
+                .contains_key(&(AddressType::Flarm, 12345_i32))
+        );
+        assert!(
+            !cache
+                .by_address
+                .contains_key(&(AddressType::Ogn, 12345_i32))
+        );
     }
 }

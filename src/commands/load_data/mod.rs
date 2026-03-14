@@ -426,6 +426,47 @@ pub async fn handle_load_data(
         }
     }
 
+    // Merge FLARM/OGN duplicate aircraft
+    // This handles aircraft created as duplicates because the same 24-bit hardware ID
+    // was classified as FLARM by the OGN DDB but as OGN Tracker in live APRS packets.
+    {
+        let merge_start = Instant::now();
+        let aircraft_repo = soar::aircraft_repo::AircraftRepository::new(diesel_pool.clone());
+        match aircraft_repo.merge_flarm_ogn_duplicates().await {
+            Ok(stats) => {
+                let duration = merge_start.elapsed().as_secs_f64();
+                info!(
+                    "FLARM/OGN duplicate merge completed in {:.1}s: {} found, {} merged, \
+                     {} deleted, {} fixes reassigned, {} flights reassigned",
+                    duration,
+                    stats.duplicates_found,
+                    stats.aircraft_merged,
+                    stats.aircraft_deleted,
+                    stats.fixes_reassigned,
+                    stats.flights_reassigned,
+                );
+                report.flarm_ogn_merge_report = Some(soar::email_reporter::MergeReport {
+                    duration_secs: duration,
+                    duplicates_found: stats.duplicates_found,
+                    aircraft_merged: stats.aircraft_merged,
+                    aircraft_deleted: stats.aircraft_deleted,
+                    fixes_reassigned: stats.fixes_reassigned,
+                    flights_reassigned: stats.flights_reassigned,
+                    registrations_claimed: 0,
+                    errors: stats.errors,
+                });
+            }
+            Err(e) => {
+                warn!("Failed to merge FLARM/OGN duplicate aircraft: {:#}", e);
+                report.flarm_ogn_merge_report = Some(soar::email_reporter::MergeReport {
+                    duration_secs: merge_start.elapsed().as_secs_f64(),
+                    errors: vec![format!("{:#}", e)],
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
     report.total_duration_secs = overall_start.elapsed().as_secs_f64();
 
     // Record overall metrics

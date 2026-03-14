@@ -6,6 +6,8 @@ use lettre::{Message, SmtpTransport, Transport};
 use std::time::Duration;
 use tracing::{info, warn};
 
+use crate::html_escape;
+
 /// Get the environment name for display purposes
 /// Returns "Production", "Staging", or "Development"
 fn get_environment_name() -> String {
@@ -121,6 +123,7 @@ pub struct DataLoadReport {
     pub entities: Vec<EntityMetrics>,
     pub overall_success: bool,
     pub merge_report: Option<MergeReport>,
+    pub flarm_ogn_merge_report: Option<MergeReport>,
 }
 
 impl Default for DataLoadReport {
@@ -136,6 +139,7 @@ impl DataLoadReport {
             entities: Vec::new(),
             overall_success: true,
             merge_report: None,
+            flarm_ogn_merge_report: None,
         }
     }
 
@@ -245,7 +249,7 @@ impl DataLoadReport {
                 <td>{}</td>
                 <td>{}</td>
             </tr>"#,
-                entity.name,
+                html_escape(&entity.name),
                 status_class,
                 status_symbol,
                 Self::format_duration(entity.duration_secs),
@@ -264,7 +268,7 @@ impl DataLoadReport {
                     </div>
                 </td>
             </tr>"#,
-                    error
+                    html_escape(error)
                 ));
             }
 
@@ -281,15 +285,17 @@ impl DataLoadReport {
                     // Check if item contains coordinates (format: "callsign|lat,lon")
                     if let Some((callsign, coords)) = item.split_once('|') {
                         // Create a Google Maps link for the coordinates
+                        // Coords are numeric lat,lon so no URL encoding needed;
+                        // HTML-escape all values for safe insertion into the template.
                         let maps_url =
                             format!("https://www.google.com/maps/search/?api=1&query={}", coords);
                         items_html.push_str(&format!(
                             r#"{} (<a href="{}" target="_blank" style="color: #721c24; text-decoration: underline;">{}</a>)"#,
-                            callsign, maps_url, coords
+                            html_escape(callsign), html_escape(&maps_url), html_escape(coords)
                         ));
                     } else {
                         // No coordinates, just display the item as-is
-                        items_html.push_str(item);
+                        items_html.push_str(&html_escape(item));
                     }
                 }
 
@@ -341,7 +347,39 @@ impl DataLoadReport {
             if !merge.errors.is_empty() {
                 html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
                 for err in &merge.errors {
-                    html.push_str(&format!("<li>{}</li>", err));
+                    html.push_str(&format!("<li>{}</li>", html_escape(err)));
+                }
+                html.push_str("</ul></div>");
+            }
+        }
+
+        // Render FLARM/OGN merge report section if present
+        if let Some(ref merge) = self.flarm_ogn_merge_report
+            && (merge.duplicates_found > 0 || !merge.errors.is_empty())
+        {
+            html.push_str(&format!(
+                r#"
+        <h2 style="margin-top: 30px; color: #333;">FLARM/OGN Duplicate Merge</h2>
+        <div class="summary">
+            <strong>Duration:</strong> {}<br>
+            <strong>Duplicates Found:</strong> {}<br>
+            <strong>Aircraft Merged:</strong> {}<br>
+            <strong>Aircraft Deleted:</strong> {}<br>
+            <strong>Fixes Reassigned:</strong> {}<br>
+            <strong>Flights Reassigned:</strong> {}
+        </div>"#,
+                Self::format_duration(merge.duration_secs),
+                merge.duplicates_found,
+                merge.aircraft_merged,
+                merge.aircraft_deleted,
+                merge.fixes_reassigned,
+                merge.flights_reassigned,
+            ));
+
+            if !merge.errors.is_empty() {
+                html.push_str(r#"<div class="error-box"><strong>Errors:</strong><ul>"#);
+                for err in &merge.errors {
+                    html.push_str(&format!("<li>{}</li>", html_escape(err)));
                 }
                 html.push_str("</ul></div>");
             }
