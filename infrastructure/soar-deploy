@@ -1267,8 +1267,8 @@ else
 fi
 
 # PgDog configuration is managed by scripts/setup-pgdog (run during provisioning)
-# and is NOT updated during deploys. To reconfigure PgDog, run:
-#   sudo ./scripts/setup-pgdog <production|staging>
+# and is NOT updated during deploys. To reconfigure PgDog, re-provision or run
+# setup-pgdog from a repo checkout on the server.
 
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."

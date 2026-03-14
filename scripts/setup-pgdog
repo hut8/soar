@@ -80,10 +80,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 
-# Source environment file to get DATABASE_URL
-set +u  # Temporarily allow unset variables
-source "$ENV_FILE"
-set -u
+# Extract DATABASE_URL from environment file without sourcing
+# (avoids executing arbitrary shell code as root)
+DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
     echo "Error: DATABASE_URL not set in $ENV_FILE"
