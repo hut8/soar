@@ -1282,6 +1282,8 @@ for pgdog_file in pgdog.toml pgdog-users.toml; do
         else
             log_info "PgDog configuration unchanged: $pgdog_file"
         fi
+    else
+        log_warn "PgDog configuration file not found in deployment directory: $pgdog_file"
     fi
 done
 

@@ -92,11 +92,16 @@ fi
 
 # Parse DATABASE_URL using Python for robustness
 # Supports both postgres:// and postgresql:// schemes, optional password/port
+if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required to parse DATABASE_URL"
+    exit 1
+fi
+
 read -r DB_USER DB_HOST DB_PORT DB_NAME_FROM_URL < <(
-    python3 -c "
+    DATABASE_URL="$DATABASE_URL" python3 -c "
+import os
 from urllib.parse import urlparse
-import sys
-url = urlparse('$DATABASE_URL')
+url = urlparse(os.environ['DATABASE_URL'])
 user = url.username or 'soar'
 host = url.hostname or '127.0.0.1'
 port = url.port or 5432

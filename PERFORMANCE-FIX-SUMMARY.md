@@ -125,7 +125,7 @@ sudo ./scripts/setup-pgdog production
 If issues occur:
 1. Stop SOAR services
 2. Revert DATABASE_URL to direct PostgreSQL connection
-3. Stop pgdog: `systemctl stop pgdog-{staging|production}`
+3. Stop pgdog: `systemctl stop pgdog`
 4. Restart SOAR services
 5. Database pool increase (30 connections) can stay - it's safe
 

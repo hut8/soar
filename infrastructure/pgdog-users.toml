@@ -16,18 +16,3 @@ password = ""
 name = "soar"
 database = "soar_dev"
 password = ""
-
-[[users]]
-name = "postgres"
-database = "soar"
-password = ""
-
-[[users]]
-name = "postgres"
-database = "soar_staging"
-password = ""
-
-[[users]]
-name = "postgres"
-database = "soar_dev"
-password = ""
