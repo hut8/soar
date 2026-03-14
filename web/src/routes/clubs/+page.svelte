@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
+	import { Users, Search, MapPinHouse, ExternalLink, Plane, Activity } from '@lucide/svelte';
 	import { Progress, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -34,7 +34,7 @@
 	let loading = $state(false);
 	let error = $state('');
 	let searchQuery = $state('');
-	let searchType = $state<'name' | 'location'>('name');
+	let searchType = $state<'name' | 'location' | 'active'>('name');
 	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
 	let selectedLatitude = $state<number | null>(null);
 	let selectedLongitude = $state<number | null>(null);
@@ -118,7 +118,9 @@
 		try {
 			let endpoint = '/clubs';
 
-			if (
+			if (searchType === 'active') {
+				endpoint = '/clubs?active=true&days=7&limit=50';
+			} else if (
 				searchType === 'location' &&
 				selectedLatitude !== null &&
 				selectedLongitude !== null &&
@@ -212,7 +214,8 @@
 					geolocateError = 'Unable to determine your location.';
 				}
 				logger.error('Error getting location: {error}', { error: err });
-			}
+			},
+			{ enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
 		);
 	}
 
@@ -225,6 +228,21 @@
 	}
 
 	let isLocationSearch = $derived(searchType === 'location');
+	let isActiveSearch = $derived(searchType === 'active');
+
+	function formatTimeAgo(dateStr: string | undefined): string {
+		if (!dateStr) return '—';
+		const date = new Date(dateStr);
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMins = Math.floor(diffMs / 60000);
+		if (diffMins < 1) return 'just now';
+		if (diffMins < 60) return `${diffMins}m ago`;
+		const diffHours = Math.floor(diffMins / 60);
+		if (diffHours < 24) return `${diffHours}h ago`;
+		const diffDays = Math.floor(diffHours / 24);
+		return `${diffDays}d ago`;
+	}
 
 	function formatAddress(club: ClubWithSoaring): string {
 		if (!club.location) {
@@ -273,8 +291,12 @@
 					value={searchType}
 					orientation="vertical"
 					onValueChange={(event: { value: string | null }) => {
-						if (event.value && (event.value === 'name' || event.value === 'location')) {
+						if (
+							event.value &&
+							(event.value === 'name' || event.value === 'location' || event.value === 'active')
+						) {
 							searchType = event.value;
+							clubs = [];
 							error = '';
 						}
 					}}
@@ -299,6 +321,15 @@
 							</SegmentedControl.ItemText>
 							<SegmentedControl.ItemHiddenInput />
 						</SegmentedControl.Item>
+						<SegmentedControl.Item value="active">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<Activity size={16} />
+									<span class="ml-1">Active</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
 					</SegmentedControl.Control>
 				</SegmentedControl>
 
@@ -311,6 +342,11 @@
 						placeholder="Type to search clubs..."
 						autocomplete="off"
 					/>
+				{:else if searchType === 'active'}
+					<button class="btn w-full preset-filled-primary-500" onclick={searchClubs}>
+						<Activity class="mr-2 h-4 w-4" />
+						Show Active Clubs
+					</button>
 				{:else if searchType === 'location'}
 					<div class="space-y-3">
 						<gmp-place-autocomplete
@@ -367,7 +403,10 @@
 						value={searchType}
 						orientation="vertical"
 						onValueChange={(event: { value: string | null }) => {
-							if (event.value && (event.value === 'name' || event.value === 'location')) {
+							if (
+								event.value &&
+								(event.value === 'name' || event.value === 'location' || event.value === 'active')
+							) {
 								searchType = event.value;
 								error = '';
 							}
@@ -393,6 +432,15 @@
 								</SegmentedControl.ItemText>
 								<SegmentedControl.ItemHiddenInput />
 							</SegmentedControl.Item>
+							<SegmentedControl.Item value="active">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<Activity size={16} />
+										<span class="ml-1">Active</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
 						</SegmentedControl.Control>
 					</SegmentedControl>
 
@@ -407,6 +455,11 @@
 								placeholder="Type to search clubs..."
 								autocomplete="off"
 							/>
+						{:else if searchType === 'active'}
+							<button class="btn preset-filled-primary-500" onclick={searchClubs}>
+								<Activity class="mr-2 h-4 w-4" />
+								Show Active Clubs
+							</button>
 						{:else if searchType === 'location'}
 							<div class="space-y-3">
 								<div class="flex gap-3">
@@ -509,6 +562,10 @@
 							{#if isLocationSearch}
 								<th>Distance</th>
 							{/if}
+							{#if isActiveSearch}
+								<th>Flights (7d)</th>
+								<th>Last Active</th>
+							{/if}
 							<th>Actions</th>
 						</tr>
 					</thead>
@@ -549,6 +606,16 @@
 									<td>
 										<span class="text-surface-600-300-token text-sm">
 											{formatDistance(club.distanceMeters)}
+										</span>
+									</td>
+								{/if}
+								{#if isActiveSearch}
+									<td>
+										<span class="font-medium">{club.recentFlightsCount ?? 0}</span>
+									</td>
+									<td>
+										<span class="text-surface-600-300-token text-sm">
+											{formatTimeAgo(club.lastFlightAt)}
 										</span>
 									</td>
 								{/if}
@@ -631,11 +698,20 @@
 								</span>
 							</div>
 						{/if}
+
+						{#if isActiveSearch}
+							<div class="flex items-center gap-2">
+								<Activity class="h-4 w-4 flex-shrink-0 text-surface-500" />
+								<span class="text-surface-600-300-token">
+									{club.recentFlightsCount ?? 0} flights &middot; {formatTimeAgo(club.lastFlightAt)}
+								</span>
+							</div>
+						{/if}
 					</div>
 				</article>
 			{/each}
 		</div>
-	{:else if !loading && !error && (searchQuery || (selectedLatitude !== null && selectedLongitude !== null))}
+	{:else if !loading && !error && (searchQuery || (selectedLatitude !== null && selectedLongitude !== null) || searchType === 'active')}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
