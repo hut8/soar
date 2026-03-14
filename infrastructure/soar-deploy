@@ -848,16 +848,19 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
                 PG_DATABASE="soar_staging"
                 PG_DATASOURCE_UID="soar-postgres-staging"
                 PG_DATASOURCE_NAME="soar-postgres-staging"
+                PG_PORT="6433"
             else
                 PG_DATABASE="soar"
                 PG_DATASOURCE_UID="soar-postgres-production"
                 PG_DATASOURCE_NAME="soar-postgres-production"
+                PG_PORT="6432"
             fi
 
             # Process template (no password needed - PgDog uses auth_type=trust on localhost)
             sed -e "s|{{POSTGRES_DATABASE}}|$PG_DATABASE|g" \
                 -e "s|{{POSTGRES_DATASOURCE_UID}}|$PG_DATASOURCE_UID|g" \
                 -e "s|{{POSTGRES_DATASOURCE_NAME}}|$PG_DATASOURCE_NAME|g" \
+                -e "s|{{POSTGRES_PORT}}|$PG_PORT|g" \
                 "$DEPLOY_DIR/grafana-provisioning/datasources/soar-postgres.yaml.template" \
                 > /etc/grafana/provisioning/datasources/soar-postgres.yaml
             chmod 644 /etc/grafana/provisioning/datasources/soar-postgres.yaml

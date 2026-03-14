@@ -208,11 +208,11 @@ ReadOnlyPaths=/etc/pgdog
 WantedBy=multi-user.target
 EOF
 
-# Enable and start service
+# Enable and (re)start service
 echo "Enabling and starting pgdog service..."
 systemctl daemon-reload
 systemctl enable pgdog
-systemctl start pgdog
+systemctl restart pgdog
 
 # Wait a moment for service to start
 sleep 2

@@ -93,7 +93,7 @@ sudo systemctl restart soar-ingest-adsb-staging
 ### 4. Monitor PgDog
 ```bash
 # Monitor logs
-journalctl -u pgdog-staging -f
+journalctl -u pgdog -f
 ```
 
 ### 5. Deploy to Production (after staging validation)

@@ -5,8 +5,9 @@
 #   {{POSTGRES_DATABASE}} - Database name (soar or soar_staging)
 #   {{POSTGRES_DATASOURCE_UID}} - Datasource UID (soar-postgres-production or soar-postgres-staging)
 #   {{POSTGRES_DATASOURCE_NAME}} - Datasource name (soar-postgres-production or soar-postgres-staging)
+#   {{POSTGRES_PORT}} - PgDog port (6432 for production, 6433 for staging)
 #
-# Connection goes through PgDog on port 6432 with auth_type=trust (no password needed)
+# Connection goes through PgDog with auth_type=trust (no password needed)
 
 apiVersion: 1
 
@@ -15,7 +16,7 @@ datasources:
     type: postgres
     uid: {{POSTGRES_DATASOURCE_UID}}
     access: proxy
-    url: 127.0.0.1:6432
+    url: 127.0.0.1:{{POSTGRES_PORT}}
     user: soar
     editable: true
     jsonData:
