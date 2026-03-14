@@ -223,6 +223,8 @@ export interface Club {
 	distanceMeters?: number;
 	status: string;
 	createdBy?: string;
+	recentFlightsCount?: number;
+	lastFlightAt?: string;
 }
 
 // For backward compatibility, extend Club with isSoaring for club selector

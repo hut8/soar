@@ -31,6 +31,8 @@ pub struct ClubSearchParams {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub radius: Option<f64>,
+    pub active: Option<bool>,
+    pub days: Option<i32>,
 }
 
 pub async fn get_club_by_id(
@@ -61,6 +63,25 @@ pub async fn search_clubs(
     Query(params): Query<ClubSearchParams>,
 ) -> impl IntoResponse {
     let clubs_repo = ClubsRepository::new(state.pool);
+
+    // Check if active clubs search is requested
+    if params.active == Some(true) {
+        let days = params.days.unwrap_or(7).clamp(1, 90);
+        match clubs_repo.get_recently_active(days, params.limit).await {
+            Ok(clubs) => {
+                let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
+                return Json(DataListResponse { data: club_views }).into_response();
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to get recently active clubs");
+                return json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get recently active clubs",
+                )
+                .into_response();
+            }
+        }
+    }
 
     // Check if geographic search parameters are provided
     if let (Some(lat), Some(lng)) = (params.latitude, params.longitude) {

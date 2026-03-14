@@ -18,6 +18,8 @@ ExecReload=/bin/kill -s HUP $MAINPID
 # Environment variables
 EnvironmentFile=/etc/soar/env
 Environment=METRICS_PORT=9095
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://tenerife:4318
+Environment=SOAR_ENV=production
 
 # Security settings
 NoNewPrivileges=yes

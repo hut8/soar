@@ -2,9 +2,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Camera, AlertCircle, X } from '@lucide/svelte';
+	import { Camera, AlertCircle, X, MonitorSmartphone, Binoculars } from '@lucide/svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-	import { ARTracker } from '$lib/services/arTracker';
+	import { ARTracker, hasOrientationSensor } from '$lib/services/arTracker';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { calculateBoundingBox, fixToARPosition } from '$lib/ar/calculations';
@@ -37,6 +37,8 @@
 	let cameraReady = $state(false);
 	let cameraError = $state<string | null>(null);
 	let permissionDenied = $state<'camera' | 'location' | 'orientation' | null>(null);
+	let sensorUnsupported = $state(false);
+	let checkingSensors = $state(true);
 
 	let userPosition: ARUserPosition | null = $state(null);
 	let deviceOrientation: ARDeviceOrientation | null = $state(null);
@@ -302,6 +304,15 @@
 		updateDimensions();
 		window.addEventListener('resize', updateDimensions);
 
+		// Check for orientation sensor support before requesting camera
+		const hasSensors = await hasOrientationSensor();
+		checkingSensors = false;
+
+		if (!hasSensors) {
+			sensorUnsupported = true;
+			return;
+		}
+
 		// Start camera
 		await arTracker.startCamera();
 
@@ -355,8 +366,38 @@
 </svelte:head>
 
 <div class="ar-page">
-	<!-- Camera video background -->
-	{#if cameraReady}
+	<!-- Sensor unsupported (desktop / no gyroscope) -->
+	{#if sensorUnsupported}
+		<div class="error-state">
+			<MonitorSmartphone size={64} class="text-warning-500" />
+			<h2>Device Not Supported</h2>
+			<p>
+				AR mode requires a device with orientation sensors (gyroscope and compass), typically a
+				phone or tablet. Your device doesn't appear to have these sensors.
+			</p>
+			<p class="suggestion">
+				Try the <strong>Spotter</strong> view instead — it provides a 3D aircraft view that works on any
+				device.
+			</p>
+			<div class="error-actions">
+				<button class="btn preset-filled-primary-500" onclick={() => goto(resolve('/spotter'))}>
+					<Binoculars size={18} />
+					Open Spotter View
+				</button>
+				<button class="preset-tonal-surface-500 btn" onclick={() => goto(resolve('/'))}>
+					Return Home
+				</button>
+			</div>
+		</div>
+	{:else if checkingSensors}
+		<div class="loading-state">
+			<div class="pulse-icon">
+				<Camera size={64} />
+			</div>
+			<p>Checking device sensors...</p>
+		</div>
+		<!-- Camera video background -->
+	{:else if cameraReady}
 		<video bind:this={videoElement} autoplay playsinline class="camera-view"></video>
 	{:else if permissionDenied}
 		<div class="error-state">
@@ -518,6 +559,25 @@
 	.error-state p {
 		max-width: 400px;
 		opacity: 0.9;
+	}
+
+	.error-state .suggestion {
+		opacity: 0.75;
+		font-size: 0.9rem;
+	}
+
+	.error-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		align-items: center;
+		margin-top: 0.5rem;
+	}
+
+	.error-actions .btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
 	.btn-close {
