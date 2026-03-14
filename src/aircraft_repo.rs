@@ -1979,11 +1979,25 @@ impl AircraftCache {
             if let Some(entry) = self.by_address.get(&(sibling_type, address)) {
                 metrics::counter!("aircraft_cache.hit_total", "lookup" => "by_address_sibling")
                     .increment(1);
-                let aircraft = entry.value().clone();
+                let mut aircraft = entry.value().clone();
                 drop(entry);
 
-                // Also cache under the incoming address type for future direct hits
+                // Set the incoming typed address field on the cached Aircraft so
+                // evict_by_id() can derive all keys to remove. Without this, the
+                // sibling-inserted by_address entry would be orphaned on eviction.
+                match address_type {
+                    AddressType::Flarm => aircraft.flarm_address = Some(address as u32),
+                    AddressType::Ogn => aircraft.ogn_address = Some(address as u32),
+                    _ => {}
+                }
+
+                // Cache under both the incoming key and update the sibling + by_id entries
                 self.by_address.insert(key, aircraft.clone());
+                self.by_address
+                    .insert((sibling_type, address), aircraft.clone());
+                if let Some(id) = aircraft.id {
+                    self.by_id.insert(id, aircraft.clone());
+                }
 
                 // Fire-and-forget DB call to add the missing address column
                 let repo = self.repo.clone();

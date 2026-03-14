@@ -945,14 +945,7 @@ fn format_distance(meters: f64) -> String {
     }
 }
 
-/// Simple HTML escaping
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
+use crate::html_escape;
 
 /// Data about a geofence exit event for email display
 #[derive(Debug, Clone)]

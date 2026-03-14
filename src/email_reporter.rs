@@ -6,14 +6,7 @@ use lettre::{Message, SmtpTransport, Transport};
 use std::time::Duration;
 use tracing::{info, warn};
 
-/// Escape HTML special characters to prevent injection in email bodies.
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
+use crate::html_escape;
 
 /// Get the environment name for display purposes
 /// Returns "Production", "Staging", or "Development"
@@ -256,7 +249,7 @@ impl DataLoadReport {
                 <td>{}</td>
                 <td>{}</td>
             </tr>"#,
-                entity.name,
+                html_escape(&entity.name),
                 status_class,
                 status_symbol,
                 Self::format_duration(entity.duration_secs),
@@ -275,7 +268,7 @@ impl DataLoadReport {
                     </div>
                 </td>
             </tr>"#,
-                    error
+                    html_escape(error)
                 ));
             }
 
@@ -292,15 +285,17 @@ impl DataLoadReport {
                     // Check if item contains coordinates (format: "callsign|lat,lon")
                     if let Some((callsign, coords)) = item.split_once('|') {
                         // Create a Google Maps link for the coordinates
+                        // Coords are numeric lat,lon so no URL encoding needed;
+                        // HTML-escape all values for safe insertion into the template.
                         let maps_url =
                             format!("https://www.google.com/maps/search/?api=1&query={}", coords);
                         items_html.push_str(&format!(
                             r#"{} (<a href="{}" target="_blank" style="color: #721c24; text-decoration: underline;">{}</a>)"#,
-                            callsign, maps_url, coords
+                            html_escape(callsign), html_escape(&maps_url), html_escape(coords)
                         ));
                     } else {
                         // No coordinates, just display the item as-is
-                        items_html.push_str(item);
+                        items_html.push_str(&html_escape(item));
                     }
                 }
 
