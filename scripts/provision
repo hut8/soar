@@ -921,96 +921,10 @@ echo -e "${GREEN}PostGIS enabled on '$DB_NAME' database${NC}"
 # PgDog Installation and Configuration
 # ============================================================================
 
-echo -e "${BLUE}Installing PgDog...${NC}"
+echo -e "${BLUE}Installing and configuring PgDog connection pooler...${NC}"
 
-# Detect architecture and download PgDog binary
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)
-        PGDOG_ARCH="x86_64"
-        ;;
-    aarch64)
-        PGDOG_ARCH="aarch64"
-        ;;
-    *)
-        echo -e "${RED}Error: Unsupported architecture: $ARCH${NC}"
-        exit 1
-        ;;
-esac
-
-PGDOG_VERSION="v1.3.2"
-PGDOG_URL="https://github.com/pgdogdev/pgdog/releases/download/${PGDOG_VERSION}/pgdog-${PGDOG_VERSION}-${PGDOG_ARCH}-unknown-linux-gnu.tar.gz"
-TMPDIR=$(mktemp -d)
-curl -fsSL "$PGDOG_URL" -o "$TMPDIR/pgdog.tar.gz"
-tar -xzf "$TMPDIR/pgdog.tar.gz" -C "$TMPDIR"
-install -m 755 "$TMPDIR/pgdog" /usr/local/bin/pgdog
-rm -rf "$TMPDIR"
-
-echo -e "${GREEN}PgDog installed successfully${NC}"
-
-# Configure PgDog
-echo -e "${BLUE}Configuring PgDog...${NC}"
-
-# Create pgdog directory
-sudo mkdir -p /etc/pgdog
-
-# Copy configuration files
-sudo cp infrastructure/pgdog.toml /etc/pgdog/pgdog.toml
-sudo cp infrastructure/pgdog-users.toml /etc/pgdog/users.toml
-
-# Set permissions
-sudo chmod 644 /etc/pgdog/pgdog.toml
-sudo chmod 644 /etc/pgdog/users.toml
-
-# Create systemd service for PgDog
-cat > /etc/systemd/system/pgdog.service <<UNIT
-[Unit]
-Description=PgDog PostgreSQL Connection Pooler
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-DynamicUser=yes
-ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
-ExecReload=/bin/kill -HUP \$MAINPID
-KillSignal=SIGINT
-KillMode=mixed
-
-Restart=on-failure
-RestartSec=5s
-
-LimitNOFILE=65536
-
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=pgdog
-
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadOnlyPaths=/etc/pgdog
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-sudo systemctl daemon-reload
-
-# Enable and start PgDog
-sudo systemctl enable pgdog
-if ! systemctl is-active --quiet pgdog; then
-    echo -e "${BLUE}Starting PgDog...${NC}"
-    sudo systemctl start pgdog
-    if systemctl is-active --quiet pgdog; then
-        echo -e "${GREEN}PgDog started successfully${NC}"
-    else
-        echo -e "${YELLOW}Warning: Failed to start PgDog. Check logs with: journalctl -u pgdog -n 50${NC}"
-    fi
-else
-    echo -e "${BLUE}PgDog is already running${NC}"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/setup-pgdog" "$ENVIRONMENT"
 
 echo -e "${GREEN}PgDog configured${NC}"
 
@@ -1111,27 +1025,16 @@ echo "  No password required for the 'soar' user on local connections"
 echo "  pg_hba.conf backup saved to: $PG_HBA_CONF.backup.*"
 echo
 echo -e "${YELLOW}PgDog Connection Pooler:${NC}"
-echo "  Listen address: 127.0.0.1:6432"
 echo "  Configuration: /etc/pgdog/pgdog.toml"
 echo "  User list: /etc/pgdog/users.toml"
 echo "  Pool mode: transaction (release connection after each transaction)"
-echo "  Default pool size: 100 per database/user pair"
 echo "  Logs: journalctl -u pgdog"
-echo ""
-echo "  Available databases through PgDog:"
-echo "    - soar (production)"
-echo "    - soar_staging (staging)"
-echo "    - soar_dev (development)"
 echo ""
 echo "  Service control:"
 echo "    sudo systemctl status pgdog"
 echo "    sudo systemctl restart pgdog"
 echo ""
-echo "  Connect via PgDog:"
-echo "    psql -h 127.0.0.1 -p 6432 -U soar -d $DB_NAME"
-echo ""
-echo "  IMPORTANT: To use PgDog, update DATABASE_URL in $ENV_FILE:"
-echo "    DATABASE_URL=postgresql://soar@127.0.0.1:6432/$DB_NAME"
+echo "  Reconfigure: sudo ./scripts/setup-pgdog $ENVIRONMENT"
 echo
 echo -e "${YELLOW}NATS:${NC}"
 echo "  NATS server installed"

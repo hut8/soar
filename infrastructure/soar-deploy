@@ -1263,41 +1263,9 @@ else
     log_warn "Alloy configuration file not found in deployment directory"
 fi
 
-# Install PgDog configuration
-PGDOG_CHANGED=false
-for pgdog_file in pgdog.toml pgdog-users.toml; do
-    if [ -f "$DEPLOY_DIR/$pgdog_file" ]; then
-        # Map pgdog-users.toml to users.toml in the install directory
-        if [ "$pgdog_file" = "pgdog-users.toml" ]; then
-            INSTALL_NAME="users.toml"
-        else
-            INSTALL_NAME="$pgdog_file"
-        fi
-        if ! diff -q "$DEPLOY_DIR/$pgdog_file" "/etc/pgdog/$INSTALL_NAME" >/dev/null 2>&1; then
-            log_info "Installing PgDog configuration: $pgdog_file -> $INSTALL_NAME"
-            sudo mkdir -p /etc/pgdog
-            sudo cp "$DEPLOY_DIR/$pgdog_file" "/etc/pgdog/$INSTALL_NAME"
-            sudo chmod 644 "/etc/pgdog/$INSTALL_NAME"
-            PGDOG_CHANGED=true
-        else
-            log_info "PgDog configuration unchanged: $pgdog_file"
-        fi
-    else
-        log_warn "PgDog configuration file not found in deployment directory: $pgdog_file"
-    fi
-done
-
-# Reload PgDog if config changed and service is running
-if [ "$PGDOG_CHANGED" = true ]; then
-    log_info "PgDog configuration installed"
-    if systemctl is-active --quiet pgdog; then
-        log_info "Reloading PgDog to apply new configuration..."
-        if ! systemctl reload pgdog; then
-            log_warn "Failed to reload PgDog, attempting restart..."
-            systemctl restart pgdog || log_warn "Failed to restart PgDog"
-        fi
-    fi
-fi
+# PgDog configuration is managed by scripts/setup-pgdog (run during provisioning)
+# and is NOT updated during deploys. To reconfigure PgDog, run:
+#   sudo ./scripts/setup-pgdog <production|staging>
 
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
