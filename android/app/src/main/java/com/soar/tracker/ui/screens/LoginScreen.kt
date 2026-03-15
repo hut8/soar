@@ -2,6 +2,7 @@ package com.soar.tracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -29,17 +31,24 @@ import androidx.compose.ui.unit.dp
 import com.soar.tracker.SoarTrackerApp
 import kotlinx.coroutines.launch
 
+private const val PRODUCTION_URL = "https://glider.flights"
+private const val STAGING_URL = "https://staging.glider.flights"
+
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as SoarTrackerApp
     val scope = rememberCoroutineScope()
 
-    var serverUrl by remember { mutableStateOf(app.tokenManager.getServerUrl()) }
+    var useStaging by remember {
+        mutableStateOf(app.tokenManager.getServerUrl() == STAGING_URL)
+    }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    val serverUrl = if (useStaging) STAGING_URL else PRODUCTION_URL
 
     Column(
         modifier = Modifier
@@ -62,20 +71,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         )
 
         Spacer(modifier = Modifier.height(32.dp))
-
-        OutlinedTextField(
-            value = serverUrl,
-            onValueChange = { serverUrl = it },
-            label = { Text("Server URL") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Next,
-            ),
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = email,
@@ -103,6 +98,23 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 imeAction = ImeAction.Done,
             ),
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Checkbox(
+                checked = useStaging,
+                onCheckedChange = { useStaging = it },
+            )
+            Text(
+                text = "Staging (development only)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         if (error != null) {
             Spacer(modifier = Modifier.height(16.dp))
