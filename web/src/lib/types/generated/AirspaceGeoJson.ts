@@ -5,7 +5,7 @@ import type { AirspaceProperties } from "./AirspaceProperties";
  * GeoJSON Feature for API responses
  */
 export type AirspaceGeoJson = {
-  type: string;
+  type: "Feature";
   geometry: { type: string; coordinates: number[][][] | number[][][][] };
   properties: AirspaceProperties;
 };

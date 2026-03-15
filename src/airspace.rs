@@ -216,6 +216,7 @@ pub struct NewAirspace {
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct AirspaceGeoJson {
     #[serde(rename = "type")]
+    #[ts(type = "\"Feature\"")]
     pub feature_type: String, // Always "Feature"
     #[ts(type = "{ type: string; coordinates: number[][][] | number[][][][] }")]
     pub geometry: serde_json::Value, // GeoJSON geometry

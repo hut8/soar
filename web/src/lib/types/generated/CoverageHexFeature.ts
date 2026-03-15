@@ -5,7 +5,7 @@ import type { CoverageHexProperties } from "./CoverageHexProperties";
  * GeoJSON Feature for H3 hex (API response)
  */
 export type CoverageHexFeature = {
-  type: string;
+  type: "Feature";
   geometry: { type: string; coordinates: number[][][] };
   properties: CoverageHexProperties;
 };

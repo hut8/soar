@@ -54,6 +54,7 @@ pub struct RawMessageResponse {
     pub receiver_id: Option<Uuid>,
     /// Pretty-printed Rust debug format of the decoded/parsed message
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub debug_format: Option<String>,
 }
 

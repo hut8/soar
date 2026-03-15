@@ -57,6 +57,7 @@ pub struct NewReceiverCoverageH3 {
 #[serde(rename_all = "camelCase")]
 pub struct CoverageHexFeature {
     #[serde(rename = "type")]
+    #[ts(type = "\"Feature\"")]
     pub feature_type: String, // Always "Feature"
     #[ts(type = "{ type: string; coordinates: number[][][] }")]
     pub geometry: serde_json::Value, // H3 hex polygon as GeoJSON

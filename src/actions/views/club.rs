@@ -139,19 +139,24 @@ pub struct ClubView {
     pub name: String,
     pub home_base_airport_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub home_base_airport_ident: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub distance_meters: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null")]
+    #[ts(optional, type = "number")]
     pub recent_flights_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub last_flight_at: Option<DateTime<Utc>>,
 }
 

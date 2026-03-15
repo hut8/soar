@@ -103,7 +103,7 @@
 		loading: boolean;
 		error?: string;
 		source?: MessageSourceType;
-		debugFormat?: string | null;
+		debugFormat?: string;
 	} {
 		const cached = rawMessagesCache.get(rawMessageId);
 		if (!cached) {

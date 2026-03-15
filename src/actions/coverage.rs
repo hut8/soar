@@ -64,6 +64,7 @@ pub struct CoverageQueryParams {
 #[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct CoverageGeoJsonResponse {
     #[serde(rename = "type")]
+    #[ts(type = "\"FeatureCollection\"")]
     pub feature_collection_type: String, // Always "FeatureCollection"
     pub features: Vec<CoverageHexFeature>,
 }

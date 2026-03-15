@@ -16,5 +16,5 @@ export type RawMessageResponse = {
   /**
    * Pretty-printed Rust debug format of the decoded/parsed message
    */
-  debugFormat: string | null;
+  debugFormat?: string;
 };

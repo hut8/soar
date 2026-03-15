@@ -5,12 +5,12 @@ export type ClubView = {
   id: string;
   name: string;
   homeBaseAirportId: number | null;
-  homeBaseAirportIdent: string | null;
-  location: Location | null;
+  homeBaseAirportIdent?: string;
+  location?: Location;
   createdAt: string;
   updatedAt: string;
-  similarityScore: number | null;
-  distanceMeters: number | null;
-  recentFlightsCount: number | null;
-  lastFlightAt: string | null;
+  similarityScore?: number;
+  distanceMeters?: number;
+  recentFlightsCount?: number;
+  lastFlightAt?: string;
 };

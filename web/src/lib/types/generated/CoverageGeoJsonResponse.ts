@@ -2,6 +2,6 @@
 import type { CoverageHexFeature } from "./CoverageHexFeature";
 
 export type CoverageGeoJsonResponse = {
-  type: string;
+  type: "FeatureCollection";
   features: Array<CoverageHexFeature>;
 };
