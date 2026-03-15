@@ -1,9 +1,14 @@
-use axum::{extract::Query, http::StatusCode, response::IntoResponse};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use ts_rs::TS;
 
 use super::{DataResponse, json_error};
+use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct WeatherParams {
@@ -40,7 +45,10 @@ pub struct WeatherResponse {
 ///
 /// Fetches current weather conditions from Open-Meteo for the given coordinates.
 /// Used primarily for setting the altimeter (QNH).
-pub async fn get_weather(Query(params): Query<WeatherParams>) -> impl IntoResponse {
+pub async fn get_weather(
+    State(state): State<AppState>,
+    Query(params): Query<WeatherParams>,
+) -> impl IntoResponse {
     if !(-90.0..=90.0).contains(&params.lat) || !(-180.0..=180.0).contains(&params.lon) {
         return json_error(
             StatusCode::BAD_REQUEST,
@@ -54,8 +62,7 @@ pub async fn get_weather(Query(params): Query<WeatherParams>) -> impl IntoRespon
         params.lat, params.lon
     );
 
-    let client = reqwest::Client::new();
-    let response = match client.get(&url).send().await {
+    let response = match state.http_client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
             warn!("Weather API request failed: {}", e);

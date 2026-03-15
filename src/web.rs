@@ -71,6 +71,7 @@ pub struct AppState {
     pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
     pub aircraft_types_lookup: std::sync::Arc<crate::actions::views::AircraftTypesLookup>, // Static reference data cache
     pub stripe_config: Option<StripeConfig>, // Stripe configuration (None if not configured)
+    pub http_client: reqwest::Client,        // Shared HTTP client for external API calls
 }
 
 async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
@@ -639,6 +640,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         live_fix_service,
         aircraft_types_lookup,
         stripe_config,
+        http_client: reqwest::Client::new(),
     };
 
     // Create CORS layer that allows all origins and methods
