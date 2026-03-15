@@ -1,4 +1,4 @@
-use bigdecimal::BigDecimal;
+use bigdecimal::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 use ts_rs::TS;
@@ -179,10 +179,8 @@ pub struct AirportView {
     pub ident: String,
     pub airport_type: String,
     pub name: String,
-    #[ts(type = "number | null")]
-    pub latitude_deg: Option<BigDecimal>,
-    #[ts(type = "number | null")]
-    pub longitude_deg: Option<BigDecimal>,
+    pub latitude_deg: Option<f64>,
+    pub longitude_deg: Option<f64>,
     pub elevation_ft: Option<i32>,
     pub continent: Option<String>,
     pub iso_country: Option<String>,
@@ -206,8 +204,8 @@ impl From<Airport> for AirportView {
             ident: airport.ident,
             airport_type: airport.airport_type,
             name: airport.name,
-            latitude_deg: airport.latitude_deg,
-            longitude_deg: airport.longitude_deg,
+            latitude_deg: airport.latitude_deg.as_ref().and_then(|d| d.to_f64()),
+            longitude_deg: airport.longitude_deg.as_ref().and_then(|d| d.to_f64()),
             elevation_ft: airport.elevation_ft,
             continent: airport.continent,
             iso_country: airport.iso_country,
