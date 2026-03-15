@@ -934,6 +934,10 @@ jobs:
           echo "Executing deployment script for radar-staging..."
           echo "Deployment ID: $DEPLOY_ID"
 
+          # Bootstrap: install the repo's soar-deploy so /usr/local/bin/soar-deploy
+          # is current before we invoke it (older versions may reject new env names)
+          ssh soar@radar.hut8.tools "sudo install -m 755 $DEPLOY_DIR/soar-deploy /usr/local/bin/soar-deploy"
+
           ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar-staging $DEPLOY_DIR &"
 
           sleep 3
@@ -1041,6 +1045,10 @@ jobs:
 
           echo "Executing deployment script for radar-production..."
           echo "Deployment ID: $DEPLOY_ID"
+
+          # Bootstrap: install the repo's soar-deploy so /usr/local/bin/soar-deploy
+          # is current before we invoke it (older versions may reject new env names)
+          ssh soar@radar.hut8.tools "sudo install -m 755 $DEPLOY_DIR/soar-deploy /usr/local/bin/soar-deploy"
 
           ssh soar@radar.hut8.tools "nohup sudo /usr/local/bin/soar-deploy radar-production $DEPLOY_DIR &"
 
