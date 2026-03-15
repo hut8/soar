@@ -857,21 +857,21 @@ impl AircraftRepository {
         // daily batch process (merge_flarm_ogn_duplicates). Attempting the UPDATE
         // would just hit a unique constraint violation on every packet.
         let already_exists = match address_type {
-            AddressType::Ogn => aircraft::table
-                .filter(aircraft::ogn_address.eq(address))
-                .filter(aircraft::id.ne(target.id))
-                .select(aircraft::id)
-                .first::<Uuid>(conn)
-                .optional()?,
-            AddressType::Flarm => aircraft::table
-                .filter(aircraft::flarm_address.eq(address))
-                .filter(aircraft::id.ne(target.id))
-                .select(aircraft::id)
-                .first::<Uuid>(conn)
-                .optional()?,
+            AddressType::Ogn => diesel::dsl::select(diesel::dsl::exists(
+                aircraft::table
+                    .filter(aircraft::ogn_address.eq(address))
+                    .filter(aircraft::id.ne(target.id)),
+            ))
+            .get_result::<bool>(conn)?,
+            AddressType::Flarm => diesel::dsl::select(diesel::dsl::exists(
+                aircraft::table
+                    .filter(aircraft::flarm_address.eq(address))
+                    .filter(aircraft::id.ne(target.id)),
+            ))
+            .get_result::<bool>(conn)?,
             _ => unreachable!(),
         };
-        if already_exists.is_some() {
+        if already_exists {
             // Another row already holds this address — can't inline-merge without
             // reassigning fixes/flights first. The batch merge will handle it.
             return Ok(None);
