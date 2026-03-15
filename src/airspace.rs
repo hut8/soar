@@ -7,7 +7,8 @@ use uuid::Uuid;
 use crate::schema::airspaces;
 
 /// Source of airspace data
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceSource")]
 pub enum AirspaceSource {
     #[db_enum(rename = "openaip")]
@@ -19,7 +20,8 @@ pub enum AirspaceSource {
 }
 
 /// ICAO Airspace Classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceClass")]
 pub enum AirspaceClass {
     #[db_enum(rename = "A")]
@@ -42,7 +44,8 @@ pub enum AirspaceClass {
 }
 
 /// OpenAIP Airspace Types (37 types)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceType")]
 pub enum AirspaceType {
     #[db_enum(rename = "Restricted")]
@@ -209,15 +212,19 @@ pub struct NewAirspace {
 }
 
 /// GeoJSON Feature for API responses
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct AirspaceGeoJson {
     #[serde(rename = "type")]
+    #[ts(type = "\"Feature\"")]
     pub feature_type: String, // Always "Feature"
+    #[ts(type = "{ type: string; coordinates: number[][][] | number[][][][] }")]
     pub geometry: serde_json::Value, // GeoJSON geometry
     pub properties: AirspaceProperties,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct AirspaceProperties {
     pub id: Uuid,

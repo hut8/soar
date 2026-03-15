@@ -81,7 +81,8 @@ pub struct Fix {
 
 /// Extended Fix struct that includes aircraft information
 /// Used for receiver fixes API where aircraft details need to be displayed
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct FixWithAircraftInfo {
     #[serde(flatten)]

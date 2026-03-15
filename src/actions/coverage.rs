@@ -60,9 +60,11 @@ pub struct CoverageQueryParams {
 // Response Types
 // ============================================================================
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct CoverageGeoJsonResponse {
     #[serde(rename = "type")]
+    #[ts(type = "\"FeatureCollection\"")]
     pub feature_collection_type: String, // Always "FeatureCollection"
     pub features: Vec<CoverageHexFeature>,
 }
@@ -173,9 +175,11 @@ pub struct HexFixesQueryParams {
 }
 
 /// Response for fixes within an H3 hexagon
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub struct FixesInHexResponse {
     pub data: Vec<FixWithAircraftInfo>,
+    #[ts(type = "number")]
     pub total: i64,
     #[serde(rename = "h3Index")]
     pub h3_index: String,
@@ -183,7 +187,8 @@ pub struct FixesInHexResponse {
 }
 
 /// Response for receivers that contributed to an H3 hexagon
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct HexReceiversResponse {
     pub data: Vec<ReceiverView>,

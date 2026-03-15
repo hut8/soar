@@ -10,7 +10,7 @@ set -euo pipefail
 #   sudo ./scripts/setup-pgdog [production|staging]
 #
 # What this does:
-# - Downloads PgDog binary from GitHub releases
+# - Builds PgDog from source (requires git, cargo, cmake)
 # - Creates configuration optimized for SOAR workload
 # - Sets up systemd service (pgdog.service)
 # - Configures trust authentication (localhost only, no passwords)
@@ -34,31 +34,39 @@ echo "SOAR PgDog Setup - $ENVIRONMENT"
 echo "========================================="
 echo
 
-# Detect architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)
-        PGDOG_ARCH="x86_64"
-        ;;
-    aarch64)
-        PGDOG_ARCH="aarch64"
-        ;;
-    *)
-        echo "Error: Unsupported architecture: $ARCH"
+# When run via sudo, use the calling user's Rust toolchain
+if [[ -n "${SUDO_USER:-}" ]]; then
+    SUDO_HOME=$(eval echo "~$SUDO_USER")
+    export RUSTUP_HOME="${RUSTUP_HOME:-$SUDO_HOME/.rustup}"
+    export PATH="${CARGO_HOME:-$SUDO_HOME/.cargo}/bin:$PATH"
+fi
+
+# Check build dependencies
+for cmd in git cargo cmake; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: $cmd is required but not installed"
         exit 1
-        ;;
-esac
+    fi
+done
 
-# Download and install PgDog binary
-PGDOG_VERSION="v1.3.2"
-PGDOG_URL="https://github.com/pgdogdev/pgdog/releases/download/${PGDOG_VERSION}/pgdog-${PGDOG_VERSION}-${PGDOG_ARCH}-unknown-linux-gnu.tar.gz"
+# Build and install PgDog from source
+# PgDog does not publish prebuilt binaries; it must be compiled from source.
+PGDOG_VERSION="v0.1.32"
+PGDOG_REPO="https://github.com/pgdogdev/pgdog.git"
 
-echo "Downloading PgDog ${PGDOG_VERSION} for ${PGDOG_ARCH}..."
+if [[ -f /usr/local/bin/pgdog ]]; then
+    INSTALLED_VERSION=$(/usr/local/bin/pgdog --version 2>/dev/null || echo "unknown")
+    echo "PgDog already installed: $INSTALLED_VERSION"
+    echo "Upgrading to ${PGDOG_VERSION}..."
+fi
+
+echo "Building PgDog ${PGDOG_VERSION} from source (this may take a few minutes)..."
 TMPDIR=$(mktemp -d)
-curl -fsSL "$PGDOG_URL" -o "$TMPDIR/pgdog.tar.gz"
-tar -xzf "$TMPDIR/pgdog.tar.gz" -C "$TMPDIR"
-install -m 755 "$TMPDIR/pgdog" /usr/local/bin/pgdog
-rm -rf "$TMPDIR"
+trap 'rm -rf "${TMPDIR:?}"' EXIT
+export CARGO_HOME="$TMPDIR/.cargo"
+git clone --depth 1 --branch "$PGDOG_VERSION" "$PGDOG_REPO" "$TMPDIR/pgdog"
+cargo build --release --manifest-path "$TMPDIR/pgdog/Cargo.toml"
+install -m 755 "$TMPDIR/pgdog/target/release/pgdog" /usr/local/bin/pgdog
 echo "PgDog installed to /usr/local/bin/pgdog"
 
 # Create directories
@@ -66,13 +74,13 @@ mkdir -p /etc/pgdog
 
 # Get PostgreSQL credentials from environment file
 if [[ "$ENVIRONMENT" == "production" ]]; then
-    ENV_FILE="/etc/soar/env"
+    ENV_FILE="/etc/soar/env-production"
     DB_NAME="soar"
-    PGDOG_PORT=6432
+    PGDOG_PORT=6434
 else
     ENV_FILE="/etc/soar/env-staging"
     DB_NAME="soar_staging"
-    PGDOG_PORT=6433
+    PGDOG_PORT=6435
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -96,16 +104,18 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
-read -r DB_USER DB_HOST DB_PORT DB_NAME_FROM_URL < <(
+# Always connect directly to PostgreSQL, not through another pooler.
+PG_PORT=5432
+
+read -r DB_USER DB_HOST DB_NAME_FROM_URL < <(
     DATABASE_URL="$DATABASE_URL" python3 -c "
 import os
 from urllib.parse import urlparse
 url = urlparse(os.environ['DATABASE_URL'])
 user = url.username or 'soar'
 host = url.hostname or '127.0.0.1'
-port = url.port or 5432
 db = url.path.lstrip('/')
-print(f'{user} {host} {port} {db}')
+print(f'{user} {host} {db}')
 " 2>/dev/null
 ) || {
     echo "Error: Could not parse DATABASE_URL"
@@ -114,7 +124,7 @@ print(f'{user} {host} {port} {db}')
 
 echo "Database configuration:"
 echo "  Host: $DB_HOST"
-echo "  Port: $DB_PORT"
+echo "  Port: $PG_PORT (direct to PostgreSQL)"
 echo "  Database: $DB_NAME_FROM_URL"
 echo "  User: $DB_USER"
 echo "  PgDog Port: $PGDOG_PORT"
@@ -148,7 +158,7 @@ workers = 4
 [[databases]]
 name = "$DB_NAME_FROM_URL"
 host = "$DB_HOST"
-port = $DB_PORT
+port = $PG_PORT
 database_name = "$DB_NAME_FROM_URL"
 user = "$DB_USER"
 EOF
@@ -181,7 +191,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 DynamicUser=yes
-ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
+ExecStart=/usr/local/bin/pgdog --config /etc/pgdog/pgdog.toml --users /etc/pgdog/users.toml
 ExecReload=/bin/kill -HUP \$MAINPID
 KillSignal=SIGINT
 KillMode=mixed
