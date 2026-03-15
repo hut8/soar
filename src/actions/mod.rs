@@ -16,6 +16,7 @@ pub mod geocoding;
 pub mod geofences;
 pub mod payments;
 pub mod pilots;
+pub mod push_subscriptions;
 pub mod raw_messages;
 pub mod receiver_alerts;
 pub mod receivers;

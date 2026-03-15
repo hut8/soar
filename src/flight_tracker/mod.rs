@@ -25,6 +25,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::geofence_repo::GeofenceRepository;
 use crate::locations_repo::LocationsRepository;
+use crate::push_notification_sender::PushNotificationSender;
 use crate::runways_repo::RunwaysRepository;
 use crate::users_repo::UsersRepository;
 use anyhow::Result;
@@ -77,6 +78,7 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
     pub geofence_repo: &'a GeofenceRepository,
     pub users_repo: &'a UsersRepository,
+    pub push_sender: Option<&'a PushNotificationSender>,
 }
 
 /// Simple flight tracker - just tracks which device is currently on which flight
@@ -91,6 +93,7 @@ pub struct FlightTracker {
     locations_repo: LocationsRepository,
     geofence_repo: GeofenceRepository,
     users_repo: UsersRepository,
+    push_sender: Option<PushNotificationSender>,
     elevation_db: ElevationDB,
     magnetic_service: crate::magnetic::MagneticService,
     // Unified aircraft state map: all aircraft seen in last 18 hours
@@ -117,6 +120,7 @@ impl Clone for FlightTracker {
             locations_repo: self.locations_repo.clone(),
             geofence_repo: self.geofence_repo.clone(),
             users_repo: self.users_repo.clone(),
+            push_sender: self.push_sender.clone(),
             elevation_db: self.elevation_db.clone(),
             magnetic_service: self.magnetic_service.clone(),
             aircraft_states: Arc::clone(&self.aircraft_states),
@@ -144,6 +148,7 @@ impl FlightTracker {
             locations_repo: LocationsRepository::new(pool.clone()),
             geofence_repo: GeofenceRepository::new(pool.clone()),
             users_repo: UsersRepository::new(pool.clone()),
+            push_sender: PushNotificationSender::from_env(pool.clone()),
             elevation_db,
             magnetic_service,
             aircraft_states: Arc::new(DashMap::new()),
@@ -187,6 +192,7 @@ impl FlightTracker {
             pool: self.pool.clone(),
             geofence_repo: &self.geofence_repo,
             users_repo: &self.users_repo,
+            push_sender: self.push_sender.as_ref(),
         }
     }
 

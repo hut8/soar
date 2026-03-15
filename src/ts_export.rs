@@ -42,6 +42,9 @@ mod tests {
     use crate::ingest_config::{DataStream, StreamFormat};
     use crate::locations::{Location, Point};
     use crate::payments::{PaymentStatus, PaymentType};
+    use crate::push_subscriptions::{
+        PushSubscriptionRequest, PushSubscriptionView, VapidPublicKeyResponse,
+    };
     use crate::raw_messages_repo::{MessageSourceType, RawMessageResponse};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
     use crate::tracker::{
@@ -150,6 +153,12 @@ mod tests {
         ReceiverAlertView::export(&cfg).expect("Failed to export ReceiverAlertView type");
         UpsertReceiverAlertRequest::export(&cfg)
             .expect("Failed to export UpsertReceiverAlertRequest type");
+
+        // Push subscription types
+        PushSubscriptionView::export(&cfg).expect("Failed to export PushSubscriptionView type");
+        PushSubscriptionRequest::export(&cfg)
+            .expect("Failed to export PushSubscriptionRequest type");
+        VapidPublicKeyResponse::export(&cfg).expect("Failed to export VapidPublicKeyResponse type");
 
         // Raw message types
         MessageSourceType::export(&cfg).expect("Failed to export MessageSourceType type");
