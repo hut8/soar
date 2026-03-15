@@ -23,6 +23,7 @@ pub struct Location {
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing)]
     #[ts(skip)]
     pub geocode_attempted_at: Option<DateTime<Utc>>,
 }
