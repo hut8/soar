@@ -2,21 +2,15 @@ package com.soar.tracker.ui.screens
 
 import java.util.Locale
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,13 +18,30 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.soar.tracker.data.api.NearbyAircraftInfo
+import com.soar.tracker.data.api.NearbyAirportInfo
 import com.soar.tracker.service.TrackingService
+import com.soar.tracker.ui.theme.Green
+import com.soar.tracker.ui.theme.Red
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
+
+private const val NM_TO_METERS = 1852.0
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,221 +49,251 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val isTracking by TrackingService.isTracking.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
+
     val aircraft = latestResponse?.nearbyAircraft ?: emptyList()
+    val airports = latestResponse?.nearbyAirports ?: emptyList()
+    val userLat = sensorData?.latitude
+    val userLon = sensorData?.longitude
+    val userHeading = sensorData?.magneticHeadingDegrees?.toFloat() ?: 0f
+
+    var northUp by remember { mutableStateOf(true) }
+
+    // Range rings in nautical miles
+    val rangeRingsNm = listOf(1.0, 2.0, 5.0, 10.0, 25.0, 50.0)
+    // Scale: the outermost ring fills the canvas
+    val maxRangeNm = rangeRingsNm.last()
+
+    val ringColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    val ringLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val aircraftColor = Green
+    val airportColor = MaterialTheme.colorScheme.tertiary
+    val userColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onSurface
+
+    val density = LocalDensity.current
+    val labelTextSize = with(density) { 10.dp.toPx() }
 
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(title = { Text("Nearby Aircraft") })
+            TopAppBar(
+                title = { Text("Live View") },
+                actions = {
+                    FilledTonalButton(
+                        onClick = { northUp = !northUp },
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) {
+                        Text(if (northUp) "North Up" else "Heading Up")
+                    }
+                },
+            )
         },
     ) { padding ->
-        if (!isTracking) {
-            Column(
+        if (!isTracking || userLat == null || userLon == null) {
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Start tracking to see nearby aircraft",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else if (aircraft.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "No aircraft nearby",
+                    text = "Start tracking to see the radar view",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else {
-            LazyColumn(
+            val mapRotation = if (northUp) 0f else -userHeading
+
+            Canvas(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .background(MaterialTheme.colorScheme.surface),
             ) {
-                item { Spacer(modifier = Modifier.height(4.dp)) }
-                items(aircraft) { ac ->
-                    AircraftCard(ac, sensorData?.latitude, sensorData?.longitude)
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val maxRadius = min(cx, cy) * 0.9f
+                val metersPerPixel = (maxRangeNm * NM_TO_METERS).toFloat() / maxRadius
+
+                // Draw range rings
+                for (rangeNm in rangeRingsNm) {
+                    val ringRadius = ((rangeNm * NM_TO_METERS) / metersPerPixel).toFloat()
+                    drawCircle(
+                        color = ringColor,
+                        radius = ringRadius,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 1f),
+                    )
+
+                    // Range label at top of ring
+                    val labelText = if (rangeNm >= 1.0 && rangeNm == rangeNm.toLong().toDouble()) {
+                        "${rangeNm.toInt()} NM"
+                    } else {
+                        "$rangeNm NM"
+                    }
+                    val labelAngleRad = Math.toRadians((mapRotation - 90.0).toDouble())
+                    val labelX = cx + ringRadius * cos(labelAngleRad).toFloat()
+                    val labelY = cy + ringRadius * sin(labelAngleRad).toFloat()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        labelText,
+                        labelX,
+                        labelY - 4f,
+                        android.graphics.Paint().apply {
+                            color = ringLabelColor.hashCode()
+                            textSize = labelTextSize
+                            textAlign = android.graphics.Paint.Align.CENTER
+                            isAntiAlias = true
+                        },
+                    )
                 }
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+
+                // North indicator
+                val northAngleRad = Math.toRadians(mapRotation.toDouble() - 90.0)
+                val northX = cx + (maxRadius + 15f) * cos(northAngleRad).toFloat()
+                val northY = cy + (maxRadius + 15f) * sin(northAngleRad).toFloat()
+                drawContext.canvas.nativeCanvas.drawText(
+                    "N",
+                    northX,
+                    northY + labelTextSize / 3f,
+                    android.graphics.Paint().apply {
+                        color = textColor.hashCode()
+                        textSize = labelTextSize * 1.4f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        isFakeBoldText = true
+                        isAntiAlias = true
+                    },
+                )
+
+                // Draw airports
+                for (airport in airports) {
+                    val pos = latLonToScreen(
+                        userLat, userLon,
+                        airport.latitude, airport.longitude,
+                        cx, cy, metersPerPixel, mapRotation,
+                    ) ?: continue
+
+                    // Airport diamond
+                    val d = 6f
+                    val diamondPath = Path().apply {
+                        moveTo(pos.x, pos.y - d)
+                        lineTo(pos.x + d, pos.y)
+                        lineTo(pos.x, pos.y + d)
+                        lineTo(pos.x - d, pos.y)
+                        close()
+                    }
+                    drawPath(diamondPath, airportColor)
+
+                    // Label
+                    drawContext.canvas.nativeCanvas.drawText(
+                        airport.ident,
+                        pos.x,
+                        pos.y - d - 3f,
+                        android.graphics.Paint().apply {
+                            color = airportColor.hashCode()
+                            textSize = labelTextSize
+                            textAlign = android.graphics.Paint.Align.CENTER
+                            isAntiAlias = true
+                        },
+                    )
+                }
+
+                // Draw aircraft
+                for (ac in aircraft) {
+                    val pos = latLonToScreen(
+                        userLat, userLon,
+                        ac.latitude, ac.longitude,
+                        cx, cy, metersPerPixel, mapRotation,
+                    ) ?: continue
+
+                    // Aircraft triangle, rotated by track
+                    val trackDeg = ac.trackDegrees?.toFloat() ?: 0f
+                    val rotation = trackDeg + mapRotation
+                    val triSize = 8f
+
+                    rotate(rotation, pivot = pos) {
+                        val triPath = Path().apply {
+                            moveTo(pos.x, pos.y - triSize)
+                            lineTo(pos.x + triSize * 0.6f, pos.y + triSize * 0.6f)
+                            lineTo(pos.x, pos.y + triSize * 0.2f)
+                            lineTo(pos.x - triSize * 0.6f, pos.y + triSize * 0.6f)
+                            close()
+                        }
+                        drawPath(triPath, aircraftColor)
+                    }
+
+                    // Label
+                    val label = ac.registration ?: ac.aircraftModel
+                    drawContext.canvas.nativeCanvas.drawText(
+                        label,
+                        pos.x,
+                        pos.y - triSize - 3f,
+                        android.graphics.Paint().apply {
+                            color = aircraftColor.hashCode()
+                            textSize = labelTextSize
+                            textAlign = android.graphics.Paint.Align.CENTER
+                            isAntiAlias = true
+                        },
+                    )
+                }
+
+                // User position: filled circle at center
+                drawCircle(
+                    color = userColor,
+                    radius = 5f,
+                    center = Offset(cx, cy),
+                )
+
+                // User heading indicator line
+                val headingLineLen = 20f
+                val headingAngleRad = if (northUp) {
+                    Math.toRadians(userHeading.toDouble() - 90.0)
+                } else {
+                    Math.toRadians(-90.0) // Points straight up in heading-up mode
+                }
+                drawLine(
+                    color = userColor,
+                    start = Offset(cx, cy),
+                    end = Offset(
+                        cx + headingLineLen * cos(headingAngleRad).toFloat(),
+                        cy + headingLineLen * sin(headingAngleRad).toFloat(),
+                    ),
+                    strokeWidth = 2f,
+                )
             }
         }
     }
 }
 
-@Composable
-private fun AircraftCard(
-    aircraft: NearbyAircraftInfo,
-    userLatitude: Double?,
-    userLongitude: Double?,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header: Registration + model + bearing arrow + distance
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = aircraft.registration ?: "Unknown",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = aircraft.aircraftModel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+/**
+ * Convert lat/lon to screen coordinates relative to user position.
+ * Returns null if the point is outside the visible area.
+ */
+private fun latLonToScreen(
+    userLat: Double,
+    userLon: Double,
+    targetLat: Double,
+    targetLon: Double,
+    cx: Float,
+    cy: Float,
+    metersPerPixel: Float,
+    mapRotation: Float,
+): Offset? {
+    // Approximate meters offset using equirectangular projection
+    val dLatMeters = (targetLat - userLat) * 111_320.0
+    val dLonMeters = (targetLon - userLon) * 111_320.0 * cos(Math.toRadians(userLat))
 
-                // Bearing arrow
-                if (userLatitude != null && userLongitude != null) {
-                    val bearing = calculateBearing(
-                        userLatitude, userLongitude,
-                        aircraft.latitude, aircraft.longitude,
-                    ).toFloat()
-                    val arrowColor = MaterialTheme.colorScheme.primary
-                    Canvas(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .padding(end = 8.dp),
-                    ) {
-                        rotate(bearing) {
-                            val path = Path().apply {
-                                moveTo(size.width / 2f, 0f)
-                                lineTo(size.width * 0.8f, size.height * 0.7f)
-                                lineTo(size.width / 2f, size.height * 0.5f)
-                                lineTo(size.width * 0.2f, size.height * 0.7f)
-                                close()
-                            }
-                            drawPath(path, arrowColor)
-                        }
-                    }
-                }
+    // Screen offset (before rotation): x = east, y = north (inverted for screen coords)
+    val rawX = (dLonMeters / metersPerPixel).toFloat()
+    val rawY = (-dLatMeters / metersPerPixel).toFloat() // negative because screen Y goes down
 
-                // Distance
-                val distNm = aircraft.distanceMeters / 1852.0
-                Text(
-                    text = String.format(Locale.US, "%.1f NM", distNm),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
+    // Apply map rotation
+    val rotRad = Math.toRadians(mapRotation.toDouble())
+    val rotX = rawX * cos(rotRad).toFloat() - rawY * sin(rotRad).toFloat()
+    val rotY = rawX * sin(rotRad).toFloat() + rawY * cos(rotRad).toFloat()
 
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
+    val screenX = cx + rotX
+    val screenY = cy + rotY
 
-            // Details row: Altitude, Speed, Climb, Heading
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                // Altitude
-                DetailValue(
-                    label = "Alt",
-                    value = aircraft.altitudeFeet?.let {
-                        String.format(Locale.US, "%.0f ft", it)
-                    } ?: "--",
-                )
-
-                // Ground speed
-                DetailValue(
-                    label = "GS",
-                    value = aircraft.groundSpeedKnots?.let {
-                        String.format(Locale.US, "%.0f kt", it)
-                    } ?: "--",
-                )
-
-                // Climb rate with arrow
-                DetailValue(
-                    label = "Climb",
-                    value = aircraft.climbFpm?.let {
-                        val arrow = when {
-                            it > 200 -> "\u25B2"
-                            it < -200 -> "\u25BC"
-                            else -> ""
-                        }
-                        String.format(Locale.US, "%s%.0f fpm", arrow, it)
-                    } ?: "--",
-                )
-
-                // Track heading
-                DetailValue(
-                    label = "Track",
-                    value = aircraft.trackDegrees?.let {
-                        String.format(Locale.US, "%.0f\u00B0", it)
-                    } ?: "--",
-                )
-            }
-
-            // Staleness
-            aircraft.lastFixAt?.let { time ->
-                Spacer(modifier = Modifier.height(4.dp))
-                val agoText = try {
-                    val instant = java.time.Instant.parse(time)
-                    val seconds = java.time.Duration.between(instant, java.time.Instant.now()).seconds
-                    when {
-                        seconds < 60 -> "${seconds}s ago"
-                        seconds < 3600 -> "${seconds / 60}m ago"
-                        else -> "${seconds / 3600}h ago"
-                    }
-                } catch (_: Exception) {
-                    ""
-                }
-                if (agoText.isNotEmpty()) {
-                    Text(
-                        text = agoText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailValue(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-private fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val lat1Rad = Math.toRadians(lat1)
-    val lat2Rad = Math.toRadians(lat2)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val y = Math.sin(dLon) * Math.cos(lat2Rad)
-    val x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
-        Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon)
-    val bearing = Math.toDegrees(Math.atan2(y, x))
-    return (bearing + 360) % 360
+    return Offset(screenX, screenY)
 }

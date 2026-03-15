@@ -274,6 +274,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 aircraft = response?.nearbyAircraft ?: emptyList(),
                 userLatitude = sensorData?.latitude,
                 userLongitude = sensorData?.longitude,
+                userHeadingDegrees = sensorData?.magneticHeadingDegrees,
             )
 
             // Open website button

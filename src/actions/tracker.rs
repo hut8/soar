@@ -12,8 +12,8 @@ use crate::auth::AuthUser;
 use crate::flights::{FlightState, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::tracker::{
-    NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixRequest, TrackerFixResponse,
-    TrackerFlightInfo,
+    NearbyAircraftInfo, NearbyAirportInfo, TrackerAircraftInfo, TrackerFixRequest,
+    TrackerFixResponse, TrackerFlightInfo,
 };
 use crate::user_fixes_repo::UserFixesRepository;
 use crate::web::AppState;
@@ -130,13 +130,17 @@ pub async fn create_tracker_fix(
     };
 
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
 
-    // Run candidate and nearby queries in parallel
+    // Run candidate, nearby aircraft, and nearby airport queries in parallel
     let candidates_fut = aircraft_repo.find_candidate_aircraft(request.latitude, request.longitude);
     let nearby_fut =
         aircraft_repo.find_nearby_aircraft(request.latitude, request.longitude, 185_200.0, 50);
+    let airports_fut =
+        airports_repo.find_nearest_airports(request.latitude, request.longitude, 100_000.0, 20);
 
-    let (candidates_result, nearby_result) = tokio::join!(candidates_fut, nearby_fut);
+    let (candidates_result, nearby_result, airports_result) =
+        tokio::join!(candidates_fut, nearby_fut, airports_fut);
 
     // Process candidates for matching with extrapolation
     let matched_aircraft = match candidates_result {
@@ -184,12 +188,38 @@ pub async fn create_tracker_fix(
         }
     };
 
+    // Build nearby airports list
+    let nearby_airports = match airports_result {
+        Ok(airports) => airports
+            .into_iter()
+            .filter_map(|(airport, distance)| {
+                use num_traits::ToPrimitive;
+                let lat = airport.latitude_deg?.to_f64()?;
+                let lon = airport.longitude_deg?.to_f64()?;
+                Some(NearbyAirportInfo {
+                    id: airport.id,
+                    ident: airport.ident,
+                    name: airport.name,
+                    latitude: lat,
+                    longitude: lon,
+                    elevation_ft: airport.elevation_ft,
+                    distance_meters: distance,
+                })
+            })
+            .collect(),
+        Err(e) => {
+            error!(error = %e, "Failed to query nearby airports");
+            Vec::new()
+        }
+    };
+
     let response = TrackerFixResponse {
         fix_id: fix.id,
         timestamp: fix.timestamp,
         matched_aircraft,
         flight,
         nearby_aircraft,
+        nearby_airports,
         ground_elevation_meters,
         altitude_agl_feet,
         magnetic_declination_degrees,

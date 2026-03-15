@@ -54,6 +54,7 @@ data class TrackerFixResponse(
     @Json(name = "matchedAircraft") val matchedAircraft: TrackerAircraftInfo?,
     val flight: TrackerFlightInfo?,
     @Json(name = "nearbyAircraft") val nearbyAircraft: List<NearbyAircraftInfo>,
+    @Json(name = "nearbyAirports") val nearbyAirports: List<NearbyAirportInfo>,
     @Json(name = "groundElevationMeters") val groundElevationMeters: Double?,
     @Json(name = "altitudeAglFeet") val altitudeAglFeet: Int?,
     @Json(name = "magneticDeclinationDegrees") val magneticDeclinationDegrees: Double?,
@@ -79,6 +80,17 @@ data class TrackerFlightInfo(
     @Json(name = "towedByAircraftModel") val towedByAircraftModel: String?,
     @Json(name = "towReleaseTime") val towReleaseTime: String?,
     @Json(name = "towReleaseAltitudeMslFt") val towReleaseAltitudeMslFt: Int?,
+)
+
+@JsonClass(generateAdapter = true)
+data class NearbyAirportInfo(
+    val id: Int,
+    val ident: String,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    @Json(name = "elevationFt") val elevationFt: Int?,
+    @Json(name = "distanceMeters") val distanceMeters: Double,
 )
 
 @JsonClass(generateAdapter = true)

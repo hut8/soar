@@ -30,6 +30,7 @@ fun NearbyAircraftList(
     aircraft: List<NearbyAircraftInfo>,
     userLatitude: Double?,
     userLongitude: Double?,
+    userHeadingDegrees: Double? = null,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -56,7 +57,7 @@ fun NearbyAircraftList(
                     modifier = Modifier.height((aircraft.size.coerceAtMost(5) * 56).dp),
                 ) {
                     items(aircraft) { ac ->
-                        NearbyAircraftRow(ac, userLatitude, userLongitude)
+                        NearbyAircraftRow(ac, userLatitude, userLongitude, userHeadingDegrees)
                         HorizontalDivider()
                     }
                 }
@@ -70,6 +71,7 @@ private fun NearbyAircraftRow(
     aircraft: NearbyAircraftInfo,
     userLatitude: Double?,
     userLongitude: Double?,
+    userHeadingDegrees: Double?,
 ) {
     Row(
         modifier = Modifier
@@ -92,10 +94,16 @@ private fun NearbyAircraftRow(
 
         // Bearing arrow
         if (userLatitude != null && userLongitude != null) {
-            val bearing = calculateBearing(
+            val absoluteBearing = calculateBearing(
                 userLatitude, userLongitude,
                 aircraft.latitude, aircraft.longitude,
             ).toFloat()
+            // Make arrow relative to device heading
+            val bearing = if (userHeadingDegrees != null) {
+                absoluteBearing - userHeadingDegrees.toFloat()
+            } else {
+                absoluteBearing
+            }
             val arrowColor = MaterialTheme.colorScheme.primary
             Canvas(
                 modifier = Modifier.size(24.dp),

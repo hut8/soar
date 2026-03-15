@@ -40,6 +40,7 @@ pub struct TrackerFixResponse {
     pub matched_aircraft: Option<TrackerAircraftInfo>,
     pub flight: Option<TrackerFlightInfo>,
     pub nearby_aircraft: Vec<NearbyAircraftInfo>,
+    pub nearby_airports: Vec<NearbyAirportInfo>,
     pub ground_elevation_meters: Option<f64>,
     pub altitude_agl_feet: Option<i32>,
     pub magnetic_declination_degrees: Option<f64>,
@@ -71,6 +72,20 @@ pub struct TrackerFlightInfo {
     pub towed_by_aircraft_model: Option<String>,
     pub tow_release_time: Option<DateTime<Utc>>,
     pub tow_release_altitude_msl_ft: Option<i32>,
+}
+
+/// Nearby airport information
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NearbyAirportInfo {
+    pub id: i32,
+    pub ident: String,
+    pub name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub elevation_ft: Option<i32>,
+    pub distance_meters: f64,
 }
 
 /// Nearby aircraft information
