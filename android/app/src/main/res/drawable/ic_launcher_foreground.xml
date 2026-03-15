@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Glider silhouette (simple) centered in adaptive icon safe zone -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30 L54,70 M34,48 L74,48 M48,65 L60,65"
+        android:strokeWidth="4"
+        android:strokeColor="#FFFFFF" />
+    <!-- Wing -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,50 L54,44 L78,50 L54,47 Z" />
+    <!-- Fuselage -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,32 L56,32 L55,68 L53,68 Z" />
+    <!-- Tail -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,64 L62,64 L58,68 L50,68 Z" />
+</vector>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SOAR Tracker</string>
+    <string name="tracking_notification_channel">Tracking</string>
+    <string name="tracking_notification_title">SOAR Tracker</string>
+    <string name="tracking_notification_text">Recording flight data</string>
+</resources>
