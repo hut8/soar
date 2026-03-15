@@ -184,7 +184,7 @@
 
 	let visibleColumnCount = $derived(visibleColumns.size);
 
-	function handleColumnPickerClickOutside(event: MouseEvent) {
+	function handlePickerClickOutside(event: MouseEvent) {
 		if (columnPickerRef && !columnPickerRef.contains(event.target as Node)) {
 			showColumnPicker = false;
 		}
@@ -274,7 +274,7 @@
 		}
 	}
 
-	function renderGraph() {
+	async function renderGraph() {
 		if (!graphContainer || statuses.length === 0 || selectedGraphDatasets.size === 0) {
 			if (graphContainer && graphInitialized) {
 				Plotly.purge(graphContainer);
@@ -353,11 +353,15 @@
 			displayModeBar: false
 		};
 
-		if (graphInitialized) {
-			Plotly.react(graphContainer, traces, layout, config);
-		} else {
-			Plotly.newPlot(graphContainer, traces, layout, config);
-			graphInitialized = true;
+		try {
+			if (graphInitialized) {
+				await Plotly.react(graphContainer, traces, layout, config);
+			} else {
+				await Plotly.newPlot(graphContainer, traces, layout, config);
+				graphInitialized = true;
+			}
+		} catch (err) {
+			logger.error('Failed to render graph: {error}', { error: err });
 		}
 	}
 
@@ -456,7 +460,7 @@
 		for (const ds of loadedDatasets) {
 			selectedGraphDatasets.add(ds);
 		}
-		document.addEventListener('click', handleColumnPickerClickOutside);
+		document.addEventListener('click', handlePickerClickOutside);
 
 		if (receiverId) {
 			await loadReceiver();
@@ -467,7 +471,7 @@
 	});
 
 	onDestroy(() => {
-		document.removeEventListener('click', handleColumnPickerClickOutside);
+		document.removeEventListener('click', handlePickerClickOutside);
 		if (graphContainer && graphInitialized) {
 			Plotly.purge(graphContainer);
 		}

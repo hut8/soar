@@ -1361,7 +1361,7 @@ impl FixesRepository {
             Ok::<i64, anyhow::Error>(total)
         })
         .await
-        .context("Fix count task panicked")??;
+        .context("Fix count task failed to join")??;
 
         Ok(result)
     }

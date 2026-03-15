@@ -600,16 +600,12 @@ pub async fn get_receiver_statistics(
         }
     };
 
-    // Get fix count for last 24 hours
+    // Get fix count for last 24 hours (non-critical, degrade gracefully)
     let fix_count_24h = match fixes_repo.count_fixes_for_receiver_24h(id).await {
         Ok(count) => count,
         Err(e) => {
             tracing::error!(receiver_id = %id, error = %e, "Failed to count fixes for receiver");
-            return json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to calculate statistics",
-            )
-            .into_response();
+            0
         }
     };
 
