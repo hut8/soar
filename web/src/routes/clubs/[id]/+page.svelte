@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { onMount, getContext } from 'svelte';
 	import { page } from '$app/stores';
-	import { MapPin, Plane, Navigation, UserCheck, ExternalLink } from '@lucide/svelte';
+	import { MapPin, Plane, Navigation, UserCheck, ExternalLink, Pencil, X } from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall, ServerError } from '$lib/api/server';
 	import { authApi } from '$lib/api/auth';
 	import { auth } from '$lib/stores/auth';
 	import AircraftTile from '$lib/components/AircraftTile.svelte';
+	import AirportSelector from '$lib/components/AirportSelector.svelte';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
 	import type {
@@ -42,6 +43,105 @@
 	$: clubId = $page.params.id || '';
 	$: isCurrentClub = $auth.user?.clubId === clubId;
 	$: club = $clubStore.club;
+	$: isClubAdmin =
+		$auth.isAuthenticated &&
+		(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin);
+
+	// Editing state
+	let editing = false;
+	let editName = '';
+	let editIsSoaring = true;
+	let editAirportSelectorValue: string[] = [];
+	let editAirportId: number | null = null;
+	let editStreet1 = '';
+	let editStreet2 = '';
+	let editCity = '';
+	let editState = '';
+	let editZipCode = '';
+	let editCountryCode = '';
+	let saving = false;
+	let editError = '';
+
+	function startEditing() {
+		if (!club) return;
+		editName = club.name;
+		editIsSoaring = club.isSoaring ?? true;
+		editAirportId = club.homeBaseAirportId ?? null;
+		editAirportSelectorValue = editAirportId ? [String(editAirportId)] : [];
+		editStreet1 = club.location?.street1 ?? '';
+		editStreet2 = club.location?.street2 ?? '';
+		editCity = club.location?.city ?? '';
+		editState = club.location?.state ?? '';
+		editZipCode = club.location?.zipCode ?? '';
+		editCountryCode = club.location?.countryCode ?? '';
+		editError = '';
+		editing = true;
+	}
+
+	function cancelEditing() {
+		editing = false;
+		editError = '';
+	}
+
+	function handleAirportSelect(selectedAirport: Airport | null) {
+		editAirportId = selectedAirport ? selectedAirport.id : null;
+	}
+
+	async function saveClub() {
+		if (!club) return;
+
+		const trimmedName = editName.trim();
+		if (!trimmedName) {
+			editError = 'Club name is required.';
+			return;
+		}
+
+		saving = true;
+		editError = '';
+
+		try {
+			const body: Record<string, unknown> = {};
+			if (trimmedName !== club.name) body.name = trimmedName;
+			if (editAirportId !== (club.homeBaseAirportId ?? null))
+				body.homeBaseAirportId = editAirportId;
+			if (editIsSoaring !== (club.isSoaring ?? true)) body.isSoaring = editIsSoaring;
+
+			// Include address fields if any changed
+			const addr = club.location;
+			if (editStreet1 !== (addr?.street1 ?? '')) body.street1 = editStreet1 || null;
+			if (editStreet2 !== (addr?.street2 ?? '')) body.street2 = editStreet2 || null;
+			if (editCity !== (addr?.city ?? '')) body.city = editCity || null;
+			if (editState !== (addr?.state ?? '')) body.state = editState || null;
+			if (editZipCode !== (addr?.zipCode ?? '')) body.zipCode = editZipCode || null;
+			if (editCountryCode !== (addr?.countryCode ?? '')) body.countryCode = editCountryCode || null;
+
+			if (Object.keys(body).length === 0) {
+				editing = false;
+				return;
+			}
+
+			const response = await serverCall<DataResponse<ClubWithSoaring>>(`/clubs/${club.id}`, {
+				method: 'PUT',
+				body: JSON.stringify(body)
+			});
+
+			// Update the club store so layout header also updates
+			clubStore.update((s) => ({ ...s, club: response.data }));
+			editing = false;
+			toaster.success({ title: 'Club updated' });
+
+			// Reload airport if it changed
+			if (response.data.homeBaseAirportId) {
+				loadAirport(response.data.homeBaseAirportId);
+			} else {
+				airport = null;
+			}
+		} catch (err) {
+			editError = err instanceof Error ? err.message : 'Failed to update club';
+		} finally {
+			saving = false;
+		}
+	}
 
 	// Generate JSON-LD structured data for SEO (reactive to club changes)
 	$: jsonLdScript = (() => {
@@ -203,6 +303,119 @@
 
 {#if club}
 	<div class="space-y-6">
+		<!-- Edit Club (club admin / system admin) -->
+		{#if isClubAdmin && !editing}
+			<div class="flex justify-end">
+				<button class="preset-tonal-surface-500 btn btn-sm" onclick={startEditing}>
+					<Pencil class="mr-1 h-4 w-4" />
+					Edit Club
+				</button>
+			</div>
+		{/if}
+
+		{#if editing && club}
+			<div class="space-y-4 card p-6">
+				<div class="flex items-center justify-between">
+					<h2 class="h2">Edit Club</h2>
+					<button
+						class="btn preset-tonal btn-sm"
+						onclick={cancelEditing}
+						aria-label="Cancel editing"
+					>
+						<X class="h-4 w-4" />
+					</button>
+				</div>
+
+				{#if editError}
+					<div
+						class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+					>
+						{editError}
+					</div>
+				{/if}
+
+				<label class="label">
+					<span class="font-semibold">Club Name</span>
+					<input bind:value={editName} class="input" type="text" disabled={saving} required />
+				</label>
+
+				<label class="flex items-center gap-3">
+					<input type="checkbox" bind:checked={editIsSoaring} class="checkbox" disabled={saving} />
+					<span>Soaring/Gliding Club</span>
+				</label>
+
+				<div>
+					<span class="label mb-1 block font-semibold">Home Base Airport</span>
+					<AirportSelector
+						bind:value={editAirportSelectorValue}
+						onSelect={handleAirportSelect}
+						placeholder="Search airports..."
+						disabled={saving}
+						initialAirportId={club.homeBaseAirportId ?? undefined}
+					/>
+				</div>
+
+				<fieldset
+					class="space-y-3 rounded-lg border border-surface-300 p-4 dark:border-surface-600"
+				>
+					<legend class="px-2 text-sm font-semibold text-surface-600 dark:text-surface-400"
+						>Address</legend
+					>
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<label class="label">
+							<span>Street</span>
+							<input bind:value={editStreet1} class="input" type="text" disabled={saving} />
+						</label>
+						<label class="label">
+							<span>Street 2</span>
+							<input bind:value={editStreet2} class="input" type="text" disabled={saving} />
+						</label>
+						<label class="label">
+							<span>City</span>
+							<input bind:value={editCity} class="input" type="text" disabled={saving} />
+						</label>
+						<label class="label">
+							<span>State</span>
+							<input bind:value={editState} class="input" type="text" disabled={saving} />
+						</label>
+						<label class="label">
+							<span>ZIP Code</span>
+							<input bind:value={editZipCode} class="input" type="text" disabled={saving} />
+						</label>
+						<label class="label">
+							<span>Country</span>
+							<input
+								bind:value={editCountryCode}
+								class="input"
+								type="text"
+								maxlength="2"
+								placeholder="US"
+								disabled={saving}
+							/>
+						</label>
+					</div>
+				</fieldset>
+
+				<div class="flex gap-2">
+					<button
+						class="btn preset-filled-primary-500"
+						onclick={saveClub}
+						disabled={saving || !editName.trim()}
+					>
+						{#if saving}
+							<Progress class="mr-1 h-4 w-4" />
+							Saving...
+						{:else}
+							Save Changes
+						{/if}
+					</button>
+					<button class="btn preset-tonal" onclick={cancelEditing} disabled={saving}>
+						Cancel
+					</button>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Join / Pending request actions (for non-members) -->
 		{#if $auth.isAuthenticated && !isCurrentClub}
 			<div class="flex-shrink-0">

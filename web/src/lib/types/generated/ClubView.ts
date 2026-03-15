@@ -11,6 +11,8 @@ export type ClubView = {
   updatedAt: string;
   similarityScore?: number;
   distanceMeters?: number;
+  status: string;
+  createdBy?: string;
   recentFlightsCount?: number;
   lastFlightAt?: string;
 };

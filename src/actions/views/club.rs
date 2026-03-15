@@ -152,6 +152,10 @@ pub struct ClubView {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub distance_meters: Option<f64>,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub created_by: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub recent_flights_count: Option<i64>,
@@ -186,6 +190,8 @@ impl From<Club> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -218,6 +224,8 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: club.distance_meters,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -250,6 +258,8 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -282,6 +292,8 @@ impl From<ClubWithLocationAndActivity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: Some(club.recent_flights_count),
             last_flight_at: club.last_flight_at,
         }

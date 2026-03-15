@@ -6,6 +6,7 @@ mod tests {
 
     use crate::actions::PaginationMetadata;
     use crate::actions::club_tow_fees::TowFeeView;
+    use crate::actions::clubs::CreateClubRequest;
     use crate::actions::coverage::{
         CoverageGeoJsonResponse, FixesInHexResponse, HexReceiversResponse,
     };
@@ -68,6 +69,8 @@ mod tests {
         RegistrantType::export(&cfg).expect("Failed to export RegistrantType type");
         ClubJoinRequestView::export(&cfg).expect("Failed to export ClubJoinRequestView type");
         ClubView::export(&cfg).expect("Failed to export ClubView type");
+        CreateClubRequest::export(&cfg).expect("Failed to export CreateClubRequest type");
+        // UpdateClubRequest is manually maintained in TypeScript (uses Option<Option<T>> patch semantics)
         TowFeeView::export(&cfg).expect("Failed to export TowFeeView type");
         FlightView::export(&cfg).expect("Failed to export FlightView type");
         FlightState::export(&cfg).expect("Failed to export FlightState type");

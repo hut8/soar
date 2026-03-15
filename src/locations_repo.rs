@@ -154,7 +154,11 @@ impl LocationsRepository {
         let param_city = params.city;
         let param_state = params.state;
         let param_zip_code = params.zip_code;
-        let param_country_code = params.country_code.map(|c| c.to_uppercase());
+        // Bound country_code length before uppercasing to prevent uncontrolled allocation
+        let param_country_code = params.country_code.map(|c| {
+            let bounded: String = c.chars().take(2).collect();
+            bounded.to_uppercase()
+        });
         let param_geolocation = params.geolocation;
 
         let new_location = Location::new(
