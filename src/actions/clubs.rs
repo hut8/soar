@@ -246,20 +246,30 @@ pub async fn get_club_flights(
     }
 }
 
-/// Truncate an optional string to a maximum length
-fn truncate_opt(s: Option<String>, max_len: usize) -> Option<String> {
-    s.map(|v| {
-        if v.len() > max_len {
-            v[..max_len].to_string()
-        } else {
-            v
-        }
-    })
+/// Check that an optional string doesn't exceed max_len. Returns Err with field name if it does.
+fn check_len(s: &Option<String>, max_len: usize, field: &str) -> Result<(), String> {
+    if let Some(v) = s
+        && v.len() > max_len
+    {
+        return Err(format!(
+            "{} is too long (max {} characters)",
+            field, max_len
+        ));
+    }
+    Ok(())
 }
 
-/// Truncate a double-option string (patch semantics) to a maximum length
-fn truncate_double_opt(s: Option<Option<String>>, max_len: usize) -> Option<Option<String>> {
-    s.map(|inner| truncate_opt(inner, max_len))
+/// Check that a double-option string doesn't exceed max_len.
+fn check_len_double(s: &Option<Option<String>>, max_len: usize, field: &str) -> Result<(), String> {
+    if let Some(Some(v)) = s
+        && v.len() > max_len
+    {
+        return Err(format!(
+            "{} is too long (max {} characters)",
+            field, max_len
+        ));
+    }
+    Ok(())
 }
 
 // --- Manual club creation ---
@@ -315,6 +325,20 @@ pub async fn create_club(
         Ok(None) => {}
     }
 
+    // Validate address field lengths
+    for result in [
+        check_len(&payload.street1, 255, "Street address"),
+        check_len(&payload.street2, 255, "Street address 2"),
+        check_len(&payload.city, 255, "City"),
+        check_len(&payload.state, 255, "State"),
+        check_len(&payload.zip_code, 20, "ZIP code"),
+        check_len(&payload.country_code, 2, "Country code"),
+    ] {
+        if let Err(msg) = result {
+            return json_error(StatusCode::BAD_REQUEST, &msg).into_response();
+        }
+    }
+
     // Determine is_soaring
     let club_is_soaring = Some(payload.is_soaring.unwrap_or_else(|| is_soaring_club(&name)));
 
@@ -329,12 +353,12 @@ pub async fn create_club(
 
         if has_address {
             Some(LocationParams {
-                street1: truncate_opt(payload.street1, 255),
-                street2: truncate_opt(payload.street2, 255),
-                city: truncate_opt(payload.city, 255),
-                state: truncate_opt(payload.state, 255),
-                zip_code: truncate_opt(payload.zip_code, 20),
-                country_code: truncate_opt(payload.country_code, 2),
+                street1: payload.street1,
+                street2: payload.street2,
+                city: payload.city,
+                state: payload.state,
+                zip_code: payload.zip_code,
+                country_code: payload.country_code,
                 geolocation: None,
             })
         } else {
@@ -591,35 +615,41 @@ pub async fn update_club(
 
     let clubs_repo = ClubsRepository::new(state.pool.clone());
 
-    // Flatten Option<Option<T>> fields with length bounds:
+    // Validate address field lengths
+    for result in [
+        check_len_double(&payload.street1, 255, "Street address"),
+        check_len_double(&payload.street2, 255, "Street address 2"),
+        check_len_double(&payload.city, 255, "City"),
+        check_len_double(&payload.state, 255, "State"),
+        check_len_double(&payload.zip_code, 20, "ZIP code"),
+        check_len_double(&payload.country_code, 2, "Country code"),
+    ] {
+        if let Err(msg) = result {
+            return json_error(StatusCode::BAD_REQUEST, &msg).into_response();
+        }
+    }
+
+    // Flatten Option<Option<T>> fields:
     // None = not provided (no change), Some(None) = clear, Some(Some(v)) = set
     let airport_update = payload.home_base_airport_id; // Option<Option<i32>>
 
-    // Truncate address fields to prevent uncontrolled allocation
-    let street1 = truncate_double_opt(payload.street1, 255);
-    let street2 = truncate_double_opt(payload.street2, 255);
-    let city_field = truncate_double_opt(payload.city, 255);
-    let state_field = truncate_double_opt(payload.state, 255);
-    let zip_code = truncate_double_opt(payload.zip_code, 20);
-    let country_code = truncate_double_opt(payload.country_code, 2);
-
     // Build location params if any address fields were explicitly provided (even if null to clear)
     let location_params = {
-        let has_address = street1.is_some()
-            || street2.is_some()
-            || city_field.is_some()
-            || state_field.is_some()
-            || zip_code.is_some()
-            || country_code.is_some();
+        let has_address = payload.street1.is_some()
+            || payload.street2.is_some()
+            || payload.city.is_some()
+            || payload.state.is_some()
+            || payload.zip_code.is_some()
+            || payload.country_code.is_some();
 
         if has_address {
             Some(LocationParams {
-                street1: street1.unwrap_or(None),
-                street2: street2.unwrap_or(None),
-                city: city_field.unwrap_or(None),
-                state: state_field.unwrap_or(None),
-                zip_code: zip_code.unwrap_or(None),
-                country_code: country_code.unwrap_or(None),
+                street1: payload.street1.unwrap_or(None),
+                street2: payload.street2.unwrap_or(None),
+                city: payload.city.unwrap_or(None),
+                state: payload.state.unwrap_or(None),
+                zip_code: payload.zip_code.unwrap_or(None),
+                country_code: payload.country_code.unwrap_or(None),
                 geolocation: None,
             })
         } else {
