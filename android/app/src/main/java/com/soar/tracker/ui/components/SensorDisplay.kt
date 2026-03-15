@@ -61,7 +61,7 @@ fun SensorDisplay(
 
             // --- Grid rows ---
 
-            // Row 1: G-Force | Vario | GS | Pressure
+            // Precompute values
             val gForce = if (accelX != null && accelY != null && accelZ != null) {
                 sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
             } else {
@@ -75,13 +75,18 @@ fun SensorDisplay(
                 else -> Color.Unspecified
             }
             val gsKnots = speedMps?.let { it * 1.94384 }
+            val altFt = altitudeMeters?.let { it * 3.28084 }
+            val trueHeading = if (magneticHeadingDegrees != null && magneticDeclinationDegrees != null) {
+                var hdg = magneticHeadingDegrees + magneticDeclinationDegrees
+                if (hdg < 0) hdg += 360.0
+                if (hdg >= 360) hdg -= 360.0
+                hdg
+            } else {
+                null
+            }
 
+            // Row 1: Vario | GS | Pressure
             GridRow {
-                GridCell(
-                    label = "G-Force",
-                    value = gForce?.let { String.format(Locale.US, "%.1f G", it) } ?: "--",
-                    mono = mono,
-                )
                 GridCell(
                     label = "Vario",
                     value = varioFpm?.let {
@@ -100,16 +105,15 @@ fun SensorDisplay(
                     label = "Pressure",
                     value = pressureHpa?.let {
                         val inHg = it * 0.02953
-                        String.format(Locale.US, "%.2f inHg", inHg)
+                        String.format(Locale.US, "%.2f", inHg)
                     } ?: "--",
                     mono = mono,
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-            // Row 2: GNSS Alt | AGL
-            val altFt = altitudeMeters?.let { it * 3.28084 }
+            // Row 2: GNSS Alt | AGL | G-Force
             GridRow {
                 GridCell(
                     label = "GNSS Alt",
@@ -121,20 +125,16 @@ fun SensorDisplay(
                     value = altitudeAglFeet?.let { String.format(Locale.US, "%d ft", it) } ?: "--",
                     mono = mono,
                 )
+                GridCell(
+                    label = "G-Force",
+                    value = gForce?.let { String.format(Locale.US, "%.1f G", it) } ?: "--",
+                    mono = mono,
+                )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
             // Row 3: Hdg (Mag) | Hdg (True) | Track (GPS)
-            val trueHeading = if (magneticHeadingDegrees != null && magneticDeclinationDegrees != null) {
-                var hdg = magneticHeadingDegrees + magneticDeclinationDegrees
-                if (hdg < 0) hdg += 360.0
-                if (hdg >= 360) hdg -= 360.0
-                hdg
-            } else {
-                null
-            }
-
             GridRow {
                 GridCell(
                     label = "Hdg (Mag)",
@@ -159,7 +159,7 @@ fun SensorDisplay(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
             // Row 4: Position
             GridRow {
@@ -179,9 +179,7 @@ fun SensorDisplay(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
             // Altimeter section
             val altimeterFt = if (pressureHpa != null && groundPressureHpa != null && groundPressureHpa > 0) {
