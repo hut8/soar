@@ -1,6 +1,7 @@
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
+use tracing::warn;
 use ts_rs::TS;
 
 use crate::airports::Airport;
@@ -179,10 +180,8 @@ pub struct AirportView {
     pub ident: String,
     pub airport_type: String,
     pub name: String,
-    #[ts(type = "number | null")]
-    pub latitude_deg: Option<BigDecimal>,
-    #[ts(type = "number | null")]
-    pub longitude_deg: Option<BigDecimal>,
+    pub latitude_deg: Option<f64>,
+    pub longitude_deg: Option<f64>,
     pub elevation_ft: Option<i32>,
     pub continent: Option<String>,
     pub iso_country: Option<String>,
@@ -199,15 +198,31 @@ pub struct AirportView {
     pub runways: Vec<RunwayView>,
 }
 
+fn bigdecimal_to_f64(value: &Option<BigDecimal>, field: &str, ident: &str) -> Option<f64> {
+    match value {
+        Some(d) => match d.to_f64() {
+            Some(f) => Some(f),
+            None => {
+                warn!(ident, field, value = %d, "Failed to convert BigDecimal coordinate to f64");
+                None
+            }
+        },
+        None => None,
+    }
+}
+
 impl From<Airport> for AirportView {
     fn from(airport: Airport) -> Self {
+        let latitude_deg = bigdecimal_to_f64(&airport.latitude_deg, "latitude_deg", &airport.ident);
+        let longitude_deg =
+            bigdecimal_to_f64(&airport.longitude_deg, "longitude_deg", &airport.ident);
         Self {
             id: airport.id,
             ident: airport.ident,
             airport_type: airport.airport_type,
             name: airport.name,
-            latitude_deg: airport.latitude_deg,
-            longitude_deg: airport.longitude_deg,
+            latitude_deg,
+            longitude_deg,
             elevation_ft: airport.elevation_ft,
             continent: airport.continent,
             iso_country: airport.iso_country,
