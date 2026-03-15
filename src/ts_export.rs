@@ -43,6 +43,9 @@ mod tests {
     use crate::payments::{PaymentStatus, PaymentType};
     use crate::raw_messages_repo::{MessageSourceType, RawMessageResponse};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
+    use crate::tracker::{
+        NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixResponse, TrackerFlightInfo,
+    };
     use crate::watchlist::WatchlistEntry;
 
     #[test]
@@ -169,5 +172,11 @@ mod tests {
         AirspaceType::export(&cfg).expect("Failed to export AirspaceType type");
         AirspaceProperties::export(&cfg).expect("Failed to export AirspaceProperties type");
         AirspaceGeoJson::export(&cfg).expect("Failed to export AirspaceGeoJson type");
+
+        // Tracker types
+        TrackerFixResponse::export(&cfg).expect("Failed to export TrackerFixResponse type");
+        TrackerAircraftInfo::export(&cfg).expect("Failed to export TrackerAircraftInfo type");
+        TrackerFlightInfo::export(&cfg).expect("Failed to export TrackerFlightInfo type");
+        NearbyAircraftInfo::export(&cfg).expect("Failed to export NearbyAircraftInfo type");
     }
 }

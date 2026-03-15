@@ -893,6 +893,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/geocode/reverse", get(actions::geocoding::reverse_geocode))
         // User location tracking
         .route("/user-fix", post(actions::create_user_fix))
+        // Android tracker endpoint
+        .route("/tracker", post(actions::create_tracker_fix))
         // Analytics routes
         .route("/analytics/flights/daily", get(actions::get_daily_flights))
         .route(

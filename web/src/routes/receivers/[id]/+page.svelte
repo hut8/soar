@@ -24,11 +24,14 @@
 		FileText,
 		Loader2,
 		Columns3,
-		RotateCcw
+		RotateCcw,
+		ChartLine
 	} from '@lucide/svelte';
 	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
+	import Plotly from 'plotly.js-dist-min';
 	import { serverCall } from '$lib/api/server';
 	import { resolvedTimezone } from '$lib/stores/timezone';
+	import { theme } from '$lib/stores/theme';
 	import { formatISODateTime, formatRelative } from '$lib/utils/dateFormatters';
 	import type {
 		Aircraft,
@@ -92,7 +95,7 @@
 	// Display options
 	let showRawData = $state(false); // For status reports
 	let showRawFixes = $state(false); // For received fixes
-	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', 'received-fixes', or 'aggregate-stats'
+	let activeTab = $state('status-reports'); // 'status-reports', 'graphs', 'raw-messages', 'received-fixes', or 'aggregate-stats'
 
 	// Column configuration for status reports
 	interface StatusColumn {
@@ -181,9 +184,184 @@
 
 	let visibleColumnCount = $derived(visibleColumns.size);
 
-	function handleColumnPickerClickOutside(event: MouseEvent) {
+	function handlePickerClickOutside(event: MouseEvent) {
 		if (columnPickerRef && !columnPickerRef.contains(event.target as Node)) {
 			showColumnPicker = false;
+		}
+		if (graphDatasetPickerRef && !graphDatasetPickerRef.contains(event.target as Node)) {
+			showGraphDatasetPicker = false;
+		}
+	}
+
+	// Graph configuration
+	interface GraphDataset {
+		key: keyof ReceiverStatusView;
+		label: string;
+		unit?: string;
+	}
+
+	const GRAPH_DATASETS: GraphDataset[] = [
+		{ key: 'cpuLoad', label: 'CPU Load', unit: '%' },
+		{ key: 'ramFree', label: 'RAM Free', unit: 'MB' },
+		{ key: 'ramTotal', label: 'RAM Total', unit: 'MB' },
+		{ key: 'voltage', label: 'Voltage', unit: 'V' },
+		{ key: 'amperage', label: 'Amperage', unit: 'A' },
+		{ key: 'cpuTemperature', label: 'CPU Temperature', unit: '°C' },
+		{ key: 'visibleSenders', label: 'Visible Senders' },
+		{ key: 'senders', label: 'Senders' },
+		{ key: 'ntpOffset', label: 'NTP Offset', unit: 'ms' },
+		{ key: 'ntpCorrection', label: 'NTP Correction', unit: 'ppm' },
+		{ key: 'latency', label: 'Latency', unit: 's' },
+		{ key: 'rfCorrectionManual', label: 'RF Correction (Manual)' },
+		{ key: 'rfCorrectionAutomatic', label: 'RF Correction (Auto)' },
+		{ key: 'noise', label: 'Noise', unit: 'dB' },
+		{ key: 'sendersSignalQuality', label: 'Senders Signal Quality' },
+		{ key: 'sendersMessages', label: 'Senders Messages' },
+		{ key: 'goodSendersSignalQuality', label: 'Good Senders Signal Quality' },
+		{ key: 'goodSenders', label: 'Good Senders' },
+		{ key: 'goodAndBadSenders', label: 'Good & Bad Senders' },
+		{ key: 'geoidOffset', label: 'Geoid Offset' },
+		{ key: 'demodulationSnrDb', label: 'Demod. SNR', unit: 'dB' },
+		{ key: 'lag', label: 'Lag', unit: 's' }
+	];
+
+	const GRAPH_STORAGE_KEY = 'receiver-graph-datasets';
+	const DEFAULT_GRAPH_DATASETS = new Set(['cpuLoad', 'senders', 'noise']);
+
+	function loadGraphDatasets(): Set<string> {
+		try {
+			const stored = localStorage.getItem(GRAPH_STORAGE_KEY);
+			if (stored) {
+				const parsed = JSON.parse(stored) as string[];
+				if (Array.isArray(parsed) && parsed.length > 0) {
+					return new Set(parsed);
+				}
+			}
+		} catch {
+			// Ignore parse errors
+		}
+		return new Set(DEFAULT_GRAPH_DATASETS);
+	}
+
+	let selectedGraphDatasets = new SvelteSet(DEFAULT_GRAPH_DATASETS);
+	let showGraphDatasetPicker = $state(false);
+	let graphDatasetPickerRef = $state<HTMLDivElement | null>(null);
+	let graphContainer = $state<HTMLDivElement | null>(null);
+	let graphInitialized = $state(false);
+
+	function toggleGraphDataset(key: string) {
+		if (selectedGraphDatasets.has(key)) {
+			selectedGraphDatasets.delete(key);
+		} else {
+			selectedGraphDatasets.add(key);
+		}
+		saveGraphDatasets(selectedGraphDatasets);
+	}
+
+	function resetGraphDatasets() {
+		selectedGraphDatasets.clear();
+		for (const key of DEFAULT_GRAPH_DATASETS) {
+			selectedGraphDatasets.add(key);
+		}
+		saveGraphDatasets(selectedGraphDatasets);
+	}
+
+	function saveGraphDatasets(datasets: SvelteSet<string>) {
+		try {
+			localStorage.setItem(GRAPH_STORAGE_KEY, JSON.stringify([...datasets]));
+		} catch {
+			// Ignore storage errors
+		}
+	}
+
+	async function renderGraph() {
+		if (!graphContainer || statuses.length === 0 || selectedGraphDatasets.size === 0) {
+			if (graphContainer && graphInitialized) {
+				Plotly.purge(graphContainer);
+				graphInitialized = false;
+			}
+			return;
+		}
+
+		const isDark = $theme === 'dark';
+		const sortedStatuses = [...statuses].sort(
+			(a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()
+		);
+		const timestamps = sortedStatuses.map((s) => new Date(s.receivedAt));
+
+		const traces: Plotly.Data[] = [];
+		for (const dataset of GRAPH_DATASETS) {
+			if (!selectedGraphDatasets.has(dataset.key)) continue;
+
+			const values = sortedStatuses.map((s) => {
+				const raw = s[dataset.key];
+				if (raw === null || raw === undefined) return null;
+				const num = typeof raw === 'string' ? parseFloat(raw) : raw;
+				return typeof num === 'number' && !isNaN(num) ? num : null;
+			});
+
+			// Skip if all values are null
+			if (values.every((v) => v === null)) continue;
+
+			traces.push({
+				x: timestamps,
+				y: values,
+				type: 'scatter',
+				mode: 'lines+markers',
+				name: dataset.label + (dataset.unit ? ` (${dataset.unit})` : ''),
+				connectgaps: false,
+				marker: { size: 4 }
+			});
+		}
+
+		if (traces.length === 0) {
+			if (graphInitialized) {
+				Plotly.purge(graphContainer);
+				graphInitialized = false;
+			}
+			return;
+		}
+
+		const layout: Partial<Plotly.Layout> = {
+			xaxis: {
+				type: 'date',
+				tickformat: '%b %d %H:%M',
+				color: isDark ? '#9ca3af' : '#6b7280',
+				gridcolor: isDark ? '#374151' : '#e5e7eb'
+			},
+			yaxis: {
+				color: isDark ? '#9ca3af' : '#6b7280',
+				gridcolor: isDark ? '#374151' : '#e5e7eb'
+			},
+			margin: { t: 20, r: 20, b: 50, l: 60 },
+			paper_bgcolor: 'transparent',
+			plot_bgcolor: 'transparent',
+			font: {
+				color: isDark ? '#d1d5db' : '#374151'
+			},
+			legend: {
+				orientation: 'h',
+				y: -0.25,
+				x: 0.5,
+				xanchor: 'center'
+			},
+			autosize: true
+		};
+
+		const config: Partial<Plotly.Config> = {
+			responsive: true,
+			displayModeBar: false
+		};
+
+		try {
+			if (graphInitialized) {
+				await Plotly.react(graphContainer, traces, layout, config);
+			} else {
+				await Plotly.newPlot(graphContainer, traces, layout, config);
+				graphInitialized = true;
+			}
+		} catch (err) {
+			logger.error('Failed to render graph: {error}', { error: err });
 		}
 	}
 
@@ -277,7 +455,12 @@
 		for (const column of loadedColumns) {
 			visibleColumns.add(column);
 		}
-		document.addEventListener('click', handleColumnPickerClickOutside);
+		const loadedDatasets = loadGraphDatasets();
+		selectedGraphDatasets.clear();
+		for (const ds of loadedDatasets) {
+			selectedGraphDatasets.add(ds);
+		}
+		document.addEventListener('click', handlePickerClickOutside);
 
 		if (receiverId) {
 			await loadReceiver();
@@ -288,7 +471,10 @@
 	});
 
 	onDestroy(() => {
-		document.removeEventListener('click', handleColumnPickerClickOutside);
+		document.removeEventListener('click', handlePickerClickOutside);
+		if (graphContainer && graphInitialized) {
+			Plotly.purge(graphContainer);
+		}
 	});
 
 	// Load raw messages when switching to that tab
@@ -312,6 +498,17 @@
 			for (const fix of fixes) {
 				fetchFixRawMessage(fix.rawMessageId, fix.receivedAt);
 			}
+		}
+	});
+
+	// Render graph when tab is active, data changes, or dataset selection changes
+	$effect(() => {
+		if (activeTab === 'graphs' && statuses.length > 0 && graphContainer) {
+			// Access selectedGraphDatasets.size to track changes
+			selectedGraphDatasets.size;
+			// Access theme to re-render on theme change
+			$theme;
+			renderGraph();
 		}
 	});
 
@@ -611,7 +808,7 @@
 	{@html jsonLdScript}
 </svelte:head>
 
-<div class="receiver-detail-page max-w-8xl container mx-auto space-y-6 p-4">
+<div class="receiver-detail-page max-w-8xl container mx-auto space-y-3 p-4 sm:space-y-6">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
 		<button class="btn preset-tonal btn-sm" onclick={goBack}>
@@ -659,13 +856,13 @@
 
 	<!-- Receiver Details -->
 	{#if !loading && !error && receiver}
-		<div class="space-y-6">
+		<div class="space-y-3 sm:space-y-6">
 			<!-- Header Card -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<div class="flex flex-wrap items-start justify-between gap-4">
-					<div class="flex-1">
-						<div class="mb-2 flex items-center gap-3">
-							<Radio class="h-8 w-10 text-primary-500" />
+					<div class="min-w-0 flex-1">
+						<div class="mb-2 flex flex-wrap items-center gap-3">
+							<Radio class="h-8 w-10 shrink-0 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
 							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
@@ -677,7 +874,7 @@
 							{/if}
 						</div>
 						{#if receiver.description}
-							<p class="text-surface-600-300-token text-lg">{receiver.description}</p>
+							<p class="text-surface-600-300-token text-lg break-words">{receiver.description}</p>
 						{/if}
 					</div>
 					<div class="text-surface-500-400-token text-sm">
@@ -690,7 +887,7 @@
 			</div>
 
 			<!-- Main Content Grid -->
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<div class="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
 				<div class="space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
@@ -801,7 +998,7 @@
 			</div>
 
 			<!-- Statistics Section -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Signal class="h-6 w-6" />
 					Statistics
@@ -834,15 +1031,11 @@
 							</p>
 						</div>
 
-						<!-- Time Period -->
+						<!-- Fix Count (Last 24 Hours) -->
 						<div class="space-y-2 card p-4">
-							<p class="text-surface-600-300-token text-sm">Time Period</p>
+							<p class="text-surface-600-300-token text-sm">Fixes (Last 24 Hours)</p>
 							<p class="text-2xl font-semibold">
-								{#if statistics.daysIncluded}
-									Last {statistics.daysIncluded} days
-								{:else}
-									All time
-								{/if}
+								{statistics.fixCount24h.toLocaleString()}
 							</p>
 						</div>
 					</div>
@@ -855,7 +1048,7 @@
 			{/if}
 
 			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Info class="h-6 w-6" />
 					Receiver Data
@@ -868,6 +1061,10 @@
 						<Tabs.Trigger value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
 							Status Reports
+						</Tabs.Trigger>
+						<Tabs.Trigger value="graphs">
+							<ChartLine class="mr-2 h-4 w-4" />
+							Graphs
 						</Tabs.Trigger>
 						<Tabs.Trigger value="raw-messages">
 							<FileText class="mr-2 h-4 w-4" />
@@ -1456,6 +1653,81 @@
 						</div>
 					</Tabs.Content>
 
+					<!-- Graphs Tab Content -->
+					<Tabs.Content value="graphs">
+						<div class="mt-4">
+							<div class="mb-4 flex items-center justify-between gap-4">
+								<p class="text-surface-500-400-token text-sm">
+									Time series plots of numeric status fields. Based on the current page of status
+									reports ({statuses.length} points).
+								</p>
+								<!-- Dataset Picker -->
+								<div class="relative" bind:this={graphDatasetPickerRef}>
+									<button
+										class="btn flex items-center gap-1.5 preset-tonal btn-sm"
+										onclick={(e: MouseEvent) => {
+											e.stopPropagation();
+											showGraphDatasetPicker = !showGraphDatasetPicker;
+										}}
+									>
+										<ChartLine class="h-4 w-4" />
+										<span class="hidden sm:inline">Datasets ({selectedGraphDatasets.size})</span>
+										<span class="sm:hidden">{selectedGraphDatasets.size}</span>
+									</button>
+
+									{#if showGraphDatasetPicker}
+										<div
+											class="absolute right-0 z-20 mt-1 max-h-80 w-64 overflow-y-auto rounded-lg border border-surface-300 bg-surface-50 p-3 shadow-lg dark:border-surface-600 dark:bg-surface-800"
+										>
+											<div class="mb-2 flex items-center justify-between">
+												<span class="text-sm font-semibold">Select Datasets</span>
+												<button class="btn preset-tonal btn-sm" onclick={resetGraphDatasets}>
+													<RotateCcw class="mr-1 h-3 w-3" />
+													Reset
+												</button>
+											</div>
+											<div class="space-y-1">
+												{#each GRAPH_DATASETS as dataset (dataset.key)}
+													<label
+														class="flex cursor-pointer items-center gap-2 rounded p-1.5 text-sm hover:bg-surface-200 dark:hover:bg-surface-700"
+													>
+														<input
+															type="checkbox"
+															checked={selectedGraphDatasets.has(dataset.key)}
+															onchange={() => toggleGraphDataset(dataset.key)}
+															class="rounded"
+														/>
+														{dataset.label}
+														{#if dataset.unit}
+															<span class="text-xs text-surface-500">({dataset.unit})</span>
+														{/if}
+													</label>
+												{/each}
+											</div>
+										</div>
+									{/if}
+								</div>
+							</div>
+
+							{#if loadingStatuses}
+								<div class="flex items-center justify-center space-x-4 p-8">
+									<Progress class="h-6 w-6" />
+									<span>Loading status data...</span>
+								</div>
+							{:else if statuses.length === 0}
+								<p class="text-surface-500-400-token p-8 text-center">
+									No status data available for graphing.
+								</p>
+							{:else if selectedGraphDatasets.size === 0}
+								<p class="text-surface-500-400-token p-8 text-center">
+									Select at least one dataset to plot.
+								</p>
+							{:else}
+								<div bind:this={graphContainer} class="h-96 w-full"></div>
+							{/if}
+						</div>
+					</Tabs.Content>
+
 					<!-- Raw Messages Tab Content -->
 					<Tabs.Content value="raw-messages">
 						<div class="mt-4">
@@ -1826,7 +2098,7 @@
 											No fix data available for this receiver
 										</p>
 									{:else}
-										<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+										<div class="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
 											<!-- Fixes by APRS Type -->
 											{#if aggregateStats.fixCountsByAprsType.length > 0}
 												<div class="space-y-4">
@@ -1962,7 +2234,7 @@
 
 			<!-- Coverage Map Section -->
 			{#if receiver.latitude !== null && receiver.longitude !== null}
-				<div class="card p-6">
+				<div class="card p-4 sm:p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Coverage Map
@@ -2007,7 +2279,7 @@
 
 <style>
 	/* Improve tab selection visibility */
-	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-selected]) {
 		background-color: rgb(var(--color-primary-500) / 0.15);
 		color: rgb(var(--color-primary-500));
 		font-weight: 600;
@@ -2016,7 +2288,7 @@
 	/* On mobile, tabs stack vertically so the underline indicator doesn't work well.
 	   Use a left border and stronger background to make the active tab obvious. */
 	@media (max-width: 639px) {
-		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-selected]) {
 			background-color: rgb(var(--color-primary-500) / 0.2);
 			border-left: 3px solid rgb(var(--color-primary-500));
 		}
