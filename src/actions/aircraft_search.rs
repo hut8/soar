@@ -18,7 +18,6 @@ use crate::actions::{
 };
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
-use crate::auth::AdminUser;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
@@ -708,13 +707,64 @@ pub struct UpdateAircraftClubResponse {
     pub message: String,
 }
 
-/// Update the club assignment for an aircraft (admin only)
+/// Update the club assignment for an aircraft (system admins or club admins assigning to their own club)
 pub async fn update_aircraft_club(
-    AdminUser(_user): AdminUser,
+    auth_user: crate::auth::AuthUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(payload): Json<UpdateAircraftClubRequest>,
 ) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // System admins can assign to any club
+    // Club admins can only assign to their own club (or unassign)
+    if !user.is_admin {
+        if !user.is_club_admin || user.club_id.is_none() {
+            return json_error(
+                StatusCode::FORBIDDEN,
+                "You must be an admin or club admin to assign aircraft",
+            )
+            .into_response();
+        }
+
+        // Club admin: can only assign to their own club
+        if let Some(target_club_id) = payload.club_id {
+            if Some(target_club_id) != user.club_id {
+                return json_error(
+                    StatusCode::FORBIDDEN,
+                    "Club admins can only assign aircraft to their own club",
+                )
+                .into_response();
+            }
+        }
+        // Club admin: can unassign (club_id = null) only if aircraft is in their club
+        else {
+            let aircraft_repo = AircraftRepository::new(state.pool.clone());
+            match aircraft_repo.get_aircraft_by_id(id).await {
+                Ok(Some(aircraft)) => {
+                    if aircraft.club_id != user.club_id {
+                        return json_error(
+                            StatusCode::FORBIDDEN,
+                            "You can only unassign aircraft from your own club",
+                        )
+                        .into_response();
+                    }
+                }
+                Ok(None) => {
+                    return json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response();
+                }
+                Err(e) => {
+                    tracing::error!(aircraft_id = %id, error = %e, "Failed to look up aircraft");
+                    return json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to look up aircraft",
+                    )
+                    .into_response();
+                }
+            }
+        }
+    }
+
     let aircraft_repo = AircraftRepository::new(state.pool);
 
     match aircraft_repo.update_club_id(id, payload.club_id).await {

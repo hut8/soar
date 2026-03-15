@@ -41,6 +41,10 @@ import type { StripeOnboardingResponse } from './generated/StripeOnboardingRespo
 import type { StripeConnectStatusView } from './generated/StripeConnectStatusView';
 import type { StripeDashboardLinkResponse } from './generated/StripeDashboardLinkResponse';
 
+// Import auto-generated club types from Rust
+import type { CreateClubRequest } from './generated/CreateClubRequest';
+import type { UpdateClubRequest } from './generated/UpdateClubRequest';
+
 // Import auto-generated auth types from Rust
 import type { LoginResponse } from './generated/LoginResponse';
 
@@ -126,6 +130,8 @@ export type {
 	StripeConnectStatusView,
 	StripeDashboardLinkResponse,
 	ClubJoinRequestView,
+	CreateClubRequest,
+	UpdateClubRequest,
 	// Auth types
 	LoginResponse,
 	// Flight gap type
@@ -215,6 +221,8 @@ export interface Club {
 	updatedAt: string;
 	similarityScore?: number;
 	distanceMeters?: number;
+	status: 'pending' | 'approved' | 'rejected';
+	createdBy: string | null;
 	recentFlightsCount?: number;
 	lastFlightAt?: string;
 }
