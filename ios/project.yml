@@ -1,0 +1,31 @@
+name: SOARTracker
+options:
+  bundleIdPrefix: com.soar
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: 1
+
+targets:
+  SOARTracker:
+    type: application
+    platform: iOS
+    sources:
+      - SOARTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.soar.tracker
+        INFOPLIST_FILE: SOARTracker/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: SOARTracker/Info.plist
+      properties:
+        UILaunchScreen: {}

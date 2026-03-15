@@ -135,7 +135,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         // Open the password reset page in browser as fallback
                         val intent = Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("$serverUrl/reset-password"),
+                            Uri.parse("$serverUrl/forgot-password"),
                         )
                         context.startActivity(intent)
                     }
