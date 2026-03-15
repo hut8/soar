@@ -34,6 +34,14 @@ echo "SOAR PgDog Setup - $ENVIRONMENT"
 echo "========================================="
 echo
 
+# When run via sudo, use the calling user's Rust toolchain
+if [[ -n "${SUDO_USER:-}" ]]; then
+    SUDO_HOME=$(eval echo "~$SUDO_USER")
+    export RUSTUP_HOME="${RUSTUP_HOME:-$SUDO_HOME/.rustup}"
+    export CARGO_HOME="${CARGO_HOME:-$SUDO_HOME/.cargo}"
+    export PATH="$CARGO_HOME/bin:$PATH"
+fi
+
 # Check build dependencies
 for cmd in git cargo cmake; do
     if ! command -v "$cmd" &>/dev/null; then
