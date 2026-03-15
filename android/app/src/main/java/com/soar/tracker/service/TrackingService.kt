@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import android.os.PowerManager
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -41,6 +42,7 @@ class TrackingService : LifecycleService() {
     private lateinit var sensorCollector: SensorCollector
     private var locationCallback: LocationCallback? = null
     private var pendingSubmit: kotlinx.coroutines.Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // Vertical speed calculation state
     private val altitudeHistory = mutableListOf<Pair<Long, Double>>() // (timestamp_ms, altitude_m)
@@ -112,6 +114,15 @@ class TrackingService : LifecycleService() {
     private fun startTracking() {
         if (_isTracking.value) return
 
+        // Acquire wake lock to keep CPU active during background tracking
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "soar:tracking",
+        ).apply {
+            acquire()
+        }
+
         sensorCollector.start()
         _isTracking.value = true
         _lastError.value = null
@@ -177,6 +188,10 @@ class TrackingService : LifecycleService() {
         sensorCollector.stop()
         _isTracking.value = false
         altitudeHistory.clear()
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
     }
 
     private fun submitFix(request: TrackerFixRequest) {
@@ -237,9 +252,17 @@ class TrackingService : LifecycleService() {
     }
 
     private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+        val openIntent = Intent(this, MainActivity::class.java)
+        val openPendingIntent = PendingIntent.getActivity(
+            this, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val stopIntent = Intent(this, TrackingService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -247,7 +270,12 @@ class TrackingService : LifecycleService() {
             .setContentTitle(getString(R.string.tracking_notification_title))
             .setContentText(getString(R.string.tracking_notification_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(openPendingIntent)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Stop Tracking",
+                stopPendingIntent,
+            )
             .setOngoing(true)
             .build()
     }
