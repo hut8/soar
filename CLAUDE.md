@@ -73,8 +73,6 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 - `/etc/alloy/config.alloy` → `infrastructure/alloy-config.alloy.template` (template - processed by soar-deploy with git commit for profiling source links)
 - `/etc/pyroscope/config.yml` → `infrastructure/pyroscope-config.yml`
 - `/etc/netdata/netdata.conf` → `infrastructure/netdata-config.conf`
-- `/etc/pgbouncer/pgbouncer.ini` → `infrastructure/pgbouncer.ini`
-- `/etc/pgbouncer/userlist.txt` → `infrastructure/pgbouncer-userlist.txt`
 - `/etc/grafana/provisioning/datasources/soar-postgres.yaml` → `infrastructure/grafana-provisioning/datasources/soar-postgres.yaml.template` (template - processed by soar-deploy)
 - `/etc/soar/ingest.toml` → `infrastructure/ingest.toml`
 
@@ -84,8 +82,9 @@ When modifying configuration files on the local system (e.g., `/etc/tempo/config
 3. Restart the service if needed: `sudo systemctl restart <service>`
 4. Commit the infrastructure/ change to git
 
-**Auto-deployed by soar-deploy:** tempo-config.yml, loki-config.yml, pyroscope-config.yml, alloy-config.alloy, pgbouncer.ini, prometheus.yml, grafana-provisioning/ (including datasource templates)
-**Manual deployment required:** netdata-config.conf, pgbouncer-userlist.txt
+**Auto-deployed by soar-deploy:** tempo-config.yml, loki-config.yml, pyroscope-config.yml, alloy-config.alloy, prometheus.yml, grafana-provisioning/ (including datasource templates)
+**Managed by scripts/setup-pgdog:** `/etc/pgdog/` (PgDog connection pooler config — generated from DATABASE_URL, not synced from repo)
+**Manual deployment required:** netdata-config.conf
 
 This ensures config changes are tracked in version control and can be reproduced across environments.
 

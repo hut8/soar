@@ -26,12 +26,12 @@ During high traffic periods, the PacketRouter internal queue was filling up (100
 - **After**: 30 connections
 - **File**: `src/main.rs:487`
 
-### 2. PgBouncer Installation Script ✅
-- **File**: `scripts/setup-pgbouncer`
+### 2. PgDog Installation Script ✅
+- **File**: `scripts/setup-pgdog`
 - **Features**:
   - Transaction-level pooling mode
-  - 50 default pool size, 10 min pool, 10 reserve
-  - Separate systemd service per environment
+  - 100 default pool size, 10 min pool, multi-threaded (4 workers)
+  - Single `pgdog.service` systemd unit
   - Auto-configuration from `/etc/soar/env`
   - Production port: 6432, Staging port: 6433
 
@@ -69,9 +69,9 @@ During high traffic periods, the PacketRouter internal queue was filling up (100
 
 ## Deployment Steps
 
-### 1. Install PgBouncer (on staging first)
+### 1. Install PgDog (on staging first)
 ```bash
-sudo ./scripts/setup-pgbouncer staging
+sudo ./scripts/setup-pgdog staging
 ```
 
 ### 2. Update DATABASE_URL in /etc/soar/env-staging
@@ -90,21 +90,15 @@ sudo systemctl restart soar-ingest-ogn-staging
 sudo systemctl restart soar-ingest-adsb-staging
 ```
 
-### 4. Monitor PgBouncer stats
+### 4. Monitor PgDog
 ```bash
-# View connection pools
-psql -h localhost -p 6433 -U soar_user pgbouncer -c 'SHOW POOLS'
-
-# View statistics
-psql -h localhost -p 6433 -U soar_user pgbouncer -c 'SHOW STATS'
-
 # Monitor logs
-tail -f /var/log/pgbouncer/pgbouncer.log
+journalctl -u pgdog -f
 ```
 
 ### 5. Deploy to Production (after staging validation)
 ```bash
-sudo ./scripts/setup-pgbouncer production
+sudo ./scripts/setup-pgdog production
 # Update /etc/soar/env with port 6432
 # Restart production services
 ```
@@ -116,7 +110,7 @@ sudo ./scripts/setup-pgbouncer production
 - `flight_tracker.enrich_flight_on_creation.latency_ms` (can be 25-32s, but non-blocking)
 - `aprs.router.internal_queue_depth` (should stay below 500)
 
-### PgBouncer Health:
+### PgDog Health:
 - Connection pool utilization (target: 60-80%)
 - Client wait time (should be near 0)
 - Query wait time (should be near 0)
@@ -131,7 +125,7 @@ sudo ./scripts/setup-pgbouncer production
 If issues occur:
 1. Stop SOAR services
 2. Revert DATABASE_URL to direct PostgreSQL connection
-3. Stop pgbouncer: `systemctl stop pgbouncer-{staging|production}`
+3. Stop pgdog: `systemctl stop pgdog`
 4. Restart SOAR services
 5. Database pool increase (30 connections) can stay - it's safe
 
@@ -140,7 +134,7 @@ If issues occur:
 1. `src/main.rs` - Database pool size 20 → 30
 2. `src/flights_repo.rs` - Added enrichment update methods
 3. `src/flight_tracker/flight_lifecycle.rs` - Added fast-path functions
-4. `scripts/setup-pgbouncer` - New installation script
+4. `scripts/setup-pgdog` - New installation script
 5. `infrastructure/grafana-dashboard-ingest-ogn.json` - Fixed environment filters
 
 ## Next Steps
