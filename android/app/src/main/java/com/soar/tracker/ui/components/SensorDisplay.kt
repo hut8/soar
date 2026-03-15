@@ -35,6 +35,7 @@ fun SensorDisplay(
     accelZ: Double?,
     pressureHpa: Double?,
     verticalSpeedMps: Double?,
+    speedMps: Double?,
     latitude: Double?,
     longitude: Double?,
     altitudeMeters: Double?,
@@ -60,7 +61,7 @@ fun SensorDisplay(
 
             // --- Grid rows ---
 
-            // Row 1: G-Force | Vario | Pressure
+            // Row 1: G-Force | Vario | GS | Pressure
             val gForce = if (accelX != null && accelY != null && accelZ != null) {
                 sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
             } else {
@@ -73,6 +74,7 @@ fun SensorDisplay(
                 varioFpm < -50 -> Red
                 else -> Color.Unspecified
             }
+            val gsKnots = speedMps?.let { it * 1.94384 }
 
             GridRow {
                 GridCell(
@@ -90,6 +92,11 @@ fun SensorDisplay(
                     valueColor = varioColor,
                 )
                 GridCell(
+                    label = "GS",
+                    value = gsKnots?.let { String.format(Locale.US, "%.0f kt", it) } ?: "--",
+                    mono = mono,
+                )
+                GridCell(
                     label = "Pressure",
                     value = pressureHpa?.let {
                         val inHg = it * 0.02953
@@ -101,7 +108,7 @@ fun SensorDisplay(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Row 2: GNSS Alt | AGL | Position
+            // Row 2: GNSS Alt | AGL
             val altFt = altitudeMeters?.let { it * 3.28084 }
             GridRow {
                 GridCell(
@@ -112,20 +119,6 @@ fun SensorDisplay(
                 GridCell(
                     label = "AGL",
                     value = altitudeAglFeet?.let { String.format(Locale.US, "%d ft", it) } ?: "--",
-                    mono = mono,
-                )
-                GridCell(
-                    label = "Position",
-                    value = if (latitude != null && longitude != null) {
-                        val latDir = if (latitude >= 0) "N" else "S"
-                        val lonDir = if (longitude >= 0) "E" else "W"
-                        String.format(
-                            Locale.US, "%.4f\u00B0 %s\n%.4f\u00B0 %s",
-                            abs(latitude), latDir, abs(longitude), lonDir,
-                        )
-                    } else {
-                        "--"
-                    },
                     mono = mono,
                 )
             }
@@ -162,6 +155,26 @@ fun SensorDisplay(
                     value = gpsBearingDegrees?.let {
                         String.format(Locale.US, "%.0f\u00B0", it)
                     } ?: "--",
+                    mono = mono,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Row 4: Position
+            GridRow {
+                GridCell(
+                    label = "Position",
+                    value = if (latitude != null && longitude != null) {
+                        val latDir = if (latitude >= 0) "N" else "S"
+                        val lonDir = if (longitude >= 0) "E" else "W"
+                        String.format(
+                            Locale.US, "%.4f\u00B0 %s  %.4f\u00B0 %s",
+                            abs(latitude), latDir, abs(longitude), lonDir,
+                        )
+                    } else {
+                        "--"
+                    },
                     mono = mono,
                 )
             }

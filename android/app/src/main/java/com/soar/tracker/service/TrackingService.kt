@@ -34,6 +34,8 @@ data class SensorData(
     val latitude: Double?,
     val longitude: Double?,
     val altitudeMeters: Double?,
+    /** Ground speed in m/s from GPS */
+    val speedMps: Double?,
     /** GPS track / direction of travel (only available when moving) */
     val gpsBearingDegrees: Double?,
     /** Magnetic compass heading from rotation vector sensor (always available) */
@@ -171,6 +173,7 @@ class TrackingService : LifecycleService() {
                     latitude = location.latitude,
                     longitude = location.longitude,
                     altitudeMeters = if (hasAltitude) location.altitude else null,
+                    speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
                     gpsBearingDegrees = if (location.hasBearing()) location.bearing.toDouble() else null,
                     magneticHeadingDegrees = sensorCollector.magneticHeadingDegrees?.toDouble(),
                 )

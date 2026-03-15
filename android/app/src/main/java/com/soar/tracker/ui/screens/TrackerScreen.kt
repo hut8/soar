@@ -252,6 +252,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 accelZ = sensorData?.accelZ,
                 pressureHpa = sensorData?.pressureHpa,
                 verticalSpeedMps = sensorData?.verticalSpeedMps,
+                speedMps = sensorData?.speedMps,
                 latitude = sensorData?.latitude,
                 longitude = sensorData?.longitude,
                 altitudeMeters = sensorData?.altitudeMeters,
