@@ -16,5 +16,3 @@ CREATE TABLE push_subscriptions (
     -- Prevent duplicate subscriptions for same endpoint
     CONSTRAINT push_subscriptions_endpoint_unique UNIQUE (endpoint)
 );
-
-CREATE INDEX CONCURRENTLY idx_push_subscriptions_user_id ON push_subscriptions(user_id);
