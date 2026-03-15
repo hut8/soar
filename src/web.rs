@@ -73,6 +73,7 @@ pub struct AppState {
     pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
     pub aircraft_types_lookup: std::sync::Arc<crate::actions::views::AircraftTypesLookup>, // Static reference data cache
     pub stripe_config: Option<StripeConfig>, // Stripe configuration (None if not configured)
+    pub http_client: reqwest::Client,        // Shared HTTP client for external API calls
     pub elevation_db: Option<ElevationDB>,   // Elevation service for AGL lookups
     pub magnetic_service: Option<MagneticService>, // Magnetic declination service
 }
@@ -657,6 +658,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         live_fix_service,
         aircraft_types_lookup,
         stripe_config,
+        http_client: reqwest::Client::new(),
         elevation_db,
         magnetic_service,
     };
@@ -937,6 +939,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         )
         // Geocoding
         .route("/geocode/reverse", get(actions::geocoding::reverse_geocode))
+        // Weather
+        .route("/weather", get(actions::weather::get_weather))
         // User location tracking
         .route("/user-fix", post(actions::create_user_fix))
         // Android tracker endpoint

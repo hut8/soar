@@ -24,6 +24,7 @@ mod tests {
         ClubJoinRequestView, ClubView, FlightView, LoginResponse, ModelDataView, RawMessageView,
         ReceiverStatusView, ReceiverView, RunwayEnd, RunwayView, UserView,
     };
+    use crate::actions::weather::WeatherResponse;
     use crate::aircraft::AddressType;
     use crate::aircraft_images::{AircraftImage, AircraftImageCollection, AircraftImageSource};
     use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};
@@ -88,6 +89,9 @@ mod tests {
 
         // Geocoding types
         ReverseGeocodeResponse::export(&cfg).expect("Failed to export ReverseGeocodeResponse type");
+
+        // Weather types
+        WeatherResponse::export(&cfg).expect("Failed to export WeatherResponse type");
 
         // Location types
         Point::export(&cfg).expect("Failed to export Point type");
