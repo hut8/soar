@@ -66,6 +66,10 @@ pub struct TrackerFlightInfo {
     pub takeoff_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
     pub duration_seconds: Option<i64>,
+    pub towed_by_registration: Option<String>,
+    pub towed_by_aircraft_model: Option<String>,
+    pub tow_release_time: Option<DateTime<Utc>>,
+    pub tow_release_altitude_msl_ft: Option<i32>,
 }
 
 /// Nearby aircraft information
@@ -82,4 +86,6 @@ pub struct NearbyAircraftInfo {
     pub ground_speed_knots: Option<f64>,
     pub distance_meters: f64,
     pub last_fix_at: Option<DateTime<Utc>>,
+    pub climb_fpm: Option<f64>,
+    pub track_degrees: Option<f64>,
 }

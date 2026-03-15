@@ -144,7 +144,8 @@ pub async fn create_tracker_fix(
             .filter_map(|row| {
                 let lat = row.latitude?;
                 let lon = row.longitude?;
-                let (altitude_feet, ground_speed_knots) = extract_fix_data(&row.current_fix);
+                let (altitude_feet, ground_speed_knots, climb_fpm, track_degrees) =
+                    extract_fix_data(&row.current_fix);
                 Some(NearbyAircraftInfo {
                     id: row.id,
                     registration: row.registration,
@@ -155,6 +156,8 @@ pub async fn create_tracker_fix(
                     ground_speed_knots,
                     distance_meters: row.distance_meters.unwrap_or(0.0),
                     last_fix_at: row.last_fix_at,
+                    climb_fpm,
+                    track_degrees,
                 })
             })
             .collect(),
@@ -292,7 +295,7 @@ async fn lookup_flight(
 
     // Resolve departure airport ident if present
     let departure_airport = if let Some(airport_id) = flight.departure_airport_id {
-        let airports_repo = AirportsRepository::new(pool);
+        let airports_repo = AirportsRepository::new(pool.clone());
         match airports_repo.get_airport_by_id(airport_id).await {
             Ok(Some(airport)) => Some(airport.ident),
             _ => None,
@@ -300,6 +303,18 @@ async fn lookup_flight(
     } else {
         None
     };
+
+    // Resolve tow aircraft info if present
+    let (towed_by_registration, towed_by_aircraft_model) =
+        if let Some(tow_aircraft_id) = flight.towed_by_aircraft_id {
+            let aircraft_repo = AircraftRepository::new(pool);
+            match aircraft_repo.get_aircraft_by_id(tow_aircraft_id).await {
+                Ok(Some(aircraft)) => (aircraft.registration, Some(aircraft.aircraft_model)),
+                _ => (None, None),
+            }
+        } else {
+            (None, None)
+        };
 
     let duration_seconds = flight
         .takeoff_time
@@ -311,19 +326,28 @@ async fn lookup_flight(
         takeoff_time: flight.takeoff_time,
         departure_airport,
         duration_seconds,
+        towed_by_registration,
+        towed_by_aircraft_model,
+        tow_release_time: flight.tow_release_time,
+        tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
     })
 }
 
-/// Extract altitude (feet) and ground speed (knots) from the current_fix JSONB.
+/// Extract altitude (feet), ground speed (knots), climb rate (fpm), and track (degrees)
+/// from the current_fix JSONB.
 /// The Fix struct uses `#[serde(rename_all = "camelCase")]`, so keys are camelCase.
-fn extract_fix_data(current_fix: &Option<serde_json::Value>) -> (Option<f64>, Option<f64>) {
+fn extract_fix_data(
+    current_fix: &Option<serde_json::Value>,
+) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
     match current_fix {
         Some(fix) => {
             let altitude_feet = fix.get("altitudeMslFeet").and_then(|v| v.as_f64());
             let ground_speed_knots = fix.get("groundSpeedKnots").and_then(|v| v.as_f64());
-            (altitude_feet, ground_speed_knots)
+            let climb_fpm = fix.get("climbFpm").and_then(|v| v.as_f64());
+            let track_degrees = fix.get("trackDegrees").and_then(|v| v.as_f64());
+            (altitude_feet, ground_speed_knots, climb_fpm, track_degrees)
         }
-        None => (None, None),
+        None => (None, None, None, None),
     }
 }
 

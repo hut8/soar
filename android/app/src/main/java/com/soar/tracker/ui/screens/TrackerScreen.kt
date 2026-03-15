@@ -58,7 +58,7 @@ import com.soar.tracker.ui.theme.Red
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrackerScreen(onLogout: () -> Unit = {}) {
+fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val isTracking by TrackingService.isTracking.collectAsState()
     val latestResponse by TrackingService.latestResponse.collectAsState()
@@ -89,6 +89,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}) {
     }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("SOAR Tracker") },
@@ -184,11 +185,6 @@ fun TrackerScreen(onLogout: () -> Unit = {}) {
 
             val response = latestResponse
 
-            // Position card
-            if (response != null) {
-                PositionCard(response)
-            }
-
             // Aircraft + Flight card
             FlightStatusCard(
                 aircraft = response?.matchedAircraft,
@@ -226,31 +222,6 @@ fun TrackerScreen(onLogout: () -> Unit = {}) {
             }
 
             Spacer(modifier = Modifier.height(80.dp)) // FAB clearance
-        }
-    }
-}
-
-@Composable
-private fun PositionCard(response: com.soar.tracker.data.api.TrackerFixResponse) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Position", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Fix: ${response.fixId.take(8)}...",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Updated: ${response.timestamp}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

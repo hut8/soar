@@ -1,21 +1,33 @@
 package com.soar.tracker.ui.components
 
+import java.util.Locale
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.soar.tracker.data.api.TrackerAircraftInfo
 import com.soar.tracker.data.api.TrackerFlightInfo
+import com.soar.tracker.ui.theme.Green
+import com.soar.tracker.ui.theme.Orange
+import com.soar.tracker.ui.theme.Red
 
 @Composable
 fun FlightStatusCard(
@@ -30,6 +42,7 @@ fun FlightStatusCard(
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Aircraft section
             Text("Aircraft", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -63,35 +76,94 @@ fun FlightStatusCard(
                 )
             }
 
+            // Flight section
             if (flight != null) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("Flight", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(4.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Row {
-                    Text("State: ", style = MaterialTheme.typography.bodyMedium)
+                // Flight state with colored indicator
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Flight", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val stateColor = when (flight.state.lowercase()) {
+                        "active" -> Green
+                        "stale" -> Orange
+                        else -> Red
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(stateColor),
+                    )
                     Text(
-                        text = flight.state.replaceFirstChar { it.uppercase() },
+                        text = " ${flight.state.replaceFirstChar { it.uppercase() }}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Takeoff time
+                flight.takeoffTime?.let { time ->
+                    // Format ISO timestamp to a readable time
+                    val displayTime = try {
+                        val instant = java.time.Instant.parse(time)
+                        val local = java.time.LocalDateTime.ofInstant(
+                            instant, java.time.ZoneId.systemDefault(),
+                        )
+                        val formatter = java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+                        "Takeoff: ${local.format(formatter)}"
+                    } catch (_: Exception) {
+                        "Takeoff: $time"
+                    }
+                    Text(text = displayTime, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // Duration
+                flight.durationSeconds?.let { seconds ->
+                    val hours = seconds / 3600
+                    val minutes = (seconds % 3600) / 60
+                    val secs = seconds % 60
+                    val durationText = if (hours > 0) {
+                        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, secs)
+                    } else {
+                        String.format(Locale.US, "%d:%02d", minutes, secs)
+                    }
+                    Text(
+                        text = "Duration: $durationText",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
 
+                // Departure airport
                 flight.departureAirport?.let { airport ->
-                    Row {
-                        Text("From: ", style = MaterialTheme.typography.bodyMedium)
-                        Text(airport, style = MaterialTheme.typography.bodyMedium)
-                    }
+                    Text(
+                        text = "From: $airport",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
 
-                flight.durationSeconds?.let { seconds ->
-                    val minutes = seconds / 60
-                    val hours = minutes / 60
-                    val remainingMinutes = minutes % 60
-                    Row {
-                        Text("Duration: ", style = MaterialTheme.typography.bodyMedium)
+                // Tow information
+                if (flight.towedByRegistration != null || flight.towedByAircraftModel != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val towLabel = buildString {
+                        append("Towed by ")
+                        flight.towedByRegistration?.let { append(it) }
+                        flight.towedByAircraftModel?.let {
+                            if (flight.towedByRegistration != null) append(" ")
+                            append("($it)")
+                        }
+                    }
+                    Text(text = towLabel, style = MaterialTheme.typography.bodyMedium)
+
+                    // Release info
+                    if (flight.towReleaseAltitudeMslFt != null) {
                         Text(
-                            text = if (hours > 0) "${hours}h ${remainingMinutes}m" else "${minutes}m",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "Released at ${flight.towReleaseAltitudeMslFt} ft MSL",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

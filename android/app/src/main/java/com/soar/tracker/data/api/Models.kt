@@ -74,6 +74,10 @@ data class TrackerFlightInfo(
     @Json(name = "takeoffTime") val takeoffTime: String?,
     @Json(name = "departureAirport") val departureAirport: String?,
     @Json(name = "durationSeconds") val durationSeconds: Long?,
+    @Json(name = "towedByRegistration") val towedByRegistration: String?,
+    @Json(name = "towedByAircraftModel") val towedByAircraftModel: String?,
+    @Json(name = "towReleaseTime") val towReleaseTime: String?,
+    @Json(name = "towReleaseAltitudeMslFt") val towReleaseAltitudeMslFt: Int?,
 )
 
 @JsonClass(generateAdapter = true)
@@ -87,4 +91,6 @@ data class NearbyAircraftInfo(
     @Json(name = "groundSpeedKnots") val groundSpeedKnots: Double?,
     @Json(name = "distanceMeters") val distanceMeters: Double,
     @Json(name = "lastFixAt") val lastFixAt: String?,
+    @Json(name = "climbFpm") val climbFpm: Double?,
+    @Json(name = "trackDegrees") val trackDegrees: Double?,
 )
