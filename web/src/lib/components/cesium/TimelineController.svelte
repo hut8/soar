@@ -198,6 +198,7 @@
 				latitude: null,
 				longitude: null,
 				adsbEmitterCategory: null,
+				engineType: null,
 				currentFix: null,
 				modelData: null
 			},

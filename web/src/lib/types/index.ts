@@ -14,6 +14,7 @@ import type { Fix } from './generated/Fix';
 import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
 import type { AircraftType } from './generated/AircraftType';
 import type { AircraftCategory } from './generated/AircraftCategory';
+import type { EngineType } from './generated/EngineType';
 import type { FlightView } from './generated/FlightView';
 import type { FlightState } from './generated/FlightState';
 import type { AddressType } from './generated/AddressType';
@@ -138,6 +139,7 @@ export type {
 	AdsbEmitterCategory,
 	AircraftType,
 	AircraftCategory,
+	EngineType,
 	FlightView,
 	FlightState,
 	AddressType,

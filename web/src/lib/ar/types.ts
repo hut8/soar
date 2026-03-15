@@ -1,6 +1,6 @@
 // AR-specific TypeScript type definitions
 
-import type { AircraftCategory, AdsbEmitterCategory } from '$lib/types';
+import type { AircraftCategory, AdsbEmitterCategory, EngineType } from '$lib/types';
 
 export interface ARDeviceOrientation {
 	heading: number; // Compass heading (0-360°, 0 = North)
@@ -32,6 +32,7 @@ export interface ARAircraftPosition {
 	trackDegrees: number | null; // aircraft heading (0-360°, 0 = north)
 	aircraftCategory: AircraftCategory | null;
 	adsbEmitterCategory: AdsbEmitterCategory | null;
+	engineType: EngineType | null;
 }
 
 export interface ARScreenPosition {

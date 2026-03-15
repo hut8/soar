@@ -27,7 +27,7 @@ mod tests {
     use crate::aircraft::AddressType;
     use crate::aircraft_images::{AircraftImage, AircraftImageCollection, AircraftImageSource};
     use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};
-    use crate::aircraft_types::AircraftCategory;
+    use crate::aircraft_types::{AircraftCategory, EngineType};
     use crate::airspace::{
         AirspaceClass, AirspaceGeoJson, AirspaceProperties, AirspaceSource, AirspaceType,
     };
@@ -65,6 +65,7 @@ mod tests {
         ModelDataView::export(&cfg).expect("Failed to export ModelDataView type");
         Aircraft::export(&cfg).expect("Failed to export Aircraft type");
         AircraftCategory::export(&cfg).expect("Failed to export AircraftCategory type");
+        EngineType::export(&cfg).expect("Failed to export EngineType type");
         AircraftRegistrationView::export(&cfg)
             .expect("Failed to export AircraftRegistrationView type");
         AircraftModelView::export(&cfg).expect("Failed to export AircraftModelView type");
