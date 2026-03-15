@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -66,6 +68,12 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
     val lastUpdateTime by TrackingService.lastUpdateTime.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val groundPressureHpa by TrackingService.groundPressureHpa.collectAsState()
+    var showAltimeterConfirm by remember { mutableStateOf(false) }
+
+    // Determine if aircraft appears to be in flight
+    val isInFlight = latestResponse?.flight?.let {
+        it.state.lowercase() == "active"
+    } ?: false
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -86,6 +94,34 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
         if (hasLocationPermission) {
             TrackingService.start(context)
         }
+    }
+
+    // Confirmation dialog for setting altimeter while in flight
+    if (showAltimeterConfirm) {
+        AlertDialog(
+            onDismissRequest = { showAltimeterConfirm = false },
+            title = { Text("Set Altimeter?") },
+            text = {
+                Text(
+                    "The aircraft appears to be in flight. Setting the altimeter " +
+                        "now will use the current pressure as the ground reference, " +
+                        "which will produce incorrect altitude readings. Are you sure?",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    sensorData?.pressureHpa?.let { TrackingService.setGroundPressure(it) }
+                    showAltimeterConfirm = false
+                }) {
+                    Text("Set Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAltimeterConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -203,6 +239,13 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 altitudeMeters = sensorData?.altitudeMeters,
                 altitudeAglFeet = response?.altitudeAglFeet,
                 groundPressureHpa = groundPressureHpa,
+                onSetAltimeter = {
+                    if (isInFlight) {
+                        showAltimeterConfirm = true
+                    } else {
+                        sensorData?.pressureHpa?.let { TrackingService.setGroundPressure(it) }
+                    }
+                },
             )
 
             // Nearby aircraft

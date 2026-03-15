@@ -75,6 +75,10 @@ class TrackingService : LifecycleService() {
         fun stop(context: Context) {
             context.stopService(Intent(context, TrackingService::class.java))
         }
+
+        fun setGroundPressure(pressureHpa: Double) {
+            _groundPressureHpa.value = pressureHpa
+        }
     }
 
     override fun onCreate() {

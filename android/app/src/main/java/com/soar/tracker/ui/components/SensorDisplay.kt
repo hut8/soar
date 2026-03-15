@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +34,7 @@ fun SensorDisplay(
     altitudeMeters: Double?,
     altitudeAglFeet: Int?,
     groundPressureHpa: Double?,
+    onSetAltimeter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -47,8 +52,6 @@ fun SensorDisplay(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                // G-Force
-                // accelX/Y/Z are already in g-force (converted in TrackingService)
                 val gForce = if (accelX != null && accelY != null && accelZ != null) {
                     sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
                 } else {
@@ -60,8 +63,7 @@ fun SensorDisplay(
                     value = gForce?.let { String.format(Locale.US, "%.1f G", it) } ?: "--",
                 )
 
-                // Vario (vertical speed in fpm)
-                val varioFpm = verticalSpeedMps?.let { it * 196.85 } // m/s to fpm
+                val varioFpm = verticalSpeedMps?.let { it * 196.85 }
                 SensorValue(
                     label = "Vario",
                     value = varioFpm?.let {
@@ -73,14 +75,7 @@ fun SensorDisplay(
                 // Pressure in both hPa and inHg
                 val pressureText = if (pressureHpa != null) {
                     val inHg = pressureHpa * 0.02953
-                    val base = String.format(Locale.US, "%.1f hPa\n%.2f inHg", pressureHpa, inHg)
-                    // Add pressure altitude if ground reference is available
-                    if (groundPressureHpa != null && groundPressureHpa > 0) {
-                        val pressAltFt = 145366.45 * (1 - Math.pow(pressureHpa / groundPressureHpa, 0.190284))
-                        String.format(Locale.US, "%s\n\u2248%.0f ft", base, pressAltFt)
-                    } else {
-                        base
-                    }
+                    String.format(Locale.US, "%.1f hPa\n%.2f inHg", pressureHpa, inHg)
                 } else {
                     "--"
                 }
@@ -116,6 +111,46 @@ fun SensorDisplay(
                         "--"
                     },
                 )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Altimeter section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Altimeter reading
+                val altimeterFt = if (pressureHpa != null && groundPressureHpa != null && groundPressureHpa > 0) {
+                    145366.45 * (1 - Math.pow(pressureHpa / groundPressureHpa, 0.190284))
+                } else {
+                    null
+                }
+                SensorValue(
+                    label = "Altimeter",
+                    value = altimeterFt?.let { String.format(Locale.US, "%.0f ft", it) } ?: "--",
+                )
+
+                // Altimeter setting (the reference pressure)
+                SensorValue(
+                    label = "Altimeter Setting",
+                    value = groundPressureHpa?.let {
+                        val inHg = it * 0.02953
+                        String.format(Locale.US, "%.2f inHg\n%.1f hPa", inHg, it)
+                    } ?: "Not set",
+                )
+
+                // Set button
+                TextButton(
+                    onClick = onSetAltimeter,
+                    enabled = pressureHpa != null,
+                    contentPadding = ButtonDefaults.TextButtonContentPadding,
+                ) {
+                    Text("Set")
+                }
             }
         }
     }
