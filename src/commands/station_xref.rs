@@ -5,7 +5,8 @@ use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use serde::Deserialize;
 use std::collections::HashMap;
-use tracing::info;
+use std::time::Duration;
+use tracing::{info, warn};
 
 /// A station entry from the FAI glider tracking site.
 #[derive(Debug, Clone, Deserialize)]
@@ -63,7 +64,12 @@ pub async fn handle_station_xref(
 ) -> Result<()> {
     // 1. Fetch FAI station data
     info!("Fetching FAI station data from {}", FAI_STATIONS_URL);
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .user_agent(concat!("soar/", env!("VERGEN_GIT_DESCRIBE")))
+        .build()
+        .context("Failed to build HTTP client")?;
     let response = client
         .get(FAI_STATIONS_URL)
         .send()
@@ -132,15 +138,24 @@ pub async fn handle_station_xref(
     }
 
     // Check location mismatches for stations in both
+    let mut parse_errors: usize = 0;
     for station in &fai_stations {
         if let Some(receiver) = soar_map.get(station.s.as_str()) {
             let fai_lat: f64 = match station.lt.parse() {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(e) => {
+                    warn!(callsign = %station.s, lat = %station.lt, "Failed to parse FAI latitude: {}", e);
+                    parse_errors += 1;
+                    continue;
+                }
             };
             let fai_lng: f64 = match station.lg.parse() {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(e) => {
+                    warn!(callsign = %station.s, lng = %station.lg, "Failed to parse FAI longitude: {}", e);
+                    parse_errors += 1;
+                    continue;
+                }
             };
 
             if let (Some(soar_lat), Some(soar_lng)) = (receiver.latitude, receiver.longitude) {
@@ -251,6 +266,9 @@ pub async fn handle_station_xref(
     println!();
 
     println!("Matched: {}", matched_count);
+    if parse_errors > 0 {
+        println!("Parse errors (skipped from comparison): {}", parse_errors);
+    }
     println!();
 
     // Version distribution
