@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.soar.tracker.service.TrackingService
-import com.soar.tracker.service.SensorData
 import com.soar.tracker.ui.components.FlightStatusCard
 import com.soar.tracker.ui.components.NearbyAircraftList
 import com.soar.tracker.ui.components.SensorDisplay

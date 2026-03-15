@@ -42,8 +42,9 @@ fun SensorDisplay(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 // G-Force
+                // accelX/Y/Z are already in g-force (converted in TrackingService)
                 val gForce = if (accelX != null && accelY != null && accelZ != null) {
-                    sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ) / 9.81
+                    sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
                 } else {
                     null
                 }

@@ -36,6 +36,7 @@ class TrackingService : LifecycleService() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var sensorCollector: SensorCollector
     private var locationCallback: LocationCallback? = null
+    private var pendingSubmit: kotlinx.coroutines.Job? = null
 
     // Vertical speed calculation state
     private val altitudeHistory = mutableListOf<Pair<Long, Double>>() // (timestamp_ms, altitude_m)
@@ -66,10 +67,7 @@ class TrackingService : LifecycleService() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, TrackingService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            context.stopService(Intent(context, TrackingService::class.java))
         }
     }
 
@@ -170,7 +168,9 @@ class TrackingService : LifecycleService() {
         val app = application as SoarTrackerApp
         val repo = app.trackerRepository ?: return
 
-        lifecycleScope.launch {
+        // Cancel any in-flight request to avoid backlog on slow networks
+        pendingSubmit?.cancel()
+        pendingSubmit = lifecycleScope.launch {
             val result = repo.submitFix(request)
             result.onSuccess { response ->
                 _latestResponse.value = response
