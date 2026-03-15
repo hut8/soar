@@ -177,11 +177,8 @@ function getFixedWingIcon(
 	// This covers aircraft tracked via OGN/APRS that lack ADS-B info
 	if (engineType) {
 		switch (engineType) {
-			// Jet engines → jet icon (B767, 737, business jets, etc.)
+			// Jet or turboprop/turboshaft → jet icon (B767, 737, King Air, ATR, etc.)
 			case 'Jet':
-				return 'jet';
-
-			// Turboprop/turboshaft → jet icon (King Air, ATR, etc.)
 			case 'Turbine':
 				return 'jet';
 
