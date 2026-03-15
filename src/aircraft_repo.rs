@@ -852,6 +852,31 @@ impl AircraftRepository {
             None => return Ok(None),
         };
 
+        // Check if the address already exists in the target column on another row.
+        // If so, this is a known FLARM/OGN duplicate that will be merged by the
+        // daily batch process (merge_flarm_ogn_duplicates). Attempting the UPDATE
+        // would just hit a unique constraint violation on every packet.
+        let already_exists = match address_type {
+            AddressType::Ogn => diesel::dsl::select(diesel::dsl::exists(
+                aircraft::table
+                    .filter(aircraft::ogn_address.eq(address))
+                    .filter(aircraft::id.ne(target.id)),
+            ))
+            .get_result::<bool>(conn)?,
+            AddressType::Flarm => diesel::dsl::select(diesel::dsl::exists(
+                aircraft::table
+                    .filter(aircraft::flarm_address.eq(address))
+                    .filter(aircraft::id.ne(target.id)),
+            ))
+            .get_result::<bool>(conn)?,
+            _ => unreachable!(),
+        };
+        if already_exists {
+            // Another row already holds this address — can't inline-merge without
+            // reassigning fixes/flights first. The batch merge will handle it.
+            return Ok(None);
+        }
+
         // Set the incoming address on the target
         let model = match address_type {
             AddressType::Ogn => diesel::update(aircraft::table.filter(aircraft::id.eq(target.id)))
@@ -883,6 +908,8 @@ impl AircraftRepository {
                 Ok(Some(m))
             }
             Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+                // True race condition: another thread inserted the address between
+                // our check and the UPDATE. This should be rare.
                 warn!(
                     "Race condition in merge_by_flarm_ogn_address: {:?} address {:06X} was \
                      inserted by another thread. Falling back to normal path.",
