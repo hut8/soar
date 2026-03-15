@@ -115,18 +115,21 @@ class TrackingService : LifecycleService() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val location = result.lastLocation ?: return
-                val verticalSpeed = calculateVerticalSpeed(location.altitude)
 
-                val ax = sensorCollector.accelX.toDouble()
-                val ay = sensorCollector.accelY.toDouble()
-                val az = sensorCollector.accelZ.toDouble()
+                val hasAltitude = location.hasAltitude()
+                val verticalSpeed = if (hasAltitude) calculateVerticalSpeed(location.altitude) else null
+
+                // Android accelerometer reports m/s², convert to g-force
+                val ax = sensorCollector.accelX.toDouble() / 9.81
+                val ay = sensorCollector.accelY.toDouble() / 9.81
+                val az = sensorCollector.accelZ.toDouble() / 9.81
                 val pressure = sensorCollector.pressureHpa?.toDouble()
 
                 val request = TrackerFixRequest(
                     latitude = location.latitude,
                     longitude = location.longitude,
                     heading = if (location.hasBearing()) location.bearing.toDouble() else null,
-                    altitudeMeters = if (location.hasAltitude()) location.altitude else null,
+                    altitudeMeters = if (hasAltitude) location.altitude else null,
                     speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
                     accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
                     pressureHpa = pressure,
@@ -173,8 +176,8 @@ class TrackingService : LifecycleService() {
                 _latestResponse.value = response
                 _lastError.value = null
                 _lastUpdateTime.value = System.currentTimeMillis()
-            }.onFailure { error ->
-                _lastError.value = error.message
+            }.onFailure { e ->
+                _lastError.value = e.message ?: "Request failed"
             }
         }
     }

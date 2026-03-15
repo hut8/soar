@@ -65,6 +65,9 @@ fun TrackerScreen() {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_COARSE_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
@@ -73,6 +76,7 @@ fun TrackerScreen() {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+            || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (hasLocationPermission) {
             TrackingService.start(context)
         }
