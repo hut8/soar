@@ -335,14 +335,20 @@ if [ "$ENVIRONMENT" = "radar-staging" ] || [ "$ENVIRONMENT" = "radar-production"
     systemctl enable "$SERVICE" || log_warn "Failed to enable $SERVICE"
     systemctl restart "$SERVICE" || log_warn "Failed to restart $SERVICE"
 
-    # Wait for service to start
-    sleep 3
+    # Wait for service to become active (up to 30 seconds)
+    SERVICE_UP=false
+    for i in $(seq 1 30); do
+        if systemctl is-active --quiet "$SERVICE"; then
+            SERVICE_UP=true
+            break
+        fi
+        sleep 1
+    done
 
-    # Verify service is running
-    if systemctl is-active --quiet "$SERVICE"; then
+    if [ "$SERVICE_UP" = true ]; then
         log_info "$SERVICE: ${GREEN}ACTIVE${NC}"
     else
-        log_error "$SERVICE: ${RED}FAILED${NC}"
+        log_error "$SERVICE: ${RED}FAILED${NC} (not active after 30s)"
         journalctl -u "$SERVICE" --no-pager --lines=10 || true
         ALL_HEALTHY=false
     fi
@@ -1389,20 +1395,25 @@ for timer in "${TIMERS[@]}"; do
     fi
 done
 
-# Wait for services to start
+# Wait for services to become active (up to 30 seconds each)
 log_info "Waiting for services to initialize..."
-sleep 5
-
-# Check service status
-log_info "Checking service status..."
 ALL_HEALTHY=true
 
 # Check active services (always started)
 for service in "${ACTIVE_SERVICES[@]}"; do
-    if systemctl is-active --quiet "$service"; then
+    SERVICE_UP=false
+    for i in $(seq 1 30); do
+        if systemctl is-active --quiet "$service"; then
+            SERVICE_UP=true
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "$SERVICE_UP" = true ]; then
         log_info "$service: ${GREEN}ACTIVE${NC}"
     else
-        log_error "$service: ${RED}FAILED${NC}"
+        log_error "$service: ${RED}FAILED${NC} (not active after 30s)"
         ALL_HEALTHY=false
 
         # Show recent logs for failed service
@@ -1415,10 +1426,19 @@ done
 if [ ${#MANUAL_SERVICES_TO_RESTART[@]} -gt 0 ]; then
     log_info "Checking restarted manual services..."
     for service in "${MANUAL_SERVICES_TO_RESTART[@]}"; do
-        if systemctl is-active --quiet "$service"; then
+        SERVICE_UP=false
+        for i in $(seq 1 30); do
+            if systemctl is-active --quiet "$service"; then
+                SERVICE_UP=true
+                break
+            fi
+            sleep 1
+        done
+
+        if [ "$SERVICE_UP" = true ]; then
             log_info "$service: ${GREEN}ACTIVE${NC}"
         else
-            log_error "$service: ${RED}FAILED${NC}"
+            log_error "$service: ${RED}FAILED${NC} (not active after 30s)"
             ALL_HEALTHY=false
 
             # Show recent logs for failed service
