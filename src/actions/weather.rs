@@ -57,12 +57,22 @@ pub async fn get_weather(
         .into_response();
     }
 
-    let url = format!(
-        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current=surface_pressure,pressure_msl,temperature_2m&wind_speed_unit=kn&temperature_unit=celsius",
-        params.lat, params.lon
-    );
-
-    let response = match state.http_client.get(&url).send().await {
+    let response = match state
+        .http_client
+        .get("https://api.open-meteo.com/v1/forecast")
+        .query(&[
+            ("latitude", params.lat.to_string()),
+            ("longitude", params.lon.to_string()),
+            (
+                "current",
+                "surface_pressure,pressure_msl,temperature_2m".to_string(),
+            ),
+            ("wind_speed_unit", "kn".to_string()),
+            ("temperature_unit", "celsius".to_string()),
+        ])
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             warn!("Weather API request failed: {}", e);
