@@ -246,6 +246,22 @@ pub async fn get_club_flights(
     }
 }
 
+/// Truncate an optional string to a maximum length
+fn truncate_opt(s: Option<String>, max_len: usize) -> Option<String> {
+    s.map(|v| {
+        if v.len() > max_len {
+            v[..max_len].to_string()
+        } else {
+            v
+        }
+    })
+}
+
+/// Truncate a double-option string (patch semantics) to a maximum length
+fn truncate_double_opt(s: Option<Option<String>>, max_len: usize) -> Option<Option<String>> {
+    s.map(|inner| truncate_opt(inner, max_len))
+}
+
 // --- Manual club creation ---
 
 #[derive(Debug, Deserialize, TS)]
@@ -271,10 +287,13 @@ pub async fn create_club(
 ) -> impl IntoResponse {
     let user = &auth_user.0;
 
-    // Validate name
+    // Validate and bound name length
     let name = payload.name.trim().to_string();
     if name.is_empty() {
         return json_error(StatusCode::BAD_REQUEST, "Club name is required").into_response();
+    }
+    if name.len() > 255 {
+        return json_error(StatusCode::BAD_REQUEST, "Club name is too long").into_response();
     }
 
     let clubs_repo = ClubsRepository::new(state.pool.clone());
@@ -310,12 +329,12 @@ pub async fn create_club(
 
         if has_address {
             Some(LocationParams {
-                street1: payload.street1,
-                street2: payload.street2,
-                city: payload.city,
-                state: payload.state,
-                zip_code: payload.zip_code,
-                country_code: payload.country_code,
+                street1: truncate_opt(payload.street1, 255),
+                street2: truncate_opt(payload.street2, 255),
+                city: truncate_opt(payload.city, 255),
+                state: truncate_opt(payload.state, 255),
+                zip_code: truncate_opt(payload.zip_code, 20),
+                country_code: truncate_opt(payload.country_code, 2),
                 geolocation: None,
             })
         } else {
@@ -492,19 +511,36 @@ pub async fn reject_club(
 
 // --- Club editing ---
 
-#[derive(Debug, Deserialize, TS)]
-#[ts(export, export_to = "../web/src/lib/types/generated/")]
+/// Patch-style update request: `None` = field omitted (no change),
+/// `Some(None)` = explicitly set to null (clear), `Some(Some(v))` = set to v.
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateClubRequest {
     pub name: Option<String>,
-    pub home_base_airport_id: Option<i32>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub home_base_airport_id: Option<Option<i32>>,
     pub is_soaring: Option<bool>,
-    pub street1: Option<String>,
-    pub street2: Option<String>,
-    pub city: Option<String>,
-    pub state: Option<String>,
-    pub zip_code: Option<String>,
-    pub country_code: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub street1: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub street2: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub city: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub state: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub zip_code: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub country_code: Option<Option<String>>,
+}
+
+/// Deserialize a field that can be: absent (None), null (Some(None)), or present (Some(Some(v)))
+fn deserialize_optional_field<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 /// Update a club (club admins of that club or system admins)
@@ -555,23 +591,35 @@ pub async fn update_club(
 
     let clubs_repo = ClubsRepository::new(state.pool.clone());
 
-    // Build location params if any address fields provided
+    // Flatten Option<Option<T>> fields with length bounds:
+    // None = not provided (no change), Some(None) = clear, Some(Some(v)) = set
+    let airport_update = payload.home_base_airport_id; // Option<Option<i32>>
+
+    // Truncate address fields to prevent uncontrolled allocation
+    let street1 = truncate_double_opt(payload.street1, 255);
+    let street2 = truncate_double_opt(payload.street2, 255);
+    let city_field = truncate_double_opt(payload.city, 255);
+    let state_field = truncate_double_opt(payload.state, 255);
+    let zip_code = truncate_double_opt(payload.zip_code, 20);
+    let country_code = truncate_double_opt(payload.country_code, 2);
+
+    // Build location params if any address fields were explicitly provided (even if null to clear)
     let location_params = {
-        let has_address = payload.street1.is_some()
-            || payload.street2.is_some()
-            || payload.city.is_some()
-            || payload.state.is_some()
-            || payload.zip_code.is_some()
-            || payload.country_code.is_some();
+        let has_address = street1.is_some()
+            || street2.is_some()
+            || city_field.is_some()
+            || state_field.is_some()
+            || zip_code.is_some()
+            || country_code.is_some();
 
         if has_address {
             Some(LocationParams {
-                street1: payload.street1,
-                street2: payload.street2,
-                city: payload.city,
-                state: payload.state,
-                zip_code: payload.zip_code,
-                country_code: payload.country_code,
+                street1: street1.unwrap_or(None),
+                street2: street2.unwrap_or(None),
+                city: city_field.unwrap_or(None),
+                state: state_field.unwrap_or(None),
+                zip_code: zip_code.unwrap_or(None),
+                country_code: country_code.unwrap_or(None),
                 geolocation: None,
             })
         } else {
@@ -583,7 +631,7 @@ pub async fn update_club(
         .update_club(
             id,
             payload.name.as_deref().map(|n| n.trim()),
-            payload.home_base_airport_id,
+            airport_update,
             payload.is_soaring,
             location_params,
         )

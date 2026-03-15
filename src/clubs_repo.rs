@@ -895,12 +895,13 @@ impl ClubsRepository {
         Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
-    /// Update a club's details in a single atomic UPDATE
+    /// Update a club's details in a single atomic UPDATE.
+    /// `new_airport_id`: None = no change, Some(None) = clear, Some(Some(v)) = set.
     pub async fn update_club(
         &self,
         club_id: Uuid,
         new_name: Option<&str>,
-        new_airport_id: Option<i32>,
+        new_airport_id: Option<Option<i32>>,
         new_is_soaring: Option<bool>,
         location_params: Option<LocationParams>,
     ) -> Result<Option<Club>> {
@@ -909,7 +910,7 @@ impl ClubsRepository {
         // Create location if address data provided
         let new_location_id = if let Some(params) = location_params {
             let location = self.locations_repo.find_or_create(params).await?;
-            Some(location.id)
+            Some(Some(location.id))
         } else {
             None
         };
@@ -924,9 +925,9 @@ impl ClubsRepository {
             let rows = diesel::update(clubs.filter(id.eq(club_id)))
                 .set((
                     new_name.as_deref().map(|n| name.eq(n.to_string())),
-                    new_airport_id.map(|a| home_base_airport_id.eq(Some(a))),
+                    new_airport_id.map(|a| home_base_airport_id.eq(a)),
                     new_is_soaring.map(|s| is_soaring.eq(Some(s))),
-                    new_location_id.map(|l| location_id.eq(Some(l))),
+                    new_location_id.map(|l| location_id.eq(l)),
                     updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn)?;
