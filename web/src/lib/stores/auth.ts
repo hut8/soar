@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import type { User } from '$lib/types';
+import { isTokenExpired } from '$lib/utils/jwt';
 
 export interface AuthStore {
 	isAuthenticated: boolean;
@@ -18,6 +19,23 @@ const initialState: AuthStore = {
 
 function createAuthStore() {
 	const { subscribe, set, update } = writable<AuthStore>(initialState);
+
+	// Listen for localStorage changes from other tabs or external clearing.
+	// This ensures the auth store stays in sync if another tab logs out
+	// or the browser evicts storage.
+	if (browser) {
+		window.addEventListener('storage', (event) => {
+			// localStorage.clear() fires with key === null
+			if (event.key === null || event.key === 'auth_token') {
+				if (!event.newValue || event.key === null) {
+					// Token was removed (logout in another tab or browser eviction)
+					set(initialState);
+				}
+				// If a new token was set in another tab, we'd need the user data too.
+				// For simplicity, just reload — the new tab's login set both values.
+			}
+		});
+	}
 
 	return {
 		subscribe,
@@ -49,6 +67,15 @@ function createAuthStore() {
 				const userStr = localStorage.getItem('auth_user');
 
 				if (token && userStr) {
+					// Reject expired tokens immediately rather than setting the store
+					// to "authenticated" only to have the first API call trigger a logout.
+					if (isTokenExpired(token)) {
+						localStorage.removeItem('auth_token');
+						localStorage.removeItem('auth_user');
+						set(initialState);
+						return;
+					}
+
 					try {
 						const user = JSON.parse(userStr) as User;
 						set({

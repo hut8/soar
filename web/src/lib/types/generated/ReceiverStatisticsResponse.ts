@@ -4,4 +4,5 @@ export type ReceiverStatisticsResponse = {
   averageUpdateIntervalSeconds: number | null;
   totalStatusCount: number;
   daysIncluded: number | null;
+  fixCount24h: number;
 };

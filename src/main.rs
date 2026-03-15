@@ -24,7 +24,7 @@ mod telemetry;
 use commands::{
     handle_archive, handle_dump_aircraft_dbs, handle_fix_address_types, handle_ingest,
     handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
-    handle_seed_test_data, handle_sitemap_generation,
+    handle_seed_test_data, handle_sitemap_generation, handle_station_xref,
 };
 use migration_email_reporter::{
     MigrationEmailConfig, MigrationReport, send_migration_email_report,
@@ -323,6 +323,16 @@ enum Commands {
         /// Only report what would be changed without making any modifications
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Cross-reference FAI glider tracking stations against our receivers table
+    ///
+    /// Fetches the station list from <https://glidertracking.fai.org/stations.php> and
+    /// compares it with the receivers in the SOAR database. Reports stations only in FAI,
+    /// only in SOAR, and location mismatches exceeding ~1 km (0.01°).
+    StationXref {
+        /// Print all entries (not just counts)
+        #[arg(long)]
+        verbose: bool,
     },
 }
 
@@ -977,6 +987,7 @@ async fn main() -> Result<()> {
         Commands::FixAddressTypes { .. } => "fix-address-types",
         Commands::SeedTestData { .. } => "seed-test-data",
         Commands::RunAggregates { .. } => "run-aggregates",
+        Commands::StationXref { .. } => "station-xref",
     };
 
     // Initialize OpenTelemetry tracer with component name
@@ -1392,6 +1403,7 @@ async fn main() -> Result<()> {
         Commands::SeedTestData {} => "soar-seed-test-data",
         Commands::FixAddressTypes { .. } => "soar-fix-address-types",
         Commands::RunAggregates { .. } => "soar-run-aggregates",
+        Commands::StationXref { .. } => "soar-station-xref",
         // These should not reach here due to early returns
         Commands::Ingest { .. } => unreachable!(),
         Commands::VerifyRuntime { .. } => unreachable!(),
@@ -1647,6 +1659,7 @@ async fn main() -> Result<()> {
         Commands::FixAddressTypes { dry_run } => {
             handle_fix_address_types(&diesel_pool, dry_run).await
         }
+        Commands::StationXref { verbose } => handle_station_xref(diesel_pool, verbose).await,
         Commands::DumpAircraftDbs { .. } => {
             // This should never be reached due to early return above
             unreachable!("DumpAircraftDbs should be handled before database setup")
