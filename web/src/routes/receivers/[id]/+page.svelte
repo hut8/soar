@@ -611,7 +611,7 @@
 	{@html jsonLdScript}
 </svelte:head>
 
-<div class="receiver-detail-page max-w-8xl container mx-auto space-y-6 p-4">
+<div class="receiver-detail-page max-w-8xl container mx-auto space-y-3 p-4 sm:space-y-6">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
 		<button class="btn preset-tonal btn-sm" onclick={goBack}>
@@ -659,13 +659,13 @@
 
 	<!-- Receiver Details -->
 	{#if !loading && !error && receiver}
-		<div class="space-y-6">
+		<div class="space-y-3 sm:space-y-6">
 			<!-- Header Card -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<div class="flex flex-wrap items-start justify-between gap-4">
-					<div class="flex-1">
-						<div class="mb-2 flex items-center gap-3">
-							<Radio class="h-8 w-10 text-primary-500" />
+					<div class="min-w-0 flex-1">
+						<div class="mb-2 flex flex-wrap items-center gap-3">
+							<Radio class="h-8 w-10 shrink-0 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
 							{#if receiver.fromOgnDb}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
@@ -677,7 +677,7 @@
 							{/if}
 						</div>
 						{#if receiver.description}
-							<p class="text-surface-600-300-token text-lg">{receiver.description}</p>
+							<p class="text-surface-600-300-token text-lg break-words">{receiver.description}</p>
 						{/if}
 					</div>
 					<div class="text-surface-500-400-token text-sm">
@@ -690,7 +690,7 @@
 			</div>
 
 			<!-- Main Content Grid -->
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<div class="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
 				<div class="space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
@@ -801,7 +801,7 @@
 			</div>
 
 			<!-- Statistics Section -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Signal class="h-6 w-6" />
 					Statistics
@@ -834,15 +834,11 @@
 							</p>
 						</div>
 
-						<!-- Time Period -->
+						<!-- Fix Count (Last 24 Hours) -->
 						<div class="space-y-2 card p-4">
-							<p class="text-surface-600-300-token text-sm">Time Period</p>
+							<p class="text-surface-600-300-token text-sm">Fixes (Last 24 Hours)</p>
 							<p class="text-2xl font-semibold">
-								{#if statistics.daysIncluded}
-									Last {statistics.daysIncluded} days
-								{:else}
-									All time
-								{/if}
+								{statistics.fixCount24h.toLocaleString()}
 							</p>
 						</div>
 					</div>
@@ -855,7 +851,7 @@
 			{/if}
 
 			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
-			<div class="card p-6">
+			<div class="card p-4 sm:p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Info class="h-6 w-6" />
 					Receiver Data
@@ -1826,7 +1822,7 @@
 											No fix data available for this receiver
 										</p>
 									{:else}
-										<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+										<div class="grid grid-cols-1 gap-3 sm:gap-6 lg:grid-cols-2">
 											<!-- Fixes by APRS Type -->
 											{#if aggregateStats.fixCountsByAprsType.length > 0}
 												<div class="space-y-4">
@@ -1962,7 +1958,7 @@
 
 			<!-- Coverage Map Section -->
 			{#if receiver.latitude !== null && receiver.longitude !== null}
-				<div class="card p-6">
+				<div class="card p-4 sm:p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Coverage Map
@@ -2007,7 +2003,7 @@
 
 <style>
 	/* Improve tab selection visibility */
-	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+	.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-selected]) {
 		background-color: rgb(var(--color-primary-500) / 0.15);
 		color: rgb(var(--color-primary-500));
 		font-weight: 600;
@@ -2016,7 +2012,7 @@
 	/* On mobile, tabs stack vertically so the underline indicator doesn't work well.
 	   Use a left border and stronger background to make the active tab obvious. */
 	@media (max-width: 639px) {
-		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-state='active']) {
+		.receiver-detail-page :global([data-scope='tabs'][data-part='trigger'][data-selected]) {
 			background-color: rgb(var(--color-primary-500) / 0.2);
 			border-left: 3px solid rgb(var(--color-primary-500));
 		}

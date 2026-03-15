@@ -508,6 +508,8 @@ pub struct ReceiverStatisticsResponse {
     pub total_status_count: i64,
     #[ts(type = "number | null")]
     pub days_included: Option<i64>,
+    #[ts(type = "number")]
+    pub fix_count_24h: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -542,10 +544,12 @@ pub async fn get_receiver_statistics(
     Query(params): Query<ReceiverStatisticsQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    use crate::fixes_repo::FixesRepository;
     use crate::receiver_status_repo::ReceiverStatusRepository;
 
     let receiver_repo = ReceiverRepository::new(state.pool.clone());
     let status_repo = ReceiverStatusRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
 
     // First verify the receiver exists
     match receiver_repo.get_receiver_by_id(id).await {
@@ -596,10 +600,20 @@ pub async fn get_receiver_statistics(
         }
     };
 
+    // Get fix count for last 24 hours
+    let fix_count_24h = match fixes_repo.count_fixes_for_receiver_24h(id).await {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!(receiver_id = %id, error = %e, "Failed to count fixes for receiver");
+            0
+        }
+    };
+
     Json(ReceiverStatisticsResponse {
         average_update_interval_seconds: avg_interval_seconds,
         total_status_count: total_count,
         days_included: params.days,
+        fix_count_24h,
     })
     .into_response()
 }

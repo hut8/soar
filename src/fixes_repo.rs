@@ -1336,6 +1336,30 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Count fixes for a specific receiver in the last 24 hours
+    pub async fn count_fixes_for_receiver_24h(&self, receiver_uuid: Uuid) -> Result<i64> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            use diesel::dsl::count_star;
+            let mut conn = pool.get()?;
+
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
+
+            let total: i64 = fixes
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.gt(cutoff_time))
+                .select(count_star())
+                .first(&mut conn)?;
+
+            Ok::<i64, anyhow::Error>(total)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get the last fix for a specific flight (most recent by timestamp)
     /// Used for coalescing validation to compare positions between timeout and reappearance
     pub async fn get_last_fix_for_flight(&self, flight_id_val: Uuid) -> Result<Option<Fix>> {
