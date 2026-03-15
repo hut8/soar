@@ -1,0 +1,43 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    setup_ci
+
+    # Fetch signing credentials from Match (private git repo)
+    match(
+      type: "appstore",
+      app_identifier: "com.soar.tracker",
+      readonly: true
+    )
+
+    # Generate Xcode project from project.yml
+    sh("cd .. && xcodegen generate")
+
+    build_app(
+      project: "SOARTracker.xcodeproj",
+      scheme: "SOARTracker",
+      export_method: "app-store",
+      destination: "generic/platform=iOS",
+      xcargs: "-allowProvisioningUpdates"
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Build only (no signing or upload)"
+  lane :build do
+    sh("cd .. && xcodegen generate")
+
+    build_app(
+      project: "SOARTracker.xcodeproj",
+      scheme: "SOARTracker",
+      skip_codesigning: true,
+      destination: "generic/platform=iOS Simulator",
+      xcargs: "CODE_SIGNING_ALLOWED=NO"
+    )
+  end
+end

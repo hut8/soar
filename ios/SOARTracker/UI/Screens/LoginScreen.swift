@@ -121,7 +121,7 @@ struct LoginScreen: View {
     private func forgotPassword() {
         guard !email.isEmpty else {
             // Open password reset page in browser
-            if let url = URL(string: "\(selectedServer.url)/auth/reset-password") {
+            if let url = URL(string: "\(selectedServer.url)/forgot-password") {
                 UIApplication.shared.open(url)
             }
             return
