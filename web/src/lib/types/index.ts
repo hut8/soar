@@ -60,6 +60,11 @@ import type { RawMessageView } from './generated/RawMessageView';
 import type { ReceiverAlertView } from './generated/ReceiverAlertView';
 import type { UpsertReceiverAlertRequest } from './generated/UpsertReceiverAlertRequest';
 
+// Import auto-generated push subscription types from Rust
+import type { PushSubscriptionView } from './generated/PushSubscriptionView';
+import type { PushSubscriptionRequest } from './generated/PushSubscriptionRequest';
+import type { VapidPublicKeyResponse } from './generated/VapidPublicKeyResponse';
+
 // Import auto-generated receiver aggregate stats types from Rust
 import type { AprsTypeCount } from './generated/AprsTypeCount';
 import type { AircraftFixCount } from './generated/AircraftFixCount';
@@ -143,7 +148,11 @@ export type {
 	ReceiverStatisticsResponse,
 	// Receiver alert types
 	ReceiverAlertView,
-	UpsertReceiverAlertRequest
+	UpsertReceiverAlertRequest,
+	// Push subscription types
+	PushSubscriptionView,
+	PushSubscriptionRequest,
+	VapidPublicKeyResponse
 };
 
 // Type aliases for backward compatibility

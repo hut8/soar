@@ -809,6 +809,23 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/user/receiver-alerts",
             get(actions::receiver_alerts::list_user_receiver_alerts),
         )
+        // Push notification routes
+        .route(
+            "/push/vapid-key",
+            get(actions::push_subscriptions::get_vapid_key),
+        )
+        .route(
+            "/push/subscribe",
+            post(actions::push_subscriptions::subscribe),
+        )
+        .route(
+            "/push/subscriptions",
+            get(actions::push_subscriptions::list_subscriptions),
+        )
+        .route(
+            "/push/subscriptions/{id}",
+            delete(actions::push_subscriptions::delete_subscription),
+        )
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))

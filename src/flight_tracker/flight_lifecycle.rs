@@ -20,6 +20,7 @@ use super::geometry::haversine_distance;
 use super::location::{create_start_end_location, find_nearby_airport, get_airport_location_id};
 use super::runway::determine_runway_identifier;
 use crate::elevation::ElevationDB;
+use crate::push_notification_sender::PushNotificationSender;
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -90,9 +91,77 @@ pub(crate) async fn create_flight_fast(
     } else {
         // Takeoff flight - full enrichment including runway detection
         spawn_flight_enrichment_on_creation(ctx, fix.clone(), aircraft.clone(), flight_id);
+
+        // Send push notification for takeoff (only for actual takeoffs, not mid-flight appearances)
+        if let Some(club_id) = aircraft.club_id
+            && let Some(push_sender) = ctx.push_sender
+        {
+            spawn_takeoff_push_notification(
+                push_sender,
+                &ctx.pool,
+                club_id,
+                flight_id,
+                aircraft,
+                ctx.airports_repo,
+                fix,
+            );
+        }
     }
 
     Ok(flight_id)
+}
+
+/// Spawn background push notification for a takeoff event
+fn spawn_takeoff_push_notification(
+    push_sender: &PushNotificationSender,
+    pool: &PgPool,
+    club_id: Uuid,
+    flight_id: Uuid,
+    aircraft: &crate::aircraft::Aircraft,
+    airports_repo: &crate::airports_repo::AirportsRepository,
+    fix: &Fix,
+) {
+    let sender = push_sender.clone();
+    let clubs_repo = crate::clubs_repo::ClubsRepository::new(pool.clone());
+    let airports_repo = airports_repo.clone();
+    let registration = aircraft.registration.clone();
+    let model = aircraft.aircraft_model.clone();
+    let lat = fix.latitude;
+    let lon = fix.longitude;
+
+    let span = tracing::info_span!(parent: None, "push_takeoff_notification", %flight_id);
+    let _ = span.set_parent(opentelemetry::Context::new());
+
+    tokio::spawn(
+        async move {
+            // Look up club name
+            let club_name = match clubs_repo.get_by_id(club_id).await {
+                Ok(Some(club)) => club.name,
+                _ => "Club".to_string(),
+            };
+
+            // Look up departure airport ident
+            let airport_ident = match find_nearby_airport(&airports_repo, lat, lon).await {
+                Some(airport_id) => match airports_repo.get_airport_by_id(airport_id).await {
+                    Ok(Some(airport)) => Some(airport.ident),
+                    _ => None,
+                },
+                None => None,
+            };
+
+            sender
+                .send_takeoff_notification(
+                    club_id,
+                    &club_name,
+                    flight_id,
+                    registration.as_deref(),
+                    &model,
+                    airport_ident.as_deref(),
+                )
+                .await;
+        }
+        .instrument(span),
+    );
 }
 
 /// Spawn background task to enrich flight with runway and location data
@@ -386,6 +455,7 @@ pub(crate) fn spawn_complete_flight(
     let elevation_db = ctx.elevation_db.clone();
     let magnetic_service = ctx.magnetic_service.clone();
     let pool = ctx.pool.clone();
+    let push_sender = ctx.push_sender.cloned();
 
     let device_clone = device.clone();
     let fix_clone = fix.clone();
@@ -404,7 +474,7 @@ pub(crate) fn spawn_complete_flight(
                 &runways_repo,
                 &elevation_db,
                 &magnetic_service,
-                pool,
+                pool.clone(),
                 &device_clone,
                 flight_id,
                 &fix_clone,
@@ -414,6 +484,53 @@ pub(crate) fn spawn_complete_flight(
                 error!(
                     flight_id = %flight_id, error = %e,
                     "Background flight completion failed"
+                );
+                return;
+            }
+
+            // Send push notification for landing
+            if let (Some(club_id), Some(sender)) = (device_clone.club_id, push_sender) {
+                let push_span =
+                    tracing::info_span!(parent: None, "push_landing_notification", %flight_id);
+                let _ = push_span.set_parent(opentelemetry::Context::new());
+
+                let airports_repo_clone = airports_repo.clone();
+                let registration = device_clone.registration.clone();
+                let model = device_clone.aircraft_model.clone();
+                let lat = fix_clone.latitude;
+                let lon = fix_clone.longitude;
+
+                tokio::spawn(
+                    async move {
+                        let clubs_repo = crate::clubs_repo::ClubsRepository::new(pool.clone());
+                        let club_name = match clubs_repo.get_by_id(club_id).await {
+                            Ok(Some(club)) => club.name,
+                            _ => "Club".to_string(),
+                        };
+
+                        let airport_ident =
+                            match find_nearby_airport(&airports_repo_clone, lat, lon).await {
+                                Some(airport_id) => {
+                                    match airports_repo_clone.get_airport_by_id(airport_id).await {
+                                        Ok(Some(airport)) => Some(airport.ident),
+                                        _ => None,
+                                    }
+                                }
+                                None => None,
+                            };
+
+                        sender
+                            .send_landing_notification(
+                                club_id,
+                                &club_name,
+                                flight_id,
+                                registration.as_deref(),
+                                &model,
+                                airport_ident.as_deref(),
+                            )
+                            .await;
+                    }
+                    .instrument(push_span),
                 );
             }
         }

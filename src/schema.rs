@@ -715,6 +715,24 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use postgis_diesel::sql_types::*;
+
+    push_subscriptions (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        endpoint -> Text,
+        p256dh_key -> Text,
+        auth_key -> Text,
+        notify_takeoff -> Bool,
+        notify_landing -> Bool,
+        user_agent -> Nullable<Text>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use postgis_diesel::sql_types::*;
     use super::sql_types::MessageSource;
 
     raw_messages (id, received_at) {
@@ -1185,6 +1203,7 @@ diesel::joinable!(geofence_subscribers -> users (user_id));
 diesel::joinable!(geofences -> clubs (club_id));
 diesel::joinable!(geofences -> users (owner_user_id));
 diesel::joinable!(payments -> clubs (club_id));
+diesel::joinable!(push_subscriptions -> users (user_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(receiver_alerts -> receivers (receiver_id));
 diesel::joinable!(receiver_alerts -> users (user_id));
@@ -1229,6 +1248,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     geofences,
     locations,
     payments,
+    push_subscriptions,
     raw_messages,
     receiver_alerts,
     receiver_coverage_h3,

@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Plane } from '@lucide/svelte';
+	import { Plane, ChevronDown, ChevronUp, Pencil, MoveUp, Navigation } from '@lucide/svelte';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';
 	import { toaster } from '$lib/toaster';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { Aircraft, Flight, User } from '$lib/types';
-	import AircraftStatusCard from './AircraftStatusCard.svelte';
+	import PilotAssignmentEditor from './PilotAssignmentEditor.svelte';
 
 	const logger = getLogger(['soar', 'AircraftStatusBoard']);
 
@@ -25,6 +25,8 @@
 
 	let userLocation = $state<{ lat: number; lng: number } | null>(null);
 	let unsubscribeFeed: (() => void) | null = null;
+	let showAll = $state(false);
+	let expandedAircraftId = $state<string | null>(null);
 
 	// Track which aircraft we've already auto-assigned for (by flightId)
 	let autoAssignedFlights = new SvelteSet<string>();
@@ -142,9 +144,28 @@
 		}
 	}
 
-	// Sort aircraft: airborne first (most recent takeoff at top), then on-ground (most recent activity at top)
+	function isActiveToday(ac: Aircraft): boolean {
+		if (!ac.lastFixAt) return false;
+		const today = new Date();
+		const fixDate = new Date(ac.lastFixAt);
+		return (
+			fixDate.getFullYear() === today.getFullYear() &&
+			fixDate.getMonth() === today.getMonth() &&
+			fixDate.getDate() === today.getDate()
+		);
+	}
+
+	function getFlightForAircraft(ac: Aircraft): Flight | null {
+		return flightsInProgress.find((f) => f.aircraftId === ac.id) || null;
+	}
+
+	function isAirborne(ac: Aircraft): boolean {
+		const flight = getFlightForAircraft(ac);
+		return flight != null && flight.state === 'active';
+	}
+
+	// Sort aircraft: airborne first, then by most recent activity
 	let sortedAircraft = $derived(() => {
-		// Precompute flight lookup map and timestamps to avoid repeated work in comparator
 		const flightByAircraftId = new Map(
 			flightsInProgress.filter((f) => f.aircraftId).map((f) => [f.aircraftId!, f])
 		);
@@ -173,8 +194,54 @@
 		});
 	});
 
-	function getFlightForAircraft(ac: Aircraft): Flight | null {
-		return flightsInProgress.find((f) => f.aircraftId === ac.id) || null;
+	let activeToday = $derived(sortedAircraft().filter((ac) => isActiveToday(ac)));
+	let inactive = $derived(sortedAircraft().filter((ac) => !isActiveToday(ac)));
+	let displayedAircraft = $derived(showAll ? sortedAircraft() : activeToday);
+
+	function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+		const R = 3440.065;
+		const dLat = ((lat2 - lat1) * Math.PI) / 180;
+		const dLon = ((lon2 - lon1) * Math.PI) / 180;
+		const a =
+			Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+			Math.cos((lat1 * Math.PI) / 180) *
+				Math.cos((lat2 * Math.PI) / 180) *
+				Math.sin(dLon / 2) *
+				Math.sin(dLon / 2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+		return R * c;
+	}
+
+	function getDistanceNm(ac: Aircraft): number | null {
+		if (!userLocation || ac.latitude == null || ac.longitude == null) return null;
+		return haversineNm(userLocation.lat, userLocation.lng, ac.latitude, ac.longitude);
+	}
+
+	function formatElapsed(takeoffTime: string): string {
+		const minutes = Math.floor((Date.now() - new Date(takeoffTime).getTime()) / 60000);
+		const h = Math.floor(minutes / 60);
+		const m = minutes % 60;
+		return h > 0 ? `${h}h ${m}m` : `${m}m`;
+	}
+
+	function getTowInfo(
+		ac: Aircraft,
+		flight: Flight | null
+	): { type: 'towing' | 'towed_by'; registration: string } | null {
+		if (!flight) return null;
+		const towedFlight = flightsInProgress.find((f) => f.towedByAircraftId === ac.id);
+		if (towedFlight) {
+			return { type: 'towing', registration: towedFlight.registration || 'unknown' };
+		}
+		if (flight.towedByAircraftId) {
+			const towPlane = flightsInProgress.find((f) => f.aircraftId === flight.towedByAircraftId);
+			return { type: 'towed_by', registration: towPlane?.registration || 'unknown' };
+		}
+		return null;
+	}
+
+	function toggleExpanded(id: string) {
+		expandedAircraftId = expandedAircraftId === id ? null : id;
 	}
 </script>
 
@@ -184,45 +251,155 @@
 		<p class="text-sm text-surface-500">No club aircraft</p>
 	</div>
 {:else}
-	<!-- Desktop: vertical scrollable column -->
-	<div class="hidden flex-col gap-3 md:flex">
-		<h3 class="flex items-center gap-2 text-lg font-semibold">
-			<Plane class="h-5 w-5" />
-			Aircraft Status
-		</h3>
-		<div class="max-h-[calc(100vh-300px)] space-y-3 overflow-y-auto pr-1">
-			{#each sortedAircraft() as ac (ac.id)}
-				<AircraftStatusCard
-					aircraft={ac}
-					flight={getFlightForAircraft(ac)}
-					{flightsInProgress}
-					{userLocation}
-					{members}
-					onPilotsChanged={onFlightsChanged}
-				/>
-			{/each}
-		</div>
-	</div>
+	<div class="card">
+		<header class="card-header flex items-center justify-between">
+			<div>
+				<h3 class="flex items-center gap-2 text-lg font-semibold">
+					<Plane class="h-5 w-5" />
+					Aircraft Active Today
+				</h3>
+				<p class="text-surface-500-400-token text-sm">
+					{activeToday.length} of {aircraft.length} aircraft heard from today
+				</p>
+			</div>
+		</header>
 
-	<!-- Mobile: horizontal scroll row -->
-	<div class="md:hidden">
-		<h3 class="mb-2 flex items-center gap-2 text-lg font-semibold">
-			<Plane class="h-5 w-5" />
-			Aircraft Status
-		</h3>
-		<div class="flex gap-3 overflow-x-auto pb-2">
-			{#each sortedAircraft() as ac (ac.id)}
-				<div class="w-64 flex-shrink-0">
-					<AircraftStatusCard
-						aircraft={ac}
-						flight={getFlightForAircraft(ac)}
-						{flightsInProgress}
-						{userLocation}
-						{members}
-						onPilotsChanged={onFlightsChanged}
-					/>
+		{#if activeToday.length === 0 && !showAll}
+			<div class="px-6 pt-2 pb-2 text-center text-sm text-surface-500">
+				No aircraft have been heard from today.
+			</div>
+		{/if}
+
+		<!-- Compact aircraft rows -->
+		<div class="divide-y divide-surface-200 dark:divide-surface-700">
+			{#each displayedAircraft as ac (ac.id)}
+				{@const flight = getFlightForAircraft(ac)}
+				{@const airborne = isAirborne(ac)}
+				{@const tow = getTowInfo(ac, flight)}
+				{@const dist = getDistanceNm(ac)}
+				{@const active = isActiveToday(ac)}
+
+				<div class={!active ? 'opacity-50' : ''}>
+					<!-- Compact row -->
+					<button
+						onclick={() => toggleExpanded(ac.id)}
+						class="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-100 dark:hover:bg-surface-700/50"
+					>
+						<!-- Status dot -->
+						<span
+							class="h-2.5 w-2.5 flex-shrink-0 rounded-full {airborne
+								? 'animate-pulse bg-success-500'
+								: active
+									? 'bg-surface-400'
+									: 'bg-surface-300 dark:bg-surface-600'}"
+						></span>
+
+						<!-- Registration -->
+						<span class="min-w-[5rem] text-sm font-semibold">
+							{ac.registration || '???'}
+						</span>
+
+						<!-- Status badge -->
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-medium {airborne
+								? 'bg-success-500 text-white'
+								: 'bg-surface-200 text-surface-600 dark:bg-surface-600 dark:text-surface-300'}"
+						>
+							{airborne ? 'Airborne' : 'Ground'}
+						</span>
+
+						<!-- Brief info -->
+						<span class="flex-1 truncate text-xs text-surface-500">
+							{#if airborne && flight?.takeoffTime}
+								{formatElapsed(flight.takeoffTime)}
+							{:else if ac.aircraftModel}
+								{ac.aircraftModel}
+							{/if}
+						</span>
+
+						<!-- Tow indicator -->
+						{#if tow}
+							<span class="flex items-center gap-0.5 text-xs text-primary-500">
+								<MoveUp class="h-3 w-3" />
+								{tow.type === 'towing' ? 'Towing' : 'Towed'}
+							</span>
+						{/if}
+
+						<!-- Distance -->
+						{#if dist != null}
+							<span class="text-xs text-surface-400 tabular-nums">
+								{dist.toFixed(0)} nm
+							</span>
+						{/if}
+					</button>
+
+					<!-- Expanded detail panel -->
+					{#if expandedAircraftId === ac.id}
+						<div
+							class="border-t border-surface-200 bg-surface-50 px-4 py-3 dark:border-surface-700 dark:bg-surface-800/50"
+						>
+							<div class="flex flex-col gap-2 text-sm">
+								{#if ac.aircraftModel}
+									<div class="text-surface-500">
+										{ac.aircraftModel}
+										{#if ac.competitionNumber}
+											<span class="ml-1 text-xs">({ac.competitionNumber})</span>
+										{/if}
+									</div>
+								{/if}
+
+								{#if airborne && flight?.takeoffTime}
+									<div class="text-success-600 dark:text-success-400">
+										Airborne for {formatElapsed(flight.takeoffTime)}
+									</div>
+								{/if}
+
+								{#if tow}
+									<div class="flex items-center gap-1 text-xs">
+										<MoveUp class="h-3 w-3" />
+										{tow.type === 'towing' ? 'Towing' : 'Towed by'}: {tow.registration}
+									</div>
+								{/if}
+
+								{#if dist != null}
+									<div class="flex items-center gap-1 text-xs text-surface-500">
+										<Navigation class="h-3 w-3" />
+										{dist.toFixed(1)} nm away
+									</div>
+								{/if}
+
+								<PilotAssignmentEditor
+									flightId={flight?.id ?? null}
+									aircraftId={ac.id}
+									aircraftRegistration={ac.registration || ''}
+									{members}
+									isAirborne={airborne}
+									onClose={() => (expandedAircraftId = null)}
+									onAssigned={onFlightsChanged}
+								/>
+							</div>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
+
+		<!-- Show All / Show Less toggle -->
+		{#if inactive.length > 0}
+			<div class="border-t border-surface-200 px-4 py-2 dark:border-surface-700">
+				<button
+					onclick={() => (showAll = !showAll)}
+					class="btn w-full gap-1 text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+				>
+					{#if showAll}
+						<ChevronUp class="h-4 w-4" />
+						Hide inactive aircraft
+					{:else}
+						<ChevronDown class="h-4 w-4" />
+						Show all aircraft ({inactive.length} not heard today)
+					{/if}
+				</button>
+			</div>
+		{/if}
 	</div>
 {/if}

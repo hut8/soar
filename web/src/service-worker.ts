@@ -113,3 +113,55 @@ self.addEventListener('fetch', (event) => {
 
 	event.respondWith(respond());
 });
+
+// Push notification event - show notification when received from server
+self.addEventListener('push', (event: PushEvent) => {
+	if (!event.data) return;
+
+	let payload;
+	try {
+		payload = event.data.json();
+	} catch {
+		return;
+	}
+
+	const aircraftName = payload.aircraftRegistration || payload.aircraftModel || 'Aircraft';
+	const title =
+		payload.eventType === 'takeoff' ? `${aircraftName} took off` : `${aircraftName} landed`;
+
+	const bodyParts: string[] = [];
+	if (payload.airportIdent) bodyParts.push(`at ${payload.airportIdent}`);
+	if (payload.clubName) bodyParts.push(payload.clubName);
+
+	const options: NotificationOptions = {
+		body: bodyParts.join(' — ') || undefined,
+		icon: '/favicon.png',
+		badge: '/favicon.png',
+		tag: `flight-${payload.flightId}`,
+		data: { url: `/flights/${payload.flightId}` },
+		timestamp: new Date(payload.timestamp).getTime()
+	};
+
+	event.waitUntil(
+		(self as unknown as ServiceWorkerGlobalScope).registration.showNotification(title, options)
+	);
+});
+
+// Handle notification click - open the flight page
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+	event.notification.close();
+	const url = event.notification.data?.url || '/';
+
+	event.waitUntil(
+		(self as unknown as ServiceWorkerGlobalScope).clients
+			.matchAll({ type: 'window' })
+			.then((windowClients: readonly WindowClient[]) => {
+				for (const client of windowClients) {
+					if (client.url.includes(url) && 'focus' in client) {
+						return client.focus();
+					}
+				}
+				return (self as unknown as ServiceWorkerGlobalScope).clients.openWindow(url);
+			})
+	);
+});
