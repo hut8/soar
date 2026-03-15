@@ -256,7 +256,8 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 longitude = sensorData?.longitude,
                 altitudeMeters = sensorData?.altitudeMeters,
                 altitudeAglFeet = response?.altitudeAglFeet,
-                headingDegrees = sensorData?.headingDegrees,
+                gpsBearingDegrees = sensorData?.gpsBearingDegrees,
+                magneticHeadingDegrees = sensorData?.magneticHeadingDegrees,
                 magneticDeclinationDegrees = response?.magneticDeclinationDegrees,
                 groundPressureHpa = groundPressureHpa,
                 onSetAltimeter = {

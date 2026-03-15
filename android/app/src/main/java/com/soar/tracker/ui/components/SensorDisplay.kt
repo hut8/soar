@@ -33,7 +33,8 @@ fun SensorDisplay(
     longitude: Double?,
     altitudeMeters: Double?,
     altitudeAglFeet: Int?,
-    headingDegrees: Double?,
+    gpsBearingDegrees: Double?,
+    magneticHeadingDegrees: Double?,
     magneticDeclinationDegrees: Double?,
     groundPressureHpa: Double?,
     onSetAltimeter: () -> Unit,
@@ -115,7 +116,7 @@ fun SensorDisplay(
                 )
             }
 
-            // Row 3: Heading True, Heading Magnetic, Declination
+            // Row 3: Heading Magnetic (compass), Heading True (computed), Declination
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
@@ -123,27 +124,43 @@ fun SensorDisplay(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SensorValue(
-                    label = "Heading (True)",
-                    value = headingDegrees?.let {
+                    label = "Hdg (Mag)",
+                    value = magneticHeadingDegrees?.let {
                         String.format(Locale.US, "%.0f\u00B0", it)
                     } ?: "--",
                 )
 
-                val magneticHeading = if (headingDegrees != null && magneticDeclinationDegrees != null) {
-                    var mag = headingDegrees - magneticDeclinationDegrees
-                    if (mag < 0) mag += 360.0
-                    if (mag >= 360) mag -= 360.0
-                    mag
+                // True heading = magnetic heading + declination
+                val trueHeading = if (magneticHeadingDegrees != null && magneticDeclinationDegrees != null) {
+                    var hdg = magneticHeadingDegrees + magneticDeclinationDegrees
+                    if (hdg < 0) hdg += 360.0
+                    if (hdg >= 360) hdg -= 360.0
+                    hdg
                 } else {
                     null
                 }
                 SensorValue(
-                    label = "Heading (Mag)",
-                    value = magneticHeading?.let {
+                    label = "Hdg (True)",
+                    value = trueHeading?.let {
                         String.format(Locale.US, "%.0f\u00B0", it)
                     } ?: "--",
                 )
 
+                SensorValue(
+                    label = "Track (GPS)",
+                    value = gpsBearingDegrees?.let {
+                        String.format(Locale.US, "%.0f\u00B0", it)
+                    } ?: "--",
+                )
+            }
+
+            // Row 4: Declination
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 SensorValue(
                     label = "Declination",
                     value = magneticDeclinationDegrees?.let {

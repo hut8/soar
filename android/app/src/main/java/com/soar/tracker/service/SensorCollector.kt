@@ -10,6 +10,7 @@ class SensorCollector(context: Context) : SensorEventListener {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val barometer = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
     @Volatile
     var accelX: Float = 0f
@@ -27,12 +28,23 @@ class SensorCollector(context: Context) : SensorEventListener {
     var pressureHpa: Float? = null
         private set
 
+    /** Magnetic heading in degrees (0-360, 0=north). Derived from rotation vector sensor. */
+    @Volatile
+    var magneticHeadingDegrees: Float? = null
+        private set
+
+    private val rotationMatrix = FloatArray(9)
+    private val orientation = FloatArray(3)
+
     fun start() {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
         barometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        rotationVector?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
     }
 
@@ -49,6 +61,14 @@ class SensorCollector(context: Context) : SensorEventListener {
             }
             Sensor.TYPE_PRESSURE -> {
                 pressureHpa = event.values[0]
+            }
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                SensorManager.getOrientation(rotationMatrix, orientation)
+                // orientation[0] is azimuth in radians (-π to π), convert to degrees (0-360)
+                var azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+                if (azimuth < 0) azimuth += 360f
+                magneticHeadingDegrees = azimuth
             }
         }
     }
