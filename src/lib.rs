@@ -108,6 +108,7 @@ pub mod stripe_customers;
 pub mod stripe_customers_repo;
 pub mod stripe_webhooks;
 pub mod stripe_webhooks_repo;
+pub mod tracker;
 pub mod user_fixes;
 pub mod user_fixes_repo;
 pub mod users;

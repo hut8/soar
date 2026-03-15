@@ -231,10 +231,12 @@ impl TestDatabase {
                 match conn.run_pending_migrations(MIGRATIONS) {
                     Ok(_) => return Ok(()),
                     Err(e) => {
-                        if Self::is_deadlock_error(&*e) && attempt < MAX_RETRIES {
+                        let is_retryable =
+                            Self::is_deadlock_error(&*e) || Self::is_already_exists_error(&*e);
+                        if is_retryable && attempt < MAX_RETRIES {
                             eprintln!(
-                                "Migration deadlock on attempt {}/{}, retrying...",
-                                attempt, MAX_RETRIES
+                                "Migration error on attempt {}/{} (retrying): {}",
+                                attempt, MAX_RETRIES, e
                             );
                             std::thread::sleep(std::time::Duration::from_millis(
                                 100 * u64::from(attempt),
@@ -264,6 +266,23 @@ impl TestDatabase {
         let mut current: Option<&dyn std::error::Error> = Some(err);
         while let Some(e) = current {
             if e.to_string().contains("deadlock detected") {
+                return true;
+            }
+            current = e.source();
+        }
+        false
+    }
+
+    /// Checks whether an error is due to a relation already existing.
+    ///
+    /// This can happen when `CREATE INDEX CONCURRENTLY` migrations
+    /// (run_in_transaction = false) race across parallel test databases.
+    /// The index gets created but the migration record isn't written,
+    /// so a retry sees the index but not the migration entry.
+    fn is_already_exists_error(err: &(dyn std::error::Error + Send + Sync)) -> bool {
+        let mut current: Option<&dyn std::error::Error> = Some(err);
+        while let Some(e) = current {
+            if e.to_string().contains("already exists") {
                 return true;
             }
             current = e.source();

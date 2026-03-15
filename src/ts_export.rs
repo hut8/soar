@@ -5,6 +5,7 @@ mod tests {
     use ts_rs::{Config, TS};
 
     use crate::actions::club_tow_fees::TowFeeView;
+    use crate::actions::clubs::CreateClubRequest;
     use crate::actions::flights::FlightGap;
     use crate::actions::geocoding::ReverseGeocodeResponse;
     use crate::actions::payments::{CheckoutResponse, CreateChargeRequest, PaymentView};
@@ -33,6 +34,9 @@ mod tests {
     use crate::ingest_config::{DataStream, StreamFormat};
     use crate::payments::{PaymentStatus, PaymentType};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
+    use crate::tracker::{
+        NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixResponse, TrackerFlightInfo,
+    };
 
     #[test]
     fn export_types() {
@@ -53,6 +57,8 @@ mod tests {
         RegistrantType::export(&cfg).expect("Failed to export RegistrantType type");
         ClubJoinRequestView::export(&cfg).expect("Failed to export ClubJoinRequestView type");
         ClubView::export(&cfg).expect("Failed to export ClubView type");
+        CreateClubRequest::export(&cfg).expect("Failed to export CreateClubRequest type");
+        // UpdateClubRequest is manually maintained in TypeScript (uses Option<Option<T>> patch semantics)
         TowFeeView::export(&cfg).expect("Failed to export TowFeeView type");
         FlightView::export(&cfg).expect("Failed to export FlightView type");
         FlightState::export(&cfg).expect("Failed to export FlightState type");
@@ -127,5 +133,11 @@ mod tests {
         ReceiverAlertView::export(&cfg).expect("Failed to export ReceiverAlertView type");
         UpsertReceiverAlertRequest::export(&cfg)
             .expect("Failed to export UpsertReceiverAlertRequest type");
+
+        // Tracker types
+        TrackerFixResponse::export(&cfg).expect("Failed to export TrackerFixResponse type");
+        TrackerAircraftInfo::export(&cfg).expect("Failed to export TrackerAircraftInfo type");
+        TrackerFlightInfo::export(&cfg).expect("Failed to export TrackerFlightInfo type");
+        NearbyAircraftInfo::export(&cfg).expect("Failed to export NearbyAircraftInfo type");
     }
 }

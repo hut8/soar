@@ -4,12 +4,19 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
-use tracing::error;
+use tracing::{error, info};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::aircraft_repo::AircraftRepository;
-use crate::clubs_repo::ClubsRepository;
+use crate::auth::{AdminUser, AuthUser};
+use crate::clubs::{CLUB_STATUS_APPROVED, CLUB_STATUS_PENDING, CLUB_STATUS_REJECTED};
+use crate::clubs_repo::{ClubsRepository, is_soaring_club};
 use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationParams;
+use crate::notifications;
+use crate::users::UpdateUserRequest;
+use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 use super::{
@@ -235,6 +242,442 @@ pub async fn get_club_flights(
                 "Failed to get club flights",
             )
             .into_response()
+        }
+    }
+}
+
+/// Check that an optional string doesn't exceed max_len. Returns Err with field name if it does.
+fn check_len(s: &Option<String>, max_len: usize, field: &str) -> Result<(), String> {
+    if let Some(v) = s
+        && v.len() > max_len
+    {
+        return Err(format!(
+            "{} is too long (max {} characters)",
+            field, max_len
+        ));
+    }
+    Ok(())
+}
+
+/// Check that a double-option string doesn't exceed max_len.
+fn check_len_double(s: &Option<Option<String>>, max_len: usize, field: &str) -> Result<(), String> {
+    if let Some(Some(v)) = s
+        && v.len() > max_len
+    {
+        return Err(format!(
+            "{} is too long (max {} characters)",
+            field, max_len
+        ));
+    }
+    Ok(())
+}
+
+// --- Manual club creation ---
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateClubRequest {
+    pub name: String,
+    pub home_base_airport_id: Option<i32>,
+    pub is_soaring: Option<bool>,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub country_code: Option<String>,
+}
+
+/// Create a new club (any authenticated user)
+pub async fn create_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateClubRequest>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Validate and bound name length
+    let name = payload.name.trim().to_string();
+    if name.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Club name is required").into_response();
+    }
+    if name.len() > 255 {
+        return json_error(StatusCode::BAD_REQUEST, "Club name is too long").into_response();
+    }
+
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Check for duplicate name
+    match clubs_repo.find_by_name(&name).await {
+        Ok(Some(_)) => {
+            return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                .into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to check club name");
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to check club name",
+            )
+            .into_response();
+        }
+        Ok(None) => {}
+    }
+
+    // Validate address field lengths
+    for result in [
+        check_len(&payload.street1, 255, "Street address"),
+        check_len(&payload.street2, 255, "Street address 2"),
+        check_len(&payload.city, 255, "City"),
+        check_len(&payload.state, 255, "State"),
+        check_len(&payload.zip_code, 20, "ZIP code"),
+        check_len(&payload.country_code, 2, "Country code"),
+    ] {
+        if let Err(msg) = result {
+            return json_error(StatusCode::BAD_REQUEST, &msg).into_response();
+        }
+    }
+
+    // Determine is_soaring
+    let club_is_soaring = Some(payload.is_soaring.unwrap_or_else(|| is_soaring_club(&name)));
+
+    // Build LocationParams if any address fields provided
+    let location_params = {
+        let has_address = payload.street1.is_some()
+            || payload.street2.is_some()
+            || payload.city.is_some()
+            || payload.state.is_some()
+            || payload.zip_code.is_some()
+            || payload.country_code.is_some();
+
+        if has_address {
+            Some(LocationParams {
+                street1: payload.street1,
+                street2: payload.street2,
+                city: payload.city,
+                state: payload.state,
+                zip_code: payload.zip_code,
+                country_code: payload.country_code,
+                geolocation: None,
+            })
+        } else {
+            None
+        }
+    };
+
+    // Create the club with pending status
+    let club = match clubs_repo
+        .create_club_manual(
+            &name,
+            club_is_soaring,
+            payload.home_base_airport_id,
+            location_params,
+            CLUB_STATUS_PENDING,
+            user.id,
+        )
+        .await
+    {
+        Ok(club) => club,
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("unique")
+                || msg.contains("duplicate")
+                || msg.contains("idx_clubs_name_unique")
+            {
+                return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                    .into_response();
+            }
+            error!(error = %e, "Failed to create club");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create club")
+                .into_response();
+        }
+    };
+
+    // Auto-join: set user's club_id and make them club admin
+    let users_repo = UsersRepository::new(state.pool.clone());
+    let update_request = UpdateUserRequest {
+        first_name: None,
+        last_name: None,
+        email: None,
+        is_admin: None,
+        is_club_admin: Some(true),
+        club_id: Some(club.id),
+        email_verified: None,
+    };
+    if let Err(e) = users_repo.update_user(user.id, &update_request).await {
+        error!(error = %e, user_id = %user.id, "Failed to auto-join user to new club");
+    }
+
+    // Send admin notification email in the background
+    let pool = state.pool.clone();
+    let club_name = club.name.clone();
+    let creator_name = user.full_name();
+    tokio::spawn(async move {
+        if let Err(e) =
+            notifications::send_club_creation_notification(&pool, &club_name, &creator_name).await
+        {
+            error!(error = %e, "Failed to send club creation notification");
+        }
+    });
+
+    info!(club_id = %club.id, club_name = %club.name, created_by = %user.id, "New club created (pending approval)");
+
+    (
+        StatusCode::CREATED,
+        Json(DataResponse {
+            data: ClubView::from(club),
+        }),
+    )
+        .into_response()
+}
+
+/// Get pending clubs (admin only)
+pub async fn get_pending_clubs(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+
+    match clubs_repo.get_by_status(CLUB_STATUS_PENDING).await {
+        Ok(clubs) => {
+            let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
+            Json(DataListResponse { data: club_views }).into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to get pending clubs");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get pending clubs",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Approve a pending club (admin only)
+pub async fn approve_club(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+
+    match clubs_repo
+        .update_club_status(id, CLUB_STATUS_APPROVED)
+        .await
+    {
+        Ok(Some(club)) => {
+            info!(club_id = %id, "Club approved");
+            Json(DataResponse {
+                data: ClubView::from(club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to approve club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to approve club").into_response()
+        }
+    }
+}
+
+/// Reject a pending club (admin only)
+pub async fn reject_club(
+    _admin: AdminUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Get the club first to check status
+    let club = match clubs_repo.get_by_id(id).await {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Club not found").into_response();
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to get club");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get club")
+                .into_response();
+        }
+    };
+
+    if club.status != CLUB_STATUS_PENDING {
+        return json_error(StatusCode::BAD_REQUEST, "Club is not pending").into_response();
+    }
+
+    // Update status to rejected
+    match clubs_repo
+        .update_club_status(id, CLUB_STATUS_REJECTED)
+        .await
+    {
+        Ok(Some(updated_club)) => {
+            // Unset club_id for members of this club
+            let users_repo = UsersRepository::new(state.pool.clone());
+            if let Err(e) = users_repo.remove_all_members_from_club(id).await {
+                error!(error = %e, club_id = %id, "Failed to remove members from rejected club");
+            }
+
+            info!(club_id = %id, "Club rejected");
+            Json(DataResponse {
+                data: ClubView::from(updated_club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to reject club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to reject club").into_response()
+        }
+    }
+}
+
+// --- Club editing ---
+
+/// Patch-style update request: `None` = field omitted (no change),
+/// `Some(None)` = explicitly set to null (clear), `Some(Some(v))` = set to v.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateClubRequest {
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub home_base_airport_id: Option<Option<i32>>,
+    pub is_soaring: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub street1: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub street2: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub city: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub state: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub zip_code: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_field")]
+    pub country_code: Option<Option<String>>,
+}
+
+/// Deserialize a field that can be: absent (None), null (Some(None)), or present (Some(Some(v)))
+fn deserialize_optional_field<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
+}
+
+/// Update a club (club admins of that club or system admins)
+pub async fn update_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateClubRequest>,
+) -> impl IntoResponse {
+    let user = &auth_user.0;
+
+    // Authorization: club admin of this club or system admin
+    let is_club_admin = user.is_club_admin && user.club_id == Some(id);
+    if !user.is_admin && !is_club_admin {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a club admin to edit this club",
+        )
+        .into_response();
+    }
+
+    // Validate name if provided
+    if let Some(ref name) = payload.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return json_error(StatusCode::BAD_REQUEST, "Club name cannot be empty")
+                .into_response();
+        }
+
+        // Check for duplicate name (different club)
+        let clubs_repo = ClubsRepository::new(state.pool.clone());
+        match clubs_repo.find_by_name(trimmed).await {
+            Ok(Some(existing)) if existing.id != id => {
+                return json_error(StatusCode::CONFLICT, "A club with this name already exists")
+                    .into_response();
+            }
+            Err(e) => {
+                error!(error = %e, "Failed to check club name");
+                return json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to check club name",
+                )
+                .into_response();
+            }
+            _ => {}
+        }
+    }
+
+    let clubs_repo = ClubsRepository::new(state.pool.clone());
+
+    // Validate address field lengths
+    for result in [
+        check_len_double(&payload.street1, 255, "Street address"),
+        check_len_double(&payload.street2, 255, "Street address 2"),
+        check_len_double(&payload.city, 255, "City"),
+        check_len_double(&payload.state, 255, "State"),
+        check_len_double(&payload.zip_code, 20, "ZIP code"),
+        check_len_double(&payload.country_code, 2, "Country code"),
+    ] {
+        if let Err(msg) = result {
+            return json_error(StatusCode::BAD_REQUEST, &msg).into_response();
+        }
+    }
+
+    // Flatten Option<Option<T>> fields:
+    // None = not provided (no change), Some(None) = clear, Some(Some(v)) = set
+    let airport_update = payload.home_base_airport_id; // Option<Option<i32>>
+
+    // Build location params if any address fields were explicitly provided (even if null to clear)
+    let location_params = {
+        let has_address = payload.street1.is_some()
+            || payload.street2.is_some()
+            || payload.city.is_some()
+            || payload.state.is_some()
+            || payload.zip_code.is_some()
+            || payload.country_code.is_some();
+
+        if has_address {
+            Some(LocationParams {
+                street1: payload.street1.unwrap_or(None),
+                street2: payload.street2.unwrap_or(None),
+                city: payload.city.unwrap_or(None),
+                state: payload.state.unwrap_or(None),
+                zip_code: payload.zip_code.unwrap_or(None),
+                country_code: payload.country_code.unwrap_or(None),
+                geolocation: None,
+            })
+        } else {
+            None
+        }
+    };
+
+    match clubs_repo
+        .update_club(
+            id,
+            payload.name.as_deref().map(|n| n.trim()),
+            airport_update,
+            payload.is_soaring,
+            location_params,
+        )
+        .await
+    {
+        Ok(Some(club)) => {
+            info!(club_id = %id, "Club updated");
+            Json(DataResponse {
+                data: ClubView::from(club),
+            })
+            .into_response()
+        }
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to update club");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update club").into_response()
         }
     }
 }

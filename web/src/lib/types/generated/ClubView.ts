@@ -9,4 +9,6 @@ export type ClubView = {
   updatedAt: string;
   similarityScore: number | null;
   distanceMeters: number | null;
+  status: string;
+  createdBy: string | null;
 };

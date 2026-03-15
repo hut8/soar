@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Club {
     pub id: Uuid,
     pub name: String,
@@ -27,7 +27,16 @@ pub struct Club {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    // Approval workflow
+    pub status: String,
+    pub created_by: Option<Uuid>,
 }
+
+/// Club status constants
+pub const CLUB_STATUS_PENDING: &str = "pending";
+pub const CLUB_STATUS_APPROVED: &str = "approved";
+pub const CLUB_STATUS_REJECTED: &str = "rejected";
 
 impl Club {
     /// Check if this club is likely related to soaring based on its name
@@ -93,6 +102,8 @@ pub struct ClubModel {
     pub location_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub status: String,
+    pub created_by: Option<Uuid>,
 }
 
 /// Insert model for new clubs
@@ -104,6 +115,8 @@ pub struct NewClubModel {
     pub is_soaring: Option<bool>,
     pub home_base_airport_id: Option<i32>,
     pub location_id: Option<Uuid>,
+    pub status: String,
+    pub created_by: Option<Uuid>,
 }
 
 /// Conversion from Club (API model) to ClubModel (database model)
@@ -117,6 +130,8 @@ impl From<Club> for ClubModel {
             location_id: club.location_id,
             created_at: club.created_at,
             updated_at: club.updated_at,
+            status: club.status,
+            created_by: club.created_by,
         }
     }
 }
@@ -130,6 +145,8 @@ impl From<Club> for NewClubModel {
             is_soaring: club.is_soaring,
             home_base_airport_id: club.home_base_airport_id,
             location_id: club.location_id,
+            status: club.status,
+            created_by: club.created_by,
         }
     }
 }
@@ -153,6 +170,8 @@ impl From<ClubModel> for Club {
             base_location: None,
             created_at: club_model.created_at,
             updated_at: club_model.updated_at,
+            status: club_model.status,
+            created_by: club_model.created_by,
         }
     }
 }
@@ -179,6 +198,8 @@ mod tests {
             base_location: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            status: CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
         };
 
         assert!(club.is_soaring_related());
@@ -205,6 +226,8 @@ mod tests {
             home_base_airport_id: None,
             home_base_airport_ident: None,
             location_id: None,
+            status: CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
             street1: Some("123 Main St".to_string()),
             street2: Some("Suite 100".to_string()),
             city: Some("Anytown".to_string()),
@@ -231,6 +254,8 @@ mod tests {
             home_base_airport_id: None,
             home_base_airport_ident: None,
             location_id: None,
+            status: CLUB_STATUS_APPROVED.to_string(),
+            created_by: None,
             street1: None,
             street2: None,
             city: None,

@@ -29,3 +29,11 @@ infrastructure/grafana-dashboard-*.json
 # OpenTelemetry data directories
 infrastructure/tempo-data/
 infrastructure/loki-data/
+
+# Android build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
