@@ -10,7 +10,7 @@ set -euo pipefail
 #   sudo ./scripts/setup-pgdog [production|staging]
 #
 # What this does:
-# - Downloads PgDog binary from GitHub releases
+# - Builds PgDog from source (requires git, cargo, cmake)
 # - Creates configuration optimized for SOAR workload
 # - Sets up systemd service (pgdog.service)
 # - Configures trust authentication (localhost only, no passwords)
@@ -34,31 +34,31 @@ echo "SOAR PgDog Setup - $ENVIRONMENT"
 echo "========================================="
 echo
 
-# Detect architecture
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)
-        PGDOG_ARCH="x86_64"
-        ;;
-    aarch64)
-        PGDOG_ARCH="aarch64"
-        ;;
-    *)
-        echo "Error: Unsupported architecture: $ARCH"
+# Check build dependencies
+for cmd in git cargo cmake; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: $cmd is required but not installed"
         exit 1
-        ;;
-esac
+    fi
+done
 
-# Download and install PgDog binary
-PGDOG_VERSION="v1.3.2"
-PGDOG_URL="https://github.com/pgdogdev/pgdog/releases/download/${PGDOG_VERSION}/pgdog-${PGDOG_VERSION}-${PGDOG_ARCH}-unknown-linux-gnu.tar.gz"
+# Build and install PgDog from source
+# PgDog does not publish prebuilt binaries; it must be compiled from source.
+PGDOG_VERSION="v0.1.32"
+PGDOG_REPO="https://github.com/pgdogdev/pgdog.git"
 
-echo "Downloading PgDog ${PGDOG_VERSION} for ${PGDOG_ARCH}..."
+if [[ -f /usr/local/bin/pgdog ]]; then
+    INSTALLED_VERSION=$(/usr/local/bin/pgdog --version 2>/dev/null || echo "unknown")
+    echo "PgDog already installed: $INSTALLED_VERSION"
+    echo "Upgrading to ${PGDOG_VERSION}..."
+fi
+
+echo "Building PgDog ${PGDOG_VERSION} from source (this may take a few minutes)..."
 TMPDIR=$(mktemp -d)
-curl -fsSL "$PGDOG_URL" -o "$TMPDIR/pgdog.tar.gz"
-tar -xzf "$TMPDIR/pgdog.tar.gz" -C "$TMPDIR"
-install -m 755 "$TMPDIR/pgdog" /usr/local/bin/pgdog
-rm -rf "$TMPDIR"
+trap 'rm -rf "$TMPDIR"' EXIT
+git clone --depth 1 --branch "$PGDOG_VERSION" "$PGDOG_REPO" "$TMPDIR/pgdog"
+cargo build --release --manifest-path "$TMPDIR/pgdog/Cargo.toml"
+install -m 755 "$TMPDIR/pgdog/target/release/pgdog" /usr/local/bin/pgdog
 echo "PgDog installed to /usr/local/bin/pgdog"
 
 # Create directories
@@ -68,11 +68,11 @@ mkdir -p /etc/pgdog
 if [[ "$ENVIRONMENT" == "production" ]]; then
     ENV_FILE="/etc/soar/env"
     DB_NAME="soar"
-    PGDOG_PORT=6432
+    PGDOG_PORT=6434
 else
     ENV_FILE="/etc/soar/env-staging"
     DB_NAME="soar_staging"
-    PGDOG_PORT=6433
+    PGDOG_PORT=6435
 fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
