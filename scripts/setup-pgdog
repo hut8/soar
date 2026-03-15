@@ -181,7 +181,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 DynamicUser=yes
-ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
+ExecStart=/usr/local/bin/pgdog --config /etc/pgdog/pgdog.toml --users /etc/pgdog/users.toml
 ExecReload=/bin/kill -HUP \$MAINPID
 KillSignal=SIGINT
 KillMode=mixed
