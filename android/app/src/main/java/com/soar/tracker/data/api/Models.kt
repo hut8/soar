@@ -56,6 +56,7 @@ data class TrackerFixResponse(
     @Json(name = "nearbyAircraft") val nearbyAircraft: List<NearbyAircraftInfo>,
     @Json(name = "groundElevationMeters") val groundElevationMeters: Double?,
     @Json(name = "altitudeAglFeet") val altitudeAglFeet: Int?,
+    @Json(name = "magneticDeclinationDegrees") val magneticDeclinationDegrees: Double?,
 )
 
 @JsonClass(generateAdapter = true)

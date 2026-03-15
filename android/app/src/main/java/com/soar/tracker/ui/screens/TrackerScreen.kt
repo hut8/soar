@@ -238,6 +238,8 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 longitude = sensorData?.longitude,
                 altitudeMeters = sensorData?.altitudeMeters,
                 altitudeAglFeet = response?.altitudeAglFeet,
+                headingDegrees = sensorData?.headingDegrees,
+                magneticDeclinationDegrees = response?.magneticDeclinationDegrees,
                 groundPressureHpa = groundPressureHpa,
                 onSetAltimeter = {
                     if (isInFlight) {
@@ -251,6 +253,8 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
             // Nearby aircraft
             NearbyAircraftList(
                 aircraft = response?.nearbyAircraft ?: emptyList(),
+                userLatitude = sensorData?.latitude,
+                userLongitude = sensorData?.longitude,
             )
 
             // Open website button

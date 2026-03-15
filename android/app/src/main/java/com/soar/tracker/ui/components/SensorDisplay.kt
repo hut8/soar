@@ -33,6 +33,8 @@ fun SensorDisplay(
     longitude: Double?,
     altitudeMeters: Double?,
     altitudeAglFeet: Int?,
+    headingDegrees: Double?,
+    magneticDeclinationDegrees: Double?,
     groundPressureHpa: Double?,
     onSetAltimeter: () -> Unit,
     modifier: Modifier = Modifier,
@@ -111,6 +113,43 @@ fun SensorDisplay(
                         "--"
                     },
                 )
+            }
+
+            // Row 3: Heading True, Heading Magnetic (only show if heading is available)
+            if (headingDegrees != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    SensorValue(
+                        label = "Heading (True)",
+                        value = String.format(Locale.US, "%.0f\u00B0", headingDegrees),
+                    )
+
+                    val magneticHeading = magneticDeclinationDegrees?.let {
+                        var mag = headingDegrees - it
+                        if (mag < 0) mag += 360.0
+                        if (mag >= 360) mag -= 360.0
+                        mag
+                    }
+                    SensorValue(
+                        label = "Heading (Mag)",
+                        value = magneticHeading?.let {
+                            String.format(Locale.US, "%.0f\u00B0", it)
+                        } ?: "--",
+                    )
+
+                    // Show declination value
+                    SensorValue(
+                        label = "Declination",
+                        value = magneticDeclinationDegrees?.let {
+                            val sign = if (it >= 0) "E" else "W"
+                            String.format(Locale.US, "%.1f\u00B0 %s", Math.abs(it), sign)
+                        } ?: "--",
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

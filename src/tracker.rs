@@ -42,6 +42,7 @@ pub struct TrackerFixResponse {
     pub nearby_aircraft: Vec<NearbyAircraftInfo>,
     pub ground_elevation_meters: Option<f64>,
     pub altitude_agl_feet: Option<i32>,
+    pub magnetic_declination_degrees: Option<f64>,
 }
 
 /// Matched aircraft information

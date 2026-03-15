@@ -33,6 +33,7 @@ data class SensorData(
     val latitude: Double?,
     val longitude: Double?,
     val altitudeMeters: Double?,
+    val headingDegrees: Double?,
 )
 
 class TrackingService : LifecycleService() {
@@ -156,6 +157,7 @@ class TrackingService : LifecycleService() {
                     latitude = location.latitude,
                     longitude = location.longitude,
                     altitudeMeters = if (hasAltitude) location.altitude else null,
+                    headingDegrees = if (location.hasBearing()) location.bearing.toDouble() else null,
                 )
 
                 submitFix(request)

@@ -1,6 +1,7 @@
 package com.soar.tracker.ui.screens
 
 import java.util.Locale
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
@@ -25,17 +26,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import com.soar.tracker.data.api.NearbyAircraftInfo
 import com.soar.tracker.service.TrackingService
-import com.soar.tracker.ui.theme.Green
-import com.soar.tracker.ui.theme.Red
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveViewScreen(modifier: Modifier = Modifier) {
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val isTracking by TrackingService.isTracking.collectAsState()
+    val sensorData by TrackingService.lastSensorData.collectAsState()
     val aircraft = latestResponse?.nearbyAircraft ?: emptyList()
 
     Scaffold(
@@ -84,7 +86,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
             ) {
                 item { Spacer(modifier = Modifier.height(4.dp)) }
                 items(aircraft) { ac ->
-                    AircraftCard(ac)
+                    AircraftCard(ac, sensorData?.latitude, sensorData?.longitude)
                 }
                 item { Spacer(modifier = Modifier.height(8.dp)) }
             }
@@ -93,7 +95,11 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AircraftCard(aircraft: NearbyAircraftInfo) {
+private fun AircraftCard(
+    aircraft: NearbyAircraftInfo,
+    userLatitude: Double?,
+    userLongitude: Double?,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -101,7 +107,7 @@ private fun AircraftCard(aircraft: NearbyAircraftInfo) {
         ),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Header: Registration + model
+            // Header: Registration + model + bearing arrow + distance
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -118,6 +124,32 @@ private fun AircraftCard(aircraft: NearbyAircraftInfo) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // Bearing arrow
+                if (userLatitude != null && userLongitude != null) {
+                    val bearing = calculateBearing(
+                        userLatitude, userLongitude,
+                        aircraft.latitude, aircraft.longitude,
+                    ).toFloat()
+                    val arrowColor = MaterialTheme.colorScheme.primary
+                    Canvas(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .padding(end = 8.dp),
+                    ) {
+                        rotate(bearing) {
+                            val path = Path().apply {
+                                moveTo(size.width / 2f, 0f)
+                                lineTo(size.width * 0.8f, size.height * 0.7f)
+                                lineTo(size.width / 2f, size.height * 0.5f)
+                                lineTo(size.width * 0.2f, size.height * 0.7f)
+                                close()
+                            }
+                            drawPath(path, arrowColor)
+                        }
+                    }
+                }
+
                 // Distance
                 val distNm = aircraft.distanceMeters / 1852.0
                 Text(
@@ -156,8 +188,8 @@ private fun AircraftCard(aircraft: NearbyAircraftInfo) {
                     label = "Climb",
                     value = aircraft.climbFpm?.let {
                         val arrow = when {
-                            it > 200 -> "▲"
-                            it < -200 -> "▼"
+                            it > 200 -> "\u25B2"
+                            it < -200 -> "\u25BC"
                             else -> ""
                         }
                         String.format(Locale.US, "%s%.0f fpm", arrow, it)
@@ -168,7 +200,7 @@ private fun AircraftCard(aircraft: NearbyAircraftInfo) {
                 DetailValue(
                     label = "Track",
                     value = aircraft.trackDegrees?.let {
-                        String.format(Locale.US, "%.0f°", it)
+                        String.format(Locale.US, "%.0f\u00B0", it)
                     } ?: "--",
                 )
             }
@@ -212,4 +244,15 @@ private fun DetailValue(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+private fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val lat1Rad = Math.toRadians(lat1)
+    val lat2Rad = Math.toRadians(lat2)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val y = Math.sin(dLon) * Math.cos(lat2Rad)
+    val x = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+        Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon)
+    val bearing = Math.toDegrees(Math.atan2(y, x))
+    return (bearing + 360) % 360
 }

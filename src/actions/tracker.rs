@@ -112,6 +112,23 @@ pub async fn create_tracker_fix(
             (None, None)
         };
 
+    // Compute magnetic declination
+    let magnetic_declination_degrees = if let Some(ref magnetic_service) = state.magnetic_service {
+        let altitude_m = request.altitude_meters.unwrap_or(0.0);
+        match magnetic_service
+            .declination(request.latitude, request.longitude, altitude_m, None)
+            .await
+        {
+            Ok(decl) => Some(decl),
+            Err(e) => {
+                tracing::warn!(error = %e, "Magnetic declination lookup failed");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
     // Run candidate and nearby queries in parallel
@@ -175,6 +192,7 @@ pub async fn create_tracker_fix(
         nearby_aircraft,
         ground_elevation_meters,
         altitude_agl_feet,
+        magnetic_declination_degrees,
     };
 
     (StatusCode::CREATED, Json(response)).into_response()
