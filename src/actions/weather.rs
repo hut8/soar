@@ -67,7 +67,6 @@ pub async fn get_weather(
                 "current",
                 "surface_pressure,pressure_msl,temperature_2m".to_string(),
             ),
-            ("wind_speed_unit", "kn".to_string()),
             ("temperature_unit", "celsius".to_string()),
         ])
         .send()
