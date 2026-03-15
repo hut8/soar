@@ -26,7 +26,9 @@ use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
 
 use crate::actions;
+use crate::elevation::ElevationDB;
 use crate::live_fixes::LiveFixService;
+use crate::magnetic::MagneticService;
 use crate::stripe_client::StripeConfig;
 
 // Embed web assets into the binary
@@ -72,6 +74,8 @@ pub struct AppState {
     pub aircraft_types_lookup: std::sync::Arc<crate::actions::views::AircraftTypesLookup>, // Static reference data cache
     pub stripe_config: Option<StripeConfig>, // Stripe configuration (None if not configured)
     pub http_client: reqwest::Client,        // Shared HTTP client for external API calls
+    pub elevation_db: Option<ElevationDB>,   // Elevation service for AGL lookups
+    pub magnetic_service: Option<MagneticService>, // Magnetic declination service
 }
 
 async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
@@ -635,12 +639,28 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         }
     };
 
+    let elevation_db = match ElevationDB::new() {
+        Ok(db) => {
+            info!("Elevation service initialized for tracker endpoint");
+            Some(db)
+        }
+        Err(e) => {
+            warn!("Elevation service not available: {e}. Tracker AGL will be unavailable.");
+            None
+        }
+    };
+
+    let magnetic_service = Some(MagneticService::new());
+    info!("Magnetic declination service initialized");
+
     let app_state = AppState {
         pool,
         live_fix_service,
         aircraft_types_lookup,
         stripe_config,
         http_client: reqwest::Client::new(),
+        elevation_db,
+        magnetic_service,
     };
 
     // Create CORS layer that allows all origins and methods
@@ -819,6 +839,23 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route(
             "/user/receiver-alerts",
             get(actions::receiver_alerts::list_user_receiver_alerts),
+        )
+        // Push notification routes
+        .route(
+            "/push/vapid-key",
+            get(actions::push_subscriptions::get_vapid_key),
+        )
+        .route(
+            "/push/subscribe",
+            post(actions::push_subscriptions::subscribe),
+        )
+        .route(
+            "/push/subscriptions",
+            get(actions::push_subscriptions::list_subscriptions),
+        )
+        .route(
+            "/push/subscriptions/{id}",
+            delete(actions::push_subscriptions::delete_subscription),
         )
         // Authentication routes
         .route("/auth/register", post(actions::register_user))

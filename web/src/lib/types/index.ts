@@ -1,4 +1,6 @@
 // Core data types for the application
+// All API response types are auto-generated from Rust via ts-rs.
+// Only frontend-only types (UI extensions, compositions, browser APIs) are defined manually here.
 
 // Import auto-generated types from Rust
 import type { ClubJoinRequestView } from './generated/ClubJoinRequestView';
@@ -12,6 +14,7 @@ import type { Fix } from './generated/Fix';
 import type { AdsbEmitterCategory } from './generated/AdsbEmitterCategory';
 import type { AircraftType } from './generated/AircraftType';
 import type { AircraftCategory } from './generated/AircraftCategory';
+import type { EngineType } from './generated/EngineType';
 import type { FlightView } from './generated/FlightView';
 import type { FlightState } from './generated/FlightState';
 import type { AddressType } from './generated/AddressType';
@@ -26,6 +29,10 @@ import type { AircraftModelView } from './generated/AircraftModelView';
 
 // Import auto-generated geocoding types from Rust
 import type { ReverseGeocodeResponse } from './generated/ReverseGeocodeResponse';
+
+// Import auto-generated location types from Rust
+import type { Point } from './generated/Point';
+import type { Location } from './generated/Location';
 
 // Import auto-generated data stream types from Rust
 import type { DataStream } from './generated/DataStream';
@@ -48,8 +55,9 @@ import type { UpdateClubRequest } from './generated/UpdateClubRequest';
 // Import auto-generated auth types from Rust
 import type { LoginResponse } from './generated/LoginResponse';
 
-// Import auto-generated flight gap type from Rust
+// Import auto-generated flight types from Rust
 import type { FlightGap } from './generated/FlightGap';
+import type { PathPoint } from './generated/PathPoint';
 
 // Import auto-generated aircraft image types from Rust
 import type { AircraftImage } from './generated/AircraftImage';
@@ -63,6 +71,11 @@ import type { RawMessageView } from './generated/RawMessageView';
 // Import auto-generated receiver alert types from Rust
 import type { ReceiverAlertView } from './generated/ReceiverAlertView';
 import type { UpsertReceiverAlertRequest } from './generated/UpsertReceiverAlertRequest';
+
+// Import auto-generated push subscription types from Rust
+import type { PushSubscriptionView } from './generated/PushSubscriptionView';
+import type { PushSubscriptionRequest } from './generated/PushSubscriptionRequest';
+import type { VapidPublicKeyResponse } from './generated/VapidPublicKeyResponse';
 
 // Import auto-generated receiver aggregate stats types from Rust
 import type { AprsTypeCount } from './generated/AprsTypeCount';
@@ -83,7 +96,38 @@ import type { AircraftGeofence } from './generated/AircraftGeofence';
 import type { GeofenceExitEvent } from './generated/GeofenceExitEvent';
 import type { GeofenceExitEventsResponse } from './generated/GeofenceExitEventsResponse';
 
-// Re-export them for external use
+// Import auto-generated raw message types from Rust
+import type { MessageSourceType } from './generated/MessageSourceType';
+import type { RawMessageResponse } from './generated/RawMessageResponse';
+
+// Import auto-generated watchlist types from Rust
+import type { WatchlistEntry } from './generated/WatchlistEntry';
+
+// Import auto-generated pagination types from Rust
+import type { PaginationMetadata } from './generated/PaginationMetadata';
+
+// Import auto-generated coverage types from Rust
+import type { CoverageHexProperties } from './generated/CoverageHexProperties';
+import type { CoverageHexFeature } from './generated/CoverageHexFeature';
+import type { CoverageGeoJsonResponse } from './generated/CoverageGeoJsonResponse';
+import type { FixesInHexResponse } from './generated/FixesInHexResponse';
+import type { HexReceiversResponse } from './generated/HexReceiversResponse';
+
+// Import auto-generated fix-with-aircraft type from Rust
+import type { FixWithAircraftInfo } from './generated/FixWithAircraftInfo';
+
+// Import auto-generated airspace types from Rust
+import type { AirspaceGeoJson } from './generated/AirspaceGeoJson';
+import type { AirspaceProperties } from './generated/AirspaceProperties';
+import type { AirspaceClass } from './generated/AirspaceClass';
+import type { AirspaceType as AirspaceTypeEnum } from './generated/AirspaceType';
+import type { AirspaceSource } from './generated/AirspaceSource';
+
+// Import auto-generated club view type from Rust
+import type { ClubView } from './generated/ClubView';
+import type { TowFeeView } from './generated/TowFeeView';
+
+// Re-export all generated types for external use
 export type {
 	Aircraft,
 	AircraftView,
@@ -95,6 +139,7 @@ export type {
 	AdsbEmitterCategory,
 	AircraftType,
 	AircraftCategory,
+	EngineType,
 	FlightView,
 	FlightState,
 	AddressType,
@@ -120,6 +165,9 @@ export type {
 	StreamFormat,
 	// Geocoding types
 	ReverseGeocodeResponse,
+	// Location types
+	Point,
+	Location,
 	// Payment types
 	PaymentView,
 	PaymentType,
@@ -130,12 +178,15 @@ export type {
 	StripeConnectStatusView,
 	StripeDashboardLinkResponse,
 	ClubJoinRequestView,
+	ClubView,
+	TowFeeView,
 	CreateClubRequest,
 	UpdateClubRequest,
 	// Auth types
 	LoginResponse,
-	// Flight gap type
+	// Flight types
 	FlightGap,
+	PathPoint,
 	// Aircraft image types
 	AircraftImage,
 	AircraftImageCollection,
@@ -149,7 +200,32 @@ export type {
 	ReceiverStatisticsResponse,
 	// Receiver alert types
 	ReceiverAlertView,
-	UpsertReceiverAlertRequest
+	UpsertReceiverAlertRequest,
+	// Push subscription types
+	PushSubscriptionView,
+	PushSubscriptionRequest,
+	VapidPublicKeyResponse,
+	// Raw message types
+	MessageSourceType,
+	RawMessageResponse,
+	// Watchlist types
+	WatchlistEntry,
+	// Pagination types
+	PaginationMetadata,
+	// Coverage types
+	CoverageHexProperties,
+	CoverageHexFeature,
+	CoverageGeoJsonResponse,
+	FixesInHexResponse,
+	HexReceiversResponse,
+	// Fix with aircraft
+	FixWithAircraftInfo,
+	// Airspace types
+	AirspaceGeoJson,
+	AirspaceProperties,
+	AirspaceClass,
+	AirspaceTypeEnum,
+	AirspaceSource
 };
 
 // Type aliases for backward compatibility
@@ -159,8 +235,15 @@ export type Receiver = ReceiverView;
 export type Airport = AirportView;
 export type Runway = RunwayView;
 export type RunwayEnd = RunwayEndGenerated;
+export type Club = ClubView;
+export type Airspace = AirspaceGeoJson;
+export type FixWithAircraft = FixWithAircraftInfo;
 
-// API Response Wrapper Types
+// Aircraft registration and model types (auto-generated from Rust via ts-rs)
+export type AircraftRegistration = AircraftRegistrationView;
+export type AircraftModel = AircraftModelView;
+
+// API Response Wrapper Types (generic wrappers used across all endpoints)
 export interface DataResponse<T> {
 	data: T;
 }
@@ -174,73 +257,17 @@ export interface DataListResponseWithTotal<T> {
 	total: number;
 }
 
-export interface PaginationMetadata {
-	page: number;
-	totalPages: number;
-	totalCount: number;
-}
-
 export interface PaginatedDataResponse<T> {
 	data: T[];
 	metadata: PaginationMetadata;
 }
 
-export interface Point {
-	latitude: number;
-	longitude: number;
+// Airspace collection - GeoJSON FeatureCollection format
+// (Constructed via serde_json::json!() in the backend, not a direct Rust struct)
+export interface AirspaceFeatureCollection {
+	type: 'FeatureCollection';
+	features: Airspace[];
 }
-
-// Lightweight path point for flight trail rendering (from RDP-compressed /path endpoint)
-export interface PathPoint {
-	latitude: number;
-	longitude: number;
-	altitudeFeet: number | null;
-	speedKnots: number | null;
-}
-
-export interface Location {
-	id: string;
-	street1?: string;
-	street2?: string;
-	city?: string;
-	state?: string;
-	zipCode?: string;
-	countryCode?: string;
-	geolocation?: Point;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface Club {
-	id: string;
-	name: string;
-	homeBaseAirportId?: number;
-	homeBaseAirportIdent?: string;
-	location?: Location;
-	createdAt: string;
-	updatedAt: string;
-	similarityScore?: number;
-	distanceMeters?: number;
-	status: 'pending' | 'approved' | 'rejected';
-	createdBy: string | null;
-	recentFlightsCount?: number;
-	lastFlightAt?: string;
-}
-
-// For backward compatibility, extend Club with isSoaring for club selector
-export interface ClubWithSoaring extends Club {
-	isSoaring?: boolean;
-}
-
-export interface ComboboxData {
-	label: string;
-	value: string;
-	club: ClubWithSoaring;
-}
-
-// Aircraft registration and model types (auto-generated from Rust via ts-rs)
-export type AircraftRegistration = AircraftRegistrationView;
-export type AircraftModel = AircraftModelView;
 
 // Type guards for AircraftOrCluster (not auto-generated)
 export function isAircraftItem(
@@ -255,134 +282,52 @@ export function isClusterItem(
 	return item.type === 'cluster';
 }
 
-// AircraftWithRegistration extends Aircraft with optional aircraft registration and detailed model information
+// === Frontend-only types (no Rust counterpart) ===
+
+// Frontend extension: Club with computed isSoaring field
+export type ClubWithSoaring = ClubView & {
+	isSoaring?: boolean;
+};
+
+// UI component data for club selector combobox
+export interface ComboboxData {
+	label: string;
+	value: string;
+	club: ClubWithSoaring;
+}
+
+// AircraftWithRegistration extends Aircraft with optional registration and model details
 export interface AircraftWithRegistration extends Aircraft {
 	aircraftRegistration?: AircraftRegistration;
-	// Detailed aircraft model information from FAA database
 	aircraftModelDetails?: AircraftModel;
 }
 
-// Frontend-specific Aircraft interface that matches how we actually use Aircraft in the UI
-// Uses Partial to make all fields optional for flexibility in partial objects
+// Frontend-specific partial Aircraft with required ID
 export type AircraftPartial = Partial<Aircraft> & {
-	id: string; // ID is always required
+	id: string;
 };
 
-// Extended Fix interface for WebSocket/legacy responses that include extra fields not in the generated Rust Fix type
-// Note: New code should avoid using these extra fields and rely on proper joins instead
+// Extended Fix for WebSocket/legacy responses with extra fields not in the generated Rust Fix type
 export interface FixWithExtras extends Fix {
-	deviceAddressHex?: string; // Legacy field, prefer aircraftId with proper join
-	registration?: string; // Aircraft registration (joined, not in Rust Fix)
-	model?: string; // Aircraft model (joined, not in Rust Fix)
-	aprsType?: string; // APRS message type (from sourceMetadata, used in WebSocket)
-	via?: string[]; // APRS via path (from sourceMetadata, used in WebSocket)
+	deviceAddressHex?: string;
+	registration?: string;
+	model?: string;
+	aprsType?: string;
+	via?: string[];
 }
 
-// FixWithAircraft type from the backend - fix with optional aircraft data
-// Used by receiver fixes endpoint
-export interface FixWithAircraft extends Fix {
-	aircraft: import('./generated/AircraftView').AircraftView | null;
-}
-
-// Raw message response from /data/raw-messages/{id} endpoint
-export interface RawMessageResponse {
-	id: string;
-	rawMessage: string; // UTF-8 for APRS/SBS, hex-encoded for Beast
-	source: 'aprs' | 'beast' | 'sbs';
-	receivedAt: string;
-	receiverId: string | null;
-	debugFormat?: string; // Pretty-printed Rust debug format of parsed message
-}
-
-// FlightDetails combines Flight with full Aircraft data
-// Used when displaying flight lists that need complete aircraft information
+// FlightDetails combines Flight with full Aircraft data (frontend composition)
 export interface FlightDetails {
 	flight: Flight;
-	aircraft: Aircraft | null; // null if aircraft data couldn't be fetched
+	aircraft: Aircraft | null;
 }
 
-export interface WatchlistEntry {
-	userId: string;
-	aircraftId: string;
-	sendEmail: boolean;
-	createdAt: string;
-	updatedAt: string;
-}
-
+// Watchlist entry with joined aircraft data (frontend composition)
 export interface WatchlistEntryWithAircraft extends WatchlistEntry {
 	aircraft?: Aircraft;
 }
 
-// Airspace interface - GeoJSON Feature format
-export interface Airspace {
-	type: 'Feature';
-	geometry: {
-		type: 'Polygon' | 'MultiPolygon';
-		coordinates: number[][][] | number[][][][];
-	};
-	properties: {
-		id: string;
-		source: 'openaip' | 'faa_nasr';
-		name: string;
-		airspaceClass: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
-		airspaceType: string;
-		lowerLimit: string;
-		upperLimit: string;
-		remarks: string | null;
-		countryCode: string | null;
-		activityType: string | null;
-	};
-}
-
-// Airspace collection - GeoJSON FeatureCollection format
-export interface AirspaceFeatureCollection {
-	type: 'FeatureCollection';
-	features: Airspace[];
-}
-
-// Coverage map - H3 hexagonal coverage visualization
-export interface CoverageHexProperties {
-	h3Index: string;
-	resolution: number;
-	fixCount: number;
-	firstSeenAt: string;
-	lastSeenAt: string;
-	minAltitudeMslFeet: number | null;
-	maxAltitudeMslFeet: number | null;
-	avgAltitudeMslFeet: number | null;
-	coverageHours: number;
-}
-
-export interface CoverageHexFeature {
-	type: 'Feature';
-	geometry: {
-		type: 'Polygon';
-		coordinates: number[][][];
-	};
-	properties: CoverageHexProperties;
-}
-
-export interface CoverageGeoJsonResponse {
-	type: 'FeatureCollection';
-	features: CoverageHexFeature[];
-}
-
-// Hex fixes modal - individual position fixes within a coverage hex
-export interface FixesInHexResponse {
-	data: FixWithAircraft[];
-	total: number;
-	h3Index: string;
-	resolution: number;
-}
-
-// Hex receivers response - receivers that contributed to a coverage hex
-export interface HexReceiversResponse {
-	data: Receiver[];
-	h3Index: string;
-}
-
-// Browser API Extensions
-// DeviceOrientationEvent with iOS-specific webkitCompassHeading property
+// Browser API extension: DeviceOrientationEvent with iOS-specific compass heading
 export interface DeviceOrientationEventWithCompass extends DeviceOrientationEvent {
-	webkitCompassHeading?: number; // iOS-specific: true magnetic heading (0-360 degrees)
+	webkitCompassHeading?: number;
 }

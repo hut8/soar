@@ -855,6 +855,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: aarch64-unknown-linux-musl
+          cache: false  # Disable built-in cache; cross builds inside Docker so host-only cache is useless
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -879,6 +880,8 @@ jobs:
       - name: Build static release binary (ARM64)
         env:
           CROSS_CONTAINER_ENGINE: docker
+          # Mount host cargo cache into cross container so cached crate downloads are reused
+          CROSS_CONTAINER_OPTS: "-v /home/runner/.cargo/registry:/root/.cargo/registry -v /home/runner/.cargo/git:/root/.cargo/git"
           SKIP_WEB_BUILD: "1"
           RUSTFLAGS: "--cfg tokio_unstable -C target-feature=+crt-static -C link-arg=-static -C force-frame-pointers=yes"
         run: cross build --release --target aarch64-unknown-linux-musl --features bundled-postgres

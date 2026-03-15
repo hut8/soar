@@ -6,9 +6,12 @@ use diesel::prelude::*;
 use diesel::serialize::{self, Output, ToSql};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
 pub struct Location {
     pub id: Uuid,
     pub street1: Option<String>,
@@ -20,11 +23,14 @@ pub struct Location {
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing)]
+    #[ts(skip)]
     pub geocode_attempted_at: Option<DateTime<Utc>>,
 }
 
 // Simple Point struct for WGS84 coordinates (reuse from clubs.rs)
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, AsExpression)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, AsExpression, TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[diesel(sql_type = crate::schema::sql_types::Point)]
 pub struct Point {
     pub latitude: f64,

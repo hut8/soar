@@ -24,6 +24,7 @@
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import AircraftStatusBoard from '$lib/components/club/AircraftStatusBoard.svelte';
+	import PushNotificationToggle from '$lib/components/club/PushNotificationToggle.svelte';
 	import type {
 		Flight,
 		FlightDetails,
@@ -263,258 +264,86 @@
 	<title>{club?.name || 'Club'} Operations - Aircraft Tracking</title>
 </svelte:head>
 
-<!-- Date Picker -->
-<div class="flex items-center gap-3">
-	<Calendar class="h-5 w-5 text-surface-500" />
-	<label class="flex items-center gap-2">
-		<span class="text-surface-600-300-token text-sm font-medium">Date:</span>
-		<div class="flex items-center gap-1">
-			<button
-				onclick={goToPreviousDay}
-				class="preset-tonal-surface-500 btn p-2 btn-sm"
-				title="Previous day"
-			>
-				<ChevronLeft class="h-4 w-4" />
-			</button>
-			<input
-				type="date"
-				bind:value={selectedDate}
-				class="input px-3 py-2"
-				max={dayjs().format('YYYY-MM-DD')}
-			/>
-			<button
-				onclick={goToNextDay}
-				class="preset-tonal-surface-500 btn p-2 btn-sm"
-				title="Next day"
-				disabled={selectedDate >= dayjs().format('YYYY-MM-DD')}
-			>
-				<ChevronRight class="h-4 w-4" />
-			</button>
-		</div>
-	</label>
+<!-- Date Picker + Notification Toggle -->
+<div class="flex items-center justify-between gap-3">
+	<div class="flex items-center gap-3">
+		<Calendar class="h-5 w-5 text-surface-500" />
+		<label class="flex items-center gap-2">
+			<span class="text-surface-600-300-token text-sm font-medium">Date:</span>
+			<div class="flex items-center gap-1">
+				<button
+					onclick={goToPreviousDay}
+					class="preset-tonal-surface-500 btn p-2 btn-sm"
+					title="Previous day"
+				>
+					<ChevronLeft class="h-4 w-4" />
+				</button>
+				<input
+					type="date"
+					bind:value={selectedDate}
+					class="input px-3 py-2"
+					max={dayjs().format('YYYY-MM-DD')}
+				/>
+				<button
+					onclick={goToNextDay}
+					class="preset-tonal-surface-500 btn p-2 btn-sm"
+					title="Next day"
+					disabled={selectedDate >= dayjs().format('YYYY-MM-DD')}
+				>
+					<ChevronRight class="h-4 w-4" />
+				</button>
+			</div>
+		</label>
+	</div>
+	{#if userBelongsToClub}
+		<PushNotificationToggle />
+	{/if}
 </div>
 
-<!-- Two-column layout: flights (left) + status board (right) on desktop -->
-<div class="flex flex-col gap-6 lg:flex-row">
-	<!-- Main flights column -->
-	<div class="min-w-0 flex-1 space-y-6">
-		<!-- Loading State -->
-		{#if loadingFlights}
-			<div class="space-y-4 card p-12 text-center">
-				<div
-					class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
-				></div>
-				<p class="text-surface-500-400-token">Loading flights...</p>
+<!-- Aircraft Status Board at top -->
+{#if userBelongsToClub && !loadingAircraft && clubAircraft.length > 0}
+	<AircraftStatusBoard
+		aircraft={clubAircraft}
+		{flightsInProgress}
+		{members}
+		onFlightsChanged={loadFlights}
+	/>
+{/if}
+
+<!-- Flights -->
+<div class="space-y-6">
+	<!-- Loading State -->
+	{#if loadingFlights}
+		<div class="space-y-4 card p-12 text-center">
+			<div
+				class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+			></div>
+			<p class="text-surface-500-400-token">Loading flights...</p>
+		</div>
+	{:else if flightsError}
+		<div class="space-y-4 card p-12 text-center">
+			<div class="rounded border border-red-200 bg-red-50 p-4 text-red-600">
+				{flightsError}
 			</div>
-		{:else if flightsError}
-			<div class="space-y-4 card p-12 text-center">
-				<div class="rounded border border-red-200 bg-red-50 p-4 text-red-600">
-					{flightsError}
-				</div>
-				<button class="btn preset-filled-primary-500" onclick={loadFlights}> Try Again </button>
-			</div>
-		{:else}
-			<!-- Flights In Progress Section (only show for today) -->
-			{#if isToday}
-				<section class="card">
-					<header class="card-header">
-						<h2 class="h2">Flights In Progress</h2>
-						<p class="text-surface-500-400-token">
-							{flightsInProgress.length} flight{flightsInProgress.length === 1 ? '' : 's'} currently active
-						</p>
-					</header>
-
-					{#if flightsInProgress.length === 0}
-						<div class="space-y-4 p-12 text-center">
-							<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
-							<div class="space-y-2">
-								<h3 class="h3">No flights in progress</h3>
-								<p class="text-surface-500-400-token">There are currently no active flights.</p>
-							</div>
-						</div>
-					{:else}
-						<!-- Desktop: Table -->
-						<div class="hidden md:block">
-							<div class="table-container">
-								<table class="table-hover table">
-									<thead>
-										<tr>
-											<th>Aircraft</th>
-											<th>Type</th>
-											<th>Takeoff</th>
-											<th>Duration</th>
-											<th>Actions</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
-											<tr>
-												<td>
-													<div class="flex flex-col gap-1">
-														{#if aircraft}
-															<AircraftLink {aircraft} size="md" />
-														{:else}
-															<span class="font-medium">
-																{flight.registration ||
-																	formatAircraftAddress(
-																		flight.deviceAddress,
-																		flight.deviceAddressType
-																	)}
-															</span>
-														{/if}
-													</div>
-												</td>
-												<td>
-													{#if flight.aircraftCategory}
-														<span
-															class="badge {getAircraftCategoryColor(
-																flight.aircraftCategory
-															)} text-xs"
-														>
-															{getAircraftCategoryDescription(flight.aircraftCategory)}
-														</span>
-													{:else}
-														<span class="text-surface-500">—</span>
-													{/if}
-												</td>
-												<td>
-													<div class="flex flex-col gap-1">
-														<div class="flex items-center gap-1 text-sm">
-															<Clock class="h-3 w-3" />
-															{formatRelativeTime(flight.takeoffTime)}
-														</div>
-														{#if flight.takeoffTime}
-															<div class="text-surface-500-400-token text-xs">
-																{formatLocalTime(flight.takeoffTime)}
-															</div>
-														{/if}
-													</div>
-												</td>
-												<td class="font-semibold">
-													{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
-												</td>
-												<td>
-													<div class="flex items-center gap-2">
-														{#if userBelongsToClub}
-															<button
-																onclick={() => openPilotModal(flight.id)}
-																class="preset-tonal-primary-500 btn flex items-center gap-1 btn-sm"
-																title="Add pilot to flight"
-															>
-																<UserPlus class="h-3 w-3" />
-																Add Pilot
-															</button>
-														{/if}
-														<a
-															href={`/flights/${flight.id}`}
-															target="_blank"
-															rel="noopener noreferrer"
-															class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
-														>
-															<ExternalLink class="h-3 w-3" />
-															Open
-														</a>
-													</div>
-												</td>
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-						</div>
-
-						<!-- Mobile: Cards -->
-						<div class="space-y-4 md:hidden">
-							{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
-								<div class="card p-4">
-									<div class="mb-3 flex items-start justify-between gap-2">
-										<div class="flex-1">
-											{#if aircraft}
-												<AircraftLink {aircraft} size="md" />
-											{:else}
-												<div class="font-medium">
-													{flight.registration ||
-														formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}
-												</div>
-											{/if}
-										</div>
-										{#if flight.aircraftCategory}
-											<span
-												class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs"
-											>
-												{getAircraftCategoryDescription(flight.aircraftCategory)}
-											</span>
-										{/if}
-									</div>
-
-									<dl class="mb-4 space-y-2 text-sm">
-										<div class="flex justify-between gap-4">
-											<dt class="text-surface-600-300-token">Takeoff</dt>
-											<dd class="text-right">
-												<div class="flex items-center gap-1">
-													<Clock class="h-3 w-3" />
-													{formatRelativeTime(flight.takeoffTime)}
-												</div>
-												{#if flight.takeoffTime}
-													<div class="text-surface-500-400-token text-xs">
-														{formatLocalTime(flight.takeoffTime)}
-													</div>
-												{/if}
-											</dd>
-										</div>
-										<div class="flex justify-between gap-4">
-											<dt class="text-surface-600-300-token">Duration</dt>
-											<dd class="font-semibold">
-												{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
-											</dd>
-										</div>
-									</dl>
-
-									<div class="flex flex-col gap-2">
-										{#if userBelongsToClub}
-											<button
-												onclick={() => openPilotModal(flight.id)}
-												class="preset-tonal-primary-500 btn flex w-full items-center justify-center gap-1 btn-sm"
-											>
-												<UserPlus class="h-3 w-3" />
-												Add Pilot
-											</button>
-										{/if}
-										<a
-											href={`/flights/${flight.id}`}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="preset-tonal-surface-500 btn flex w-full items-center justify-center gap-1 btn-sm"
-										>
-											<ExternalLink class="h-3 w-3" />
-											Open Flight
-										</a>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</section>
-			{/if}
-
-			<!-- Completed Flights Section -->
+			<button class="btn preset-filled-primary-500" onclick={loadFlights}> Try Again </button>
+		</div>
+	{:else}
+		<!-- Flights In Progress Section (only show for today) -->
+		{#if isToday}
 			<section class="card">
 				<header class="card-header">
-					<h2 class="h2">Completed Flights</h2>
+					<h2 class="h2">Flights In Progress</h2>
 					<p class="text-surface-500-400-token">
-						{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} completed on
-						{dayjs(selectedDate).format('MMMM D, YYYY')}
+						{flightsInProgress.length} flight{flightsInProgress.length === 1 ? '' : 's'} currently active
 					</p>
 				</header>
 
-				{#if completedFlights.length === 0}
+				{#if flightsInProgress.length === 0}
 					<div class="space-y-4 p-12 text-center">
 						<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 						<div class="space-y-2">
-							<h3 class="h3">No completed flights</h3>
-							<p class="text-surface-500-400-token">
-								No flights were completed on {dayjs(selectedDate).format('MMMM D, YYYY')}.
-							</p>
+							<h3 class="h3">No flights in progress</h3>
+							<p class="text-surface-500-400-token">There are currently no active flights.</p>
 						</div>
 					</div>
 				{:else}
@@ -527,40 +356,26 @@
 										<th>Aircraft</th>
 										<th>Type</th>
 										<th>Takeoff</th>
-										<th>Landing</th>
 										<th>Duration</th>
-										<th>Distance</th>
-										<th>Tow</th>
 										<th>Actions</th>
 									</tr>
 								</thead>
 								<tbody>
-									{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
+									{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
 										<tr>
 											<td>
 												<div class="flex flex-col gap-1">
-													<div class="flex items-center gap-2">
-														{#if aircraft}
-															<AircraftLink {aircraft} size="md" />
-														{:else}
-															<span class="font-medium">
-																{flight.registration ||
-																	formatAircraftAddress(
-																		flight.deviceAddress,
-																		flight.deviceAddressType
-																	)}
-															</span>
-														{/if}
-														{#if flight.towedByAircraftId}
-															<span
-																class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-																title="This aircraft was towed"
-															>
-																<MoveUp class="h-3 w-3" />
-																Towed
-															</span>
-														{/if}
-													</div>
+													{#if aircraft}
+														<AircraftLink {aircraft} size="md" />
+													{:else}
+														<span class="font-medium">
+															{flight.registration ||
+																formatAircraftAddress(
+																	flight.deviceAddress,
+																	flight.deviceAddressType
+																)}
+														</span>
+													{/if}
 												</div>
 											</td>
 											<td>
@@ -587,45 +402,10 @@
 															{formatLocalTime(flight.takeoffTime)}
 														</div>
 													{/if}
-													{#if flight.departureAirport}
-														<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-															<MapPin class="h-3 w-3" />
-															{flight.departureAirport}
-														</div>
-													{/if}
-												</div>
-											</td>
-											<td>
-												<div class="flex flex-col gap-1">
-													<div class="flex items-center gap-1 text-sm">
-														<Clock class="h-3 w-3" />
-														{formatRelativeTime(flight.landingTime)}
-													</div>
-													{#if flight.landingTime}
-														<div class="text-surface-500-400-token text-xs">
-															{formatLocalTime(flight.landingTime)}
-														</div>
-													{/if}
-													{#if flight.arrivalAirport}
-														<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-															<MapPin class="h-3 w-3" />
-															{flight.arrivalAirport}
-														</div>
-													{/if}
 												</div>
 											</td>
 											<td class="font-semibold">
-												{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
-											</td>
-											<td class="font-semibold">
-												{formatDistance(flight.totalDistanceMeters)}
-											</td>
-											<td>
-												{#if flight.towedByAircraftId}
-													<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
-												{:else}
-													<span class="text-surface-500">—</span>
-												{/if}
+												{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
 											</td>
 											<td>
 												<div class="flex items-center gap-2">
@@ -659,7 +439,7 @@
 
 					<!-- Mobile: Cards -->
 					<div class="space-y-4 md:hidden">
-						{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
+						{#each flightsInProgressDetails as { flight, aircraft } (flight.id)}
 							<div class="card p-4">
 								<div class="mb-3 flex items-start justify-between gap-2">
 									<div class="flex-1">
@@ -671,25 +451,12 @@
 													formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}
 											</div>
 										{/if}
-										{#if flight.towedByAircraftId}
-											<span
-												class="mt-1 badge flex inline-flex items-center gap-1 preset-filled-primary-500 text-xs"
-												title="This aircraft was towed"
-											>
-												<MoveUp class="h-3 w-3" />
-												Towed
-											</span>
-										{/if}
 									</div>
-									<div>
-										{#if flight.aircraftCategory}
-											<span
-												class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs"
-											>
-												{getAircraftCategoryDescription(flight.aircraftCategory)}
-											</span>
-										{/if}
-									</div>
+									{#if flight.aircraftCategory}
+										<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+											{getAircraftCategoryDescription(flight.aircraftCategory)}
+										</span>
+									{/if}
 								</div>
 
 								<dl class="mb-4 space-y-2 text-sm">
@@ -705,52 +472,14 @@
 													{formatLocalTime(flight.takeoffTime)}
 												</div>
 											{/if}
-											{#if flight.departureAirport}
-												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-													<MapPin class="h-3 w-3" />
-													{flight.departureAirport}
-												</div>
-											{/if}
-										</dd>
-									</div>
-									<div class="flex justify-between gap-4">
-										<dt class="text-surface-600-300-token">Landing</dt>
-										<dd class="text-right">
-											<div class="flex items-center gap-1">
-												<Clock class="h-3 w-3" />
-												{formatRelativeTime(flight.landingTime)}
-											</div>
-											{#if flight.landingTime}
-												<div class="text-surface-500-400-token text-xs">
-													{formatLocalTime(flight.landingTime)}
-												</div>
-											{/if}
-											{#if flight.arrivalAirport}
-												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-													<MapPin class="h-3 w-3" />
-													{flight.arrivalAirport}
-												</div>
-											{/if}
 										</dd>
 									</div>
 									<div class="flex justify-between gap-4">
 										<dt class="text-surface-600-300-token">Duration</dt>
 										<dd class="font-semibold">
-											{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
+											{calculateFlightDuration(flight.takeoffTime, dayjs().toISOString())}
 										</dd>
 									</div>
-									<div class="flex justify-between gap-4">
-										<dt class="text-surface-600-300-token">Distance</dt>
-										<dd class="font-semibold">{formatDistance(flight.totalDistanceMeters)}</dd>
-									</div>
-									{#if flight.towedByAircraftId}
-										<div class="flex justify-between gap-4">
-											<dt class="text-surface-600-300-token">Tow Aircraft</dt>
-											<dd>
-												<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
-											</dd>
-										</div>
-									{/if}
 								</dl>
 
 								<div class="flex flex-col gap-2">
@@ -779,18 +508,284 @@
 				{/if}
 			</section>
 		{/if}
-	</div>
 
-	<!-- Aircraft Status Board sidebar (desktop: right column, mobile: above flights via horizontal scroll) -->
-	{#if userBelongsToClub && !loadingAircraft && clubAircraft.length > 0}
-		<aside class="w-full lg:w-80 lg:flex-shrink-0">
-			<AircraftStatusBoard
-				aircraft={clubAircraft}
-				{flightsInProgress}
-				{members}
-				onFlightsChanged={loadFlights}
-			/>
-		</aside>
+		<!-- Completed Flights Section -->
+		<section class="card">
+			<header class="card-header">
+				<h2 class="h2">Completed Flights</h2>
+				<p class="text-surface-500-400-token">
+					{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} completed on
+					{dayjs(selectedDate).format('MMMM D, YYYY')}
+				</p>
+			</header>
+
+			{#if completedFlights.length === 0}
+				<div class="space-y-4 p-12 text-center">
+					<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+					<div class="space-y-2">
+						<h3 class="h3">No completed flights</h3>
+						<p class="text-surface-500-400-token">
+							No flights were completed on {dayjs(selectedDate).format('MMMM D, YYYY')}.
+						</p>
+					</div>
+				</div>
+			{:else}
+				<!-- Desktop: Table -->
+				<div class="hidden md:block">
+					<div class="table-container">
+						<table class="table-hover table">
+							<thead>
+								<tr>
+									<th>Aircraft</th>
+									<th>Type</th>
+									<th>Takeoff</th>
+									<th>Landing</th>
+									<th>Duration</th>
+									<th>Distance</th>
+									<th>Tow</th>
+									<th>Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
+									<tr>
+										<td>
+											<div class="flex flex-col gap-1">
+												<div class="flex items-center gap-2">
+													{#if aircraft}
+														<AircraftLink {aircraft} size="md" />
+													{:else}
+														<span class="font-medium">
+															{flight.registration ||
+																formatAircraftAddress(
+																	flight.deviceAddress,
+																	flight.deviceAddressType
+																)}
+														</span>
+													{/if}
+													{#if flight.towedByAircraftId}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											</div>
+										</td>
+										<td>
+											{#if flight.aircraftCategory}
+												<span
+													class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs"
+												>
+													{getAircraftCategoryDescription(flight.aircraftCategory)}
+												</span>
+											{:else}
+												<span class="text-surface-500">—</span>
+											{/if}
+										</td>
+										<td>
+											<div class="flex flex-col gap-1">
+												<div class="flex items-center gap-1 text-sm">
+													<Clock class="h-3 w-3" />
+													{formatRelativeTime(flight.takeoffTime)}
+												</div>
+												{#if flight.takeoffTime}
+													<div class="text-surface-500-400-token text-xs">
+														{formatLocalTime(flight.takeoffTime)}
+													</div>
+												{/if}
+												{#if flight.departureAirport}
+													<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+														<MapPin class="h-3 w-3" />
+														{flight.departureAirport}
+													</div>
+												{/if}
+											</div>
+										</td>
+										<td>
+											<div class="flex flex-col gap-1">
+												<div class="flex items-center gap-1 text-sm">
+													<Clock class="h-3 w-3" />
+													{formatRelativeTime(flight.landingTime)}
+												</div>
+												{#if flight.landingTime}
+													<div class="text-surface-500-400-token text-xs">
+														{formatLocalTime(flight.landingTime)}
+													</div>
+												{/if}
+												{#if flight.arrivalAirport}
+													<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+														<MapPin class="h-3 w-3" />
+														{flight.arrivalAirport}
+													</div>
+												{/if}
+											</div>
+										</td>
+										<td class="font-semibold">
+											{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
+										</td>
+										<td class="font-semibold">
+											{formatDistance(flight.totalDistanceMeters)}
+										</td>
+										<td>
+											{#if flight.towedByAircraftId}
+												<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
+											{:else}
+												<span class="text-surface-500">—</span>
+											{/if}
+										</td>
+										<td>
+											<div class="flex items-center gap-2">
+												{#if userBelongsToClub}
+													<button
+														onclick={() => openPilotModal(flight.id)}
+														class="preset-tonal-primary-500 btn flex items-center gap-1 btn-sm"
+														title="Add pilot to flight"
+													>
+														<UserPlus class="h-3 w-3" />
+														Add Pilot
+													</button>
+												{/if}
+												<a
+													href={`/flights/${flight.id}`}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+												>
+													<ExternalLink class="h-3 w-3" />
+													Open
+												</a>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+				<!-- Mobile: Cards -->
+				<div class="space-y-4 md:hidden">
+					{#each completedFlightsDetails as { flight, aircraft } (flight.id)}
+						<div class="card p-4">
+							<div class="mb-3 flex items-start justify-between gap-2">
+								<div class="flex-1">
+									{#if aircraft}
+										<AircraftLink {aircraft} size="md" />
+									{:else}
+										<div class="font-medium">
+											{flight.registration ||
+												formatAircraftAddress(flight.deviceAddress, flight.deviceAddressType)}
+										</div>
+									{/if}
+									{#if flight.towedByAircraftId}
+										<span
+											class="mt-1 badge flex inline-flex items-center gap-1 preset-filled-primary-500 text-xs"
+											title="This aircraft was towed"
+										>
+											<MoveUp class="h-3 w-3" />
+											Towed
+										</span>
+									{/if}
+								</div>
+								<div>
+									{#if flight.aircraftCategory}
+										<span class="badge {getAircraftCategoryColor(flight.aircraftCategory)} text-xs">
+											{getAircraftCategoryDescription(flight.aircraftCategory)}
+										</span>
+									{/if}
+								</div>
+							</div>
+
+							<dl class="mb-4 space-y-2 text-sm">
+								<div class="flex justify-between gap-4">
+									<dt class="text-surface-600-300-token">Takeoff</dt>
+									<dd class="text-right">
+										<div class="flex items-center gap-1">
+											<Clock class="h-3 w-3" />
+											{formatRelativeTime(flight.takeoffTime)}
+										</div>
+										{#if flight.takeoffTime}
+											<div class="text-surface-500-400-token text-xs">
+												{formatLocalTime(flight.takeoffTime)}
+											</div>
+										{/if}
+										{#if flight.departureAirport}
+											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+												<MapPin class="h-3 w-3" />
+												{flight.departureAirport}
+											</div>
+										{/if}
+									</dd>
+								</div>
+								<div class="flex justify-between gap-4">
+									<dt class="text-surface-600-300-token">Landing</dt>
+									<dd class="text-right">
+										<div class="flex items-center gap-1">
+											<Clock class="h-3 w-3" />
+											{formatRelativeTime(flight.landingTime)}
+										</div>
+										{#if flight.landingTime}
+											<div class="text-surface-500-400-token text-xs">
+												{formatLocalTime(flight.landingTime)}
+											</div>
+										{/if}
+										{#if flight.arrivalAirport}
+											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+												<MapPin class="h-3 w-3" />
+												{flight.arrivalAirport}
+											</div>
+										{/if}
+									</dd>
+								</div>
+								<div class="flex justify-between gap-4">
+									<dt class="text-surface-600-300-token">Duration</dt>
+									<dd class="font-semibold">
+										{calculateFlightDuration(flight.takeoffTime, flight.landingTime)}
+									</dd>
+								</div>
+								<div class="flex justify-between gap-4">
+									<dt class="text-surface-600-300-token">Distance</dt>
+									<dd class="font-semibold">{formatDistance(flight.totalDistanceMeters)}</dd>
+								</div>
+								{#if flight.towedByAircraftId}
+									<div class="flex justify-between gap-4">
+										<dt class="text-surface-600-300-token">Tow Aircraft</dt>
+										<dd>
+											<TowAircraftLink aircraftId={flight.towedByAircraftId} size="sm" />
+										</dd>
+									</div>
+								{/if}
+							</dl>
+
+							<div class="flex flex-col gap-2">
+								{#if userBelongsToClub}
+									<button
+										onclick={() => openPilotModal(flight.id)}
+										class="preset-tonal-primary-500 btn flex w-full items-center justify-center gap-1 btn-sm"
+									>
+										<UserPlus class="h-3 w-3" />
+										Add Pilot
+									</button>
+								{/if}
+								<a
+									href={`/flights/${flight.id}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="preset-tonal-surface-500 btn flex w-full items-center justify-center gap-1 btn-sm"
+								>
+									<ExternalLink class="h-3 w-3" />
+									Open Flight
+								</a>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</section>
 	{/if}
 </div>
 

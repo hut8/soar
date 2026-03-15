@@ -1,8 +1,11 @@
 package com.soar.tracker.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -20,16 +23,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -43,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.soar.tracker.SoarTrackerApp
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.components.FlightStatusCard
 import com.soar.tracker.ui.components.NearbyAircraftList
@@ -52,13 +61,20 @@ import com.soar.tracker.ui.theme.Red
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrackerScreen() {
+fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val isTracking by TrackingService.isTracking.collectAsState()
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val lastError by TrackingService.lastError.collectAsState()
     val lastUpdateTime by TrackingService.lastUpdateTime.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
+    val groundPressureHpa by TrackingService.groundPressureHpa.collectAsState()
+    var showAltimeterConfirm by remember { mutableStateOf(false) }
+
+    // Determine if aircraft appears to be in flight
+    val isInFlight = latestResponse?.flight?.let {
+        it.state.lowercase(Locale.ROOT) == "active"
+    } ?: false
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -71,21 +87,81 @@ fun TrackerScreen() {
         )
     }
 
+    // Background location permission must be requested separately on Android 10+
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        // Whether granted or not, start tracking (foreground location is sufficient)
+        TrackingService.start(context)
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
             || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (hasLocationPermission) {
-            TrackingService.start(context)
+            // Request background location for continuous tracking
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            } else {
+                TrackingService.start(context)
+            }
         }
     }
 
+    // Confirmation dialog for setting altimeter while in flight
+    if (showAltimeterConfirm) {
+        AlertDialog(
+            onDismissRequest = { showAltimeterConfirm = false },
+            title = { Text("Set Altimeter?") },
+            text = {
+                Text(
+                    "The aircraft appears to be in flight. Setting the altimeter " +
+                        "now will use the current pressure as the ground reference, " +
+                        "which will produce incorrect altitude readings. Are you sure?",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    sensorData?.pressureHpa?.let { TrackingService.setGroundPressure(it) }
+                    showAltimeterConfirm = false
+                }) {
+                    Text("Set Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAltimeterConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("SOAR Tracker") },
                 actions = {
+                    // Logout button
+                    IconButton(onClick = {
+                        if (isTracking) {
+                            TrackingService.stop(context)
+                        }
+                        val app = context.applicationContext as SoarTrackerApp
+                        app.authRepository.logout()
+                        onLogout()
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Sign out",
+                        )
+                    }
                     // Connection status indicator
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -163,11 +239,6 @@ fun TrackerScreen() {
 
             val response = latestResponse
 
-            // Position card
-            if (response != null) {
-                PositionCard(response)
-            }
-
             // Aircraft + Flight card
             FlightStatusCard(
                 aircraft = response?.matchedAircraft,
@@ -181,39 +252,46 @@ fun TrackerScreen() {
                 accelZ = sensorData?.accelZ,
                 pressureHpa = sensorData?.pressureHpa,
                 verticalSpeedMps = sensorData?.verticalSpeedMps,
+                speedMps = sensorData?.speedMps,
+                latitude = sensorData?.latitude,
+                longitude = sensorData?.longitude,
+                altitudeMeters = sensorData?.altitudeMeters,
+                altitudeAglFeet = response?.altitudeAglFeet,
+                gpsBearingDegrees = sensorData?.gpsBearingDegrees,
+                magneticHeadingDegrees = sensorData?.magneticHeadingDegrees,
+                magneticDeclinationDegrees = response?.magneticDeclinationDegrees,
+                groundPressureHpa = groundPressureHpa,
+                onSetAltimeter = {
+                    if (isInFlight) {
+                        showAltimeterConfirm = true
+                    } else {
+                        sensorData?.pressureHpa?.let { TrackingService.setGroundPressure(it) }
+                    }
+                },
             )
 
             // Nearby aircraft
             NearbyAircraftList(
                 aircraft = response?.nearbyAircraft ?: emptyList(),
+                userLatitude = sensorData?.latitude,
+                userLongitude = sensorData?.longitude,
+                userHeadingDegrees = sensorData?.magneticHeadingDegrees,
             )
+
+            // Open website button
+            OutlinedButton(
+                onClick = {
+                    val app = context.applicationContext as SoarTrackerApp
+                    val url = app.tokenManager.getServerUrl()
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Open glider.flights")
+            }
 
             Spacer(modifier = Modifier.height(80.dp)) // FAB clearance
-        }
-    }
-}
-
-@Composable
-private fun PositionCard(response: com.soar.tracker.data.api.TrackerFixResponse) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Position", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Fix: ${response.fixId.take(8)}...",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "Updated: ${response.timestamp}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

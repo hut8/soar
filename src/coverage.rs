@@ -52,21 +52,26 @@ pub struct NewReceiverCoverageH3 {
 }
 
 /// GeoJSON Feature for H3 hex (API response)
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CoverageHexFeature {
     #[serde(rename = "type")]
+    #[ts(type = "\"Feature\"")]
     pub feature_type: String, // Always "Feature"
+    #[ts(type = "{ type: string; coordinates: number[][][] }")]
     pub geometry: serde_json::Value, // H3 hex polygon as GeoJSON
     pub properties: CoverageHexProperties,
 }
 
 /// Properties for coverage hex feature
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CoverageHexProperties {
     pub h3_index: String, // H3 index as hex string for frontend
     pub resolution: i16,
+    #[ts(type = "number")]
     pub fix_count: i64,
     pub first_seen_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,

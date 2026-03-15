@@ -12,8 +12,8 @@ use crate::auth::AuthUser;
 use crate::flights::{FlightState, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::tracker::{
-    NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixRequest, TrackerFixResponse,
-    TrackerFlightInfo,
+    NearbyAircraftInfo, NearbyAirportInfo, TrackerAircraftInfo, TrackerFixRequest,
+    TrackerFixResponse, TrackerFlightInfo,
 };
 use crate::user_fixes_repo::UserFixesRepository;
 use crate::web::AppState;
@@ -87,13 +87,75 @@ pub async fn create_tracker_fix(
     };
 
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
 
-    // Run candidate and nearby queries in parallel
+    // Set up all async lookups to run in parallel.
+    // Candidate query is bounded by ST_DWithin(2km) + last_fix_at within 2 minutes,
+    // so the result set is inherently limited by the spatial and temporal constraints.
     let candidates_fut = aircraft_repo.find_candidate_aircraft(request.latitude, request.longitude);
+    // Both nearby queries use SQL LIMIT clauses (50 and 20 respectively) to bound allocations.
     let nearby_fut =
         aircraft_repo.find_nearby_aircraft(request.latitude, request.longitude, 185_200.0, 50);
+    let airports_fut =
+        airports_repo.find_nearest_airports(request.latitude, request.longitude, 100_000.0, 20);
 
-    let (candidates_result, nearby_result) = tokio::join!(candidates_fut, nearby_fut);
+    let elevation_fut = async {
+        if let Some(ref elevation_db) = state.elevation_db {
+            match elevation_db
+                .elevation(request.latitude, request.longitude)
+                .await
+            {
+                Ok(Some(elev_m)) => {
+                    let ground_elev = elev_m as f64;
+                    let agl = request.altitude_meters.map(|alt_m| {
+                        let alt_ft = alt_m * 3.28084;
+                        let ground_ft = ground_elev * 3.28084;
+                        (alt_ft - ground_ft).round() as i32
+                    });
+                    (Some(ground_elev), agl)
+                }
+                Ok(None) => (None, None),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Elevation lookup failed");
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        }
+    };
+
+    let magnetic_fut = async {
+        if let Some(ref magnetic_service) = state.magnetic_service {
+            let altitude_m = request.altitude_meters.unwrap_or(0.0);
+            match magnetic_service
+                .declination(request.latitude, request.longitude, altitude_m, None)
+                .await
+            {
+                Ok(decl) => Some(decl),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Magnetic declination lookup failed");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
+    let (
+        candidates_result,
+        nearby_result,
+        airports_result,
+        (ground_elevation_meters, altitude_agl_feet),
+        magnetic_declination_degrees,
+    ) = tokio::join!(
+        candidates_fut,
+        nearby_fut,
+        airports_fut,
+        elevation_fut,
+        magnetic_fut
+    );
 
     // Process candidates for matching with extrapolation
     let matched_aircraft = match candidates_result {
@@ -118,7 +180,8 @@ pub async fn create_tracker_fix(
             .filter_map(|row| {
                 let lat = row.latitude?;
                 let lon = row.longitude?;
-                let (altitude_feet, ground_speed_knots) = extract_fix_data(&row.current_fix);
+                let (altitude_feet, ground_speed_knots, climb_fpm, track_degrees) =
+                    extract_fix_data(&row.current_fix);
                 Some(NearbyAircraftInfo {
                     id: row.id,
                     registration: row.registration,
@@ -129,11 +192,38 @@ pub async fn create_tracker_fix(
                     ground_speed_knots,
                     distance_meters: row.distance_meters.unwrap_or(0.0),
                     last_fix_at: row.last_fix_at,
+                    climb_fpm,
+                    track_degrees,
                 })
             })
             .collect(),
         Err(e) => {
             error!(error = %e, "Failed to query nearby aircraft");
+            Vec::new()
+        }
+    };
+
+    // Build nearby airports list
+    let nearby_airports = match airports_result {
+        Ok(airports) => airports
+            .into_iter()
+            .filter_map(|(airport, distance)| {
+                use num_traits::ToPrimitive;
+                let lat = airport.latitude_deg?.to_f64()?;
+                let lon = airport.longitude_deg?.to_f64()?;
+                Some(NearbyAirportInfo {
+                    id: airport.id,
+                    ident: airport.ident,
+                    name: airport.name,
+                    latitude: lat,
+                    longitude: lon,
+                    elevation_ft: airport.elevation_ft,
+                    distance_meters: distance,
+                })
+            })
+            .collect(),
+        Err(e) => {
+            error!(error = %e, "Failed to query nearby airports");
             Vec::new()
         }
     };
@@ -144,6 +234,10 @@ pub async fn create_tracker_fix(
         matched_aircraft,
         flight,
         nearby_aircraft,
+        nearby_airports,
+        ground_elevation_meters,
+        altitude_agl_feet,
+        magnetic_declination_degrees,
     };
 
     (StatusCode::CREATED, Json(response)).into_response()
@@ -264,7 +358,7 @@ async fn lookup_flight(
 
     // Resolve departure airport ident if present
     let departure_airport = if let Some(airport_id) = flight.departure_airport_id {
-        let airports_repo = AirportsRepository::new(pool);
+        let airports_repo = AirportsRepository::new(pool.clone());
         match airports_repo.get_airport_by_id(airport_id).await {
             Ok(Some(airport)) => Some(airport.ident),
             _ => None,
@@ -272,6 +366,18 @@ async fn lookup_flight(
     } else {
         None
     };
+
+    // Resolve tow aircraft info if present
+    let (towed_by_registration, towed_by_aircraft_model) =
+        if let Some(tow_aircraft_id) = flight.towed_by_aircraft_id {
+            let aircraft_repo = AircraftRepository::new(pool);
+            match aircraft_repo.get_aircraft_by_id(tow_aircraft_id).await {
+                Ok(Some(aircraft)) => (aircraft.registration, Some(aircraft.aircraft_model)),
+                _ => (None, None),
+            }
+        } else {
+            (None, None)
+        };
 
     let duration_seconds = flight
         .takeoff_time
@@ -283,19 +389,28 @@ async fn lookup_flight(
         takeoff_time: flight.takeoff_time,
         departure_airport,
         duration_seconds,
+        towed_by_registration,
+        towed_by_aircraft_model,
+        tow_release_time: flight.tow_release_time,
+        tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
     })
 }
 
-/// Extract altitude (feet) and ground speed (knots) from the current_fix JSONB.
+/// Extract altitude (feet), ground speed (knots), climb rate (fpm), and track (degrees)
+/// from the current_fix JSONB.
 /// The Fix struct uses `#[serde(rename_all = "camelCase")]`, so keys are camelCase.
-fn extract_fix_data(current_fix: &Option<serde_json::Value>) -> (Option<f64>, Option<f64>) {
+fn extract_fix_data(
+    current_fix: &Option<serde_json::Value>,
+) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
     match current_fix {
         Some(fix) => {
             let altitude_feet = fix.get("altitudeMslFeet").and_then(|v| v.as_f64());
             let ground_speed_knots = fix.get("groundSpeedKnots").and_then(|v| v.as_f64());
-            (altitude_feet, ground_speed_knots)
+            let climb_fpm = fix.get("climbFpm").and_then(|v| v.as_f64());
+            let track_degrees = fix.get("trackDegrees").and_then(|v| v.as_f64());
+            (altitude_feet, ground_speed_knots, climb_fpm, track_degrees)
         }
-        None => (None, None),
+        None => (None, None, None, None),
     }
 }
 

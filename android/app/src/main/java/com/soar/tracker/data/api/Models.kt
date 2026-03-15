@@ -25,6 +25,11 @@ data class UserInfo(
     val email: String?,
 )
 
+@JsonClass(generateAdapter = true)
+data class PasswordResetRequest(
+    val email: String,
+)
+
 // --- Tracker ---
 
 @JsonClass(generateAdapter = true)
@@ -49,6 +54,10 @@ data class TrackerFixResponse(
     @Json(name = "matchedAircraft") val matchedAircraft: TrackerAircraftInfo?,
     val flight: TrackerFlightInfo?,
     @Json(name = "nearbyAircraft") val nearbyAircraft: List<NearbyAircraftInfo>,
+    @Json(name = "nearbyAirports") val nearbyAirports: List<NearbyAirportInfo>,
+    @Json(name = "groundElevationMeters") val groundElevationMeters: Double?,
+    @Json(name = "altitudeAglFeet") val altitudeAglFeet: Int?,
+    @Json(name = "magneticDeclinationDegrees") val magneticDeclinationDegrees: Double?,
 )
 
 @JsonClass(generateAdapter = true)
@@ -67,6 +76,21 @@ data class TrackerFlightInfo(
     @Json(name = "takeoffTime") val takeoffTime: String?,
     @Json(name = "departureAirport") val departureAirport: String?,
     @Json(name = "durationSeconds") val durationSeconds: Long?,
+    @Json(name = "towedByRegistration") val towedByRegistration: String?,
+    @Json(name = "towedByAircraftModel") val towedByAircraftModel: String?,
+    @Json(name = "towReleaseTime") val towReleaseTime: String?,
+    @Json(name = "towReleaseAltitudeMslFt") val towReleaseAltitudeMslFt: Int?,
+)
+
+@JsonClass(generateAdapter = true)
+data class NearbyAirportInfo(
+    val id: Int,
+    val ident: String,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    @Json(name = "elevationFt") val elevationFt: Int?,
+    @Json(name = "distanceMeters") val distanceMeters: Double,
 )
 
 @JsonClass(generateAdapter = true)
@@ -80,4 +104,6 @@ data class NearbyAircraftInfo(
     @Json(name = "groundSpeedKnots") val groundSpeedKnots: Double?,
     @Json(name = "distanceMeters") val distanceMeters: Double,
     @Json(name = "lastFixAt") val lastFixAt: String?,
+    @Json(name = "climbFpm") val climbFpm: Double?,
+    @Json(name = "trackDegrees") val trackDegrees: Double?,
 )
