@@ -230,7 +230,7 @@
 	let isLocationSearch = $derived(searchType === 'location');
 	let isActiveSearch = $derived(searchType === 'active');
 
-	function formatTimeAgo(dateStr: string | undefined): string {
+	function formatTimeAgo(dateStr: string | null | undefined): string {
 		if (!dateStr) return '—';
 		const date = new Date(dateStr);
 		const now = new Date();

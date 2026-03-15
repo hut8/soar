@@ -1,20 +1,13 @@
 <script lang="ts">
 	import { X, Radio, MapPin, Info, Clock, ExternalLink, Loader2 } from '@lucide/svelte';
-	import type { Receiver } from '$lib/types';
+	import type {
+		Receiver,
+		ReceiverStatisticsResponse,
+		ReceiverAggregateStatsResponse
+	} from '$lib/types';
 	import { serverCall } from '$lib/api/server';
 	import { resolvedTimezone } from '$lib/stores/timezone';
 	import { formatRelative, formatDate as fmtDate } from '$lib/utils/dateFormatters';
-
-	interface ReceiverStatistics {
-		averageUpdateIntervalSeconds: number | null;
-		totalStatusCount: number;
-		daysIncluded: number | null;
-	}
-
-	interface AggregateStatsResponse {
-		fixCountsByAprsType: { aprsType: string; fixCount: number }[];
-		fixCountsByAircraft: { aircraftId: string; fixCount: number }[];
-	}
 
 	// Props
 	let { showModal = $bindable(), selectedReceiver = $bindable() } = $props<{
@@ -22,8 +15,8 @@
 		selectedReceiver: Receiver | null;
 	}>();
 
-	let statistics = $state<ReceiverStatistics | null>(null);
-	let aggregateStats = $state<AggregateStatsResponse | null>(null);
+	let statistics = $state<ReceiverStatisticsResponse | null>(null);
+	let aggregateStats = $state<ReceiverAggregateStatsResponse | null>(null);
 	let loadingStats = $state(false);
 
 	let lastFetchedReceiverId = $state<string | null>(null);
@@ -44,8 +37,8 @@
 		loadingStats = true;
 		try {
 			const [statsRes, aggRes] = await Promise.all([
-				serverCall<ReceiverStatistics>(`/receivers/${receiverId}/statistics`),
-				serverCall<AggregateStatsResponse>(`/receivers/${receiverId}/aggregate-stats`)
+				serverCall<ReceiverStatisticsResponse>(`/receivers/${receiverId}/statistics`),
+				serverCall<ReceiverAggregateStatsResponse>(`/receivers/${receiverId}/aggregate-stats`)
 			]);
 			statistics = statsRes;
 			aggregateStats = aggRes;
@@ -284,7 +277,7 @@
 											</dt>
 											<dd class="mt-1 text-sm font-semibold">
 												{aggregateStats.fixCountsByAircraft
-													.reduce((sum, a) => sum + a.fixCount, 0)
+													.reduce((sum: number, a) => sum + a.count, 0)
 													.toLocaleString()}
 											</dd>
 										</div>

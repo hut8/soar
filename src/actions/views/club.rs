@@ -141,7 +141,6 @@ pub struct ClubView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_base_airport_ident: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(skip)]
     pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -150,6 +149,7 @@ pub struct ClubView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_meters: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number | null")]
     pub recent_flights_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_flight_at: Option<DateTime<Utc>>,

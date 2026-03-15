@@ -74,11 +74,15 @@ pub struct DataListResponseWithTotal<T> {
 }
 
 /// Pagination metadata (nested in paginated responses)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationMetadata {
+    #[ts(type = "number")]
     pub page: i64,
+    #[ts(type = "number")]
     pub total_pages: i64,
+    #[ts(type = "number")]
     pub total_count: i64,
 }
 
