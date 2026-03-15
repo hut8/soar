@@ -38,8 +38,7 @@ echo
 if [[ -n "${SUDO_USER:-}" ]]; then
     SUDO_HOME=$(eval echo "~$SUDO_USER")
     export RUSTUP_HOME="${RUSTUP_HOME:-$SUDO_HOME/.rustup}"
-    export CARGO_HOME="${CARGO_HOME:-$SUDO_HOME/.cargo}"
-    export PATH="$CARGO_HOME/bin:$PATH"
+    export PATH="${CARGO_HOME:-$SUDO_HOME/.cargo}/bin:$PATH"
 fi
 
 # Check build dependencies
@@ -63,7 +62,8 @@ fi
 
 echo "Building PgDog ${PGDOG_VERSION} from source (this may take a few minutes)..."
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+trap 'rm -rf "${TMPDIR:?}"' EXIT
+export CARGO_HOME="$TMPDIR/.cargo"
 git clone --depth 1 --branch "$PGDOG_VERSION" "$PGDOG_REPO" "$TMPDIR/pgdog"
 cargo build --release --manifest-path "$TMPDIR/pgdog/Cargo.toml"
 install -m 755 "$TMPDIR/pgdog/target/release/pgdog" /usr/local/bin/pgdog
