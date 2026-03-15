@@ -434,15 +434,12 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Run Android lint
-        run: gradle lint
-        continue-on-error: true
+        run: ./gradlew lint
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

@@ -1,5 +1,6 @@
 package com.soar.tracker.ui.components
 
+import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,7 +50,7 @@ fun SensorDisplay(
 
                 SensorValue(
                     label = "G-Force",
-                    value = gForce?.let { String.format("%.1f G", it) } ?: "--",
+                    value = gForce?.let { String.format(Locale.US,"%.1f G", it) } ?: "--",
                 )
 
                 // Vario (vertical speed in fpm)
@@ -58,14 +59,14 @@ fun SensorDisplay(
                     label = "Vario",
                     value = varioFpm?.let {
                         val sign = if (it >= 0) "+" else ""
-                        String.format("%s%.0f fpm", sign, it)
+                        String.format(Locale.US,"%s%.0f fpm", sign, it)
                     } ?: "--",
                 )
 
                 // Pressure
                 SensorValue(
                     label = "Pressure",
-                    value = pressureHpa?.let { String.format("%.1f hPa", it) } ?: "--",
+                    value = pressureHpa?.let { String.format(Locale.US,"%.1f hPa", it) } ?: "--",
                 )
             }
         }

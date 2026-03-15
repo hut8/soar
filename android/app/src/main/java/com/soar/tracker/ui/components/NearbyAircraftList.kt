@@ -1,5 +1,6 @@
 package com.soar.tracker.ui.components
 
+import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,12 +83,12 @@ private fun NearbyAircraftRow(aircraft: NearbyAircraftInfo) {
         Column(horizontalAlignment = Alignment.End) {
             val distNm = aircraft.distanceMeters / 1852.0
             Text(
-                text = String.format("%.1f NM", distNm),
+                text = String.format(Locale.US,"%.1f NM", distNm),
                 style = MaterialTheme.typography.bodyMedium,
             )
             aircraft.altitudeFeet?.let {
                 Text(
-                    text = String.format("%.0f ft", it),
+                    text = String.format(Locale.US,"%.0f ft", it),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
