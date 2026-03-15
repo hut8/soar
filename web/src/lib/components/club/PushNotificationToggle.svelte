@@ -32,9 +32,11 @@
 
 		try {
 			if (subscribed) {
-				// Unsubscribe: remove browser subscription + server-side records
-				const subs = await getSubscriptions();
+				// Unsubscribe this browser and remove all server-side records for this user.
+				// This disables notifications across all devices — acceptable since the toggle
+				// is a simple on/off for the user, not per-device.
 				await unsubscribeFromPush();
+				const subs = await getSubscriptions();
 				for (const sub of subs) {
 					await deleteSubscription(sub.id);
 				}

@@ -125,6 +125,8 @@ self.addEventListener('push', (event: PushEvent) => {
 		return;
 	}
 
+	if (!payload.eventType || !payload.flightId) return;
+
 	const aircraftName = payload.aircraftRegistration || payload.aircraftModel || 'Aircraft';
 	const title =
 		payload.eventType === 'takeoff' ? `${aircraftName} took off` : `${aircraftName} landed`;
@@ -133,13 +135,15 @@ self.addEventListener('push', (event: PushEvent) => {
 	if (payload.airportIdent) bodyParts.push(`at ${payload.airportIdent}`);
 	if (payload.clubName) bodyParts.push(payload.clubName);
 
+	const ts = payload.timestamp ? new Date(payload.timestamp).getTime() : Date.now();
+
 	const options: NotificationOptions = {
 		body: bodyParts.join(' — ') || undefined,
 		icon: '/favicon.png',
 		badge: '/favicon.png',
 		tag: `flight-${payload.flightId}`,
 		data: { url: `/flights/${payload.flightId}` },
-		timestamp: new Date(payload.timestamp).getTime()
+		timestamp: Number.isNaN(ts) ? Date.now() : ts
 	};
 
 	event.waitUntil(
@@ -154,7 +158,7 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
 
 	event.waitUntil(
 		(self as unknown as ServiceWorkerGlobalScope).clients
-			.matchAll({ type: 'window' })
+			.matchAll({ type: 'window', includeUncontrolled: true })
 			.then((windowClients: readonly WindowClient[]) => {
 				for (const client of windowClients) {
 					if (client.url.includes(url) && 'focus' in client) {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Plane, ChevronDown, ChevronUp, Pencil, MoveUp, Navigation } from '@lucide/svelte';
+	import { Plane, ChevronDown, ChevronUp, MoveUp, Navigation } from '@lucide/svelte';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { serverCall } from '$lib/api/server';
 	import { getLogger } from '$lib/logging';

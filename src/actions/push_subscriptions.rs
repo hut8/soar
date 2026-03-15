@@ -37,7 +37,7 @@ pub async fn subscribe(
     if req.endpoint.is_empty() || req.p256dh_key.is_empty() || req.auth_key.is_empty() {
         return json_error(
             StatusCode::BAD_REQUEST,
-            "endpoint, p256dh_key, and auth_key are required",
+            "endpoint, p256dhKey, and authKey are required",
         )
         .into_response();
     }

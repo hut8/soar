@@ -54,18 +54,23 @@ export async function subscribeToPush(): Promise<PushSubscriptionView | null> {
 	const json = subscription.toJSON();
 	if (!json.endpoint || !json.keys) return null;
 
-	const response = await serverCall<DataResponse<PushSubscriptionView>>('/push/subscribe', {
-		method: 'POST',
-		body: JSON.stringify({
-			endpoint: json.endpoint,
-			p256dhKey: json.keys.p256dh,
-			authKey: json.keys.auth,
-			notifyTakeoff: true,
-			notifyLanding: true
-		})
-	});
-
-	return response.data;
+	try {
+		const response = await serverCall<DataResponse<PushSubscriptionView>>('/push/subscribe', {
+			method: 'POST',
+			body: JSON.stringify({
+				endpoint: json.endpoint,
+				p256dhKey: json.keys.p256dh,
+				authKey: json.keys.auth,
+				notifyTakeoff: true,
+				notifyLanding: true
+			})
+		});
+		return response.data;
+	} catch (err) {
+		// Server registration failed — unsubscribe the browser to avoid dangling subscription
+		await subscription.unsubscribe();
+		throw err;
+	}
 }
 
 export async function unsubscribeFromPush(): Promise<void> {
