@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import android.os.PowerManager
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -30,6 +31,15 @@ data class SensorData(
     val accelZ: Double,
     val pressureHpa: Double?,
     val verticalSpeedMps: Double?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val altitudeMeters: Double?,
+    /** Ground speed in m/s from GPS */
+    val speedMps: Double?,
+    /** GPS track / direction of travel (only available when moving) */
+    val gpsBearingDegrees: Double?,
+    /** Magnetic compass heading from rotation vector sensor (always available) */
+    val magneticHeadingDegrees: Double?,
 )
 
 class TrackingService : LifecycleService() {
@@ -37,6 +47,7 @@ class TrackingService : LifecycleService() {
     private lateinit var sensorCollector: SensorCollector
     private var locationCallback: LocationCallback? = null
     private var pendingSubmit: kotlinx.coroutines.Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // Vertical speed calculation state
     private val altitudeHistory = mutableListOf<Pair<Long, Double>>() // (timestamp_ms, altitude_m)
@@ -61,6 +72,9 @@ class TrackingService : LifecycleService() {
         private val _lastSensorData = MutableStateFlow<SensorData?>(null)
         val lastSensorData: StateFlow<SensorData?> = _lastSensorData
 
+        private val _groundPressureHpa = MutableStateFlow<Double?>(null)
+        val groundPressureHpa: StateFlow<Double?> = _groundPressureHpa
+
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
             context.startForegroundService(intent)
@@ -68,6 +82,10 @@ class TrackingService : LifecycleService() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, TrackingService::class.java))
+        }
+
+        fun setGroundPressure(pressureHpa: Double) {
+            _groundPressureHpa.value = pressureHpa
         }
     }
 
@@ -94,12 +112,23 @@ class TrackingService : LifecycleService() {
 
     override fun onDestroy() {
         stopTracking()
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         super.onDestroy()
     }
 
     @Suppress("MissingPermission") // Permission checked before starting service
     private fun startTracking() {
         if (_isTracking.value) return
+
+        // Acquire wake lock to keep CPU active during background tracking
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "soar:tracking",
+        ).apply {
+            acquire(4 * 60 * 60 * 1000L) // 4 hour timeout as safety net
+        }
 
         sensorCollector.start()
         _isTracking.value = true
@@ -143,6 +172,12 @@ class TrackingService : LifecycleService() {
                     accelZ = az,
                     pressureHpa = pressure,
                     verticalSpeedMps = verticalSpeed,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    altitudeMeters = if (hasAltitude) location.altitude else null,
+                    speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
+                    gpsBearingDegrees = if (location.hasBearing()) location.bearing.toDouble() else null,
+                    magneticHeadingDegrees = sensorCollector.magneticHeadingDegrees?.toDouble(),
                 )
 
                 submitFix(request)
@@ -161,7 +196,12 @@ class TrackingService : LifecycleService() {
         locationCallback = null
         sensorCollector.stop()
         _isTracking.value = false
+        _groundPressureHpa.value = null
         altitudeHistory.clear()
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
     }
 
     private fun submitFix(request: TrackerFixRequest) {
@@ -176,6 +216,12 @@ class TrackingService : LifecycleService() {
                 _latestResponse.value = response
                 _lastError.value = null
                 _lastUpdateTime.value = System.currentTimeMillis()
+                // Capture ground pressure when AGL ≈ 0
+                val agl = response.altitudeAglFeet
+                val pressure = _lastSensorData.value?.pressureHpa
+                if (agl != null && agl in -50..50 && pressure != null) {
+                    _groundPressureHpa.value = pressure
+                }
             }.onFailure { e ->
                 _lastError.value = e.message ?: "Request failed"
             }
@@ -216,9 +262,17 @@ class TrackingService : LifecycleService() {
     }
 
     private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
+        val openIntent = Intent(this, MainActivity::class.java)
+        val openPendingIntent = PendingIntent.getActivity(
+            this, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val stopIntent = Intent(this, TrackingService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -226,7 +280,12 @@ class TrackingService : LifecycleService() {
             .setContentTitle(getString(R.string.tracking_notification_title))
             .setContentText(getString(R.string.tracking_notification_text))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(openPendingIntent)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Stop Tracking",
+                stopPendingIntent,
+            )
             .setOngoing(true)
             .build()
     }

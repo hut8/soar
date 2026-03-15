@@ -48,7 +48,8 @@ mod tests {
     use crate::raw_messages_repo::{MessageSourceType, RawMessageResponse};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
     use crate::tracker::{
-        NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixResponse, TrackerFlightInfo,
+        NearbyAircraftInfo, NearbyAirportInfo, TrackerAircraftInfo, TrackerFixResponse,
+        TrackerFlightInfo,
     };
     use crate::watchlist::WatchlistEntry;
 
@@ -190,5 +191,6 @@ mod tests {
         TrackerAircraftInfo::export(&cfg).expect("Failed to export TrackerAircraftInfo type");
         TrackerFlightInfo::export(&cfg).expect("Failed to export TrackerFlightInfo type");
         NearbyAircraftInfo::export(&cfg).expect("Failed to export NearbyAircraftInfo type");
+        NearbyAirportInfo::export(&cfg).expect("Failed to export NearbyAirportInfo type");
     }
 }
