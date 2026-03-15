@@ -118,12 +118,17 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         scope.launch {
                             val loginApi = app.createLoginApi(serverUrl)
                             try {
-                                loginApi.requestPasswordReset(
+                                val response = loginApi.requestPasswordReset(
                                     com.soar.tracker.data.api.PasswordResetRequest(email),
                                 )
-                                resetSent = true
+                                if (response.isSuccessful) {
+                                    resetSent = true
+                                } else {
+                                    error = response.errorBody()?.string()
+                                        ?: "Could not send reset email. Please verify the email and try again."
+                                }
                             } catch (e: Exception) {
-                                error = "Failed to send reset email"
+                                error = "Could not send reset email. Please check your connection."
                             }
                         }
                     } else {

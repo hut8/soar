@@ -5,7 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -73,7 +73,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
 
     // Determine if aircraft appears to be in flight
     val isInFlight = latestResponse?.flight?.let {
-        it.state.lowercase() == "active"
+        it.state.lowercase(Locale.ROOT) == "active"
     } ?: false
 
     var hasLocationPermission by remember {
@@ -281,7 +281,9 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
             // Open website button
             OutlinedButton(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://glider.flights"))
+                    val app = context.applicationContext as SoarTrackerApp
+                    val url = app.tokenManager.getServerUrl()
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                     context.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),

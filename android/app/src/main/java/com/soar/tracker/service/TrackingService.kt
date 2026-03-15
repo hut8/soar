@@ -112,6 +112,8 @@ class TrackingService : LifecycleService() {
 
     override fun onDestroy() {
         stopTracking()
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         super.onDestroy()
     }
 
@@ -125,7 +127,7 @@ class TrackingService : LifecycleService() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "soar:tracking",
         ).apply {
-            acquire()
+            acquire(4 * 60 * 60 * 1000L) // 4 hour timeout as safety net
         }
 
         sensorCollector.start()
@@ -194,6 +196,7 @@ class TrackingService : LifecycleService() {
         locationCallback = null
         sensorCollector.stop()
         _isTracking.value = false
+        _groundPressureHpa.value = null
         altitudeHistory.clear()
         wakeLock?.let {
             if (it.isHeld) it.release()

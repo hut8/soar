@@ -86,8 +86,20 @@ pub async fn create_tracker_fix(
         }
     };
 
-    // Look up ground elevation and compute AGL
-    let (ground_elevation_meters, altitude_agl_feet) =
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
+
+    // Set up all async lookups to run in parallel.
+    // Candidate query is bounded by ST_DWithin(2km) + last_fix_at within 2 minutes,
+    // so the result set is inherently limited by the spatial and temporal constraints.
+    let candidates_fut = aircraft_repo.find_candidate_aircraft(request.latitude, request.longitude);
+    // Both nearby queries use SQL LIMIT clauses (50 and 20 respectively) to bound allocations.
+    let nearby_fut =
+        aircraft_repo.find_nearby_aircraft(request.latitude, request.longitude, 185_200.0, 50);
+    let airports_fut =
+        airports_repo.find_nearest_airports(request.latitude, request.longitude, 100_000.0, 20);
+
+    let elevation_fut = async {
         if let Some(ref elevation_db) = state.elevation_db {
             match elevation_db
                 .elevation(request.latitude, request.longitude)
@@ -110,37 +122,40 @@ pub async fn create_tracker_fix(
             }
         } else {
             (None, None)
-        };
-
-    // Compute magnetic declination
-    let magnetic_declination_degrees = if let Some(ref magnetic_service) = state.magnetic_service {
-        let altitude_m = request.altitude_meters.unwrap_or(0.0);
-        match magnetic_service
-            .declination(request.latitude, request.longitude, altitude_m, None)
-            .await
-        {
-            Ok(decl) => Some(decl),
-            Err(e) => {
-                tracing::warn!(error = %e, "Magnetic declination lookup failed");
-                None
-            }
         }
-    } else {
-        None
     };
 
-    let aircraft_repo = AircraftRepository::new(state.pool.clone());
-    let airports_repo = AirportsRepository::new(state.pool.clone());
+    let magnetic_fut = async {
+        if let Some(ref magnetic_service) = state.magnetic_service {
+            let altitude_m = request.altitude_meters.unwrap_or(0.0);
+            match magnetic_service
+                .declination(request.latitude, request.longitude, altitude_m, None)
+                .await
+            {
+                Ok(decl) => Some(decl),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Magnetic declination lookup failed");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
 
-    // Run candidate, nearby aircraft, and nearby airport queries in parallel
-    let candidates_fut = aircraft_repo.find_candidate_aircraft(request.latitude, request.longitude);
-    let nearby_fut =
-        aircraft_repo.find_nearby_aircraft(request.latitude, request.longitude, 185_200.0, 50);
-    let airports_fut =
-        airports_repo.find_nearest_airports(request.latitude, request.longitude, 100_000.0, 20);
-
-    let (candidates_result, nearby_result, airports_result) =
-        tokio::join!(candidates_fut, nearby_fut, airports_fut);
+    let (
+        candidates_result,
+        nearby_result,
+        airports_result,
+        (ground_elevation_meters, altitude_agl_feet),
+        magnetic_declination_degrees,
+    ) = tokio::join!(
+        candidates_fut,
+        nearby_fut,
+        airports_fut,
+        elevation_fut,
+        magnetic_fut
+    );
 
     // Process candidates for matching with extrapolation
     let matched_aircraft = match candidates_result {

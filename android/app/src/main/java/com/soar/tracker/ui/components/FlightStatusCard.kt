@@ -86,7 +86,7 @@ fun FlightStatusCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Flight", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.width(8.dp))
-                    val stateColor = when (flight.state.lowercase()) {
+                    val stateColor = when (flight.state.lowercase(Locale.ROOT)) {
                         "active" -> Green
                         "stale" -> Orange
                         else -> Red

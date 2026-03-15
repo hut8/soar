@@ -1,14 +1,11 @@
 package com.soar.tracker.ui.screens
 
-import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -24,19 +21,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.soar.tracker.data.api.NearbyAircraftInfo
-import com.soar.tracker.data.api.NearbyAirportInfo
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.theme.Green
-import com.soar.tracker.ui.theme.Red
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -116,6 +109,33 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                 val maxRadius = min(cx, cy) * 0.9f
                 val metersPerPixel = (maxRangeNm * NM_TO_METERS).toFloat() / maxRadius
 
+                // Pre-create reusable Paint objects outside draw loops
+                val ringLabelPaint = android.graphics.Paint().apply {
+                    color = ringLabelColor.toArgb()
+                    textSize = labelTextSize
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isAntiAlias = true
+                }
+                val northPaint = android.graphics.Paint().apply {
+                    color = textColor.toArgb()
+                    textSize = labelTextSize * 1.4f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isFakeBoldText = true
+                    isAntiAlias = true
+                }
+                val airportLabelPaint = android.graphics.Paint().apply {
+                    color = airportColor.toArgb()
+                    textSize = labelTextSize
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isAntiAlias = true
+                }
+                val aircraftLabelPaint = android.graphics.Paint().apply {
+                    color = aircraftColor.toArgb()
+                    textSize = labelTextSize
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isAntiAlias = true
+                }
+
                 // Draw range rings
                 for (rangeNm in rangeRingsNm) {
                     val ringRadius = ((rangeNm * NM_TO_METERS) / metersPerPixel).toFloat()
@@ -139,12 +159,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         labelText,
                         labelX,
                         labelY - 4f,
-                        android.graphics.Paint().apply {
-                            color = ringLabelColor.hashCode()
-                            textSize = labelTextSize
-                            textAlign = android.graphics.Paint.Align.CENTER
-                            isAntiAlias = true
-                        },
+                        ringLabelPaint,
                     )
                 }
 
@@ -156,13 +171,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                     "N",
                     northX,
                     northY + labelTextSize / 3f,
-                    android.graphics.Paint().apply {
-                        color = textColor.hashCode()
-                        textSize = labelTextSize * 1.4f
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        isFakeBoldText = true
-                        isAntiAlias = true
-                    },
+                    northPaint,
                 )
 
                 // Draw airports
@@ -171,7 +180,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         userLat, userLon,
                         airport.latitude, airport.longitude,
                         cx, cy, metersPerPixel, mapRotation,
-                    ) ?: continue
+                    )
 
                     // Airport diamond
                     val d = 6f
@@ -189,12 +198,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         airport.ident,
                         pos.x,
                         pos.y - d - 3f,
-                        android.graphics.Paint().apply {
-                            color = airportColor.hashCode()
-                            textSize = labelTextSize
-                            textAlign = android.graphics.Paint.Align.CENTER
-                            isAntiAlias = true
-                        },
+                        airportLabelPaint,
                     )
                 }
 
@@ -204,7 +208,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         userLat, userLon,
                         ac.latitude, ac.longitude,
                         cx, cy, metersPerPixel, mapRotation,
-                    ) ?: continue
+                    )
 
                     // Aircraft triangle, rotated by track
                     val trackDeg = ac.trackDegrees?.toFloat() ?: 0f
@@ -228,12 +232,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         label,
                         pos.x,
                         pos.y - triSize - 3f,
-                        android.graphics.Paint().apply {
-                            color = aircraftColor.hashCode()
-                            textSize = labelTextSize
-                            textAlign = android.graphics.Paint.Align.CENTER
-                            isAntiAlias = true
-                        },
+                        aircraftLabelPaint,
                     )
                 }
 
@@ -267,7 +266,6 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
 
 /**
  * Convert lat/lon to screen coordinates relative to user position.
- * Returns null if the point is outside the visible area.
  */
 private fun latLonToScreen(
     userLat: Double,
@@ -278,7 +276,7 @@ private fun latLonToScreen(
     cy: Float,
     metersPerPixel: Float,
     mapRotation: Float,
-): Offset? {
+): Offset {
     // Approximate meters offset using equirectangular projection
     val dLatMeters = (targetLat - userLat) * 111_320.0
     val dLonMeters = (targetLon - userLon) * 111_320.0 * cos(Math.toRadians(userLat))
