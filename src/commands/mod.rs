@@ -9,6 +9,7 @@ pub mod run;
 pub mod run_aggregates;
 pub mod seed_test_data;
 pub mod sitemap;
+pub mod station_xref;
 
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_aircraft_dbs::handle_dump_aircraft_dbs;
@@ -21,3 +22,4 @@ pub use run::handle_run;
 pub use run_aggregates::run_aggregates;
 pub use seed_test_data::handle_seed_test_data;
 pub use sitemap::handle_sitemap_generation;
+pub use station_xref::handle_station_xref;

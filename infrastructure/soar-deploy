@@ -63,6 +63,26 @@ else
     exit 1
 fi
 
+# Self-update: if the deployment directory has a newer soar-deploy, install it
+# and re-exec before doing anything else (including environment validation),
+# so that new environment names are recognised immediately.
+# Failures here write a status file so CI polling doesn't hang.
+if [ -d "$DEPLOY_DIR" ] && [ -f "$DEPLOY_DIR/soar-deploy" ]; then
+    if ! diff -q "$0" "$DEPLOY_DIR/soar-deploy" >/dev/null 2>&1; then
+        echo -e "${YELLOW}[WARN]${NC} Deployment script has changed - updating /usr/local/bin/soar-deploy and re-executing..."
+        DEPLOY_DIR_BASENAME=$(basename "$DEPLOY_DIR")
+        _EARLY_STATUS_DIR="$DEPLOY_STATUS_DIR/${ENVIRONMENT}-${DEPLOY_DIR_BASENAME}.status"
+        _EARLY_LOG_DIR="$DEPLOY_LOG_DIR/${ENVIRONMENT}-${DEPLOY_DIR_BASENAME}.log"
+        if ! install -m 755 -o root -g root "$DEPLOY_DIR/soar-deploy" /usr/local/bin/soar-deploy; then
+            mkdir -p "$DEPLOY_STATUS_DIR" "$DEPLOY_LOG_DIR"
+            echo "Self-update failed: could not install $DEPLOY_DIR/soar-deploy" > "$_EARLY_LOG_DIR"
+            echo "1" > "$_EARLY_STATUS_DIR"
+            exit 1
+        fi
+        exec /usr/local/bin/soar-deploy "$@"
+    fi
+fi
+
 # Validate environment
 VALID_ENVS="production staging radar-staging radar-production"
 if ! echo "$VALID_ENVS" | grep -qw "$ENVIRONMENT"; then
@@ -112,23 +132,8 @@ log_info "Deployment ID: $DEPLOY_ID"
 log_info "Status file: $STATUS_FILE"
 log_info "Starting SOAR deployment for $ENVIRONMENT from: $DEPLOY_DIR"
 
-# Self-update: Check if deployment script itself has changed
-if [ -f "$DEPLOY_DIR/soar-deploy" ]; then
-    if ! diff -q "$0" "$DEPLOY_DIR/soar-deploy" >/dev/null 2>&1; then
-        log_warn "Deployment script has changed - updating /usr/local/bin/soar-deploy and re-executing..."
-
-        # Install updated deployment script
-        install -m 755 -o root -g root "$DEPLOY_DIR/soar-deploy" /usr/local/bin/soar-deploy
-
-        log_info "Deployment script updated, re-executing with same arguments..."
-        # Re-exec the updated script with original arguments
-        exec /usr/local/bin/soar-deploy "$@"
-    else
-        log_info "Deployment script is up-to-date"
-    fi
-else
-    log_warn "No soar-deploy found in deployment directory, skipping self-update check"
-fi
+# Note: self-update logic is handled early in the script (before environment
+# validation) so that new environment names are recognised immediately.
 
 # Set environment-specific variables
 if [ "$ENVIRONMENT" = "radar-staging" ]; then
