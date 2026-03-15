@@ -196,8 +196,9 @@ impl FromStr for AircraftCategory {
 /// ICAO Engine Type (3rd character of ICAO description from ICAO Doc 8643)
 /// ICAO standard values: Piston, Jet, Turbine (turboprop/turboshaft), Electric, Rocket
 /// Extended values: Special, None (for gliders/balloons)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, TS)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::EngineType")]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 pub enum EngineType {
     Piston,   // P (ICAO Doc 8643)
     Jet,      // J (ICAO Doc 8643)

@@ -6,7 +6,7 @@
  * with fluid altitude-based color gradients.
  */
 
-import type { AdsbEmitterCategory, AircraftCategory } from '$lib/types';
+import type { AdsbEmitterCategory, AircraftCategory, EngineType } from '$lib/types';
 import type { ExpressionSpecification } from 'maplibre-gl';
 
 /**
@@ -90,7 +90,8 @@ const ALL_SHAPES: IconShape[] = [
  */
 export function getIconShapeForCategory(
 	category: AircraftCategory | null | undefined,
-	adsbEmitterCategory?: AdsbEmitterCategory | null
+	adsbEmitterCategory?: AdsbEmitterCategory | null,
+	engineType?: EngineType | null
 ): IconShape {
 	if (!category) return 'unknown';
 
@@ -126,13 +127,13 @@ export function getIconShapeForCategory(
 		case 'Drone':
 			return 'unknown';
 
-		// Fixed-wing: use ADS-B emitter category to pick icon
+		// Fixed-wing: use ADS-B emitter category, then engine type to pick icon
 		case 'Landplane':
 		case 'Seaplane':
 		case 'Amphibian':
 		case 'TowTug':
 		case 'Electric':
-			return getFixedWingIcon(adsbEmitterCategory);
+			return getFixedWingIcon(adsbEmitterCategory, engineType);
 
 		// Static obstacles
 		case 'StaticObstacle':
@@ -145,28 +146,52 @@ export function getIconShapeForCategory(
 }
 
 /**
- * Determine the best icon for a fixed-wing aircraft using ADS-B emitter category.
- * Falls back to 'cessna' when no ADS-B data is available (most OGN/Flarm aircraft).
+ * Determine the best icon for a fixed-wing aircraft.
+ * Priority: ADS-B emitter category (most specific) → engine type → default cessna.
  */
-function getFixedWingIcon(adsbEmitterCategory?: AdsbEmitterCategory | null): IconShape {
-	if (!adsbEmitterCategory) return 'cessna';
+function getFixedWingIcon(
+	adsbEmitterCategory?: AdsbEmitterCategory | null,
+	engineType?: EngineType | null
+): IconShape {
+	// ADS-B emitter category is the most specific signal for aircraft size
+	if (adsbEmitterCategory) {
+		switch (adsbEmitterCategory) {
+			// Large, high-vortex large, and heavy aircraft → airliner
+			case 'A3':
+			case 'A4':
+			case 'A5':
+				return 'airliner';
 
-	switch (adsbEmitterCategory) {
-		// Large, high-vortex large, and heavy aircraft → airliner
-		case 'A3':
-		case 'A4':
-		case 'A5':
-			return 'airliner';
+			// Small (15,500-75,000 lbs) and high performance → jet
+			case 'A2':
+			case 'A6':
+				return 'jet';
 
-		// Small (15,500-75,000 lbs) and high performance → jet
-		case 'A2':
-		case 'A6':
-			return 'jet';
-
-		// Light and everything else → cessna
-		default:
-			return 'cessna';
+			// Light and everything else → cessna
+			default:
+				return 'cessna';
+		}
 	}
+
+	// Fall back to engine type when no ADS-B emitter data is available
+	// This covers aircraft tracked via OGN/APRS that lack ADS-B info
+	if (engineType) {
+		switch (engineType) {
+			// Jet engines → jet icon (B767, 737, business jets, etc.)
+			case 'Jet':
+				return 'jet';
+
+			// Turboprop/turboshaft → jet icon (King Air, ATR, etc.)
+			case 'Turbine':
+				return 'jet';
+
+			// Piston, electric, and others → cessna
+			default:
+				return 'cessna';
+		}
+	}
+
+	return 'cessna';
 }
 
 /**

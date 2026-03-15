@@ -219,7 +219,8 @@
 				aircraft.registration,
 				clubName,
 				aircraft.aircraftCategory,
-				aircraft.adsbEmitterCategory
+				aircraft.adsbEmitterCategory,
+				aircraft.engineType
 			);
 			if (!arPosition) continue;
 

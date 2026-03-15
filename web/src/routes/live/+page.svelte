@@ -274,7 +274,11 @@
 	// Convert aircraft to GeoJSON feature
 	function aircraftToFeature(aircraft: Aircraft, fix: Fix): GeoJSON.Feature<GeoJSON.Point> {
 		// Get icon shape based on aircraft category
-		const shape = getIconShapeForCategory(aircraft.aircraftCategory, aircraft.adsbEmitterCategory);
+		const shape = getIconShapeForCategory(
+			aircraft.aircraftCategory,
+			aircraft.adsbEmitterCategory,
+			aircraft.engineType
+		);
 		return {
 			type: 'Feature',
 			geometry: {
@@ -952,10 +956,12 @@
 			container: mapContainer,
 			style: getStyleSpec(currentStyle),
 			center: [loadedState.state.center.lng, loadedState.state.center.lat],
-			zoom: loadedState.state.zoom
+			zoom: loadedState.state.zoom,
+			attributionControl: false
 		});
 
-		// Add navigation controls
+		// Add collapsed attribution control and navigation controls
+		map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 		// Handle map load

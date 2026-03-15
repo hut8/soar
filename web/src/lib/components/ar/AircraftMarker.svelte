@@ -51,7 +51,11 @@
 
 	// Get the aircraft icon shape and definition based on category
 	const iconShape = $derived(
-		getIconShapeForCategory(aircraft.aircraftCategory, aircraft.adsbEmitterCategory)
+		getIconShapeForCategory(
+			aircraft.aircraftCategory,
+			aircraft.adsbEmitterCategory,
+			aircraft.engineType
+		)
 	);
 	const iconDef = $derived(getIconDefinition(iconShape));
 
