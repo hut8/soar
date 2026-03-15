@@ -1794,6 +1794,135 @@ impl AircraftRepository {
         })
         .await?
     }
+
+    /// Find candidate aircraft near a point for tracker matching.
+    /// Returns aircraft within 2km that have reported a fix within the last 2 minutes.
+    pub async fn find_candidate_aircraft(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<Vec<CandidateAircraftRow>> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT id, registration, aircraft_model, competition_number,
+                       latitude, longitude, current_fix, last_fix_at,
+                       ST_Distance(
+                           location_geom::geography,
+                           ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                       ) as distance_meters
+                FROM aircraft
+                WHERE location_geom IS NOT NULL
+                  AND last_fix_at >= NOW() - INTERVAL '2 minutes'
+                  AND ST_DWithin(
+                      location_geom::geography,
+                      ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                      2000
+                  )
+                ORDER BY location_geom::geography <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+            "#;
+
+            let results: Vec<CandidateAircraftRow> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .load::<CandidateAircraftRow>(&mut conn)?;
+
+            Ok::<Vec<CandidateAircraftRow>, anyhow::Error>(results)
+        })
+        .await?
+    }
+
+    /// Find nearby aircraft within a given radius of a point.
+    /// Returns aircraft ordered by distance, limited to a maximum count.
+    pub async fn find_nearby_aircraft(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_meters: f64,
+        limit: i64,
+    ) -> Result<Vec<NearbyAircraftRow>> {
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT id, registration, aircraft_model,
+                       latitude, longitude, current_fix, last_fix_at,
+                       ST_Distance(
+                           location_geom::geography,
+                           ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                       ) as distance_meters
+                FROM aircraft
+                WHERE location_geom IS NOT NULL
+                  AND last_fix_at >= NOW() - INTERVAL '10 minutes'
+                  AND ST_DWithin(
+                      location_geom::geography,
+                      ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                      $3
+                  )
+                ORDER BY location_geom::geography <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                LIMIT $4
+            "#;
+
+            let results: Vec<NearbyAircraftRow> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .bind::<diesel::sql_types::Double, _>(radius_meters)
+                .bind::<diesel::sql_types::BigInt, _>(limit)
+                .load::<NearbyAircraftRow>(&mut conn)?;
+
+            Ok::<Vec<NearbyAircraftRow>, anyhow::Error>(results)
+        })
+        .await?
+    }
+}
+
+/// Row returned from the candidate aircraft spatial query.
+#[derive(QueryableByName, Debug, Clone)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct CandidateAircraftRow {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    pub id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub registration: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub aircraft_model: String,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub competition_number: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub longitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
+    pub current_fix: Option<serde_json::Value>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    pub last_fix_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub distance_meters: Option<f64>,
+}
+
+/// Row returned from the nearby aircraft spatial query.
+#[derive(QueryableByName, Debug, Clone)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NearbyAircraftRow {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    pub id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    pub registration: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub aircraft_model: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub longitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
+    pub current_fix: Option<serde_json::Value>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    pub last_fix_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    pub distance_meters: Option<f64>,
 }
 
 /// In-memory aircraft cache to eliminate DB round trips on the fix processing hot path.

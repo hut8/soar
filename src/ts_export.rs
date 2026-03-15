@@ -33,6 +33,9 @@ mod tests {
     use crate::ingest_config::{DataStream, StreamFormat};
     use crate::payments::{PaymentStatus, PaymentType};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
+    use crate::tracker::{
+        NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixResponse, TrackerFlightInfo,
+    };
 
     #[test]
     fn export_types() {
@@ -127,5 +130,11 @@ mod tests {
         ReceiverAlertView::export(&cfg).expect("Failed to export ReceiverAlertView type");
         UpsertReceiverAlertRequest::export(&cfg)
             .expect("Failed to export UpsertReceiverAlertRequest type");
+
+        // Tracker types
+        TrackerFixResponse::export(&cfg).expect("Failed to export TrackerFixResponse type");
+        TrackerAircraftInfo::export(&cfg).expect("Failed to export TrackerAircraftInfo type");
+        TrackerFlightInfo::export(&cfg).expect("Failed to export TrackerFlightInfo type");
+        NearbyAircraftInfo::export(&cfg).expect("Failed to export NearbyAircraftInfo type");
     }
 }
