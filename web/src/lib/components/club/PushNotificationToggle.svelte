@@ -36,11 +36,16 @@
 				// This disables notifications across all devices — acceptable since the toggle
 				// is a simple on/off for the user, not per-device.
 				await unsubscribeFromPush();
-				const subs = await getSubscriptions();
-				for (const sub of subs) {
-					await deleteSubscription(sub.id);
-				}
 				subscribed = false;
+				// Best-effort server cleanup — UI already reflects unsubscribed state
+				try {
+					const subs = await getSubscriptions();
+					for (const sub of subs) {
+						await deleteSubscription(sub.id);
+					}
+				} catch {
+					// Server-side records will be cleaned up on 410 Gone when push is attempted
+				}
 				toaster.success({ title: 'Flight notifications disabled' });
 			} else {
 				// Subscribe

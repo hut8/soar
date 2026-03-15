@@ -25,10 +25,12 @@ impl PushNotificationSender {
     ///
     /// Required env vars:
     /// - `VAPID_PRIVATE_KEY_FILE`: Path to PEM-formatted ECDSA P-256 private key
-    /// - `VAPID_PUBLIC_KEY`: Base64url-encoded public key (served to browsers)
     ///
     /// Optional:
     /// - `VAPID_SUBJECT`: Contact URI (default: mailto:admin@glider.flights)
+    ///
+    /// Note: `VAPID_PUBLIC_KEY` is also needed in the env for the web API endpoint
+    /// (`GET /push/vapid-key`) but is not read here.
     pub fn from_env(pool: PgPool) -> Option<Self> {
         let key_file = std::env::var("VAPID_PRIVATE_KEY_FILE").ok()?;
         let subject = std::env::var("VAPID_SUBJECT")
