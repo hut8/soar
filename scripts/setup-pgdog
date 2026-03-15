@@ -66,7 +66,7 @@ mkdir -p /etc/pgdog
 
 # Get PostgreSQL credentials from environment file
 if [[ "$ENVIRONMENT" == "production" ]]; then
-    ENV_FILE="/etc/soar/env"
+    ENV_FILE="/etc/soar/env-production"
     DB_NAME="soar"
     PGDOG_PORT=6434
 else
