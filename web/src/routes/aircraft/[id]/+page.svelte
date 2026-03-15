@@ -96,6 +96,8 @@
 
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.isAdmin === true;
+	$: isClubAdmin = $auth.user?.isClubAdmin === true && !!$auth.user?.clubId;
+	$: canAssignClub = isAdmin || isClubAdmin;
 	$: userClubId = $auth.user?.clubId;
 	$: isInWatchlist = $watchlist.entries.some((e) => e.aircraftId === aircraftId);
 
@@ -642,8 +644,8 @@
 
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<!-- Club Assignment (Admin Only) -->
-				{#if isAdmin}
+				<!-- Club Assignment (Admin or Club Admin) -->
+				{#if canAssignClub}
 					<div class="space-y-4 card p-6">
 						<h2 class="flex items-center gap-2 h2">
 							<Building2 class="h-6 w-6" />
@@ -651,49 +653,68 @@
 						</h2>
 
 						<div class="space-y-4">
-							<div>
-								<label for="club-select" class="text-surface-600-300-token mb-2 block text-sm">
-									Assign Aircraft to Club
-								</label>
-								<select
-									id="club-select"
-									class="select"
-									bind:value={selectedClubId}
-									disabled={savingClub}
-								>
-									<option value="">No club assigned</option>
-									{#each clubs as club (club.id)}
-										<option value={club.id}>{club.name}</option>
-									{/each}
-								</select>
-							</div>
+							{#if isAdmin}
+								<div>
+									<label for="club-select" class="text-surface-600-300-token mb-2 block text-sm">
+										Assign Aircraft to Club
+									</label>
+									<select
+										id="club-select"
+										class="select"
+										bind:value={selectedClubId}
+										disabled={savingClub}
+									>
+										<option value="">No club assigned</option>
+										{#each clubs as club (club.id)}
+											<option value={club.id}>{club.name}</option>
+										{/each}
+									</select>
+								</div>
 
-							<div class="flex gap-2">
+								<div class="flex gap-2">
+									<button
+										class="btn preset-filled-primary-500"
+										onclick={updateDeviceClub}
+										disabled={savingClub}
+									>
+										{#if savingClub}
+											<Progress class="h-4 w-4" />
+											<span>Saving...</span>
+										{:else}
+											<Save class="h-4 w-4" />
+											<span>Save Assignment</span>
+										{/if}
+									</button>
+
+									{#if userClubId}
+										<button
+											class="btn preset-filled-secondary-500"
+											onclick={assignToMyClub}
+											disabled={savingClub}
+										>
+											<Building2 class="h-4 w-4" />
+											<span>Assign to My Club</span>
+										</button>
+									{/if}
+								</div>
+							{:else if userClubId}
+								<p class="text-surface-600-300-token text-sm">
+									Assign this aircraft to your club's fleet.
+								</p>
 								<button
 									class="btn preset-filled-primary-500"
-									onclick={updateDeviceClub}
+									onclick={assignToMyClub}
 									disabled={savingClub}
 								>
 									{#if savingClub}
 										<Progress class="h-4 w-4" />
-										<span>Saving...</span>
+										<span>Assigning...</span>
 									{:else}
-										<Save class="h-4 w-4" />
-										<span>Save Assignment</span>
+										<Building2 class="mr-1 h-4 w-4" />
+										<span>Assign to My Club</span>
 									{/if}
 								</button>
-
-								{#if userClubId}
-									<button
-										class="btn preset-filled-secondary-500"
-										onclick={assignToMyClub}
-										disabled={savingClub}
-									>
-										<Building2 class="h-4 w-4" />
-										<span>Assign to My Club</span>
-									</button>
-								{/if}
-							</div>
+							{/if}
 						</div>
 					</div>
 				{/if}

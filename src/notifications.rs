@@ -219,3 +219,86 @@ pub async fn send_join_request_notification(
     })
     .await?
 }
+
+/// Send notification to admin when a new club is created and needs approval.
+///
+/// Sends to the `EMAIL_TO` env var (same as other admin notifications).
+/// Designed to be called from `tokio::spawn`.
+pub async fn send_club_creation_notification(
+    _pool: &PgPool,
+    club_name: &str,
+    creator_name: &str,
+) -> Result<()> {
+    let config = match SmtpConfig::from_env() {
+        Some(c) => c,
+        None => {
+            info!("SMTP not configured, skipping club creation notification");
+            return Ok(());
+        }
+    };
+
+    let to_email = match env::var("EMAIL_TO") {
+        Ok(email) => email,
+        Err(_) => {
+            info!("EMAIL_TO not set, skipping club creation notification");
+            return Ok(());
+        }
+    };
+
+    let club_name = club_name.to_string();
+    let creator_name = creator_name.to_string();
+
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let prefix = staging_prefix();
+        let subject = format!("{}New Club Created: {}", prefix, club_name);
+
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; font-size: 20px; }}
+        .message {{ margin: 15px 0; color: #555; }}
+        .footer {{ margin-top: 20px; color: #999; font-size: 12px; text-align: center; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>New Club Created</h1>
+        <div class="message">
+            <p><strong>{creator}</strong> has created a new club: <strong>{club}</strong>.</p>
+            <p>This club is pending approval. Please log in to SOAR to review and approve or reject it.</p>
+        </div>
+        <div class="footer">
+            SOAR - Soaring Observation And Records
+        </div>
+    </div>
+</body>
+</html>"#,
+            creator = html_escape(&creator_name),
+            club = html_escape(&club_name),
+        );
+
+        match send_email(&config, &to_email, &subject, html_body) {
+            Ok(()) => {
+                info!(
+                    to = %to_email,
+                    club = %club_name,
+                    "Sent club creation notification email"
+                );
+            }
+            Err(e) => {
+                error!(
+                    to = %to_email,
+                    error = %e,
+                    "Failed to send club creation notification email"
+                );
+            }
+        }
+
+        Ok(())
+    })
+    .await?
+}

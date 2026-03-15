@@ -139,19 +139,28 @@ pub struct ClubView {
     pub name: String,
     pub home_base_airport_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub home_base_airport_ident: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(skip)]
+    #[ts(optional)]
     pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub distance_meters: Option<f64>,
+    pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub created_by: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
     pub recent_flights_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub last_flight_at: Option<DateTime<Utc>>,
 }
 
@@ -181,6 +190,8 @@ impl From<Club> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -213,6 +224,8 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: club.distance_meters,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -245,6 +258,8 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: None,
             last_flight_at: None,
         }
@@ -277,6 +292,8 @@ impl From<ClubWithLocationAndActivity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            status: club.status,
+            created_by: club.created_by,
             recent_flights_count: Some(club.recent_flights_count),
             last_flight_at: club.last_flight_at,
         }

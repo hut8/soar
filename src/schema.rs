@@ -454,6 +454,8 @@ diesel::table! {
         location_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        status -> Text,
+        created_by -> Nullable<Uuid>,
     }
 }
 
@@ -1215,7 +1217,6 @@ diesel::joinable!(spurious_flights -> aircraft (aircraft_id));
 diesel::joinable!(stripe_connected_accounts -> clubs (club_id));
 diesel::joinable!(stripe_customers -> users (user_id));
 diesel::joinable!(user_fixes -> users (user_id));
-diesel::joinable!(users -> clubs (club_id));
 diesel::joinable!(watchlist -> aircraft (aircraft_id));
 diesel::joinable!(watchlist -> users (user_id));
 

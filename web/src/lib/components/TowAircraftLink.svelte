@@ -3,7 +3,7 @@
 	import { Plane, ExternalLink } from '@lucide/svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { serverCall } from '$lib/api/server';
-	import type { Aircraft } from '$lib/types';
+	import type { Aircraft, DataResponse } from '$lib/types';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
 	import { getLogger } from '$lib/logging';
 
@@ -40,7 +40,7 @@
 
 		// If not in cache, fetch from server
 		try {
-			const response = await serverCall<{ data: Aircraft }>(`/aircraft/${aircraftId}`);
+			const response = await serverCall<DataResponse<Aircraft>>(`/aircraft/${aircraftId}`);
 			aircraft = response.data;
 		} catch (error) {
 			logger.error('Failed to load aircraft {aircraftId}: {error}', { aircraftId, error });

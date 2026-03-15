@@ -10,7 +10,8 @@ use uuid::Uuid;
 use crate::web::PgPool;
 
 /// Message source enum - distinguishes between protocol types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "lowercase")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::MessageSource")]
 pub enum MessageSourceType {
@@ -42,7 +43,8 @@ pub struct RawMessageWithSource {
 /// For APRS: raw_message is UTF-8 text
 /// For Beast: raw_message is hex-encoded binary
 /// For SBS: raw_message is UTF-8 CSV text
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct RawMessageResponse {
     pub id: Uuid,
@@ -52,6 +54,7 @@ pub struct RawMessageResponse {
     pub receiver_id: Option<Uuid>,
     /// Pretty-printed Rust debug format of the decoded/parsed message
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub debug_format: Option<String>,
 }
 

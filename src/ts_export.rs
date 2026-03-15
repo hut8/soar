@@ -4,8 +4,13 @@
 mod tests {
     use ts_rs::{Config, TS};
 
+    use crate::actions::PaginationMetadata;
     use crate::actions::club_tow_fees::TowFeeView;
-    use crate::actions::flights::FlightGap;
+    use crate::actions::clubs::CreateClubRequest;
+    use crate::actions::coverage::{
+        CoverageGeoJsonResponse, FixesInHexResponse, HexReceiversResponse,
+    };
+    use crate::actions::flights::{FlightGap, PathPoint};
     use crate::actions::geocoding::ReverseGeocodeResponse;
     use crate::actions::payments::{CheckoutResponse, CreateChargeRequest, PaymentView};
     use crate::actions::receivers::{
@@ -23,7 +28,11 @@ mod tests {
     use crate::aircraft_images::{AircraftImage, AircraftImageCollection, AircraftImageSource};
     use crate::aircraft_registrations::{AirworthinessClass, LightSportType, RegistrantType};
     use crate::aircraft_types::AircraftCategory;
-    use crate::fixes::Fix;
+    use crate::airspace::{
+        AirspaceClass, AirspaceGeoJson, AirspaceProperties, AirspaceSource, AirspaceType,
+    };
+    use crate::coverage::{CoverageHexFeature, CoverageHexProperties};
+    use crate::fixes::{Fix, FixWithAircraftInfo};
     use crate::flights::FlightState;
     use crate::geofence::{
         AircraftGeofence, CreateGeofenceRequest, Geofence, GeofenceDetailResponse,
@@ -31,11 +40,17 @@ mod tests {
         GeofenceSubscriber, GeofenceWithCounts, UpdateGeofenceRequest,
     };
     use crate::ingest_config::{DataStream, StreamFormat};
+    use crate::locations::{Location, Point};
     use crate::payments::{PaymentStatus, PaymentType};
     use crate::push_subscriptions::{
         PushSubscriptionRequest, PushSubscriptionView, VapidPublicKeyResponse,
     };
+    use crate::raw_messages_repo::{MessageSourceType, RawMessageResponse};
     use crate::receiver_alerts::{ReceiverAlertView, UpsertReceiverAlertRequest};
+    use crate::tracker::{
+        NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixResponse, TrackerFlightInfo,
+    };
+    use crate::watchlist::WatchlistEntry;
 
     #[test]
     fn export_types() {
@@ -44,6 +59,7 @@ mod tests {
 
         // Calling export() generates the .ts files
         Fix::export(&cfg).expect("Failed to export Fix type");
+        FixWithAircraftInfo::export(&cfg).expect("Failed to export FixWithAircraftInfo type");
         AircraftView::export(&cfg).expect("Failed to export AircraftView type");
         ModelDataView::export(&cfg).expect("Failed to export ModelDataView type");
         Aircraft::export(&cfg).expect("Failed to export Aircraft type");
@@ -56,6 +72,8 @@ mod tests {
         RegistrantType::export(&cfg).expect("Failed to export RegistrantType type");
         ClubJoinRequestView::export(&cfg).expect("Failed to export ClubJoinRequestView type");
         ClubView::export(&cfg).expect("Failed to export ClubView type");
+        CreateClubRequest::export(&cfg).expect("Failed to export CreateClubRequest type");
+        // UpdateClubRequest is manually maintained in TypeScript (uses Option<Option<T>> patch semantics)
         TowFeeView::export(&cfg).expect("Failed to export TowFeeView type");
         FlightView::export(&cfg).expect("Failed to export FlightView type");
         FlightState::export(&cfg).expect("Failed to export FlightState type");
@@ -68,6 +86,10 @@ mod tests {
 
         // Geocoding types
         ReverseGeocodeResponse::export(&cfg).expect("Failed to export ReverseGeocodeResponse type");
+
+        // Location types
+        Point::export(&cfg).expect("Failed to export Point type");
+        Location::export(&cfg).expect("Failed to export Location type");
 
         // Geofence types
         GeofenceLayer::export(&cfg).expect("Failed to export GeofenceLayer type");
@@ -105,8 +127,9 @@ mod tests {
         // Auth types
         LoginResponse::export(&cfg).expect("Failed to export LoginResponse type");
 
-        // Flight gap type
+        // Flight types
         FlightGap::export(&cfg).expect("Failed to export FlightGap type");
+        PathPoint::export(&cfg).expect("Failed to export PathPoint type");
 
         // Aircraft image types
         AircraftImageSource::export(&cfg).expect("Failed to export AircraftImageSource type");
@@ -136,5 +159,36 @@ mod tests {
         PushSubscriptionRequest::export(&cfg)
             .expect("Failed to export PushSubscriptionRequest type");
         VapidPublicKeyResponse::export(&cfg).expect("Failed to export VapidPublicKeyResponse type");
+
+        // Raw message types
+        MessageSourceType::export(&cfg).expect("Failed to export MessageSourceType type");
+        RawMessageResponse::export(&cfg).expect("Failed to export RawMessageResponse type");
+
+        // Watchlist types
+        WatchlistEntry::export(&cfg).expect("Failed to export WatchlistEntry type");
+
+        // Pagination types
+        PaginationMetadata::export(&cfg).expect("Failed to export PaginationMetadata type");
+
+        // Coverage types
+        CoverageHexProperties::export(&cfg).expect("Failed to export CoverageHexProperties type");
+        CoverageHexFeature::export(&cfg).expect("Failed to export CoverageHexFeature type");
+        CoverageGeoJsonResponse::export(&cfg)
+            .expect("Failed to export CoverageGeoJsonResponse type");
+        FixesInHexResponse::export(&cfg).expect("Failed to export FixesInHexResponse type");
+        HexReceiversResponse::export(&cfg).expect("Failed to export HexReceiversResponse type");
+
+        // Airspace types
+        AirspaceSource::export(&cfg).expect("Failed to export AirspaceSource type");
+        AirspaceClass::export(&cfg).expect("Failed to export AirspaceClass type");
+        AirspaceType::export(&cfg).expect("Failed to export AirspaceType type");
+        AirspaceProperties::export(&cfg).expect("Failed to export AirspaceProperties type");
+        AirspaceGeoJson::export(&cfg).expect("Failed to export AirspaceGeoJson type");
+
+        // Tracker types
+        TrackerFixResponse::export(&cfg).expect("Failed to export TrackerFixResponse type");
+        TrackerAircraftInfo::export(&cfg).expect("Failed to export TrackerAircraftInfo type");
+        TrackerFlightInfo::export(&cfg).expect("Failed to export TrackerFlightInfo type");
+        NearbyAircraftInfo::export(&cfg).expect("Failed to export NearbyAircraftInfo type");
     }
 }

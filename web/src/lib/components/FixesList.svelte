@@ -9,7 +9,13 @@
 		formatTimeWithSeconds
 	} from '$lib/utils/dateFormatters';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { Fix, FixWithExtras, RawMessageResponse, DataResponse } from '$lib/types';
+	import type {
+		Fix,
+		FixWithExtras,
+		RawMessageResponse,
+		DataResponse,
+		MessageSourceType
+	} from '$lib/types';
 	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
@@ -96,7 +102,7 @@
 		content?: string;
 		loading: boolean;
 		error?: string;
-		source?: 'aprs' | 'beast' | 'sbs';
+		source?: MessageSourceType;
 		debugFormat?: string;
 	} {
 		const cached = rawMessagesCache.get(rawMessageId);

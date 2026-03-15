@@ -22,6 +22,7 @@ pub mod receiver_alerts;
 pub mod receivers;
 pub mod status;
 pub mod stripe_connect;
+pub mod tracker;
 pub mod user_fixes;
 pub mod user_settings;
 pub mod users;
@@ -40,6 +41,7 @@ pub use fixes::*;
 pub use flights::*;
 pub use receivers::*;
 pub use status::*;
+pub use tracker::*;
 pub use user_fixes::*;
 pub use user_settings::*;
 pub use users::*;
@@ -75,11 +77,15 @@ pub struct DataListResponseWithTotal<T> {
 }
 
 /// Pagination metadata (nested in paginated responses)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationMetadata {
+    #[ts(type = "number")]
     pub page: i64,
+    #[ts(type = "number")]
     pub total_pages: i64,
+    #[ts(type = "number")]
     pub total_count: i64,
 }
 
