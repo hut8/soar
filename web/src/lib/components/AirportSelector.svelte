@@ -2,7 +2,7 @@
 	import { Combobox } from '@skeletonlabs/skeleton-svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { serverCall } from '$lib/api/server';
-	import type { Airport, DataListResponse } from '$lib/types';
+	import type { Airport, DataListResponse, DataResponse } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 
 	const logger = getLogger(['soar', 'AirportSelector']);
@@ -70,7 +70,7 @@
 
 	async function loadAirportById(id: number) {
 		try {
-			const response = await serverCall<{ data: Airport }>(`/airports/${id}`);
+			const response = await serverCall<DataResponse<Airport>>(`/airports/${id}`);
 			airports = [response.data];
 			value = [String(id)];
 			if (onSelect) onSelect(response.data);

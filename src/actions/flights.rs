@@ -38,7 +38,8 @@ pub struct SplinePoint {
 }
 
 /// Lightweight path point for flight visualization
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "../web/src/lib/types/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct PathPoint {
     pub latitude: f64,
