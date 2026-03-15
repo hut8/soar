@@ -1338,12 +1338,16 @@ impl FixesRepository {
 
     /// Count fixes for a specific receiver in the last 24 hours
     pub async fn count_fixes_for_receiver_24h(&self, receiver_uuid: Uuid) -> Result<i64> {
+        use anyhow::Context;
+
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
             use diesel::dsl::count_star;
-            let mut conn = pool.get()?;
+            let mut conn = pool
+                .get()
+                .context("Failed to get database connection for fix count")?;
 
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
@@ -1351,11 +1355,13 @@ impl FixesRepository {
                 .filter(receiver_id.eq(receiver_uuid))
                 .filter(received_at.gt(cutoff_time))
                 .select(count_star())
-                .first(&mut conn)?;
+                .first(&mut conn)
+                .context("Failed to count fixes for receiver")?;
 
             Ok::<i64, anyhow::Error>(total)
         })
-        .await??;
+        .await
+        .context("Fix count task panicked")??;
 
         Ok(result)
     }

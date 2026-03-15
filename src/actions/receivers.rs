@@ -605,7 +605,11 @@ pub async fn get_receiver_statistics(
         Ok(count) => count,
         Err(e) => {
             tracing::error!(receiver_id = %id, error = %e, "Failed to count fixes for receiver");
-            0
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to calculate statistics",
+            )
+            .into_response();
         }
     };
 
