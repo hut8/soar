@@ -1,0 +1,259 @@
+#!/bin/bash
+set -euo pipefail
+
+# SOAR PgDog Setup Script
+#
+# This script installs and configures PgDog as a connection pooler
+# for PostgreSQL to reduce connection overhead and improve performance.
+#
+# Usage:
+#   sudo ./scripts/setup-pgdog [production|staging]
+#
+# What this does:
+# - Downloads PgDog binary from GitHub releases
+# - Creates configuration optimized for SOAR workload
+# - Sets up systemd service (pgdog.service)
+# - Configures trust authentication (localhost only, no passwords)
+# - Creates pool for the environment's database
+
+ENVIRONMENT="${1:-production}"
+
+if [[ "$ENVIRONMENT" != "production" && "$ENVIRONMENT" != "staging" ]]; then
+    echo "Error: Environment must be 'production' or 'staging'"
+    echo "Usage: sudo $0 [production|staging]"
+    exit 1
+fi
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root (use sudo)"
+   exit 1
+fi
+
+echo "========================================="
+echo "SOAR PgDog Setup - $ENVIRONMENT"
+echo "========================================="
+echo
+
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)
+        PGDOG_ARCH="x86_64"
+        ;;
+    aarch64)
+        PGDOG_ARCH="aarch64"
+        ;;
+    *)
+        echo "Error: Unsupported architecture: $ARCH"
+        exit 1
+        ;;
+esac
+
+# Download and install PgDog binary
+PGDOG_VERSION="v1.3.2"
+PGDOG_URL="https://github.com/pgdogdev/pgdog/releases/download/${PGDOG_VERSION}/pgdog-${PGDOG_VERSION}-${PGDOG_ARCH}-unknown-linux-gnu.tar.gz"
+
+echo "Downloading PgDog ${PGDOG_VERSION} for ${PGDOG_ARCH}..."
+TMPDIR=$(mktemp -d)
+curl -fsSL "$PGDOG_URL" -o "$TMPDIR/pgdog.tar.gz"
+tar -xzf "$TMPDIR/pgdog.tar.gz" -C "$TMPDIR"
+install -m 755 "$TMPDIR/pgdog" /usr/local/bin/pgdog
+rm -rf "$TMPDIR"
+echo "PgDog installed to /usr/local/bin/pgdog"
+
+# Create directories
+mkdir -p /etc/pgdog
+
+# Get PostgreSQL credentials from environment file
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    ENV_FILE="/etc/soar/env"
+    DB_NAME="soar"
+    PGDOG_PORT=6432
+else
+    ENV_FILE="/etc/soar/env-staging"
+    DB_NAME="soar_staging"
+    PGDOG_PORT=6433
+fi
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Error: Environment file $ENV_FILE not found"
+    exit 1
+fi
+
+# Extract DATABASE_URL from environment file without sourcing
+# (avoids executing arbitrary shell code as root)
+DATABASE_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+
+if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "Error: DATABASE_URL not set in $ENV_FILE"
+    exit 1
+fi
+
+# Parse DATABASE_URL using Python for robustness
+# Supports both postgres:// and postgresql:// schemes, optional password/port
+if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required to parse DATABASE_URL"
+    exit 1
+fi
+
+read -r DB_USER DB_HOST DB_PORT DB_NAME_FROM_URL < <(
+    DATABASE_URL="$DATABASE_URL" python3 -c "
+import os
+from urllib.parse import urlparse
+url = urlparse(os.environ['DATABASE_URL'])
+user = url.username or 'soar'
+host = url.hostname or '127.0.0.1'
+port = url.port or 5432
+db = url.path.lstrip('/')
+print(f'{user} {host} {port} {db}')
+" 2>/dev/null
+) || {
+    echo "Error: Could not parse DATABASE_URL"
+    exit 1
+}
+
+echo "Database configuration:"
+echo "  Host: $DB_HOST"
+echo "  Port: $DB_PORT"
+echo "  Database: $DB_NAME_FROM_URL"
+echo "  User: $DB_USER"
+echo "  PgDog Port: $PGDOG_PORT"
+echo
+
+# Create pgdog.toml
+echo "Creating pgdog.toml configuration..."
+cat > /etc/pgdog/pgdog.toml <<EOF
+# SOAR PgDog Configuration - $ENVIRONMENT
+# Generated: $(date)
+
+[general]
+host = "127.0.0.1"
+port = $PGDOG_PORT
+default_pool_size = 100
+min_pool_size = 10
+pooler_mode = "transaction"
+auth_type = "trust"
+connect_timeout = 15000
+idle_timeout = 600000
+server_lifetime = 3600000
+client_idle_timeout = 0
+client_login_timeout = 60000
+query_timeout = 0
+checkout_timeout = 120000
+stats_period = 60000
+log_connections = false
+log_disconnections = false
+workers = 4
+
+[[databases]]
+name = "$DB_NAME_FROM_URL"
+host = "$DB_HOST"
+port = $DB_PORT
+database_name = "$DB_NAME_FROM_URL"
+user = "$DB_USER"
+EOF
+
+chmod 644 /etc/pgdog/pgdog.toml
+
+# Create users.toml (trust auth — no passwords needed on localhost)
+echo "Creating users.toml authentication file..."
+cat > /etc/pgdog/users.toml <<EOF
+# SOAR PgDog Users - $ENVIRONMENT
+# Generated: $(date)
+# Using trust auth on localhost — passwords are not checked
+
+[[users]]
+name = "$DB_USER"
+database = "$DB_NAME_FROM_URL"
+password = ""
+EOF
+
+chmod 644 /etc/pgdog/users.toml
+
+# Create systemd service file
+echo "Creating systemd service..."
+cat > /etc/systemd/system/pgdog.service <<EOF
+[Unit]
+Description=PgDog PostgreSQL Connection Pooler
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+ExecStart=/usr/local/bin/pgdog --config-dir /etc/pgdog
+ExecReload=/bin/kill -HUP \$MAINPID
+KillSignal=SIGINT
+KillMode=mixed
+
+Restart=on-failure
+RestartSec=5s
+
+LimitNOFILE=65536
+
+# Logging (PgDog logs to stdout/stderr)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pgdog
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/pgdog
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and (re)start service
+echo "Enabling and starting pgdog service..."
+systemctl daemon-reload
+systemctl enable pgdog
+systemctl restart pgdog
+
+# Wait a moment for service to start
+sleep 2
+
+# Check status
+if systemctl is-active --quiet pgdog; then
+    echo
+    echo "========================================="
+    echo "PgDog installed and running!"
+    echo "========================================="
+    echo
+    echo "Connection details:"
+    echo "  Listen address: 127.0.0.1:$PGDOG_PORT"
+    echo "  Database: $DB_NAME_FROM_URL"
+    echo "  Pooling mode: transaction"
+    echo "  Pool size: 100 (default)"
+    echo
+    echo "To connect via PgDog:"
+    echo "  psql -h 127.0.0.1 -p $PGDOG_PORT -U $DB_USER -d $DB_NAME_FROM_URL"
+    echo
+    echo "Management commands:"
+    echo "  systemctl status pgdog"
+    echo "  systemctl restart pgdog"
+    echo "  systemctl stop pgdog"
+    echo "  journalctl -u pgdog -f"
+    echo
+    echo "========================================="
+    echo "Next steps:"
+    echo "========================================="
+    echo "1. Update DATABASE_URL in $ENV_FILE to use PgDog:"
+    echo "   DATABASE_URL=postgresql://$DB_USER@localhost:$PGDOG_PORT/$DB_NAME_FROM_URL"
+    echo
+    echo "2. Restart SOAR services to use new connection:"
+    echo "   sudo systemctl restart soar-run-$ENVIRONMENT"
+    echo
+else
+    echo
+    echo "========================================="
+    echo "PgDog failed to start"
+    echo "========================================="
+    echo
+    echo "Check logs:"
+    echo "  journalctl -u pgdog -n 50"
+    exit 1
+fi
