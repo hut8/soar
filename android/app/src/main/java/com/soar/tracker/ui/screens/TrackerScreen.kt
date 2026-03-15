@@ -1,7 +1,9 @@
 package com.soar.tracker.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,12 +22,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -43,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.soar.tracker.SoarTrackerApp
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.components.FlightStatusCard
 import com.soar.tracker.ui.components.NearbyAircraftList
@@ -52,13 +58,14 @@ import com.soar.tracker.ui.theme.Red
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrackerScreen() {
+fun TrackerScreen(onLogout: () -> Unit = {}) {
     val context = LocalContext.current
     val isTracking by TrackingService.isTracking.collectAsState()
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val lastError by TrackingService.lastError.collectAsState()
     val lastUpdateTime by TrackingService.lastUpdateTime.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
+    val groundPressureHpa by TrackingService.groundPressureHpa.collectAsState()
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -86,6 +93,20 @@ fun TrackerScreen() {
             TopAppBar(
                 title = { Text("SOAR Tracker") },
                 actions = {
+                    // Logout button
+                    IconButton(onClick = {
+                        if (isTracking) {
+                            TrackingService.stop(context)
+                        }
+                        val app = context.applicationContext as SoarTrackerApp
+                        app.authRepository.logout()
+                        onLogout()
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Sign out",
+                        )
+                    }
                     // Connection status indicator
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -181,12 +202,28 @@ fun TrackerScreen() {
                 accelZ = sensorData?.accelZ,
                 pressureHpa = sensorData?.pressureHpa,
                 verticalSpeedMps = sensorData?.verticalSpeedMps,
+                latitude = sensorData?.latitude,
+                longitude = sensorData?.longitude,
+                altitudeMeters = sensorData?.altitudeMeters,
+                altitudeAglFeet = response?.altitudeAglFeet,
+                groundPressureHpa = groundPressureHpa,
             )
 
             // Nearby aircraft
             NearbyAircraftList(
                 aircraft = response?.nearbyAircraft ?: emptyList(),
             )
+
+            // Open website button
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://glider.flights"))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Open glider.flights")
+            }
 
             Spacer(modifier = Modifier.height(80.dp)) // FAB clearance
         }

@@ -86,6 +86,32 @@ pub async fn create_tracker_fix(
         }
     };
 
+    // Look up ground elevation and compute AGL
+    let (ground_elevation_meters, altitude_agl_feet) =
+        if let Some(ref elevation_db) = state.elevation_db {
+            match elevation_db
+                .elevation(request.latitude, request.longitude)
+                .await
+            {
+                Ok(Some(elev_m)) => {
+                    let ground_elev = elev_m as f64;
+                    let agl = request.altitude_meters.map(|alt_m| {
+                        let alt_ft = alt_m * 3.28084;
+                        let ground_ft = ground_elev * 3.28084;
+                        (alt_ft - ground_ft).round() as i32
+                    });
+                    (Some(ground_elev), agl)
+                }
+                Ok(None) => (None, None),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Elevation lookup failed");
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        };
+
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
     // Run candidate and nearby queries in parallel
@@ -144,6 +170,8 @@ pub async fn create_tracker_fix(
         matched_aircraft,
         flight,
         nearby_aircraft,
+        ground_elevation_meters,
+        altitude_agl_feet,
     };
 
     (StatusCode::CREATED, Json(response)).into_response()

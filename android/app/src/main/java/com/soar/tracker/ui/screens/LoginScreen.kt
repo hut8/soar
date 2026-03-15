@@ -1,5 +1,7 @@
 package com.soar.tracker.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,10 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.soar.tracker.SoarTrackerApp
+import com.soar.tracker.ui.components.RadarSweep
 import kotlinx.coroutines.launch
 
 private const val PRODUCTION_URL = "https://glider.flights"
@@ -47,6 +50,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var resetSent by remember { mutableStateOf(false) }
 
     val serverUrl = if (useStaging) STAGING_URL else PRODUCTION_URL
 
@@ -99,7 +103,45 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             ),
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Forgot password link
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = {
+                    if (email.isNotBlank()) {
+                        resetSent = false
+                        error = null
+                        scope.launch {
+                            val loginApi = app.createLoginApi(serverUrl)
+                            try {
+                                loginApi.requestPasswordReset(
+                                    com.soar.tracker.data.api.PasswordResetRequest(email),
+                                )
+                                resetSent = true
+                            } catch (e: Exception) {
+                                error = "Failed to send reset email"
+                            }
+                        }
+                    } else {
+                        // Open the password reset page in browser as fallback
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("$serverUrl/reset-password"),
+                        )
+                        context.startActivity(intent)
+                    }
+                },
+            ) {
+                Text(
+                    text = "Forgot password?",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -116,8 +158,17 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             )
         }
 
+        if (resetSent) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Password reset email sent. Check your inbox.",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         if (error != null) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = error!!,
                 color = MaterialTheme.colorScheme.error,
@@ -131,6 +182,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onClick = {
                 isLoading = true
                 error = null
+                resetSent = false
                 scope.launch {
                     val loginApi = app.createLoginApi(serverUrl)
                     val result = app.authRepository.login(loginApi, email, password)
@@ -149,10 +201,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
         ) {
             if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.height(20.dp),
-                    strokeWidth = 2.dp,
-                )
+                RadarSweep(size = 18.dp)
             } else {
                 Text("Sign In")
             }

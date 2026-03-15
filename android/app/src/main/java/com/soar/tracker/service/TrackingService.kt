@@ -30,6 +30,9 @@ data class SensorData(
     val accelZ: Double,
     val pressureHpa: Double?,
     val verticalSpeedMps: Double?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val altitudeMeters: Double?,
 )
 
 class TrackingService : LifecycleService() {
@@ -60,6 +63,9 @@ class TrackingService : LifecycleService() {
 
         private val _lastSensorData = MutableStateFlow<SensorData?>(null)
         val lastSensorData: StateFlow<SensorData?> = _lastSensorData
+
+        private val _groundPressureHpa = MutableStateFlow<Double?>(null)
+        val groundPressureHpa: StateFlow<Double?> = _groundPressureHpa
 
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
@@ -143,6 +149,9 @@ class TrackingService : LifecycleService() {
                     accelZ = az,
                     pressureHpa = pressure,
                     verticalSpeedMps = verticalSpeed,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    altitudeMeters = if (hasAltitude) location.altitude else null,
                 )
 
                 submitFix(request)
@@ -176,6 +185,12 @@ class TrackingService : LifecycleService() {
                 _latestResponse.value = response
                 _lastError.value = null
                 _lastUpdateTime.value = System.currentTimeMillis()
+                // Capture ground pressure when AGL ≈ 0
+                val agl = response.altitudeAglFeet
+                val pressure = _lastSensorData.value?.pressureHpa
+                if (agl != null && agl in -50..50 && pressure != null) {
+                    _groundPressureHpa.value = pressure
+                }
             }.onFailure { e ->
                 _lastError.value = e.message ?: "Request failed"
             }

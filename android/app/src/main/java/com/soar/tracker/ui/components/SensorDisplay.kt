@@ -25,6 +25,11 @@ fun SensorDisplay(
     accelZ: Double?,
     pressureHpa: Double?,
     verticalSpeedMps: Double?,
+    latitude: Double?,
+    longitude: Double?,
+    altitudeMeters: Double?,
+    altitudeAglFeet: Int?,
+    groundPressureHpa: Double?,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -37,6 +42,7 @@ fun SensorDisplay(
             Text("Sensors", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Row 1: G-Force, Vario, Pressure
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -51,7 +57,7 @@ fun SensorDisplay(
 
                 SensorValue(
                     label = "G-Force",
-                    value = gForce?.let { String.format(Locale.US,"%.1f G", it) } ?: "--",
+                    value = gForce?.let { String.format(Locale.US, "%.1f G", it) } ?: "--",
                 )
 
                 // Vario (vertical speed in fpm)
@@ -60,14 +66,55 @@ fun SensorDisplay(
                     label = "Vario",
                     value = varioFpm?.let {
                         val sign = if (it >= 0) "+" else ""
-                        String.format(Locale.US,"%s%.0f fpm", sign, it)
+                        String.format(Locale.US, "%s%.0f fpm", sign, it)
                     } ?: "--",
                 )
 
-                // Pressure
+                // Pressure in both hPa and inHg
+                val pressureText = if (pressureHpa != null) {
+                    val inHg = pressureHpa * 0.02953
+                    val base = String.format(Locale.US, "%.1f hPa\n%.2f inHg", pressureHpa, inHg)
+                    // Add pressure altitude if ground reference is available
+                    if (groundPressureHpa != null && groundPressureHpa > 0) {
+                        val pressAltFt = 145366.45 * (1 - Math.pow(pressureHpa / groundPressureHpa, 0.190284))
+                        String.format(Locale.US, "%s\n\u2248%.0f ft", base, pressAltFt)
+                    } else {
+                        base
+                    }
+                } else {
+                    "--"
+                }
                 SensorValue(
                     label = "Pressure",
-                    value = pressureHpa?.let { String.format(Locale.US,"%.1f hPa", it) } ?: "--",
+                    value = pressureText,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Row 2: GNSS Alt, AGL, Position
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                val altFt = altitudeMeters?.let { it * 3.28084 }
+                SensorValue(
+                    label = "GNSS Alt",
+                    value = altFt?.let { String.format(Locale.US, "%.0f ft", it) } ?: "--",
+                )
+
+                SensorValue(
+                    label = "AGL",
+                    value = altitudeAglFeet?.let { String.format(Locale.US, "%d ft", it) } ?: "--",
+                )
+
+                SensorValue(
+                    label = "Position",
+                    value = if (latitude != null && longitude != null) {
+                        String.format(Locale.US, "%.4f\n%.4f", latitude, longitude)
+                    } else {
+                        "--"
+                    },
                 )
             }
         }

@@ -40,6 +40,8 @@ pub struct TrackerFixResponse {
     pub matched_aircraft: Option<TrackerAircraftInfo>,
     pub flight: Option<TrackerFlightInfo>,
     pub nearby_aircraft: Vec<NearbyAircraftInfo>,
+    pub ground_elevation_meters: Option<f64>,
+    pub altitude_agl_feet: Option<i32>,
 }
 
 /// Matched aircraft information

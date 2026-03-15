@@ -28,7 +28,13 @@ fun NavGraph() {
             )
         }
         composable("tracker") {
-            TrackerScreen()
+            TrackerScreen(
+                onLogout = {
+                    navController.navigate("login") {
+                        popUpTo("tracker") { inclusive = true }
+                    }
+                },
+            )
         }
     }
 }

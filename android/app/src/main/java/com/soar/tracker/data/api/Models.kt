@@ -25,6 +25,11 @@ data class UserInfo(
     val email: String?,
 )
 
+@JsonClass(generateAdapter = true)
+data class PasswordResetRequest(
+    val email: String,
+)
+
 // --- Tracker ---
 
 @JsonClass(generateAdapter = true)
@@ -49,6 +54,8 @@ data class TrackerFixResponse(
     @Json(name = "matchedAircraft") val matchedAircraft: TrackerAircraftInfo?,
     val flight: TrackerFlightInfo?,
     @Json(name = "nearbyAircraft") val nearbyAircraft: List<NearbyAircraftInfo>,
+    @Json(name = "groundElevationMeters") val groundElevationMeters: Double?,
+    @Json(name = "altitudeAglFeet") val altitudeAglFeet: Int?,
 )
 
 @JsonClass(generateAdapter = true)
