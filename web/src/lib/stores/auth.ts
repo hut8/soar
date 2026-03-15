@@ -25,8 +25,9 @@ function createAuthStore() {
 	// or the browser evicts storage.
 	if (browser) {
 		window.addEventListener('storage', (event) => {
-			if (event.key === 'auth_token') {
-				if (!event.newValue) {
+			// localStorage.clear() fires with key === null
+			if (event.key === null || event.key === 'auth_token') {
+				if (!event.newValue || event.key === null) {
 					// Token was removed (logout in another tab or browser eviction)
 					set(initialState);
 				}
@@ -71,6 +72,7 @@ function createAuthStore() {
 					if (isTokenExpired(token)) {
 						localStorage.removeItem('auth_token');
 						localStorage.removeItem('auth_user');
+						set(initialState);
 						return;
 					}
 
