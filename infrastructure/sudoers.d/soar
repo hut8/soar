@@ -13,7 +13,11 @@
 #   sudo chmod 755 /usr/local/bin/soar-deploy
 #   sudo chown root:root /usr/local/bin/soar-deploy
 #
-# Security: This grants minimal privileges - only the deployment script can be run with sudo
+# Security: This grants minimal privileges - only the deployment script and
+# the install command (for bootstrapping soar-deploy itself) can be run with sudo
+
+# Allow soar user to bootstrap the deployment script from a deploy package
+soar ALL=(root) NOPASSWD: /usr/bin/install -m 755 /tmp/soar/deploy/*/soar-deploy /usr/local/bin/soar-deploy
 
 # Allow soar user to execute the deployment script for production (default)
 soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy /tmp/soar/deploy/*
