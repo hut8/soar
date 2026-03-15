@@ -24,6 +24,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+data class SensorData(
+    val accelX: Double,
+    val accelY: Double,
+    val accelZ: Double,
+    val pressureHpa: Double?,
+    val verticalSpeedMps: Double?,
+)
+
 class TrackingService : LifecycleService() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var sensorCollector: SensorCollector
@@ -48,6 +56,9 @@ class TrackingService : LifecycleService() {
 
         private val _lastUpdateTime = MutableStateFlow<Long>(0)
         val lastUpdateTime: StateFlow<Long> = _lastUpdateTime
+
+        private val _lastSensorData = MutableStateFlow<SensorData?>(null)
+        val lastSensorData: StateFlow<SensorData?> = _lastSensorData
 
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
@@ -106,6 +117,11 @@ class TrackingService : LifecycleService() {
                 val location = result.lastLocation ?: return
                 val verticalSpeed = calculateVerticalSpeed(location.altitude)
 
+                val ax = sensorCollector.accelX.toDouble()
+                val ay = sensorCollector.accelY.toDouble()
+                val az = sensorCollector.accelZ.toDouble()
+                val pressure = sensorCollector.pressureHpa?.toDouble()
+
                 val request = TrackerFixRequest(
                     latitude = location.latitude,
                     longitude = location.longitude,
@@ -113,10 +129,18 @@ class TrackingService : LifecycleService() {
                     altitudeMeters = if (location.hasAltitude()) location.altitude else null,
                     speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
                     accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-                    pressureHpa = sensorCollector.pressureHpa?.toDouble(),
-                    accelX = sensorCollector.accelX.toDouble(),
-                    accelY = sensorCollector.accelY.toDouble(),
-                    accelZ = sensorCollector.accelZ.toDouble(),
+                    pressureHpa = pressure,
+                    accelX = ax,
+                    accelY = ay,
+                    accelZ = az,
+                    verticalSpeedMps = verticalSpeed,
+                )
+
+                _lastSensorData.value = SensorData(
+                    accelX = ax,
+                    accelY = ay,
+                    accelZ = az,
+                    pressureHpa = pressure,
                     verticalSpeedMps = verticalSpeed,
                 )
 

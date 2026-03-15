@@ -9,7 +9,7 @@ use tracing::error;
 use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::auth::AuthUser;
-use crate::flights::haversine_distance;
+use crate::flights::{FlightState, haversine_distance};
 use crate::flights_repo::FlightsRepository;
 use crate::tracker::{
     NearbyAircraftInfo, TrackerAircraftInfo, TrackerFixRequest, TrackerFixResponse,
@@ -111,23 +111,25 @@ pub async fn create_tracker_fix(
         None
     };
 
-    // Build nearby aircraft list
+    // Build nearby aircraft list, filtering out rows with missing coordinates
     let nearby_aircraft = match nearby_result {
         Ok(rows) => rows
             .into_iter()
-            .map(|row| {
+            .filter_map(|row| {
+                let lat = row.latitude?;
+                let lon = row.longitude?;
                 let (altitude_feet, ground_speed_knots) = extract_fix_data(&row.current_fix);
-                NearbyAircraftInfo {
+                Some(NearbyAircraftInfo {
                     id: row.id,
                     registration: row.registration,
                     aircraft_model: row.aircraft_model,
-                    latitude: row.latitude.unwrap_or(0.0),
-                    longitude: row.longitude.unwrap_or(0.0),
+                    latitude: lat,
+                    longitude: lon,
                     altitude_feet,
                     ground_speed_knots,
                     distance_meters: row.distance_meters.unwrap_or(0.0),
                     last_fix_at: row.last_fix_at,
-                }
+                })
             })
             .collect(),
         Err(e) => {
@@ -168,12 +170,13 @@ fn find_best_match(
 
         // Extrapolate position if we have speed and heading from current_fix
         let (extrap_lat, extrap_lon) = if let Some(ref fix_json) = candidate.current_fix {
+            // current_fix is serialized from Fix with #[serde(rename_all = "camelCase")]
             let speed_knots = fix_json
-                .get("ground_speed_knots")
+                .get("groundSpeedKnots")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
             let track_deg = fix_json
-                .get("track_degrees")
+                .get("trackDegrees")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0);
 
@@ -276,7 +279,7 @@ async fn lookup_flight(
 
     Some(TrackerFlightInfo {
         id: flight.id,
-        state: "active".to_string(),
+        state: FlightState::Active,
         takeoff_time: flight.takeoff_time,
         departure_airport,
         duration_seconds,
@@ -284,13 +287,148 @@ async fn lookup_flight(
 }
 
 /// Extract altitude (feet) and ground speed (knots) from the current_fix JSONB.
+/// The Fix struct uses `#[serde(rename_all = "camelCase")]`, so keys are camelCase.
 fn extract_fix_data(current_fix: &Option<serde_json::Value>) -> (Option<f64>, Option<f64>) {
     match current_fix {
         Some(fix) => {
-            let altitude_feet = fix.get("altitude_feet").and_then(|v| v.as_f64());
-            let ground_speed_knots = fix.get("ground_speed_knots").and_then(|v| v.as_f64());
+            let altitude_feet = fix.get("altitudeMslFeet").and_then(|v| v.as_f64());
+            let ground_speed_knots = fix.get("groundSpeedKnots").and_then(|v| v.as_f64());
             (altitude_feet, ground_speed_knots)
         }
         None => (None, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aircraft_repo::CandidateAircraftRow;
+    use serde_json::json;
+
+    fn make_request(lat: f64, lon: f64) -> TrackerFixRequest {
+        TrackerFixRequest {
+            latitude: lat,
+            longitude: lon,
+            heading: None,
+            altitude_meters: None,
+            speed_mps: None,
+            accuracy_meters: None,
+            pressure_hpa: None,
+            accel_x: None,
+            accel_y: None,
+            accel_z: None,
+            vertical_speed_mps: None,
+        }
+    }
+
+    fn make_candidate(
+        lat: f64,
+        lon: f64,
+        speed_knots: Option<f64>,
+        track_deg: Option<f64>,
+        last_fix_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> CandidateAircraftRow {
+        let current_fix = match (speed_knots, track_deg) {
+            (Some(speed), Some(track)) => Some(json!({
+                "groundSpeedKnots": speed,
+                "trackDegrees": track,
+            })),
+            _ => None,
+        };
+
+        CandidateAircraftRow {
+            id: uuid::Uuid::new_v4(),
+            registration: Some("N12345".to_string()),
+            aircraft_model: "ASK-21".to_string(),
+            competition_number: "AB".to_string(),
+            latitude: Some(lat),
+            longitude: Some(lon),
+            current_fix,
+            last_fix_at,
+            distance_meters: Some(100.0),
+        }
+    }
+
+    #[test]
+    fn extrapolate_position_north() {
+        // Moving due north at ~100m
+        let (new_lat, new_lon) = extrapolate_position(42.0, -71.0, 0.0, 100.0);
+        assert!(new_lat > 42.0, "should move north");
+        assert!(
+            (new_lon - (-71.0)).abs() < 0.0001,
+            "longitude should stay roughly the same"
+        );
+    }
+
+    #[test]
+    fn extrapolate_position_east() {
+        let (new_lat, new_lon) = extrapolate_position(42.0, -71.0, 90.0, 100.0);
+        assert!(
+            (new_lat - 42.0).abs() < 0.001,
+            "latitude should stay roughly the same"
+        );
+        assert!(new_lon > -71.0, "should move east");
+    }
+
+    #[test]
+    fn match_aircraft_at_same_position() {
+        let request = make_request(42.0, -71.0);
+        let candidates = vec![make_candidate(42.0, -71.0, None, None, None)];
+
+        let result = find_best_match(&request, &candidates);
+        assert!(result.is_some(), "should match aircraft at same position");
+        assert!(result.unwrap().distance_meters < 1.0);
+    }
+
+    #[test]
+    fn no_match_when_too_far() {
+        let request = make_request(42.0, -71.0);
+        // ~1km away - outside 200m match radius
+        let candidates = vec![make_candidate(42.01, -71.0, None, None, None)];
+
+        let result = find_best_match(&request, &candidates);
+        assert!(result.is_none(), "should not match aircraft 1km away");
+    }
+
+    #[test]
+    fn no_extrapolation_when_slow() {
+        let request = make_request(42.0, -71.0);
+        let candidates = vec![make_candidate(
+            42.0,
+            -71.0,
+            Some(3.0), // below 5-knot threshold
+            Some(90.0),
+            Some(chrono::Utc::now() - chrono::Duration::seconds(10)),
+        )];
+
+        let result = find_best_match(&request, &candidates);
+        assert!(result.is_some(), "should still match without extrapolation");
+    }
+
+    #[test]
+    fn skip_candidate_with_null_coordinates() {
+        let request = make_request(42.0, -71.0);
+        let mut candidate = make_candidate(42.0, -71.0, None, None, None);
+        candidate.latitude = None;
+
+        let result = find_best_match(&request, &[candidate]);
+        assert!(result.is_none(), "should skip candidate with null lat");
+    }
+
+    #[test]
+    fn selects_closest_candidate() {
+        let request = make_request(42.0, -71.0);
+        let candidates = vec![
+            make_candidate(42.0001, -71.0, None, None, None), // ~11m away
+            make_candidate(42.0, -71.0, None, None, None),    // 0m away
+            make_candidate(42.00005, -71.0, None, None, None), // ~5.5m away
+        ];
+
+        let result = find_best_match(&request, &candidates);
+        assert!(result.is_some());
+        assert!(
+            result.unwrap().distance_meters < 1.0,
+            "should select closest"
+        );
     }
 }

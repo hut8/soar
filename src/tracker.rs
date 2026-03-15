@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use crate::flights::FlightState;
+
 /// Request body for POST /data/tracker
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,8 +60,7 @@ pub struct TrackerAircraftInfo {
 #[serde(rename_all = "camelCase")]
 pub struct TrackerFlightInfo {
     pub id: Uuid,
-    /// "active", "stale", "complete", "timed_out"
-    pub state: String,
+    pub state: FlightState,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
     pub duration_seconds: Option<i64>,

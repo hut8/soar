@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.soar.tracker.service.TrackingService
+import com.soar.tracker.service.SensorData
 import com.soar.tracker.ui.components.FlightStatusCard
 import com.soar.tracker.ui.components.NearbyAircraftList
 import com.soar.tracker.ui.components.SensorDisplay
@@ -58,6 +59,7 @@ fun TrackerScreen() {
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val lastError by TrackingService.lastError.collectAsState()
     val lastUpdateTime by TrackingService.lastUpdateTime.collectAsState()
+    val sensorData by TrackingService.lastSensorData.collectAsState()
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -169,13 +171,13 @@ fun TrackerScreen() {
                 flight = response?.flight,
             )
 
-            // Sensor card - extract from last request's raw data
+            // Sensor card
             SensorDisplay(
-                accelX = null, // Sensors are read by the service, not returned in response
-                accelY = null,
-                accelZ = null,
-                pressureHpa = null,
-                verticalSpeedMps = null,
+                accelX = sensorData?.accelX,
+                accelY = sensorData?.accelY,
+                accelZ = sensorData?.accelZ,
+                pressureHpa = sensorData?.pressureHpa,
+                verticalSpeedMps = sensorData?.verticalSpeedMps,
             )
 
             // Nearby aircraft
