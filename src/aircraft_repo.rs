@@ -1804,7 +1804,9 @@ impl AircraftRepository {
     ) -> Result<Vec<CandidateAircraftRow>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
             let sql = r#"
                 SELECT id, registration, aircraft_model, competition_number,
@@ -1845,7 +1847,9 @@ impl AircraftRepository {
     ) -> Result<Vec<NearbyAircraftRow>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+            let mut conn = pool
+                .get()
+                .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))?;
 
             let sql = r#"
                 SELECT id, registration, aircraft_model,
