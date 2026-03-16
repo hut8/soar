@@ -206,8 +206,8 @@ pub async fn create_pilot(
     }
 }
 
-/// Get pilots for a specific club (convenience endpoint that filters to only pilots)
-pub async fn get_pilots_by_club(
+/// Get all members for a specific club
+pub async fn get_members_by_club(
     auth_user: AuthUser,
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
@@ -218,21 +218,21 @@ pub async fn get_pilots_by_club(
     if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to view its pilots",
+            "You must be a member of this club to view its members",
         )
         .into_response();
     }
 
-    match users_repo.get_pilots_by_club(club_id).await {
-        Ok(pilots) => {
-            let pilot_views: Vec<UserView> = pilots.into_iter().map(UserView::from).collect();
-            Json(DataListResponse { data: pilot_views }).into_response()
+    match users_repo.get_members_by_club(club_id).await {
+        Ok(members) => {
+            let member_views: Vec<UserView> = members.into_iter().map(UserView::from).collect();
+            Json(DataListResponse { data: member_views }).into_response()
         }
         Err(e) => {
-            error!(club_id = %club_id, error = %e, "Failed to get pilots for club");
+            error!(club_id = %club_id, error = %e, "Failed to get members for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get pilots for club",
+                "Failed to get members for club",
             )
             .into_response()
         }
