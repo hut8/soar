@@ -90,8 +90,8 @@ pub async fn get_aircraft_images(
         sources_to_query
     );
 
-    // Create HTTP client for fetching
-    let client = AircraftImagesClient::new(reqwest::Client::new());
+    // Use shared HTTP client for fetching
+    let client = AircraftImagesClient::new(state.http_client.clone());
     let mode_s_hex = aircraft.aircraft_address_hex();
 
     // Track if we made any changes

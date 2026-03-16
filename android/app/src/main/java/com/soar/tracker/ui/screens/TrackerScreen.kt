@@ -69,6 +69,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
     val lastUpdateTime by TrackingService.lastUpdateTime.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val groundPressureHpa by TrackingService.groundPressureHpa.collectAsState()
+    val liveHeading by TrackingService.liveHeadingDegrees.collectAsState()
     var showAltimeterConfirm by remember { mutableStateOf(false) }
 
     // Determine if aircraft appears to be in flight
@@ -221,8 +222,8 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
         ) {
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Error display
-            lastError?.let { error ->
+            // Error display (skip blank errors)
+            lastError?.takeIf { it.isNotBlank() }?.let { error ->
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -256,6 +257,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 latitude = sensorData?.latitude,
                 longitude = sensorData?.longitude,
                 altitudeMeters = sensorData?.altitudeMeters,
+                altitudeMslMeters = sensorData?.altitudeMslMeters,
                 altitudeAglFeet = response?.altitudeAglFeet,
                 gpsBearingDegrees = sensorData?.gpsBearingDegrees,
                 magneticHeadingDegrees = sensorData?.magneticHeadingDegrees,
@@ -276,6 +278,7 @@ fun TrackerScreen(onLogout: () -> Unit = {}, modifier: Modifier = Modifier) {
                 userLatitude = sensorData?.latitude,
                 userLongitude = sensorData?.longitude,
                 userHeadingDegrees = sensorData?.magneticHeadingDegrees,
+                liveHeadingDegrees = liveHeading,
             )
 
             // Open website button
