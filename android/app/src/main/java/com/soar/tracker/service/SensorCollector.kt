@@ -43,6 +43,18 @@ class SensorCollector(context: Context) : SensorEventListener {
     private val _liveHeadingDegrees = MutableStateFlow<Float?>(null)
     val liveHeadingDegrees: StateFlow<Float?> = _liveHeadingDegrees
 
+    /**
+     * Live pitch in degrees for AR view.
+     * 0° = phone held vertically (screen facing user), positive = tilting up toward sky.
+     * Derived from orientation[1] which is -90° when vertical, so we add 90.
+     */
+    private val _livePitchDegrees = MutableStateFlow<Float?>(null)
+    val livePitchDegrees: StateFlow<Float?> = _livePitchDegrees
+
+    /** Live roll in degrees. 0° = upright, positive = tilted clockwise. */
+    private val _liveRollDegrees = MutableStateFlow<Float?>(null)
+    val liveRollDegrees: StateFlow<Float?> = _liveRollDegrees
+
     private val rotationMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
 
@@ -61,6 +73,8 @@ class SensorCollector(context: Context) : SensorEventListener {
     fun stop() {
         sensorManager.unregisterListener(this)
         _liveHeadingDegrees.value = null
+        _livePitchDegrees.value = null
+        _liveRollDegrees.value = null
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -81,6 +95,12 @@ class SensorCollector(context: Context) : SensorEventListener {
                 if (azimuth < 0) azimuth += 360f
                 magneticHeadingDegrees = azimuth
                 _liveHeadingDegrees.value = azimuth
+                // orientation[1] is pitch in radians: 0 = flat, -π/2 = vertical (screen facing user)
+                // Add 90° so 0° = vertical phone, positive = tilting up toward sky
+                val pitch = Math.toDegrees(orientation[1].toDouble()).toFloat() + 90f
+                _livePitchDegrees.value = pitch
+                // orientation[2] is roll in radians: 0 = upright, positive = clockwise tilt
+                _liveRollDegrees.value = Math.toDegrees(orientation[2].toDouble()).toFloat()
             }
         }
     }

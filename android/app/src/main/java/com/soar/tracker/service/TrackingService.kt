@@ -58,6 +58,8 @@ class TrackingService : LifecycleService() {
     private var locationCallback: LocationCallback? = null
     private var pendingSubmit: kotlinx.coroutines.Job? = null
     private var headingForwardJob: kotlinx.coroutines.Job? = null
+    private var pitchForwardJob: kotlinx.coroutines.Job? = null
+    private var rollForwardJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     // Vertical speed calculation state
@@ -101,6 +103,12 @@ class TrackingService : LifecycleService() {
          */
         private val _liveHeadingDegrees = MutableStateFlow<Float?>(null)
         val liveHeadingDegrees: StateFlow<Float?> = _liveHeadingDegrees
+
+        private val _livePitchDegrees = MutableStateFlow<Float?>(null)
+        val livePitchDegrees: StateFlow<Float?> = _livePitchDegrees
+
+        private val _liveRollDegrees = MutableStateFlow<Float?>(null)
+        val liveRollDegrees: StateFlow<Float?> = _liveRollDegrees
 
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
@@ -165,6 +173,16 @@ class TrackingService : LifecycleService() {
         headingForwardJob = lifecycleScope.launch {
             sensorCollector.liveHeadingDegrees.collect { heading ->
                 _liveHeadingDegrees.value = heading
+            }
+        }
+        pitchForwardJob = lifecycleScope.launch {
+            sensorCollector.livePitchDegrees.collect { pitch ->
+                _livePitchDegrees.value = pitch
+            }
+        }
+        rollForwardJob = lifecycleScope.launch {
+            sensorCollector.liveRollDegrees.collect { roll ->
+                _liveRollDegrees.value = roll
             }
         }
 
@@ -234,10 +252,16 @@ class TrackingService : LifecycleService() {
         locationCallback = null
         headingForwardJob?.cancel()
         headingForwardJob = null
+        pitchForwardJob?.cancel()
+        pitchForwardJob = null
+        rollForwardJob?.cancel()
+        rollForwardJob = null
         sensorCollector.stop()
         _isTracking.value = false
         _groundPressureHpa.value = null
         _liveHeadingDegrees.value = null
+        _livePitchDegrees.value = null
+        _liveRollDegrees.value = null
         cachedGeoidOffsetMeters = null
         altitudeHistory.clear()
         wakeLock?.let {
