@@ -256,7 +256,7 @@ fun ARScreen(modifier: Modifier = Modifier) {
                         } catch (_: Exception) {
                             // Camera binding failed — preview will be blank
                         }
-                    }, ctx.mainExecutor)
+                    }, androidx.core.content.ContextCompat.getMainExecutor(ctx))
                     previewView
                 }
             },
