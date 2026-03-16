@@ -781,7 +781,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/pilots", post(actions::users::create_pilot))
         .route(
             "/clubs/{id}/pilots",
-            get(actions::users::get_pilots_by_club),
+            get(actions::users::get_members_by_club),
         )
         .route(
             "/users/{id}/invite",

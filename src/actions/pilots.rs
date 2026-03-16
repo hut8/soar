@@ -58,9 +58,9 @@ pub async fn get_pilot_by_id(
     }
 }
 
-/// Get all pilots for a specific club
+/// Get all members for a specific club
 /// Requires authentication and user must belong to the requested club
-pub async fn get_pilots_by_club(
+pub async fn get_members_by_club(
     Path(club_id): Path<Uuid>,
     State(state): State<AppState>,
     AuthUser(user): AuthUser,
@@ -69,20 +69,20 @@ pub async fn get_pilots_by_club(
     if user.club_id != Some(club_id) && !user.is_admin {
         return json_error(
             StatusCode::FORBIDDEN,
-            "You must be a member of this club to view its pilots",
+            "You must be a member of this club to view its members",
         )
         .into_response();
     }
 
     let users_repo = UsersRepository::new(state.pool.clone());
 
-    match users_repo.get_pilots_by_club(club_id).await {
-        Ok(pilots) => Json(DataListResponse { data: pilots }).into_response(),
+    match users_repo.get_members_by_club(club_id).await {
+        Ok(members) => Json(DataListResponse { data: members }).into_response(),
         Err(e) => {
-            tracing::error!(club_id = %club_id, error = %e, "Failed to get pilots for club");
+            tracing::error!(club_id = %club_id, error = %e, "Failed to get members for club");
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get pilots for club",
+                "Failed to get members for club",
             )
             .into_response()
         }

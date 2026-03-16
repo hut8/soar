@@ -550,26 +550,19 @@ impl UsersRepository {
         .await?
     }
 
-    /// Get all pilots (users with pilot qualifications) for a club
+    /// Get all members for a club
     /// Excludes soft-deleted users
-    pub async fn get_pilots_by_club(&self, club_id: Uuid) -> Result<Vec<User>> {
+    pub async fn get_members_by_club(&self, club_id: Uuid) -> Result<Vec<User>> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<User>> {
             let mut conn = pool.get()?;
-            let pilots = users::table
+            let members = users::table
                 .filter(users::club_id.eq(Some(club_id)))
                 .filter(users::deleted_at.is_null())
-                .filter(
-                    users::is_licensed
-                        .eq(true)
-                        .or(users::is_instructor.eq(true))
-                        .or(users::is_tow_pilot.eq(true))
-                        .or(users::is_examiner.eq(true)),
-                )
                 .order((users::last_name.asc(), users::first_name.asc()))
                 .load::<UserRecord>(&mut conn)?;
-            Ok(pilots.into_iter().map(|r| r.into()).collect())
+            Ok(members.into_iter().map(|r| r.into()).collect())
         })
         .await?
     }
