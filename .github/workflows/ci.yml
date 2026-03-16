@@ -56,12 +56,18 @@ jobs:
 
   test-e2e:
     name: E2E Tests (Playwright)
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     container:
       image: ghcr.io/hut8/soar-ci:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
+        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
+        - /opt/ci-cache/target:/ci-target
+    env:
+      CARGO_TARGET_DIR: /ci-target/${{ runner.name }}-e2e
     services:
       postgres:
         image: ghcr.io/hut8/postgis-timescaledb:latest
@@ -95,13 +101,6 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "e2e-debug"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install web dependencies
         run: bun install --frozen-lockfile
@@ -138,7 +137,7 @@ jobs:
           RUSTFLAGS="--cfg tokio_unstable" cargo build
 
           # Seed test data
-          ./target/debug/soar seed-test-data
+          $CARGO_TARGET_DIR/debug/soar seed-test-data
 
       - name: Start Rust backend server
         working-directory: .
@@ -156,7 +155,7 @@ jobs:
           BASE_URL: http://localhost:4173
         run: |
           # Start backend server in background
-          ./target/debug/soar web --port 61225 --interface localhost > backend.log 2>&1 &
+          $CARGO_TARGET_DIR/debug/soar web --port 61225 --interface localhost > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "Backend PID: $BACKEND_PID"
           echo $BACKEND_PID > backend.pid
@@ -215,6 +214,12 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
+        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
+        - /opt/ci-cache/target:/ci-target
+    env:
+      CARGO_TARGET_DIR: /ci-target/${{ runner.name }}-test
     services:
       postgres:
         image: ghcr.io/hut8/postgis-timescaledb:latest
@@ -249,14 +254,6 @@ jobs:
       - name: Install web dependencies
         working-directory: ./web
         run: bun install --frozen-lockfile
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "test-build"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-all-crates: true
 
       - name: Setup test database
         env:
@@ -308,6 +305,12 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
+        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
+        - /opt/ci-cache/target:/ci-target
+    env:
+      CARGO_TARGET_DIR: /ci-target/${{ runner.name }}-release-musl
     defaults:
       run:
         shell: bash
@@ -336,14 +339,6 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: bun run build
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "release-build-native-musl"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-all-crates: true
-
       - name: Build static release binary
         env:
           SKIP_WEB_BUILD: "1"  # Frontend already built via bun run build above
@@ -357,21 +352,21 @@ jobs:
       - name: Verify static linking
         run: |
           echo "Checking if binary is statically linked..."
-          file target/x86_64-unknown-linux-musl/release/soar
+          file $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar
 
           # Check for dynamic dependencies (should show "statically linked")
-          if ldd target/x86_64-unknown-linux-musl/release/soar 2>&1 | grep -q "not a dynamic executable"; then
+          if ldd $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar 2>&1 | grep -q "not a dynamic executable"; then
             echo "Binary is statically linked (no dynamic dependencies)"
           else
             echo "Binary has dynamic dependencies:"
-            ldd target/x86_64-unknown-linux-musl/release/soar || true
+            ldd $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar || true
           fi
 
       - name: Create binary archive
         run: |
           rm -rf release
           mkdir -p release
-          cp target/x86_64-unknown-linux-musl/release/soar release/
+          cp $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar release/
           cp README.md release/ || echo "No README.md found"
           tar -czf soar-linux-x64.tar.gz -C release .
 
@@ -385,19 +380,19 @@ jobs:
       - name: Show binary info
         run: |
           echo "Binary size:"
-          ls -lh target/x86_64-unknown-linux-musl/release/soar
+          ls -lh $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar
           echo ""
           echo "Binary info:"
-          file target/x86_64-unknown-linux-musl/release/soar
+          file $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar
           echo ""
           echo "Stripped binary size:"
-          cp target/x86_64-unknown-linux-musl/release/soar /tmp/soar-stripped
+          cp $CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/soar /tmp/soar-stripped
           strip /tmp/soar-stripped
           ls -lh /tmp/soar-stripped
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     container:
       image: ghcr.io/hut8/soar-ci:latest
       credentials:
