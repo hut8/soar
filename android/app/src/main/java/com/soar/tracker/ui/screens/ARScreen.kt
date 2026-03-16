@@ -11,12 +11,15 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +54,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -59,14 +64,17 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.soar.tracker.data.api.NearbyAircraftInfo
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.theme.Green
+import com.soar.tracker.ui.theme.Red
 import com.soar.tracker.ui.util.ARAircraftPosition
 import com.soar.tracker.ui.util.normalizeBearing
 import com.soar.tracker.ui.util.projectToScreen
 import com.soar.tracker.ui.util.toARAircraftPosition
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 private const val NM_TO_METERS = 1852.0
+private const val TAP_RADIUS_PX = 60f // Hit-test radius for tapping aircraft markers
 
 @Composable
 fun ARScreen(modifier: Modifier = Modifier) {
@@ -104,6 +112,13 @@ fun ARScreen(modifier: Modifier = Modifier) {
 
     // Target aircraft for direction indicator
     var targetAircraftId by remember { mutableStateOf<String?>(null) }
+
+    // Selected aircraft for detail popup (tapped on marker)
+    var selectedAircraft by remember { mutableStateOf<NearbyAircraftInfo?>(null) }
+
+    // Rendered aircraft positions for hit-testing taps
+    // Updated each frame by the Canvas draw pass
+    val renderedPositions = remember { mutableListOf<Pair<NearbyAircraftInfo, Offset>>() }
 
     // FOV based on orientation
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -207,14 +222,39 @@ fun ARScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Aircraft overlay
+        // Aircraft overlay with tap detection
         if (userLat != null && userLon != null && hasSensors) {
             val heading = currentHeading!!
             val pitch = currentPitch!!
 
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures { tapOffset ->
+                            // Find the closest rendered aircraft to the tap point
+                            var closest: NearbyAircraftInfo? = null
+                            var closestDist = TAP_RADIUS_PX
+                            for ((ac, pos) in renderedPositions) {
+                                val dx = tapOffset.x - pos.x
+                                val dy = tapOffset.y - pos.y
+                                val dist = sqrt(dx * dx + dy * dy)
+                                if (dist < closestDist) {
+                                    closestDist = dist
+                                    closest = ac
+                                }
+                            }
+                            if (closest != null) {
+                                selectedAircraft = closest
+                            }
+                        }
+                    },
+            ) {
                 val w = size.width
                 val h = size.height
+
+                // Clear and rebuild rendered positions for hit-testing
+                renderedPositions.clear()
 
                 for (ac in aircraft) {
                     if (ac.distanceMeters / NM_TO_METERS > rangeNm) continue
@@ -226,6 +266,7 @@ fun ARScreen(modifier: Modifier = Modifier) {
                     if (!screenPos.visible) continue
 
                     val center = Offset(screenPos.x, screenPos.y)
+                    renderedPositions.add(ac to center)
 
                     // Aircraft triangle icon
                     val triSize = 12f
@@ -280,7 +321,6 @@ fun ARScreen(modifier: Modifier = Modifier) {
                 val arPos = toARAircraftPosition(targetAc, userLat, userLon, userAltM)
                 val screenPos = projectToScreen(
                     arPos, heading, pitch, fovH, fovV,
-                    // Use approximate screen size — exact size not critical for visibility check
                     with(density) { configuration.screenWidthDp.dp.toPx() },
                     with(density) { configuration.screenHeightDp.dp.toPx() },
                 )
@@ -375,6 +415,21 @@ fun ARScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        // Aircraft detail popup (shown when tapping a marker)
+        selectedAircraft?.let { ac ->
+            AircraftDetailPopup(
+                aircraft = ac,
+                userLat = userLat,
+                userLon = userLon,
+                heading = currentHeading,
+                onDismiss = { selectedAircraft = null },
+                onTrack = {
+                    targetAircraftId = ac.id
+                    selectedAircraft = null
+                },
+            )
+        }
+
         // Aircraft list modal
         if (showAircraftList && userLat != null && userLon != null) {
             AircraftListModal(
@@ -390,6 +445,170 @@ fun ARScreen(modifier: Modifier = Modifier) {
                 onDismiss = { showAircraftList = false },
             )
         }
+    }
+}
+
+/** Aircraft detail popup shown when tapping a marker on the AR view. */
+@Composable
+private fun AircraftDetailPopup(
+    aircraft: NearbyAircraftInfo,
+    userLat: Double?,
+    userLon: Double?,
+    heading: Float?,
+    onDismiss: () -> Unit,
+    onTrack: () -> Unit,
+) {
+    val distNm = aircraft.distanceMeters / NM_TO_METERS
+    val bearing = if (userLat != null && userLon != null) {
+        com.soar.tracker.ui.util.calculateBearing(
+            userLat, userLon, aircraft.latitude, aircraft.longitude,
+        )
+    } else {
+        null
+    }
+    val arrowRotation = if (bearing != null && heading != null) {
+        (bearing - heading).toFloat()
+    } else {
+        null
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp)
+                .background(Color(0xFF1A1A2E), RoundedCornerShape(16.dp))
+                .clickable {} // Consume clicks on the popup itself
+                .padding(20.dp),
+        ) {
+            // Header with direction arrow and name
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (arrowRotation != null) {
+                        Text(
+                            text = "\u2191",
+                            color = Green,
+                            style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier.rotate(arrowRotation),
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = aircraft.registration ?: aircraft.aircraftModel,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        if (aircraft.registration != null) {
+                            Text(
+                                text = aircraft.aircraftModel,
+                                color = Color.White.copy(alpha = 0.6f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Position section
+            DetailRow("Altitude", aircraft.altitudeFeet?.let {
+                String.format(Locale.US, "%.0f ft", it)
+            } ?: "Unknown")
+            DetailRow("Ground Speed", aircraft.groundSpeedKnots?.let {
+                String.format(Locale.US, "%.0f kt", it)
+            } ?: "Unknown")
+            DetailRow("Track", aircraft.trackDegrees?.let {
+                String.format(Locale.US, "%03.0f\u00B0", it)
+            } ?: "Unknown")
+            aircraft.climbFpm?.let { climb ->
+                val sign = if (climb >= 0) "+" else ""
+                val climbColor = when {
+                    climb > 50 -> Green
+                    climb < -50 -> Red
+                    else -> Color.White
+                }
+                DetailRow(
+                    "Climb Rate",
+                    String.format(Locale.US, "%s%.0f fpm", sign, climb),
+                    valueColor = climbColor,
+                )
+            }
+            DetailRow("Distance", String.format(Locale.US, "%.1f nm", distNm))
+            bearing?.let {
+                DetailRow("Bearing", String.format(Locale.US, "%03.0f\u00B0", it))
+            }
+            DetailRow("Position", String.format(
+                Locale.US, "%.4f, %.4f", aircraft.latitude, aircraft.longitude,
+            ))
+            aircraft.lastFixAt?.let {
+                // Show just the time portion if ISO format
+                val timeStr = if (it.contains("T")) it.substringAfter("T").take(8) else it
+                DetailRow("Last Seen", timeStr)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Track button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Green.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = onTrack)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = "Track this aircraft",
+                    color = Green,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    valueColor: Color = Color.White,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.5f),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = value,
+            color = valueColor,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -476,7 +695,7 @@ private fun AircraftListModal(
                         ) {
                             // Direction arrow
                             Text(
-                                text = "\u2191", // ↑
+                                text = "\u2191", // up arrow
                                 color = Green,
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.rotate(arrowRotation),
@@ -491,7 +710,7 @@ private fun AircraftListModal(
                                 )
                                 val altText = ac.altitudeFeet?.let {
                                     String.format(Locale.US, "%.0f ft", it)
-                                } ?: "—"
+                                } ?: "\u2014"
                                 Text(
                                     text = "$altText  \u00B7  ${String.format(Locale.US, "%.1f nm", distNm)}  \u00B7  ${String.format(Locale.US, "%03.0f\u00B0", bearing)}",
                                     color = Color.White.copy(alpha = 0.7f),
@@ -560,7 +779,7 @@ private fun DirectionIndicator(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "\u2191", // ↑
+                text = "\u2191", // up arrow
                 color = Green,
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.rotate(arrowAngle),

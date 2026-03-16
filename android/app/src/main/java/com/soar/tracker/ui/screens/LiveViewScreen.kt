@@ -190,7 +190,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(top = padding.calculateTopPadding()),
             ) {
                 // Pre-create Paint objects outside Canvas to avoid allocation every frame
                 val northPaint = remember(textColor, labelTextSize) {
