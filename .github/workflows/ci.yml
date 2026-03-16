@@ -12,6 +12,10 @@ on:
   release:
     types: [ published ]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -205,7 +209,7 @@ jobs:
 
   test-rust:
     name: Test Rust Project
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     container:
       image: ghcr.io/hut8/soar-ci:latest
       credentials:
@@ -298,7 +302,7 @@ jobs:
 
   build-release:
     name: Build Release Binary (Native Static musl)
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     container:
       image: ghcr.io/hut8/soar-ci:latest
       credentials:
