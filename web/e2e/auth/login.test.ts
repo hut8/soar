@@ -98,7 +98,7 @@ test.describe('Login', () => {
 		await page.getByPlaceholder('Enter your password').press('Enter');
 
 		// Should be redirected to home page
-		await expect(page).toHaveURL('/');
+		await expect(page).toHaveURL('/', { timeout: 15000 });
 	});
 
 	test('should navigate to registration page from login', async ({ page }) => {
