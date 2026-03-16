@@ -28,6 +28,7 @@ pub mod user_settings;
 pub mod users;
 pub mod views;
 pub mod watchlist;
+pub mod weather;
 
 pub use aircraft::*;
 pub use aircraft_images::*;

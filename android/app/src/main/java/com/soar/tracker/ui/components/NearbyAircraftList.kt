@@ -32,8 +32,23 @@ fun NearbyAircraftList(
     userLatitude: Double?,
     userLongitude: Double?,
     userHeadingDegrees: Double? = null,
+    liveHeadingDegrees: Float? = null,
     modifier: Modifier = Modifier,
 ) {
+    // Prefer live heading (updates at ~50 Hz from rotation sensor) over the GPS-paced snapshot
+    val effectiveHeading = liveHeadingDegrees?.toDouble() ?: userHeadingDegrees
+    // Compute the farthest aircraft distance for the header
+    val maxDistNm = if (aircraft.isNotEmpty()) {
+        aircraft.maxOf { it.distanceMeters } / 1852.0
+    } else {
+        0.0
+    }
+    val rangeLabel = if (maxDistNm >= 1.0) {
+        String.format(Locale.US, "%.0f", maxDistNm)
+    } else {
+        String.format(Locale.US, "%.1f", maxDistNm)
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -42,14 +57,15 @@ fun NearbyAircraftList(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Nearby Aircraft (${aircraft.size})",
+                text = if (aircraft.isEmpty()) "No aircraft nearby"
+                       else "Aircraft within $rangeLabel NM (${aircraft.size})",
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             if (aircraft.isEmpty()) {
                 Text(
-                    text = "No aircraft nearby",
+                    text = "Start tracking to detect nearby aircraft",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -58,7 +74,7 @@ fun NearbyAircraftList(
                     modifier = Modifier.height((aircraft.size.coerceAtMost(5) * 56).dp),
                 ) {
                     items(aircraft) { ac ->
-                        NearbyAircraftRow(ac, userLatitude, userLongitude, userHeadingDegrees)
+                        NearbyAircraftRow(ac, userLatitude, userLongitude, effectiveHeading)
                         HorizontalDivider()
                     }
                 }

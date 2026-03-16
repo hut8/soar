@@ -12,7 +12,8 @@ class TrackerRepository(private val api: SoarApi) {
                 val body = response.body() ?: return Result.failure(Exception("Empty response"))
                 Result.success(body)
             } else {
-                val errorBody = response.errorBody()?.string() ?: "Request failed"
+                val errorBody = response.errorBody()?.string()?.takeIf { it.isNotBlank() }
+                    ?: "Request failed (HTTP ${response.code()})"
                 Result.failure(Exception(errorBody))
             }
         } catch (e: Exception) {

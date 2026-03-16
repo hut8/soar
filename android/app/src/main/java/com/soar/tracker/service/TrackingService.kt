@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.location.Location
+import android.os.Build
 import android.os.Looper
 import android.os.PowerManager
 import androidx.lifecycle.LifecycleService
@@ -33,7 +35,15 @@ data class SensorData(
     val verticalSpeedMps: Double?,
     val latitude: Double?,
     val longitude: Double?,
+    /** Raw WGS84 ellipsoid height from GPS (not corrected for geoid). */
     val altitudeMeters: Double?,
+    /**
+     * Altitude above mean sea level (MSL) in meters.
+     * On Android 34+: from [Location.getMslAltitudeMeters].
+     * On older APIs: computed using the server-provided ground elevation and a cached geoid offset.
+     * Falls back to raw WGS84 height if no correction is available yet.
+     */
+    val altitudeMslMeters: Double?,
     /** Ground speed in m/s from GPS */
     val speedMps: Double?,
     /** GPS track / direction of travel (only available when moving) */
@@ -47,10 +57,19 @@ class TrackingService : LifecycleService() {
     private lateinit var sensorCollector: SensorCollector
     private var locationCallback: LocationCallback? = null
     private var pendingSubmit: kotlinx.coroutines.Job? = null
+    private var headingForwardJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     // Vertical speed calculation state
     private val altitudeHistory = mutableListOf<Pair<Long, Double>>() // (timestamp_ms, altitude_m)
+
+    /**
+     * Cached geoid offset (WGS84 ellipsoid height minus MSL) in meters.
+     * Computed from the server's ground elevation when AGL ≈ 0.
+     * The geoid height is relatively stable over hundreds of kilometers,
+     * so a single cached value is sufficient for a session.
+     */
+    private var cachedGeoidOffsetMeters: Double? = null
 
     companion object {
         const val CHANNEL_ID = "soar_tracking"
@@ -74,6 +93,14 @@ class TrackingService : LifecycleService() {
 
         private val _groundPressureHpa = MutableStateFlow<Double?>(null)
         val groundPressureHpa: StateFlow<Double?> = _groundPressureHpa
+
+        /**
+         * Live magnetic heading from the rotation vector sensor, updating at ~50 Hz.
+         * Use this for UI that needs immediate heading updates (e.g. nearby-aircraft arrows)
+         * instead of [lastSensorData] which only updates on GPS callbacks (~3 s).
+         */
+        private val _liveHeadingDegrees = MutableStateFlow<Float?>(null)
+        val liveHeadingDegrees: StateFlow<Float?> = _liveHeadingDegrees
 
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
@@ -134,6 +161,13 @@ class TrackingService : LifecycleService() {
         _isTracking.value = true
         _lastError.value = null
 
+        // Forward live heading from sensor collector to the static StateFlow
+        headingForwardJob = lifecycleScope.launch {
+            sensorCollector.liveHeadingDegrees.collect { heading ->
+                _liveHeadingDegrees.value = heading
+            }
+        }
+
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             3_000L, // 3 seconds
@@ -145,6 +179,9 @@ class TrackingService : LifecycleService() {
 
                 val hasAltitude = location.hasAltitude()
                 val verticalSpeed = if (hasAltitude) calculateVerticalSpeed(location.altitude) else null
+
+                // Compute MSL altitude
+                val altMsl = if (hasAltitude) computeMslAltitude(location) else null
 
                 // Android accelerometer reports m/s², convert to g-force
                 val ax = sensorCollector.accelX.toDouble() / 9.81
@@ -175,6 +212,7 @@ class TrackingService : LifecycleService() {
                     latitude = location.latitude,
                     longitude = location.longitude,
                     altitudeMeters = if (hasAltitude) location.altitude else null,
+                    altitudeMslMeters = altMsl,
                     speedMps = if (location.hasSpeed()) location.speed.toDouble() else null,
                     gpsBearingDegrees = if (location.hasBearing()) location.bearing.toDouble() else null,
                     magneticHeadingDegrees = sensorCollector.magneticHeadingDegrees?.toDouble(),
@@ -194,9 +232,13 @@ class TrackingService : LifecycleService() {
     private fun stopTracking() {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
+        headingForwardJob?.cancel()
+        headingForwardJob = null
         sensorCollector.stop()
         _isTracking.value = false
         _groundPressureHpa.value = null
+        _liveHeadingDegrees.value = null
+        cachedGeoidOffsetMeters = null
         altitudeHistory.clear()
         wakeLock?.let {
             if (it.isHeld) it.release()
@@ -222,10 +264,56 @@ class TrackingService : LifecycleService() {
                 if (agl != null && agl in -50..50 && pressure != null) {
                     _groundPressureHpa.value = pressure
                 }
+                // Compute and cache geoid offset when near ground level.
+                // geoidOffset = WGS84_height - MSL_height
+                // When AGL ≈ 0: MSL_height ≈ groundElevation, so
+                // geoidOffset ≈ WGS84_height - groundElevation
+                // Use request.altitudeMeters (captured at call time) rather than
+                // _lastSensorData which may have advanced during the network round-trip.
+                val groundElev = response.groundElevationMeters
+                val gpsAlt = request.altitudeMeters
+                if (agl != null && agl in -50..50 &&
+                    groundElev != null && gpsAlt != null &&
+                    cachedGeoidOffsetMeters == null
+                ) {
+                    cachedGeoidOffsetMeters = gpsAlt - groundElev
+                }
             }.onFailure { e ->
-                _lastError.value = e.message ?: "Request failed"
+                _lastError.value = e.message?.takeIf { it.isNotBlank() } ?: "Request failed"
             }
         }
+    }
+
+    /**
+     * Compute MSL altitude from a GPS [Location].
+     *
+     * GPS `getAltitude()` returns height above the WGS84 ellipsoid, which can differ
+     * from mean-sea-level (MSL) by up to 100 m depending on location.  For example,
+     * in Troy, NY the geoid is ≈29 m below the WGS84 ellipsoid, so the raw GPS
+     * altitude reads ≈29 m (≈95 ft) too low.
+     *
+     * Strategy:
+     *  1. Android 34+: use `getMslAltitudeMeters()` (built-in EGM2008 model).
+     *  2. Older APIs: apply a cached geoid offset derived from the server's
+     *     `groundElevationMeters` when the user was near ground level.
+     *  3. Fallback: return raw WGS84 altitude (better than nothing).
+     */
+    private fun computeMslAltitude(location: Location): Double {
+        // Android 34+ provides MSL altitude directly via built-in EGM2008 model
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (location.hasMslAltitude()) {
+                return location.mslAltitudeMeters
+            }
+        }
+
+        // Apply cached geoid offset if available
+        val offset = cachedGeoidOffsetMeters
+        if (offset != null) {
+            return location.altitude - offset
+        }
+
+        // No correction available yet — return raw WGS84 height
+        return location.altitude
     }
 
     private fun calculateVerticalSpeed(altitude: Double): Double? {
