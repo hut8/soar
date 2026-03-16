@@ -51,17 +51,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.soar.tracker.data.api.NearbyAircraftInfo
 import com.soar.tracker.service.TrackingService
+import com.soar.tracker.ui.components.AircraftDetailRow
 import com.soar.tracker.ui.theme.Green
 import com.soar.tracker.ui.theme.Red
 import com.soar.tracker.ui.util.calculateBearing
 import com.soar.tracker.ui.util.drawAircraftIcon
 import com.soar.tracker.ui.util.getAltitudeColor
+import com.soar.tracker.ui.util.NM_TO_METERS
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
-
-private const val NM_TO_METERS = 1852.0
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -253,7 +253,8 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                             detectTapGestures { tapOffset ->
                                 var closest: NearbyAircraftInfo? = null
                                 var closestDist = 60f
-                                for ((ac, pos) in renderedPositions) {
+                                val positions = renderedPositions.toList()
+                                for ((ac, pos) in positions) {
                                     val dx = tapOffset.x - pos.x
                                     val dy = tapOffset.y - pos.y
                                     val dist = sqrt(dx * dx + dy * dy)
@@ -675,13 +676,13 @@ private fun LiveViewAircraftPopup(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(12.dp))
 
-            LiveViewDetailRow("Altitude", aircraft.altitudeFeet?.let {
+            AircraftDetailRow("Altitude", aircraft.altitudeFeet?.let {
                 String.format(Locale.US, "%.0f ft", it)
             } ?: "Unknown")
-            LiveViewDetailRow("Ground Speed", aircraft.groundSpeedKnots?.let {
+            AircraftDetailRow("Ground Speed", aircraft.groundSpeedKnots?.let {
                 String.format(Locale.US, "%.0f kt", it)
             } ?: "Unknown")
-            LiveViewDetailRow("Track", aircraft.trackDegrees?.let {
+            AircraftDetailRow("Track", aircraft.trackDegrees?.let {
                 String.format(Locale.US, "%03.0f\u00B0", it)
             } ?: "Unknown")
             aircraft.climbFpm?.let { climb ->
@@ -691,46 +692,21 @@ private fun LiveViewAircraftPopup(
                     climb < -50 -> Red
                     else -> Color.Unspecified
                 }
-                LiveViewDetailRow(
+                AircraftDetailRow(
                     "Climb Rate",
                     String.format(Locale.US, "%s%.0f fpm", sign, climb),
                     valueColor = climbColor,
                 )
             }
-            LiveViewDetailRow("Distance", String.format(Locale.US, "%.1f nm", distNm))
-            LiveViewDetailRow("Bearing", String.format(Locale.US, "%03.0f\u00B0", bearing))
-            LiveViewDetailRow("Position", String.format(
+            AircraftDetailRow("Distance", String.format(Locale.US, "%.1f nm", distNm))
+            AircraftDetailRow("Bearing", String.format(Locale.US, "%03.0f\u00B0", bearing))
+            AircraftDetailRow("Position", String.format(
                 Locale.US, "%.4f, %.4f", aircraft.latitude, aircraft.longitude,
             ))
             aircraft.lastFixAt?.let {
                 val timeStr = if (it.contains("T")) it.substringAfter("T").take(8) else it
-                LiveViewDetailRow("Last Seen", timeStr)
+                AircraftDetailRow("Last Seen", timeStr)
             }
         }
-    }
-}
-
-@Composable
-private fun LiveViewDetailRow(
-    label: String,
-    value: String,
-    valueColor: Color = Color.Unspecified,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            text = value,
-            color = valueColor,
-            style = MaterialTheme.typography.bodySmall,
-        )
     }
 }

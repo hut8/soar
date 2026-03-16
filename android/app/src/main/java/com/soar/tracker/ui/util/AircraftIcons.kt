@@ -120,6 +120,18 @@ fun DrawScope.drawAircraftIcon(
     }
 }
 
+/** Altitude gradient stop: altitude in feet to RGB color components. */
+private data class AltColorStop(val alt: Double, val r: Int, val g: Int, val b: Int)
+
+private val ALTITUDE_COLOR_STOPS = listOf(
+    AltColorStop(0.0, 239, 68, 68),       // Red    #ef4444
+    AltColorStop(5000.0, 249, 115, 22),    // Orange #f97316
+    AltColorStop(10000.0, 234, 179, 8),    // Yellow #eab308
+    AltColorStop(20000.0, 34, 197, 94),    // Green  #22c55e
+    AltColorStop(30000.0, 6, 182, 212),    // Cyan   #06b6d4
+    AltColorStop(40000.0, 56, 189, 248),   // Blue   #38bdf8
+)
+
 /**
  * Altitude-based color gradient matching the web view.
  * Interpolates from red (ground) through orange, yellow, green, cyan to light blue (40,000 ft).
@@ -132,19 +144,8 @@ fun getAltitudeColor(altitudeFeet: Double?): Color {
 
     val alt = altitudeFeet.coerceIn(0.0, 40000.0)
 
-    // Gradient stops: altitude → Color
-    data class Stop(val alt: Double, val r: Int, val g: Int, val b: Int)
-
-    val stops = listOf(
-        Stop(0.0, 239, 68, 68),       // Red    #ef4444
-        Stop(5000.0, 249, 115, 22),    // Orange #f97316
-        Stop(10000.0, 234, 179, 8),    // Yellow #eab308
-        Stop(20000.0, 34, 197, 94),    // Green  #22c55e
-        Stop(30000.0, 6, 182, 212),    // Cyan   #06b6d4
-        Stop(40000.0, 56, 189, 248),   // Blue   #38bdf8
-    )
-
     // Find bracketing stops
+    val stops = ALTITUDE_COLOR_STOPS
     var lower = stops.first()
     var upper = stops.last()
     for (i in 0 until stops.size - 1) {

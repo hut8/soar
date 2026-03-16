@@ -64,6 +64,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.soar.tracker.ar.ARCoreSessionManager
 import com.soar.tracker.data.api.NearbyAircraftInfo
+import com.soar.tracker.ui.components.AircraftDetailRow
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.theme.Green
 import com.soar.tracker.ui.theme.Red
@@ -73,11 +74,13 @@ import com.soar.tracker.ui.util.getAltitudeColor
 import com.soar.tracker.ui.util.normalizeBearing
 import com.soar.tracker.ui.util.projectToScreen
 import com.soar.tracker.ui.util.toARAircraftPosition
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.soar.tracker.ui.util.NM_TO_METERS
+import com.soar.tracker.ui.util.calculateBearing
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-
-private const val NM_TO_METERS = 1852.0
 private const val TAP_RADIUS_PX = 60f // Hit-test radius for tapping aircraft markers
 
 @Composable
@@ -99,13 +102,19 @@ fun ARScreen(modifier: Modifier = Modifier) {
     val userAltM = sensorData?.altitudeMslMeters ?: sensorData?.altitudeMeters ?: 0.0
 
     // Camera permission
-    var cameraPermissionGranted by remember { mutableStateOf(false) }
+    var cameraPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> cameraPermissionGranted = granted }
 
     LaunchedEffect(Unit) {
-        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        if (!cameraPermissionGranted) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     // Range slider (5–150 NM)
@@ -290,7 +299,8 @@ fun ARScreen(modifier: Modifier = Modifier) {
                             // Find the closest rendered aircraft to the tap point
                             var closest: NearbyAircraftInfo? = null
                             var closestDist = TAP_RADIUS_PX
-                            for ((ac, pos) in renderedPositions) {
+                            val positions = renderedPositions.toList()
+                            for ((ac, pos) in positions) {
                                 val dx = tapOffset.x - pos.x
                                 val dy = tapOffset.y - pos.y
                                 val dist = sqrt(dx * dx + dy * dy)
@@ -337,7 +347,7 @@ fun ARScreen(modifier: Modifier = Modifier) {
                     val distLabel = String.format(
                         Locale.US, "%.1fnm", ac.distanceMeters / NM_TO_METERS,
                     )
-                    val infoText = "$label  $altLabel  $distLabel"
+                    val infoText = listOfNotNull(label, altLabel.ifEmpty { null }, distLabel).joinToString("  ")
 
                     val textWidth = labelPaint.measureText(infoText)
                     val pillPadH = 6f
@@ -506,7 +516,7 @@ private fun AircraftDetailPopup(
 ) {
     val distNm = aircraft.distanceMeters / NM_TO_METERS
     val bearing = if (userLat != null && userLon != null) {
-        com.soar.tracker.ui.util.calculateBearing(
+        calculateBearing(
             userLat, userLon, aircraft.latitude, aircraft.longitude,
         )
     } else {
@@ -577,15 +587,16 @@ private fun AircraftDetailPopup(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Position section
-            DetailRow("Altitude", aircraft.altitudeFeet?.let {
+            val arLabelColor = Color.White.copy(alpha = 0.5f)
+            AircraftDetailRow("Altitude", aircraft.altitudeFeet?.let {
                 String.format(Locale.US, "%.0f ft", it)
-            } ?: "Unknown")
-            DetailRow("Ground Speed", aircraft.groundSpeedKnots?.let {
+            } ?: "Unknown", labelColor = arLabelColor, valueColor = Color.White)
+            AircraftDetailRow("Ground Speed", aircraft.groundSpeedKnots?.let {
                 String.format(Locale.US, "%.0f kt", it)
-            } ?: "Unknown")
-            DetailRow("Track", aircraft.trackDegrees?.let {
+            } ?: "Unknown", labelColor = arLabelColor, valueColor = Color.White)
+            AircraftDetailRow("Track", aircraft.trackDegrees?.let {
                 String.format(Locale.US, "%03.0f\u00B0", it)
-            } ?: "Unknown")
+            } ?: "Unknown", labelColor = arLabelColor, valueColor = Color.White)
             aircraft.climbFpm?.let { climb ->
                 val sign = if (climb >= 0) "+" else ""
                 val climbColor = when {
@@ -593,23 +604,24 @@ private fun AircraftDetailPopup(
                     climb < -50 -> Red
                     else -> Color.White
                 }
-                DetailRow(
+                AircraftDetailRow(
                     "Climb Rate",
                     String.format(Locale.US, "%s%.0f fpm", sign, climb),
+                    labelColor = arLabelColor,
                     valueColor = climbColor,
                 )
             }
-            DetailRow("Distance", String.format(Locale.US, "%.1f nm", distNm))
+            AircraftDetailRow("Distance", String.format(Locale.US, "%.1f nm", distNm), labelColor = arLabelColor, valueColor = Color.White)
             bearing?.let {
-                DetailRow("Bearing", String.format(Locale.US, "%03.0f\u00B0", it))
+                AircraftDetailRow("Bearing", String.format(Locale.US, "%03.0f\u00B0", it), labelColor = arLabelColor, valueColor = Color.White)
             }
-            DetailRow("Position", String.format(
+            AircraftDetailRow("Position", String.format(
                 Locale.US, "%.4f, %.4f", aircraft.latitude, aircraft.longitude,
-            ))
+            ), labelColor = arLabelColor, valueColor = Color.White)
             aircraft.lastFixAt?.let {
                 // Show just the time portion if ISO format
                 val timeStr = if (it.contains("T")) it.substringAfter("T").take(8) else it
-                DetailRow("Last Seen", timeStr)
+                AircraftDetailRow("Last Seen", timeStr, labelColor = arLabelColor, valueColor = Color.White)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -630,31 +642,6 @@ private fun AircraftDetailPopup(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DetailRow(
-    label: String,
-    value: String,
-    valueColor: Color = Color.White,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.5f),
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            text = value,
-            color = valueColor,
-            style = MaterialTheme.typography.bodySmall,
-        )
     }
 }
 
@@ -717,7 +704,7 @@ private fun AircraftListModal(
                 ) {
                     items(sorted, key = { it.id }) { ac ->
                         val distNm = ac.distanceMeters / NM_TO_METERS
-                        val bearing = com.soar.tracker.ui.util.calculateBearing(
+                        val bearing = calculateBearing(
                             userLat, userLon, ac.latitude, ac.longitude,
                         )
                         // Arrow rotation: bearing relative to device heading

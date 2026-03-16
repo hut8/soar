@@ -1,11 +1,11 @@
 package com.soar.tracker.ui.util
 
 import com.soar.tracker.data.api.NearbyAircraftInfo
+import kotlin.math.abs
 import kotlin.math.atan2
 
 private const val METERS_TO_FEET = 3.28084
 private const val NM_TO_FEET = 6076.12
-private const val NM_TO_METERS = 1852.0
 
 /**
  * Aircraft position with pre-computed bearing and elevation angle for AR projection.
@@ -90,8 +90,8 @@ fun projectToScreen(
     val relativeBearing = normalizeBearing(arPos.bearing - headingDeg)
     val adjustedElevation = arPos.elevation - pitchDeg
 
-    val withinH = Math.abs(relativeBearing) <= fovH / 2.0
-    val withinV = Math.abs(adjustedElevation) <= fovV / 2.0
+    val withinH = abs(relativeBearing) <= fovH / 2.0
+    val withinV = abs(adjustedElevation) <= fovV / 2.0
     if (!withinH || !withinV) {
         return ARScreenPosition(-1000f, -1000f, false)
     }
