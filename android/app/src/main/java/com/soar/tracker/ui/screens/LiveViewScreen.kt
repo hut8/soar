@@ -62,7 +62,8 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
     val userLat = sensorData?.latitude
     val userLon = sensorData?.longitude
     // Prefer live heading (updates at ~50 Hz) over the GPS-paced snapshot (~3 s)
-    val userHeading = liveHeading ?: sensorData?.magneticHeadingDegrees?.toFloat() ?: 0f
+    // Nullable: null means heading is unknown, 0f means north
+    val userHeading: Float? = liveHeading ?: sensorData?.magneticHeadingDegrees?.toFloat()
 
     var northUp by remember { mutableStateOf(true) }
 
@@ -136,7 +137,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                 )
             }
         } else {
-            val mapRotation = if (northUp) 0f else -userHeading
+            val mapRotation = if (northUp) 0f else -(userHeading ?: 0f)
 
             // Precompute telemetry values for the bottom panel
             // Prefer MSL-corrected altitude (accounts for geoid undulation)
@@ -152,13 +153,17 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
             }
             val altSettingInHg = groundPressureHpa?.let { it * 0.02953 }
             val magneticDeclination = latestResponse?.magneticDeclinationDegrees
-            val trueHeading = if (userHeading != 0f && magneticDeclination != null) {
-                var hdg = userHeading + magneticDeclination
-                if (hdg < 0) hdg += 360.0
-                if (hdg >= 360) hdg -= 360.0
-                hdg
+            val trueHeading: Double? = if (userHeading != null) {
+                if (magneticDeclination != null) {
+                    var hdg = userHeading + magneticDeclination
+                    if (hdg < 0) hdg += 360.0
+                    if (hdg >= 360) hdg -= 360.0
+                    hdg
+                } else {
+                    userHeading.toDouble()
+                }
             } else {
-                userHeading.toDouble()
+                null
             }
 
             // Distance and bearing to departure airport
@@ -187,6 +192,33 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                     .fillMaxSize()
                     .padding(padding),
             ) {
+                // Pre-create Paint objects outside Canvas to avoid allocation every frame
+                val northPaint = remember(textColor, labelTextSize) {
+                    android.graphics.Paint().apply {
+                        color = textColor.toArgb()
+                        textSize = labelTextSize * 1.4f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        isFakeBoldText = true
+                        isAntiAlias = true
+                    }
+                }
+                val airportLabelPaint = remember(airportColor, labelTextSize) {
+                    android.graphics.Paint().apply {
+                        color = airportColor.toArgb()
+                        textSize = labelTextSize
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        isAntiAlias = true
+                    }
+                }
+                val aircraftLabelPaint = remember(aircraftColor, labelTextSize) {
+                    android.graphics.Paint().apply {
+                        color = aircraftColor.toArgb()
+                        textSize = labelTextSize
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        isAntiAlias = true
+                    }
+                }
+
                 // Radar canvas with pinch-to-zoom
                 Box(
                     modifier = Modifier
@@ -209,27 +241,6 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                     val cy = size.height / 2f
                     val maxRadius = min(cx, cy) * 0.9f
                     val metersPerPixel = (radarRangeNm * NM_TO_METERS).toFloat() / maxRadius
-
-                    // Pre-create reusable Paint objects outside draw loops
-                    val northPaint = android.graphics.Paint().apply {
-                        color = textColor.toArgb()
-                        textSize = labelTextSize * 1.4f
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        isFakeBoldText = true
-                        isAntiAlias = true
-                    }
-                    val airportLabelPaint = android.graphics.Paint().apply {
-                        color = airportColor.toArgb()
-                        textSize = labelTextSize
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        isAntiAlias = true
-                    }
-                    val aircraftLabelPaint = android.graphics.Paint().apply {
-                        color = aircraftColor.toArgb()
-                        textSize = labelTextSize
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        isAntiAlias = true
-                    }
 
                     // Draw range rings (no labels — they are illegible on mobile)
                     for (rangeNm in rangeRingsNm) {
@@ -332,22 +343,24 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         center = Offset(cx, cy),
                     )
 
-                    // User heading indicator line
-                    val headingLineLen = 20f
-                    val headingAngleRad = if (northUp) {
-                        Math.toRadians(userHeading.toDouble() - 90.0)
-                    } else {
-                        Math.toRadians(-90.0) // Points straight up in heading-up mode
+                    // User heading indicator line (only drawn when heading is known)
+                    if (userHeading != null) {
+                        val headingLineLen = 20f
+                        val headingAngleRad = if (northUp) {
+                            Math.toRadians(userHeading.toDouble() - 90.0)
+                        } else {
+                            Math.toRadians(-90.0) // Points straight up in heading-up mode
+                        }
+                        drawLine(
+                            color = userColor,
+                            start = Offset(cx, cy),
+                            end = Offset(
+                                cx + headingLineLen * cos(headingAngleRad).toFloat(),
+                                cy + headingLineLen * sin(headingAngleRad).toFloat(),
+                            ),
+                            strokeWidth = 2f,
+                        )
                     }
-                    drawLine(
-                        color = userColor,
-                        start = Offset(cx, cy),
-                        end = Offset(
-                            cx + headingLineLen * cos(headingAngleRad).toFloat(),
-                            cy + headingLineLen * sin(headingAngleRad).toFloat(),
-                        ),
-                        strokeWidth = 2f,
-                    )
                 }
 
                 // Range display overlay (top-right of radar)

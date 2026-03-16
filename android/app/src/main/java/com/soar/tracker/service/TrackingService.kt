@@ -268,8 +268,10 @@ class TrackingService : LifecycleService() {
                 // geoidOffset = WGS84_height - MSL_height
                 // When AGL ≈ 0: MSL_height ≈ groundElevation, so
                 // geoidOffset ≈ WGS84_height - groundElevation
+                // Use request.altitudeMeters (captured at call time) rather than
+                // _lastSensorData which may have advanced during the network round-trip.
                 val groundElev = response.groundElevationMeters
-                val gpsAlt = _lastSensorData.value?.altitudeMeters
+                val gpsAlt = request.altitudeMeters
                 if (agl != null && agl in -50..50 &&
                     groundElev != null && gpsAlt != null &&
                     cachedGeoidOffsetMeters == null
