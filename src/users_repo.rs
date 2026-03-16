@@ -560,13 +560,6 @@ impl UsersRepository {
             let pilots = users::table
                 .filter(users::club_id.eq(Some(club_id)))
                 .filter(users::deleted_at.is_null())
-                .filter(
-                    users::is_licensed
-                        .eq(true)
-                        .or(users::is_instructor.eq(true))
-                        .or(users::is_tow_pilot.eq(true))
-                        .or(users::is_examiner.eq(true)),
-                )
                 .order((users::last_name.asc(), users::first_name.asc()))
                 .load::<UserRecord>(&mut conn)?;
             Ok(pilots.into_iter().map(|r| r.into()).collect())
