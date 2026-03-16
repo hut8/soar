@@ -5,6 +5,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class SensorCollector(context: Context) : SensorEventListener {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -33,6 +35,14 @@ class SensorCollector(context: Context) : SensorEventListener {
     var magneticHeadingDegrees: Float? = null
         private set
 
+    /**
+     * Live heading StateFlow that updates on every sensor event (~20ms at SENSOR_DELAY_GAME).
+     * UI components that need real-time heading (e.g. nearby-aircraft arrows) should collect
+     * this flow instead of waiting for the GPS-paced SensorData snapshot.
+     */
+    private val _liveHeadingDegrees = MutableStateFlow<Float?>(null)
+    val liveHeadingDegrees: StateFlow<Float?> = _liveHeadingDegrees
+
     private val rotationMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
 
@@ -50,6 +60,7 @@ class SensorCollector(context: Context) : SensorEventListener {
 
     fun stop() {
         sensorManager.unregisterListener(this)
+        _liveHeadingDegrees.value = null
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -69,6 +80,7 @@ class SensorCollector(context: Context) : SensorEventListener {
                 var azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
                 if (azimuth < 0) azimuth += 360f
                 magneticHeadingDegrees = azimuth
+                _liveHeadingDegrees.value = azimuth
             }
         }
     }

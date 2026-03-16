@@ -39,6 +39,7 @@ fun SensorDisplay(
     latitude: Double?,
     longitude: Double?,
     altitudeMeters: Double?,
+    altitudeMslMeters: Double?,
     altitudeAglFeet: Int?,
     gpsBearingDegrees: Double?,
     magneticHeadingDegrees: Double?,
@@ -75,7 +76,8 @@ fun SensorDisplay(
                 else -> Color.Unspecified
             }
             val gsKnots = speedMps?.let { it * 1.94384 }
-            val altFt = altitudeMeters?.let { it * 3.28084 }
+            // Prefer MSL-corrected altitude (accounts for geoid undulation)
+            val altFt = (altitudeMslMeters ?: altitudeMeters)?.let { it * 3.28084 }
             val trueHeading = if (magneticHeadingDegrees != null && magneticDeclinationDegrees != null) {
                 var hdg = magneticHeadingDegrees + magneticDeclinationDegrees
                 if (hdg < 0) hdg += 360.0
@@ -97,7 +99,7 @@ fun SensorDisplay(
                     valueColor = varioColor,
                 )
                 GridCell(
-                    label = "GS",
+                    label = "Ground Speed",
                     value = gsKnots?.let { String.format(Locale.US, "%.0f kt", it) } ?: "--",
                     mono = mono,
                 )
