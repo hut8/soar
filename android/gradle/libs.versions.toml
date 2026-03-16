@@ -13,6 +13,7 @@ navigation = "2.8.5"
 playServicesLocation = "21.3.0"
 securityCrypto = "1.1.0-alpha06"
 camerax = "1.4.1"
+arcore = "1.46.0"
 ksp = "2.1.0-1.0.29"
 
 [libraries]
@@ -44,6 +45,7 @@ androidx-camera-core = { group = "androidx.camera", name = "camera-core", versio
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+arcore = { group = "com.google.ar", name = "core", version.ref = "arcore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

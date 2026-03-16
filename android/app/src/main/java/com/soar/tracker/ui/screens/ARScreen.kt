@@ -1,7 +1,9 @@
 package com.soar.tracker.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.content.res.Configuration
+import android.opengl.GLSurfaceView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -57,7 +59,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.soar.tracker.ar.ARCoreSessionManager
 import com.soar.tracker.data.api.NearbyAircraftInfo
 import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.theme.Green
@@ -119,15 +124,36 @@ fun ARScreen(modifier: Modifier = Modifier) {
     // Updated each frame by the Canvas draw pass
     val renderedPositions = remember { mutableListOf<Pair<NearbyAircraftInfo, Offset>>() }
 
-    // FOV based on orientation
-    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val fovH = if (isPortrait) 45f else 60f
-    val fovV = if (isPortrait) 60f else 45f
+    // ARCore session manager (null until camera permission granted and ARCore attempted)
+    var arCoreManager by remember { mutableStateOf<ARCoreSessionManager?>(null) }
 
-    // Use raw sensor values directly — smoothing adds visible lag vs camera
-    val currentHeading = liveHeading
-    val currentPitch = livePitch
+    // Collect ARCore values (heading, pitch, FOV) — null when unavailable
+    val arHeading by arCoreManager?.headingDegrees?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+    val arPitch by arCoreManager?.pitchDegrees?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+    val arFovH by arCoreManager?.fovHDegrees?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+    val arFovV by arCoreManager?.fovVDegrees?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+    val arAvailable by arCoreManager?.isAvailable?.collectAsState()
+        ?: remember { mutableStateOf(false) }
+
+    // Use ARCore heading/pitch when available, fall back to sensor
+    val currentHeading = if (arAvailable) arHeading ?: liveHeading else liveHeading
+    val currentPitch = if (arAvailable) arPitch ?: livePitch else livePitch
     val hasSensors = currentHeading != null && currentPitch != null
+
+    // FOV: prefer ARCore's actual camera FOV, fall back to hardcoded estimates
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+    val fovH = arFovH ?: if (isPortrait) 45f else 60f
+    val fovV = arFovV ?: if (isPortrait) 60f else 45f
+
+    // Feed sensor heading to ARCore for north calibration
+    LaunchedEffect(liveHeading, arCoreManager) {
+        val heading = liveHeading ?: return@LaunchedEffect
+        arCoreManager?.calibrateNorth(heading)
+    }
 
     // Not tracking state
     if (!isTracking) {
@@ -180,38 +206,68 @@ fun ARScreen(modifier: Modifier = Modifier) {
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Camera preview
+        // Camera preview: ARCore GLSurfaceView or CameraX fallback
         AndroidView(
             factory = { ctx ->
-                val previewView = PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                val activity = ctx as Activity
+                val manager = ARCoreSessionManager(activity)
+
+                if (manager.createSession()) {
+                    // ARCore available — use GLSurfaceView with ARCore rendering
+                    liveHeading?.let { manager.calibrateNorth(it) }
+                    val glView = GLSurfaceView(ctx).apply {
+                        preserveEGLContextOnPause = true
+                        setEGLContextClientVersion(2)
+                        setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+                        setRenderer(manager)
+                        renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                    }
+                    manager.resume()
+                    arCoreManager = manager
+                    glView
+                } else {
+                    // ARCore unavailable — fall back to CameraX
+                    val previewView = PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    }
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                    cameraProviderFuture.addListener({
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build().also {
+                            it.surfaceProvider = previewView.surfaceProvider
+                        }
+                        try {
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                preview,
+                            )
+                        } catch (_: Exception) {
+                            // Camera binding failed — preview will be blank
+                        }
+                    }, ctx.mainExecutor)
+                    previewView
                 }
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                        )
-                    } catch (_: Exception) {
-                        // Camera binding failed — preview will be blank
-                    }
-                }, ctx.mainExecutor)
-                previewView
             },
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Unbind camera when leaving the screen
+        // Lifecycle management: pause/resume ARCore, cleanup on dispose
         DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> arCoreManager?.resume()
+                    Lifecycle.Event.ON_PAUSE -> arCoreManager?.pause()
+                    else -> {}
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
             onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+                arCoreManager?.destroy()
+                arCoreManager = null
                 try {
                     val cameraProvider = ProcessCameraProvider.getInstance(context).get()
                     cameraProvider.unbindAll()

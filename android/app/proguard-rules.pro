@@ -9,3 +9,6 @@
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
+
+# ARCore
+-keep class com.google.ar.core.** { *; }
