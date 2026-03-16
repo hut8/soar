@@ -63,9 +63,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       volumes:
-        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
-        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
-        - /opt/ci-cache/target:/ci-target
+        - /opt/ci-cache:/ci-cache
     services:
       postgres:
         image: ghcr.io/hut8/postgis-timescaledb:latest
@@ -94,8 +92,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Set cargo target directory
-        run: echo "CARGO_TARGET_DIR=/ci-target/${RUNNER_NAME}-e2e" >> $GITHUB_ENV
+      - name: Setup persistent cargo cache
+        run: |
+          mkdir -p /ci-cache/${RUNNER_NAME}/cargo-registry /ci-cache/${RUNNER_NAME}/cargo-git
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-registry /usr/local/cargo/registry
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-git /usr/local/cargo/git
+          echo "CARGO_TARGET_DIR=/ci-cache/${RUNNER_NAME}/target-e2e" >> $GITHUB_ENV
 
       - name: Install unzip (required by setup-bun in container)
         run: apt-get update -qq && apt-get install -y -qq unzip
@@ -216,9 +218,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       volumes:
-        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
-        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
-        - /opt/ci-cache/target:/ci-target
+        - /opt/ci-cache:/ci-cache
     services:
       postgres:
         image: ghcr.io/hut8/postgis-timescaledb:latest
@@ -244,8 +244,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Set cargo target directory
-        run: echo "CARGO_TARGET_DIR=/ci-target/${RUNNER_NAME}-test" >> $GITHUB_ENV
+      - name: Setup persistent cargo cache
+        run: |
+          mkdir -p /ci-cache/${RUNNER_NAME}/cargo-registry /ci-cache/${RUNNER_NAME}/cargo-git
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-registry /usr/local/cargo/registry
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-git /usr/local/cargo/git
+          echo "CARGO_TARGET_DIR=/ci-cache/${RUNNER_NAME}/target-test" >> $GITHUB_ENV
 
       - name: Install unzip (required by setup-bun in container)
         run: apt-get update -qq && apt-get install -y -qq unzip
@@ -308,9 +312,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       volumes:
-        - /opt/ci-cache/cargo-registry:/usr/local/cargo/registry
-        - /opt/ci-cache/cargo-git:/usr/local/cargo/git
-        - /opt/ci-cache/target:/ci-target
+        - /opt/ci-cache:/ci-cache
     defaults:
       run:
         shell: bash
@@ -321,8 +323,12 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
-      - name: Set cargo target directory
-        run: echo "CARGO_TARGET_DIR=/ci-target/${RUNNER_NAME}-release-musl" >> $GITHUB_ENV
+      - name: Setup persistent cargo cache
+        run: |
+          mkdir -p /ci-cache/${RUNNER_NAME}/cargo-registry /ci-cache/${RUNNER_NAME}/cargo-git
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-registry /usr/local/cargo/registry
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-git /usr/local/cargo/git
+          echo "CARGO_TARGET_DIR=/ci-cache/${RUNNER_NAME}/target-release-musl" >> $GITHUB_ENV
 
       - name: Install unzip (required by setup-bun in container)
         run: apt-get update -qq && apt-get install -y -qq unzip
@@ -401,6 +407,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      volumes:
+        - /opt/ci-cache:/ci-cache
     defaults:
       run:
         shell: bash
@@ -410,6 +418,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
+
+      - name: Setup persistent cargo cache
+        run: |
+          mkdir -p /ci-cache/${RUNNER_NAME}/cargo-registry /ci-cache/${RUNNER_NAME}/cargo-git
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-registry /usr/local/cargo/registry
+          ln -sfn /ci-cache/${RUNNER_NAME}/cargo-git /usr/local/cargo/git
 
       - name: Run security audit
         run: cargo audit
