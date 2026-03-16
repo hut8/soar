@@ -104,23 +104,3 @@ fun projectToScreen(
 
     return ARScreenPosition(x, y, true)
 }
-
-/**
- * Exponential moving average that handles the 0/360 wrap-around for angles.
- * Returns angle in 0..360 range.
- */
-fun smoothAngle(current: Float, target: Float, alpha: Float): Float {
-    var diff = target - current
-    // Shortest path across 0/360 boundary
-    if (diff > 180f) diff -= 360f
-    if (diff < -180f) diff += 360f
-    var result = current + alpha * diff
-    if (result < 0f) result += 360f
-    if (result >= 360f) result -= 360f
-    return result
-}
-
-/** Simple EMA for pitch (no wrap-around needed). */
-fun smoothLinear(current: Float, target: Float, alpha: Float): Float {
-    return current + alpha * (target - current)
-}
