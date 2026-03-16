@@ -50,9 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -66,6 +63,8 @@ import com.soar.tracker.service.TrackingService
 import com.soar.tracker.ui.theme.Green
 import com.soar.tracker.ui.theme.Red
 import com.soar.tracker.ui.util.ARAircraftPosition
+import com.soar.tracker.ui.util.drawAircraftIcon
+import com.soar.tracker.ui.util.getAltitudeColor
 import com.soar.tracker.ui.util.normalizeBearing
 import com.soar.tracker.ui.util.projectToScreen
 import com.soar.tracker.ui.util.toARAircraftPosition
@@ -268,20 +267,11 @@ fun ARScreen(modifier: Modifier = Modifier) {
                     val center = Offset(screenPos.x, screenPos.y)
                     renderedPositions.add(ac to center)
 
-                    // Aircraft triangle icon
-                    val triSize = 12f
+                    // Aircraft icon with altitude-based coloring
+                    val iconSize = 24f
                     val trackDeg = ac.trackDegrees?.toFloat() ?: 0f
-                    rotate(trackDeg, pivot = center) {
-                        val triPath = Path().apply {
-                            moveTo(center.x, center.y - triSize)
-                            lineTo(center.x + triSize * 0.6f, center.y + triSize * 0.6f)
-                            lineTo(center.x, center.y + triSize * 0.2f)
-                            lineTo(center.x - triSize * 0.6f, center.y + triSize * 0.6f)
-                            close()
-                        }
-                        drawPath(triPath, Color.White)
-                        drawPath(triPath, Green, style = Stroke(width = 1.5f))
-                    }
+                    val altColor = getAltitudeColor(ac.altitudeFeet)
+                    drawAircraftIcon(center, trackDeg, iconSize, altColor)
 
                     // Info label below marker
                     val label = ac.registration ?: ac.aircraftModel
@@ -296,7 +286,7 @@ fun ARScreen(modifier: Modifier = Modifier) {
                     val textWidth = labelPaint.measureText(infoText)
                     val pillPadH = 6f
                     val pillPadV = 3f
-                    val pillTop = center.y + triSize + 4f
+                    val pillTop = center.y + iconSize / 2f + 4f
                     val pillRect = android.graphics.RectF(
                         center.x - textWidth / 2 - pillPadH,
                         pillTop,
