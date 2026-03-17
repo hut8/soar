@@ -28,11 +28,12 @@ class BackgroundRenderer {
             position(0)
         }
 
-    // Tex coords — default values, updated per-frame by ARCore
+    // Source tex coords for ARCore's transformDisplayUvCoords.
+    // Vertices are bottom-left origin (OpenGL), so UV Y is flipped: 1=bottom, 0=top.
     private val quadTexCoordsSrc: FloatBuffer = ByteBuffer
         .allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         .apply {
-            put(floatArrayOf(0f, 0f, 0f, 1f, 1f, 0f, 1f, 1f))
+            put(floatArrayOf(0f, 1f, 0f, 0f, 1f, 1f, 1f, 0f))
             position(0)
         }
 
