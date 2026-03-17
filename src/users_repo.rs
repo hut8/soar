@@ -573,7 +573,7 @@ impl UsersRepository {
                 return Ok(None);
             };
 
-            diesel::update(users::table.filter(users::id.eq(user_id)))
+            let updated = diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set((
                     users::first_name.eq(request_clone.first_name.unwrap_or(current.first_name)),
                     users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
@@ -585,13 +585,8 @@ impl UsersRepository {
                     users::is_examiner.eq(request_clone.is_examiner.unwrap_or(current.is_examiner)),
                     users::updated_at.eq(now),
                 ))
-                .execute(&mut conn)?;
-
-            let updated = users::table
-                .filter(users::id.eq(user_id))
-                .first::<UserRecord>(&mut conn)
-                .optional()?;
-            Ok(updated.map(|r| r.into()))
+                .get_result::<UserRecord>(&mut conn)?;
+            Ok(Some(updated.into()))
         })
         .await?
     }

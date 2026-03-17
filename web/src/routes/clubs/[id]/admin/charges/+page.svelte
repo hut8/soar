@@ -289,7 +289,7 @@
 			aria-labelledby="create-charge-heading"
 			tabindex="-1"
 		>
-			<h3 class="mb-4 h3">Create Charge</h3>
+			<h3 id="create-charge-heading" class="mb-4 h3">Create Charge</h3>
 
 			<label class="label mb-4">
 				<span>Member</span>
