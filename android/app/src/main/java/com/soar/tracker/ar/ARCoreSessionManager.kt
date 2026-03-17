@@ -31,8 +31,10 @@ class ARCoreSessionManager(private val activity: Activity) : GLSurfaceView.Rende
     private val backgroundRenderer = BackgroundRenderer()
 
     // North calibration: offset = magneticNorth - arcoreYaw (averaged over N samples)
+    // Accessed from both main thread (calibrateNorth) and GL thread (onDrawFrame)
+    private val calibrationLock = Any()
     private var northOffsetDegrees: Float? = null
-    private val calibrationSamples = mutableListOf<Float>() // (magneticHeading - arcoreYaw)
+    private val calibrationSamples = mutableListOf<Float>()
     @Volatile
     private var pendingMagneticHeading: Float? = null
 
@@ -57,7 +59,9 @@ class ARCoreSessionManager(private val activity: Activity) : GLSurfaceView.Rende
      * Only the first [CALIBRATION_SAMPLE_COUNT] samples are used.
      */
     fun calibrateNorth(magneticHeadingDegrees: Float) {
-        if (northOffsetDegrees != null) return // Already calibrated
+        synchronized(calibrationLock) {
+            if (northOffsetDegrees != null) return // Already calibrated
+        }
         pendingMagneticHeading = magneticHeadingDegrees
     }
 
@@ -145,23 +149,24 @@ class ARCoreSessionManager(private val activity: Activity) : GLSurfaceView.Rende
         val pose = camera.displayOrientedPose
         val (arcoreYawDeg, pitchDeg) = extractYawPitch(pose)
 
-        // Collect north calibration samples
-        if (northOffsetDegrees == null) {
-            val magHeading = pendingMagneticHeading
-            if (magHeading != null) {
-                var diff = magHeading - arcoreYawDeg
-                // Normalize to -180..180 for averaging
-                if (diff > 180f) diff -= 360f
-                if (diff < -180f) diff += 360f
-                calibrationSamples.add(diff)
+        // Collect north calibration samples (synchronized — written here on GL thread,
+        // northOffsetDegrees read on main thread via calibrateNorth's early-return check)
+        val offset = synchronized(calibrationLock) {
+            if (northOffsetDegrees == null) {
+                val magHeading = pendingMagneticHeading
+                if (magHeading != null) {
+                    var diff = magHeading - arcoreYawDeg
+                    if (diff > 180f) diff -= 360f
+                    if (diff < -180f) diff += 360f
+                    calibrationSamples.add(diff)
 
-                if (calibrationSamples.size >= CALIBRATION_SAMPLE_COUNT) {
-                    northOffsetDegrees = calibrationSamples.average().toFloat()
+                    if (calibrationSamples.size >= CALIBRATION_SAMPLE_COUNT) {
+                        northOffsetDegrees = calibrationSamples.average().toFloat()
+                    }
                 }
             }
+            northOffsetDegrees
         }
-
-        val offset = northOffsetDegrees
         if (offset != null) {
             var heading = (arcoreYawDeg + offset) % 360f
             if (heading < 0) heading += 360f

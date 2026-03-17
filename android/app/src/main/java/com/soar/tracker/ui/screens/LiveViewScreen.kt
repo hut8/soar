@@ -354,7 +354,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                         val trackDeg = ac.trackDegrees?.toFloat() ?: 0f
                         val rotation = trackDeg + mapRotation
                         val altColor = getAltitudeColor(ac.altitudeFeet)
-                        drawAircraftIcon(pos, rotation, 20f, altColor)
+                        drawAircraftIcon(pos, rotation, 22f, altColor)
 
                         // Label
                         val label = ac.registration ?: ac.aircraftModel

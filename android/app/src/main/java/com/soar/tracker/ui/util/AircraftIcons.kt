@@ -8,19 +8,16 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.geometry.Offset
 
 /**
- * Aircraft icon paths and altitude-based coloring, ported from the web's aircraftIcons.ts.
- *
- * SVG paths from tar1090 project (https://github.com/wiedehopf/tar1090).
+ * Aircraft icon drawing and altitude-based coloring.
  */
 
 /**
  * Draw an aircraft icon centered at [center], rotated by [trackDegrees].
- * Uses the "unknown" aircraft silhouette from tar1090 — a generic airplane shape
- * that works well at small sizes on mobile.
+ * Uses a simple airplane silhouette: pointed nose, swept wings, tail fin.
  *
  * @param center Screen position to draw at
- * @param trackDegrees Aircraft track heading for rotation
- * @param size Icon size in pixels (height)
+ * @param trackDegrees Aircraft track heading for rotation (0 = north/up)
+ * @param size Icon size in pixels (total height nose-to-tail)
  * @param fillColor Fill color (typically altitude-based)
  * @param strokeColor Outline color
  */
@@ -35,88 +32,39 @@ fun DrawScope.drawAircraftIcon(
         translate(center.x, center.y)
         rotate(trackDegrees)
     }) {
-        // "unknown" icon from tar1090: viewBox "-2.5 -2.5 22 22" → 22x22 units, centered at ~8.5,8
-        // Scale from 22-unit viewBox to desired pixel size
-        val scale = size / 22f
-        val cx = 8.5f // Approximate center X of the path
-        val cy = 8.5f // Approximate center Y of the path
+        val h = size / 2f // Half height
+        val w = size * 0.35f // Half wingspan
 
         val path = Path().apply {
-            // Simplified "unknown" airplane silhouette
-            // Body
-            moveTo((4.256f - cx) * scale, (15.496f - cy) * scale)
-            // Left wing sweep
-            cubicTo(
-                (3.979f - cx) * scale, (14.340f - cy) * scale,
-                (7.280f - cx) * scale, (13.606f - cy) * scale,
-                (7.280f - cx) * scale, (13.606f - cy) * scale,
-            )
-            lineTo((7.280f - cx) * scale, (8.650f - cy) * scale)
-            lineTo((1.280f - cx) * scale, (10.650f - cy) * scale)
-            cubicTo(
-                (0.600f - cx) * scale, (10.650f - cy) * scale,
-                (0.280f - cx) * scale, (10.300f - cy) * scale,
-                (0.280f - cx) * scale, (9.990f - cy) * scale,
-            )
-            cubicTo(
-                (0.242f - cx) * scale, (9.595f - cy) * scale,
-                (0.496f - cx) * scale, (9.231f - cy) * scale,
-                (0.880f - cx) * scale, (9.130f - cy) * scale,
-            )
-            cubicTo(
-                (1.140f - cx) * scale, (9.0f - cy) * scale,
-                (4.800f - cx) * scale, (7.0f - cy) * scale,
-                (7.280f - cx) * scale, (5.630f - cy) * scale,
-            )
-            lineTo((7.280f - cx) * scale, (3.0f - cy) * scale)
-            cubicTo(
-                (7.280f - cx) * scale, (1.890f - cy) * scale,
-                (7.720f - cx) * scale, (0.290f - cy) * scale,
-                (8.510f - cx) * scale, (0.290f - cy) * scale,
-            )
-            cubicTo(
-                (9.300f - cx) * scale, (0.290f - cy) * scale,
-                (9.770f - cx) * scale, (1.840f - cy) * scale,
-                (9.770f - cx) * scale, (3.0f - cy) * scale,
-            )
-            lineTo((9.770f - cx) * scale, (5.630f - cy) * scale)
-            cubicTo(
-                (12.220f - cx) * scale, (7.0f - cy) * scale,
-                (15.870f - cx) * scale, (9.0f - cy) * scale,
-                (16.140f - cx) * scale, (9.130f - cy) * scale,
-            )
-            cubicTo(
-                (16.530f - cx) * scale, (9.223f - cy) * scale,
-                (16.791f - cx) * scale, (9.591f - cy) * scale,
-                (16.750f - cx) * scale, (9.990f - cy) * scale,
-            )
-            cubicTo(
-                (16.700f - cx) * scale, (10.300f - cy) * scale,
-                (16.390f - cx) * scale, (10.660f - cy) * scale,
-                (15.700f - cx) * scale, (10.660f - cy) * scale,
-            )
-            lineTo((9.770f - cx) * scale, (8.660f - cy) * scale)
-            lineTo((9.770f - cx) * scale, (13.606f - cy) * scale)
-            cubicTo(
-                (9.770f - cx) * scale, (13.606f - cy) * scale,
-                (13.070f - cx) * scale, (14.340f - cy) * scale,
-                (12.794f - cx) * scale, (15.496f - cy) * scale,
-            )
-            cubicTo(
-                (12.463f - cx) * scale, (16.880f - cy) * scale,
-                (9.964f - cx) * scale, (15.874f - cy) * scale,
-                (8.540f - cx) * scale, (15.874f - cy) * scale,
-            )
-            cubicTo(
-                (7.106f - cx) * scale, (15.874f - cy) * scale,
-                (4.590f - cx) * scale, (16.890f - cy) * scale,
-                (4.256f - cx) * scale, (15.496f - cy) * scale,
-            )
+            // Nose (top)
+            moveTo(0f, -h)
+            // Right side of fuselage to wing root
+            lineTo(w * 0.2f, -h * 0.2f)
+            // Right wing tip
+            lineTo(w, h * 0.1f)
+            // Right wing trailing edge back to fuselage
+            lineTo(w * 0.2f, h * 0.25f)
+            // Right side of fuselage to tail
+            lineTo(w * 0.2f, h * 0.65f)
+            // Right tail fin
+            lineTo(w * 0.55f, h)
+            // Tail center
+            lineTo(0f, h * 0.8f)
+            // Left tail fin
+            lineTo(-w * 0.55f, h)
+            // Left side of fuselage from tail
+            lineTo(-w * 0.2f, h * 0.65f)
+            // Left wing trailing edge
+            lineTo(-w * 0.2f, h * 0.25f)
+            // Left wing tip
+            lineTo(-w, h * 0.1f)
+            // Left side of fuselage to nose
+            lineTo(-w * 0.2f, -h * 0.2f)
             close()
         }
 
         drawPath(path, fillColor)
-        drawPath(path, strokeColor, style = Stroke(width = 1.2f))
+        drawPath(path, strokeColor, style = Stroke(width = 1.5f))
     }
 }
 

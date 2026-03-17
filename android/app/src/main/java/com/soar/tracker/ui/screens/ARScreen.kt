@@ -2,6 +2,8 @@ package com.soar.tracker.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.opengl.GLSurfaceView
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -81,6 +83,7 @@ import com.soar.tracker.ui.util.calculateBearing
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+
 private const val TAP_RADIUS_PX = 60f // Hit-test radius for tapping aircraft markers
 
 @Composable
@@ -218,10 +221,10 @@ fun ARScreen(modifier: Modifier = Modifier) {
         // Camera preview: ARCore GLSurfaceView or CameraX fallback
         AndroidView(
             factory = { ctx ->
-                val activity = ctx as Activity
-                val manager = ARCoreSessionManager(activity)
+                val activity = ctx.findActivity()
+                val manager = activity?.let { ARCoreSessionManager(it) }
 
-                if (manager.createSession()) {
+                if (manager != null && manager.createSession()) {
                     // ARCore available — use GLSurfaceView with ARCore rendering
                     liveHeading?.let { manager.calibrateNorth(it) }
                     val glView = GLSurfaceView(ctx).apply {
@@ -334,25 +337,26 @@ fun ARScreen(modifier: Modifier = Modifier) {
                     renderedPositions.add(ac to center)
 
                     // Aircraft icon with altitude-based coloring
-                    val iconSize = 24f
+                    val iconSize = 28f
                     val trackDeg = ac.trackDegrees?.toFloat() ?: 0f
                     val altColor = getAltitudeColor(ac.altitudeFeet)
                     drawAircraftIcon(center, trackDeg, iconSize, altColor)
 
                     // Info label below marker
-                    val label = ac.registration ?: ac.aircraftModel
+                    val name = ac.registration ?: ac.aircraftModel
+                    val model = if (ac.registration != null) ac.aircraftModel else null
                     val altLabel = ac.altitudeFeet?.let {
                         String.format(Locale.US, "%.0fft", it)
                     } ?: ""
                     val distLabel = String.format(
                         Locale.US, "%.1fnm", ac.distanceMeters / NM_TO_METERS,
                     )
-                    val infoText = listOfNotNull(label, altLabel.ifEmpty { null }, distLabel).joinToString("  ")
+                    val infoText = listOfNotNull(name, model, altLabel.ifEmpty { null }, distLabel).joinToString(" \u00B7 ")
 
                     val textWidth = labelPaint.measureText(infoText)
                     val pillPadH = 6f
                     val pillPadV = 3f
-                    val pillTop = center.y + iconSize / 2f + 4f
+                    val pillTop = center.y + iconSize / 2f + 2f
                     val pillRect = android.graphics.RectF(
                         center.x - textWidth / 2 - pillPadH,
                         pillTop,
@@ -829,4 +833,14 @@ private fun DirectionIndicator(
             )
         }
     }
+}
+
+/** Walk the context chain to find the hosting Activity. */
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }
