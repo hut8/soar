@@ -122,6 +122,17 @@ pub struct CreatePilotRequest {
     pub email: Option<String>, // Optional - for sending invitation
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePilotRequest {
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub is_licensed: Option<bool>,
+    pub is_instructor: Option<bool>,
+    pub is_tow_pilot: Option<bool>,
+    pub is_examiner: Option<bool>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SendInvitationRequest {
     pub email: String,

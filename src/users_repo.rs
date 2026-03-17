@@ -550,6 +550,47 @@ impl UsersRepository {
         .await?
     }
 
+    /// Update pilot qualification fields
+    pub async fn update_pilot(
+        &self,
+        user_id: Uuid,
+        request: &crate::users::UpdatePilotRequest,
+    ) -> Result<Option<User>> {
+        let pool = self.pool.clone();
+        let request_clone = request.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let now = Utc::now();
+
+            let current = users::table
+                .filter(users::id.eq(user_id))
+                .filter(users::deleted_at.is_null())
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+
+            let Some(current) = current else {
+                return Ok(None);
+            };
+
+            let updated = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::first_name.eq(request_clone.first_name.unwrap_or(current.first_name)),
+                    users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
+                    users::is_licensed.eq(request_clone.is_licensed.unwrap_or(current.is_licensed)),
+                    users::is_instructor
+                        .eq(request_clone.is_instructor.unwrap_or(current.is_instructor)),
+                    users::is_tow_pilot
+                        .eq(request_clone.is_tow_pilot.unwrap_or(current.is_tow_pilot)),
+                    users::is_examiner.eq(request_clone.is_examiner.unwrap_or(current.is_examiner)),
+                    users::updated_at.eq(now),
+                ))
+                .get_result::<UserRecord>(&mut conn)?;
+            Ok(Some(updated.into()))
+        })
+        .await?
+    }
+
     /// Get all members for a club
     /// Excludes soft-deleted users
     pub async fn get_members_by_club(&self, club_id: Uuid) -> Result<Vec<User>> {

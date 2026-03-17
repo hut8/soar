@@ -174,21 +174,21 @@
 
 <div class="container mx-auto max-w-4xl p-4">
 	<div class="mb-6 flex items-center gap-4">
-		<button onclick={() => goto(`/clubs/${clubId}`)} class="variant-ghost-surface btn p-2">
+		<button onclick={() => goto(`/clubs/${clubId}`)} class="preset-tonal-surface-500 btn p-2">
 			<ArrowLeft class="h-5 w-5" />
 		</button>
 		<h1 class="h2">Charges</h1>
 	</div>
 
 	{#if error}
-		<div class="alert variant-filled-error mb-4">
+		<div class="alert mb-4 preset-filled-error-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>{error}</div>
 		</div>
 	{/if}
 
 	{#if !isClubAdmin}
-		<div class="alert variant-ghost-warning mb-4">
+		<div class="alert mb-4 preset-filled-warning-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>
 				<p class="font-semibold">Access Restricted</p>
@@ -203,7 +203,7 @@
 					<p class="text-sm opacity-75">Create and manage charges for club members</p>
 				</div>
 				{#if isClubAdmin}
-					<button onclick={openAddModal} class="variant-filled-primary btn">
+					<button onclick={openAddModal} class="btn preset-filled-primary-500">
 						<Plus class="h-4 w-4" />
 						<span>Create Charge</span>
 					</button>
@@ -274,12 +274,22 @@
 </div>
 
 {#if showAddModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" onclick={closeAddModal}></div>
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal">
-		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
-			<h3 class="mb-4 h3">Create Charge</h3>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={closeAddModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && closeAddModal()}
+	>
+		<div
+			class="m-4 w-full max-w-md card p-6"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-labelledby="create-charge-heading"
+			tabindex="-1"
+		>
+			<h3 id="create-charge-heading" class="mb-4 h3">Create Charge</h3>
 
 			<label class="label mb-4">
 				<span>Member</span>
@@ -324,18 +334,18 @@
 			</label>
 
 			{#if formError}
-				<div class="alert variant-filled-error mb-4">
+				<div class="alert mb-4 preset-filled-error-500">
 					<p>{formError}</p>
 				</div>
 			{/if}
 
 			<div class="flex justify-end gap-2">
-				<button onclick={closeAddModal} class="variant-ghost-surface btn" disabled={submitting}>
+				<button onclick={closeAddModal} class="preset-tonal-surface-500 btn" disabled={submitting}>
 					Cancel
 				</button>
 				<button
 					onclick={handleCreateCharge}
-					class="variant-filled-primary btn"
+					class="btn preset-filled-primary-500"
 					disabled={submitting}
 				>
 					{submitting ? 'Creating...' : 'Create Charge'}
@@ -344,25 +354,3 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		z-index: 998;
-	}
-
-	.modal {
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		z-index: 999;
-		max-height: 90vh;
-		overflow-y: auto;
-	}
-</style>

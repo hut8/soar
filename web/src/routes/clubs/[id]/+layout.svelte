@@ -56,7 +56,6 @@
 
 	const adminSubItems = [
 		{ href: 'admin/join-requests', label: 'Join Requests' },
-		{ href: 'admin/users', label: 'Users' },
 		{ href: 'admin/fees', label: 'Fees' },
 		{ href: 'admin/charges', label: 'Charges' },
 		{ href: 'admin/stripe', label: 'Stripe' }

@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount, getContext } from 'svelte';
 	import { page } from '$app/stores';
-	import { UserPlus, Check, X } from '@lucide/svelte';
+	import { UserPlus, Check, X, Edit2 } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { User, ClubWithSoaring, DataListResponse } from '$lib/types';
+	import type { User, ClubWithSoaring, DataListResponse, DataResponse } from '$lib/types';
 	import { getLogger } from '$lib/logging';
 	import type { Writable } from 'svelte/store';
 
@@ -22,8 +22,9 @@
 	let loadingMembers = $state(true);
 	let error = $state('');
 	let showAddModal = $state(false);
+	let showEditModal = $state(false);
 
-	// Add member form state
+	// Form state (shared between add/edit)
 	let formFirstName = $state('');
 	let formLastName = $state('');
 	let formIsLicensed = $state(false);
@@ -33,8 +34,15 @@
 	let formError = $state('');
 	let submitting = $state(false);
 
+	// Edit state
+	let editingMember = $state<User | null>(null);
+
 	let clubId = $derived($page.params.id || '');
 	let userBelongsToClub = $derived($auth.isAuthenticated && $auth.user?.clubId === clubId);
+	let isClubAdmin = $derived(
+		$auth.isAuthenticated &&
+			(($auth.user?.clubId === clubId && $auth.user?.isClubAdmin) || $auth.user?.isAdmin)
+	);
 
 	let club = $derived($clubStore.club);
 
@@ -58,7 +66,7 @@
 		}
 	}
 
-	function openAddModal() {
+	function resetForm() {
 		formFirstName = '';
 		formLastName = '';
 		formIsLicensed = false;
@@ -66,11 +74,32 @@
 		formIsTowPilot = false;
 		formIsExaminer = false;
 		formError = '';
+	}
+
+	function openAddModal() {
+		resetForm();
 		showAddModal = true;
 	}
 
 	function closeAddModal() {
 		showAddModal = false;
+	}
+
+	function openEditModal(member: User) {
+		editingMember = member;
+		formFirstName = member.firstName;
+		formLastName = member.lastName;
+		formIsLicensed = member.isLicensed;
+		formIsInstructor = member.isInstructor;
+		formIsTowPilot = member.isTowPilot;
+		formIsExaminer = member.isExaminer;
+		formError = '';
+		showEditModal = true;
+	}
+
+	function closeEditModal() {
+		showEditModal = false;
+		editingMember = null;
 	}
 
 	async function handleAddMember() {
@@ -105,6 +134,40 @@
 			submitting = false;
 		}
 	}
+
+	async function handleEditMember() {
+		if (!editingMember) return;
+
+		if (!formFirstName.trim() || !formLastName.trim()) {
+			formError = 'First name and last name are required';
+			return;
+		}
+
+		submitting = true;
+		formError = '';
+
+		try {
+			await serverCall<DataResponse<User>>(`/pilots/${editingMember.id}`, {
+				method: 'PUT',
+				body: JSON.stringify({
+					firstName: formFirstName.trim(),
+					lastName: formLastName.trim(),
+					isLicensed: formIsLicensed,
+					isInstructor: formIsInstructor,
+					isTowPilot: formIsTowPilot,
+					isExaminer: formIsExaminer
+				})
+			});
+
+			await loadMembers();
+			closeEditModal();
+		} catch (err) {
+			logger.error('Error updating member: {error}', { error: err });
+			formError = err instanceof Error ? err.message : 'Failed to update member';
+		} finally {
+			submitting = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -122,7 +185,7 @@
 		{/if}
 	</div>
 
-	{#if userBelongsToClub}
+	{#if isClubAdmin}
 		<button onclick={openAddModal} class="btn preset-filled-primary-500">
 			<UserPlus class="mr-2 h-5 w-5" />
 			Add Member
@@ -147,10 +210,12 @@
 {:else if members.length === 0}
 	<div class="card p-8 text-center">
 		<p class="text-surface-600-300-token mb-4 text-lg">No members found for this club.</p>
-		<button onclick={openAddModal} class="btn preset-filled-primary-500">
-			<UserPlus class="mr-2 h-5 w-5" />
-			Add First Member
-		</button>
+		{#if isClubAdmin}
+			<button onclick={openAddModal} class="btn preset-filled-primary-500">
+				<UserPlus class="mr-2 h-5 w-5" />
+				Add First Member
+			</button>
+		{/if}
 	</div>
 {:else}
 	<div class="overflow-hidden card">
@@ -165,6 +230,9 @@
 							<th>Instructor</th>
 							<th>Tow Pilot</th>
 							<th>Examiner</th>
+							{#if isClubAdmin}
+								<th class="text-right">Actions</th>
+							{/if}
 						</tr>
 					</thead>
 					<tbody>
@@ -202,6 +270,17 @@
 										<X class="h-5 w-5 text-surface-400" />
 									{/if}
 								</td>
+								{#if isClubAdmin}
+									<td class="text-right">
+										<button
+											onclick={() => openEditModal(member)}
+											class="preset-tonal-surface-500 btn btn-sm"
+											title="Edit member"
+										>
+											<Edit2 class="h-4 w-4" />
+										</button>
+									</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -213,9 +292,20 @@
 		<div class="space-y-4 p-4 md:hidden">
 			{#each members as member (member.id)}
 				<div class="card p-4">
-					<div class="mb-3 text-lg font-medium">
-						{member.firstName}
-						{member.lastName}
+					<div class="mb-3 flex items-center justify-between">
+						<div class="text-lg font-medium">
+							{member.firstName}
+							{member.lastName}
+						</div>
+						{#if isClubAdmin}
+							<button
+								onclick={() => openEditModal(member)}
+								class="preset-tonal-surface-500 btn btn-sm"
+								title="Edit member"
+							>
+								<Edit2 class="h-4 w-4" />
+							</button>
+						{/if}
 					</div>
 
 					<div class="grid grid-cols-2 gap-3 text-sm">
@@ -284,11 +374,11 @@
 
 			<div class="space-y-4">
 				<div>
-					<label for="first-name" class="label">
+					<label for="add-first-name" class="label">
 						<span>First Name <span class="text-error-500">*</span></span>
 					</label>
 					<input
-						id="first-name"
+						id="add-first-name"
 						type="text"
 						bind:value={formFirstName}
 						placeholder="John"
@@ -299,11 +389,11 @@
 				</div>
 
 				<div>
-					<label for="last-name" class="label">
+					<label for="add-last-name" class="label">
 						<span>Last Name <span class="text-error-500">*</span></span>
 					</label>
 					<input
-						id="last-name"
+						id="add-last-name"
 						type="text"
 						bind:value={formLastName}
 						placeholder="Doe"
@@ -375,6 +465,128 @@
 						disabled={submitting}
 					>
 						{submitting ? 'Adding...' : 'Add Member'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Edit Member Modal -->
+{#if showEditModal && editingMember}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={closeEditModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && closeEditModal()}
+	>
+		<div
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-labelledby="edit-member-heading"
+			tabindex="-1"
+		>
+			<div class="flex items-center justify-between">
+				<h2 id="edit-member-heading" class="text-xl font-bold">Edit Member</h2>
+				<button onclick={closeEditModal} class="preset-tonal-surface-500 btn btn-sm">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+
+			<div class="space-y-4">
+				<div>
+					<label for="edit-first-name" class="label">
+						<span>First Name <span class="text-error-500">*</span></span>
+					</label>
+					<input
+						id="edit-first-name"
+						type="text"
+						bind:value={formFirstName}
+						class="input"
+						disabled={submitting}
+						required
+					/>
+				</div>
+
+				<div>
+					<label for="edit-last-name" class="label">
+						<span>Last Name <span class="text-error-500">*</span></span>
+					</label>
+					<input
+						id="edit-last-name"
+						type="text"
+						bind:value={formLastName}
+						class="input"
+						disabled={submitting}
+						required
+					/>
+				</div>
+
+				<div class="space-y-2">
+					<label class="flex items-center space-x-2">
+						<input
+							type="checkbox"
+							bind:checked={formIsLicensed}
+							class="checkbox"
+							disabled={submitting}
+						/>
+						<span>Licensed Pilot</span>
+					</label>
+
+					<label class="flex items-center space-x-2">
+						<input
+							type="checkbox"
+							bind:checked={formIsInstructor}
+							class="checkbox"
+							disabled={submitting}
+						/>
+						<span>Instructor</span>
+					</label>
+
+					<label class="flex items-center space-x-2">
+						<input
+							type="checkbox"
+							bind:checked={formIsTowPilot}
+							class="checkbox"
+							disabled={submitting}
+						/>
+						<span>Tow Pilot</span>
+					</label>
+
+					<label class="flex items-center space-x-2">
+						<input
+							type="checkbox"
+							bind:checked={formIsExaminer}
+							class="checkbox"
+							disabled={submitting}
+						/>
+						<span>Examiner</span>
+					</label>
+				</div>
+
+				{#if formError}
+					<div class="alert preset-filled-error-500">
+						<p>{formError}</p>
+					</div>
+				{/if}
+
+				<div class="flex justify-end gap-2">
+					<button
+						onclick={closeEditModal}
+						class="preset-tonal-surface-500 btn"
+						disabled={submitting}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleEditMember}
+						class="btn preset-filled-primary-500"
+						disabled={submitting}
+					>
+						{submitting ? 'Saving...' : 'Save Changes'}
 					</button>
 				</div>
 			</div>

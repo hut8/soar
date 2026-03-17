@@ -95,7 +95,7 @@
 
 <div class="container mx-auto max-w-4xl p-4">
 	<div class="mb-6 flex items-center gap-4">
-		<button onclick={() => goto(`/clubs/${clubId}`)} class="variant-ghost-surface btn p-2">
+		<button onclick={() => goto(`/clubs/${clubId}`)} class="preset-tonal-surface-500 btn p-2">
 			<ArrowLeft class="h-5 w-5" />
 		</button>
 		<h1 class="h2">Stripe Connect</h1>
@@ -108,14 +108,14 @@
 			></div>
 		</div>
 	{:else if error}
-		<div class="alert variant-filled-error mb-4">
+		<div class="alert mb-4 preset-filled-error-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>{error}</div>
 		</div>
 	{/if}
 
 	{#if !isClubAdmin}
-		<div class="alert variant-ghost-warning mb-4">
+		<div class="alert mb-4 preset-filled-warning-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>
 				<p class="font-semibold">Access Restricted</p>
@@ -138,7 +138,7 @@
 				</p>
 				<button
 					onclick={startOnboarding}
-					class="variant-filled-primary btn btn-lg"
+					class="btn preset-filled-primary-500 btn-lg"
 					disabled={actionLoading || !isClubAdmin}
 				>
 					{#if actionLoading}
@@ -158,7 +158,7 @@
 				</p>
 				<button
 					onclick={startOnboarding}
-					class="variant-filled-warning btn btn-lg"
+					class="btn preset-filled-warning-500 btn-lg"
 					disabled={actionLoading || !isClubAdmin}
 				>
 					{#if actionLoading}
@@ -209,7 +209,7 @@
 					</p>
 					<button
 						onclick={openDashboard}
-						class="variant-filled-primary btn"
+						class="btn preset-filled-primary-500"
 						disabled={actionLoading || !isClubAdmin}
 					>
 						{#if actionLoading}

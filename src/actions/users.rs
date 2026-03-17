@@ -9,11 +9,13 @@ use uuid::Uuid;
 
 use crate::auth::{AdminUser, AuthUser};
 use crate::email::EmailService;
-use crate::users::{CreatePilotRequest, SendInvitationRequest, UpdateUserRequest, User};
+use crate::users::{
+    CreatePilotRequest, SendInvitationRequest, UpdatePilotRequest, UpdateUserRequest, User,
+};
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
-use super::{DataListResponse, json_error, views::UserView};
+use super::{DataListResponse, DataResponse, json_error, views::UserView};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -202,6 +204,52 @@ pub async fn create_pilot(
         Err(e) => {
             error!(error = %e, "Failed to create pilot");
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pilot").into_response()
+        }
+    }
+}
+
+/// Update a pilot's qualifications and name
+/// Club admins can update pilots in their club; site admins can update any pilot
+pub async fn update_pilot(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(pilot_id): Path<Uuid>,
+    Json(payload): Json<UpdatePilotRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    // Get the pilot to verify club membership
+    let pilot = match users_repo.get_by_id(pilot_id).await {
+        Ok(Some(user)) => user,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to get pilot");
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get pilot")
+                .into_response();
+        }
+    };
+
+    // Only club admins for the same club or site admins can update
+    let is_club_admin = auth_user.0.is_club_admin
+        && pilot.club_id.is_some()
+        && auth_user.0.club_id == pilot.club_id;
+    if !auth_user.0.is_admin && !is_club_admin {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a club admin to update pilots",
+        )
+        .into_response();
+    }
+
+    match users_repo.update_pilot(pilot_id, &payload).await {
+        Ok(Some(user)) => Json(DataResponse {
+            data: UserView::from(user),
+        })
+        .into_response(),
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to update pilot");
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update pilot").into_response()
         }
     }
 }
