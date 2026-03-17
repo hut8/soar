@@ -234,7 +234,7 @@
 <div class="container mx-auto max-w-4xl p-4">
 	<!-- Header -->
 	<div class="mb-6 flex items-center gap-4">
-		<button onclick={() => goto(`/clubs/${clubId}`)} class="variant-ghost-surface btn p-2">
+		<button onclick={() => goto(`/clubs/${clubId}`)} class="preset-tonal-surface-500 btn p-2">
 			<ArrowLeft class="h-5 w-5" />
 		</button>
 		<h1 class="h2">Tow Fee Management</h1>
@@ -247,7 +247,7 @@
 			></div>
 		</div>
 	{:else if error}
-		<div class="alert variant-filled-error">
+		<div class="alert preset-filled-error-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>
 				<h3 class="h3">Error</h3>
@@ -255,7 +255,7 @@
 			</div>
 		</div>
 	{:else if !isClubAdmin}
-		<div class="alert variant-ghost-warning">
+		<div class="alert preset-filled-warning-500">
 			<AlertCircle class="h-5 w-5" />
 			<div>
 				<p class="font-semibold">Access Restricted</p>
@@ -270,7 +270,7 @@
 					<p class="text-sm opacity-75">Configure tow fees based on altitude tiers</p>
 				</div>
 				{#if isClubAdmin}
-					<button onclick={openAddModal} class="variant-filled-primary btn">
+					<button onclick={openAddModal} class="btn preset-filled-primary-500">
 						<Plus class="h-4 w-4" />
 						<span>Add Tier</span>
 					</button>
@@ -311,7 +311,7 @@
 									<td>
 										{formatAltitude(fee.maxAltitude)}
 										{#if fee.maxAltitude === null}
-											<span class="variant-soft-primary ml-2 badge">Fallback</span>
+											<span class="preset-tonal-primary-500 ml-2 badge">Fallback</span>
 										{/if}
 									</td>
 									<td class="font-semibold">{formatCost(fee.cost)}</td>
@@ -323,14 +323,14 @@
 											<div class="flex justify-end gap-2">
 												<button
 													onclick={() => openEditModal(fee)}
-													class="variant-ghost-surface btn btn-sm"
+													class="preset-tonal-surface-500 btn btn-sm"
 													title="Edit"
 												>
 													<Edit2 class="h-4 w-4" />
 												</button>
 												<button
 													onclick={() => openDeleteModal(fee)}
-													class="variant-ghost-error btn btn-sm"
+													class="preset-tonal-error-500 btn btn-sm"
 													title="Delete"
 												>
 													<Trash2 class="h-4 w-4" />
@@ -347,7 +347,7 @@
 
 			<!-- Info about fallback tier -->
 			{#if !hasFallbackTier}
-				<div class="alert variant-ghost-warning mt-4">
+				<div class="alert mt-4 preset-filled-warning-500">
 					<AlertCircle class="h-5 w-5" />
 					<div class="alert-message">
 						<h3 class="h4">No Fallback Tier</h3>
@@ -364,12 +364,22 @@
 
 <!-- Add Tow Fee Modal -->
 {#if showAddModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" onclick={closeAddModal}></div>
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal">
-		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
-			<h3 class="mb-4 h3">Add Tow Fee Tier</h3>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={closeAddModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && closeAddModal()}
+	>
+		<div
+			class="m-4 w-full max-w-md card p-6"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-labelledby="add-fee-heading"
+			tabindex="-1"
+		>
+			<h3 id="add-fee-heading" class="mb-4 h3">Add Tow Fee Tier</h3>
 
 			<label class="label mb-4">
 				<span>Maximum Altitude (ft AGL)</span>
@@ -400,16 +410,20 @@
 			</label>
 
 			{#if formError}
-				<div class="alert variant-filled-error mb-4">
+				<div class="alert mb-4 preset-filled-error-500">
 					<p>{formError}</p>
 				</div>
 			{/if}
 
 			<div class="flex justify-end gap-2">
-				<button onclick={closeAddModal} class="variant-ghost-surface btn" disabled={submitting}>
+				<button onclick={closeAddModal} class="preset-tonal-surface-500 btn" disabled={submitting}>
 					Cancel
 				</button>
-				<button onclick={handleAddTowFee} class="variant-filled-primary btn" disabled={submitting}>
+				<button
+					onclick={handleAddTowFee}
+					class="btn preset-filled-primary-500"
+					disabled={submitting}
+				>
 					{submitting ? 'Adding...' : 'Add Tier'}
 				</button>
 			</div>
@@ -419,12 +433,22 @@
 
 <!-- Edit Tow Fee Modal -->
 {#if showEditModal && editingFee}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" onclick={closeEditModal}></div>
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal">
-		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
-			<h3 class="mb-4 h3">Edit Tow Fee Tier</h3>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={closeEditModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && closeEditModal()}
+	>
+		<div
+			class="m-4 w-full max-w-md card p-6"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-labelledby="edit-fee-heading"
+			tabindex="-1"
+		>
+			<h3 id="edit-fee-heading" class="mb-4 h3">Edit Tow Fee Tier</h3>
 
 			<label class="label mb-4">
 				<span>Maximum Altitude (ft AGL)</span>
@@ -455,16 +479,20 @@
 			</label>
 
 			{#if formError}
-				<div class="alert variant-filled-error mb-4">
+				<div class="alert mb-4 preset-filled-error-500">
 					<p>{formError}</p>
 				</div>
 			{/if}
 
 			<div class="flex justify-end gap-2">
-				<button onclick={closeEditModal} class="variant-ghost-surface btn" disabled={submitting}>
+				<button onclick={closeEditModal} class="preset-tonal-surface-500 btn" disabled={submitting}>
 					Cancel
 				</button>
-				<button onclick={handleEditTowFee} class="variant-filled-primary btn" disabled={submitting}>
+				<button
+					onclick={handleEditTowFee}
+					class="btn preset-filled-primary-500"
+					disabled={submitting}
+				>
 					{submitting ? 'Saving...' : 'Save Changes'}
 				</button>
 			</div>
@@ -474,12 +502,22 @@
 
 <!-- Delete Confirmation Modal -->
 {#if showDeleteModal && deletingFee}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" onclick={closeDeleteModal}></div>
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal">
-		<div class="w-full max-w-md card p-6" onclick={(e) => e.stopPropagation()}>
-			<h3 class="mb-4 h3">Delete Tow Fee Tier</h3>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+		onclick={closeDeleteModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
+	>
+		<div
+			class="m-4 w-full max-w-md card p-6"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-labelledby="delete-fee-heading"
+			tabindex="-1"
+		>
+			<h3 id="delete-fee-heading" class="mb-4 h3">Delete Tow Fee Tier</h3>
 
 			<p class="mb-4">
 				Are you sure you want to delete the tow fee tier for
@@ -488,35 +526,21 @@
 			</p>
 
 			<div class="flex justify-end gap-2">
-				<button onclick={closeDeleteModal} class="variant-ghost-surface btn" disabled={submitting}>
+				<button
+					onclick={closeDeleteModal}
+					class="preset-tonal-surface-500 btn"
+					disabled={submitting}
+				>
 					Cancel
 				</button>
-				<button onclick={handleDeleteTowFee} class="variant-filled-error btn" disabled={submitting}>
+				<button
+					onclick={handleDeleteTowFee}
+					class="btn preset-filled-error-500"
+					disabled={submitting}
+				>
 					{submitting ? 'Deleting...' : 'Delete'}
 				</button>
 			</div>
 		</div>
 	</div>
 {/if}
-
-<style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		z-index: 998;
-	}
-
-	.modal {
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		z-index: 999;
-		max-height: 90vh;
-		overflow-y: auto;
-	}
-</style>

@@ -779,6 +779,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         )
         // Pilot/User routes
         .route("/pilots", post(actions::users::create_pilot))
+        .route("/pilots/{id}", put(actions::users::update_pilot))
         .route(
             "/clubs/{id}/pilots",
             get(actions::users::get_members_by_club),
