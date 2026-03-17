@@ -49,6 +49,23 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Wait for a systemd service to become active.
+# Usage: wait_for_service_active <service_name> [timeout_seconds]
+# Returns 0 if active, 1 if timed out.
+# Note: does NOT short-circuit on is-failed, because services with
+# Restart=on-failure can transiently enter failed before recovering.
+wait_for_service_active() {
+    local service="$1"
+    local timeout="${2:-30}"
+    for ((i=1; i<=timeout; i++)); do
+        if systemctl is-active --quiet "$service"; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 # Parse arguments: environment and deploy directory
 # Supports both: "soar-deploy staging /path" and "soar-deploy /path" (defaults to production)
 if [ $# -eq 2 ]; then
@@ -335,14 +352,12 @@ if [ "$ENVIRONMENT" = "radar-staging" ] || [ "$ENVIRONMENT" = "radar-production"
     systemctl enable "$SERVICE" || log_warn "Failed to enable $SERVICE"
     systemctl restart "$SERVICE" || log_warn "Failed to restart $SERVICE"
 
-    # Wait for service to start
-    sleep 3
-
-    # Verify service is running
-    if systemctl is-active --quiet "$SERVICE"; then
+    # Wait for service to become active (up to 30 seconds)
+    if wait_for_service_active "$SERVICE" 30; then
         log_info "$SERVICE: ${GREEN}ACTIVE${NC}"
     else
-        log_error "$SERVICE: ${RED}FAILED${NC}"
+        SERVICE_STATE=$(systemctl show -p ActiveState --value "$SERVICE" 2>/dev/null || echo "unknown")
+        log_error "$SERVICE: ${RED}FAILED${NC} (state: $SERVICE_STATE after 30s)"
         journalctl -u "$SERVICE" --no-pager --lines=10 || true
         ALL_HEALTHY=false
     fi
@@ -1389,20 +1404,17 @@ for timer in "${TIMERS[@]}"; do
     fi
 done
 
-# Wait for services to start
+# Wait for services to become active (up to 30 seconds each)
 log_info "Waiting for services to initialize..."
-sleep 5
-
-# Check service status
-log_info "Checking service status..."
 ALL_HEALTHY=true
 
 # Check active services (always started)
 for service in "${ACTIVE_SERVICES[@]}"; do
-    if systemctl is-active --quiet "$service"; then
+    if wait_for_service_active "$service" 30; then
         log_info "$service: ${GREEN}ACTIVE${NC}"
     else
-        log_error "$service: ${RED}FAILED${NC}"
+        SVC_STATE=$(systemctl show -p ActiveState --value "$service" 2>/dev/null || echo "unknown")
+        log_error "$service: ${RED}FAILED${NC} (state: $SVC_STATE after 30s)"
         ALL_HEALTHY=false
 
         # Show recent logs for failed service
@@ -1415,10 +1427,11 @@ done
 if [ ${#MANUAL_SERVICES_TO_RESTART[@]} -gt 0 ]; then
     log_info "Checking restarted manual services..."
     for service in "${MANUAL_SERVICES_TO_RESTART[@]}"; do
-        if systemctl is-active --quiet "$service"; then
+        if wait_for_service_active "$service" 30; then
             log_info "$service: ${GREEN}ACTIVE${NC}"
         else
-            log_error "$service: ${RED}FAILED${NC}"
+            SVC_STATE=$(systemctl show -p ActiveState --value "$service" 2>/dev/null || echo "unknown")
+            log_error "$service: ${RED}FAILED${NC} (state: $SVC_STATE after 30s)"
             ALL_HEALTHY=false
 
             # Show recent logs for failed service

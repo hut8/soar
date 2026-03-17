@@ -208,7 +208,7 @@ async fn test_full_pilot_invitation_workflow() {
 
 #[tokio::test]
 #[serial]
-async fn test_get_pilots_by_club() {
+async fn test_get_members_by_club() {
     let test_db = setup_test_db().await;
     let pool = test_db.pool();
     let users_repo = UsersRepository::new(pool.clone());
@@ -254,7 +254,7 @@ async fn test_get_pilots_by_club() {
     users_repo.create_pilot(pilot3.clone()).await.unwrap();
 
     // Get all pilots for the club
-    let pilots = users_repo.get_pilots_by_club(club.id).await.unwrap();
+    let pilots = users_repo.get_members_by_club(club.id).await.unwrap();
     assert_eq!(pilots.len(), 3);
 
     // Verify all returned pilots are from the correct club

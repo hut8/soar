@@ -11,7 +11,7 @@ use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
 use super::{
-    json_error,
+    DataResponse, json_error,
     views::{
         CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse,
         PasswordResetConfirm, PasswordResetRequest, UserView,
@@ -203,7 +203,9 @@ pub async fn login_user(
 }
 
 pub async fn get_current_user(auth_user: AuthUser) -> impl IntoResponse {
-    Json(UserView::from(auth_user.0))
+    Json(DataResponse {
+        data: UserView::from(auth_user.0),
+    })
 }
 
 pub async fn verify_email(

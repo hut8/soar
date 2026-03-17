@@ -92,7 +92,10 @@ function createAuthStore() {
 				}
 			}
 		},
-		updateUser: (user: User) => {
+		updateUser: (user: User | null | undefined) => {
+			if (!user || !user.id) {
+				return;
+			}
 			if (browser) {
 				localStorage.setItem('auth_user', JSON.stringify(user));
 			}
