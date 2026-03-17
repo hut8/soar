@@ -67,7 +67,6 @@ import kotlin.math.sqrt
 @Composable
 fun LiveViewScreen(modifier: Modifier = Modifier) {
     val latestResponse by TrackingService.latestResponse.collectAsState()
-    val isTracking by TrackingService.isTracking.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val liveHeading by TrackingService.liveHeadingDegrees.collectAsState()
 
@@ -143,7 +142,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
             )
         },
     ) { padding ->
-        if (!isTracking || userLat == null || userLon == null) {
+        if (userLat == null || userLon == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -151,7 +150,7 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Start tracking to see the radar view",
+                    text = "Waiting for GPS position\u2026",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

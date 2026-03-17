@@ -93,7 +93,6 @@ fun ARScreen(modifier: Modifier = Modifier) {
     val configuration = LocalConfiguration.current
 
     // Tracking state
-    val isTracking by TrackingService.isTracking.collectAsState()
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val liveHeading by TrackingService.liveHeadingDegrees.collectAsState()
@@ -165,21 +164,6 @@ fun ARScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(liveHeading, arCoreManager) {
         val heading = liveHeading ?: return@LaunchedEffect
         arCoreManager?.calibrateNorth(heading)
-    }
-
-    // Not tracking state
-    if (!isTracking) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "Start tracking to use AR view",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        return
     }
 
     // Camera permission denied
