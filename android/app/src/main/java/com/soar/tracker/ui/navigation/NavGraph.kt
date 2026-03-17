@@ -2,6 +2,7 @@ package com.soar.tracker.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.soar.tracker.SoarTrackerApp
+import com.soar.tracker.ui.screens.ARScreen
 import com.soar.tracker.ui.screens.LiveViewScreen
 import com.soar.tracker.ui.screens.LoginScreen
 import com.soar.tracker.ui.screens.TrackerScreen
@@ -74,6 +76,12 @@ private fun MainScreen(onLogout: () -> Unit) {
                     icon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
                     label = { Text("Live View") },
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
+                    label = { Text("AR") },
+                )
             }
         },
     ) { padding ->
@@ -83,6 +91,9 @@ private fun MainScreen(onLogout: () -> Unit) {
                 modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             )
             1 -> LiveViewScreen(
+                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
+            )
+            2 -> ARScreen(
                 modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             )
         }

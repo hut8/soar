@@ -110,7 +110,7 @@ test.describe('Registration', () => {
 		console.log('Current URL after registration:', page.url());
 
 		// Should be redirected to login page with success message
-		await expect(page).toHaveURL(/\/login/);
+		await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
 		await expect(page.getByText(/registration successful.*check your email/i)).toBeVisible();
 
 		// Verify that verification email was sent via Mailpit

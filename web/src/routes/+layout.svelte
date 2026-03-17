@@ -49,7 +49,8 @@
 		Info,
 		Eye,
 		Binoculars,
-		Shield
+		Shield,
+		Smartphone
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -409,6 +410,15 @@
 											>
 												<Info size={16} /> Info
 											</a>
+											<a
+												href="https://nightly.link/hut8/soar/workflows/ci.yml/main/soar-tracker-debug.zip"
+												class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+												onclick={() => (showDesktopMenu = false)}
+												target="_blank"
+												rel="noopener noreferrer"
+											>
+												<Smartphone size={16} /> Android App
+											</a>
 										</div>
 									</div>
 								{/if}
@@ -632,6 +642,15 @@
 						onclick={() => (showMobileMenu = false)}
 					>
 						<Info size={16} /> System Info
+					</a>
+					<a
+						href="https://nightly.link/hut8/soar/workflows/ci.yml/main/soar-tracker-debug.zip"
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						<Smartphone size={16} /> Android App
 					</a>
 
 					{#if $auth.isAuthenticated}

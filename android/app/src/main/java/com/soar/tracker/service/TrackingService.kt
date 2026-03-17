@@ -58,6 +58,7 @@ class TrackingService : LifecycleService() {
     private var locationCallback: LocationCallback? = null
     private var pendingSubmit: kotlinx.coroutines.Job? = null
     private var headingForwardJob: kotlinx.coroutines.Job? = null
+    private var pitchForwardJob: kotlinx.coroutines.Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     // Vertical speed calculation state
@@ -101,6 +102,9 @@ class TrackingService : LifecycleService() {
          */
         private val _liveHeadingDegrees = MutableStateFlow<Float?>(null)
         val liveHeadingDegrees: StateFlow<Float?> = _liveHeadingDegrees
+
+        private val _livePitchDegrees = MutableStateFlow<Float?>(null)
+        val livePitchDegrees: StateFlow<Float?> = _livePitchDegrees
 
         fun start(context: Context) {
             val intent = Intent(context, TrackingService::class.java)
@@ -167,7 +171,11 @@ class TrackingService : LifecycleService() {
                 _liveHeadingDegrees.value = heading
             }
         }
-
+        pitchForwardJob = lifecycleScope.launch {
+            sensorCollector.livePitchDegrees.collect { pitch ->
+                _livePitchDegrees.value = pitch
+            }
+        }
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             3_000L, // 3 seconds
@@ -234,10 +242,13 @@ class TrackingService : LifecycleService() {
         locationCallback = null
         headingForwardJob?.cancel()
         headingForwardJob = null
+        pitchForwardJob?.cancel()
+        pitchForwardJob = null
         sensorCollector.stop()
         _isTracking.value = false
         _groundPressureHpa.value = null
         _liveHeadingDegrees.value = null
+        _livePitchDegrees.value = null
         cachedGeoidOffsetMeters = null
         altitudeHistory.clear()
         wakeLock?.let {

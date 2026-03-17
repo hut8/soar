@@ -1,5 +1,7 @@
 package com.soar.tracker.ui.util
 
+const val NM_TO_METERS = 1852.0
+
 fun calculateBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val lat1Rad = Math.toRadians(lat1)
     val lat2Rad = Math.toRadians(lat2)
