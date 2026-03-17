@@ -39,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationServices
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -77,31 +76,22 @@ fun LiveViewScreen(modifier: Modifier = Modifier) {
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val liveHeading by TrackingService.liveHeadingDegrees.collectAsState()
 
+    val isTracking by TrackingService.isTracking.collectAsState()
+
     val aircraft = latestResponse?.nearbyAircraft ?: emptyList()
     val airports = latestResponse?.nearbyAirports ?: emptyList()
+    val userLat = sensorData?.latitude
+    val userLon = sensorData?.longitude
 
-    // Last-known position fallback when tracking hasn't started yet
-    var fallbackLat by remember { mutableStateOf<Double?>(null) }
-    var fallbackLon by remember { mutableStateOf<Double?>(null) }
-
-    @Suppress("MissingPermission")
+    // Auto-start tracking if location permission is already granted
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (!isTracking &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-            fusedClient.lastLocation.addOnSuccessListener { location ->
-                if (location != null) {
-                    fallbackLat = location.latitude
-                    fallbackLon = location.longitude
-                }
-            }
+            TrackingService.start(context)
         }
     }
-
-    // Prefer tracking position, fall back to last-known GPS
-    val userLat = sensorData?.latitude ?: fallbackLat
-    val userLon = sensorData?.longitude ?: fallbackLon
     // Prefer live heading (updates at ~50 Hz) over the GPS-paced snapshot (~3 s)
     // Nullable: null means heading is unknown, 0f means north
     val userHeading: Float? = liveHeading ?: sensorData?.magneticHeadingDegrees?.toFloat()
