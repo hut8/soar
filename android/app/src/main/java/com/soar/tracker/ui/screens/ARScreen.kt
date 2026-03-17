@@ -93,6 +93,7 @@ fun ARScreen(modifier: Modifier = Modifier) {
     val configuration = LocalConfiguration.current
 
     // Tracking state
+    val isTracking by TrackingService.isTracking.collectAsState()
     val latestResponse by TrackingService.latestResponse.collectAsState()
     val sensorData by TrackingService.lastSensorData.collectAsState()
     val liveHeading by TrackingService.liveHeadingDegrees.collectAsState()
@@ -102,6 +103,16 @@ fun ARScreen(modifier: Modifier = Modifier) {
     val userLat = sensorData?.latitude
     val userLon = sensorData?.longitude
     val userAltM = sensorData?.altitudeMslMeters ?: sensorData?.altitudeMeters ?: 0.0
+
+    // Auto-start tracking if location permission is already granted
+    LaunchedEffect(Unit) {
+        if (!isTracking &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            TrackingService.start(context)
+        }
+    }
 
     // Camera permission
     var cameraPermissionGranted by remember {
