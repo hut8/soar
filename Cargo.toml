@@ -108,9 +108,9 @@ flarmnet = { git = "https://github.com/hut8/flarmnet-rs", default-features = fal
 pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec", "frame-pointer"] }
 lru = "0.16"
 moka = { version = "0.12", features = ["future", "sync"] }
-sha2 = "0.10.9"
-scraper = "0.25"
-shapefile = "0.7"
+sha2 = "0.11.0"
+scraper = "0.26"
+shapefile = "0.8"
 kml = "0.13"
 hex = "0.4.3"
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
