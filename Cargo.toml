@@ -30,8 +30,8 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6", features = ["derive"] }
 dashmap = "6.1"
 dotenvy = { version = "0.15" }
-fake = { version = "5.0.0", features = ["derive", "chrono", "uuid"] }
-google_maps = { version = "3.9.4", features = [
+fake = { version = "5.1.0", features = ["derive", "chrono", "uuid"] }
+google_maps = { version = "3.9.5", features = [
     "geocoding",
     "elevation",
     "reqwest-rustls-tls",
@@ -76,7 +76,7 @@ diesel_migrations = "2.3"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 flate2 = "1.1"
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
+tokio = { version = "1.51", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
 console-subscriber = "0.5"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
@@ -85,7 +85,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "tracing-log"] }
 sentry = { version = "0.47", default-features = false, features = ["backtrace", "contexts", "panic", "tracing", "reqwest", "rustls"] }
 sentry-tracing = "0.47"
-uuid = { version = "1.22", features = ["v4", "v7", "serde"] }
+uuid = { version = "1.23", features = ["v4", "v7", "serde"] }
 zstd = "0.13"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.32"
@@ -97,8 +97,8 @@ opentelemetry-semantic-conventions = "0.31"
 opentelemetry-appender-tracing = "0.31"
 tracing-opentelemetry = "0.32"
 postgis_diesel = { version = "3.1.0", features = ["serde", "serde_geojson"] }
-rust_decimal = { version = "1.40", default-features = false, features = ["std", "serde", "borsh"] }
-zip = "8.2"
+rust_decimal = { version = "1.41", default-features = false, features = ["std", "serde", "borsh"] }
+zip = "8.5"
 flydent = "0.6.0"
 flume = { version = "0.12", features = ["async"] }
 sitemap-rs = "0.4.0"
