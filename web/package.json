@@ -34,16 +34,16 @@
 		"@types/plotly.js": "^3.0.10",
 		"oxlint": "^1.51.0",
 		"prettier": "^3.8.1",
-		"prettier-plugin-svelte": "^3.5.1",
+		"prettier-plugin-svelte": "^4.0.1",
 		"prettier-plugin-tailwindcss": "^0.7.1",
 		"rollup-plugin-external-globals": "^0.13.0",
 		"svelte": "^5.53.8",
 		"svelte-check": "^4.4.5",
 		"tailwindcss": "^4.1",
-		"typescript": "^5.9.3",
+		"typescript": "^6.0.3",
 		"vite": "^8.0.0",
 		"vite-plugin-devtools-json": "^1.0.0",
-		"vite-plugin-static-copy": "^3.2.0"
+		"vite-plugin-static-copy": "^4.1.0"
 	},
 	"dependencies": {
 		"@deck.gl/core": "^9.2.11",
@@ -51,7 +51,7 @@
 		"@deck.gl/mapbox": "^9.2.11",
 		"@googlemaps/js-api-loader": "^2.0.2",
 		"@logtape/logtape": "^2.0.4",
-		"@lucide/svelte": "^0.577.0",
+		"@lucide/svelte": "^1.16.0",
 		"@sentry/sveltekit": "^10.42.0",
 		"@skeletonlabs/skeleton": "^4.12.1",
 		"@skeletonlabs/tw-plugin": "^0.4.1",
